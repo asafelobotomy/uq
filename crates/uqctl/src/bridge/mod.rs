@@ -3,6 +3,7 @@
 //! stdout is protocol only; everything else goes to stderr. One task owns stdout and receives
 //! `Outbound` over an mpsc channel, so concurrent replies and events never interleave mid-line.
 
+mod dispatch;
 mod launch;
 pub mod protocol;
 mod uqd;
@@ -31,6 +32,7 @@ async fn handle(link: &uqd::Link, call: &str, args: &[Value]) -> Result<Value, S
             link.call(call, args).await
         }
         "Launch" => launch::launch(link, args).await,
+        "Dispatch" => dispatch::dispatch(args).await,
         other => Err(format!("unknown call {other}")),
     }
 }
