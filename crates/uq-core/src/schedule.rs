@@ -106,6 +106,14 @@ pub fn variant_at<Tz: TimeZone>(s: &Schedule, now: &DateTime<Tz>) -> Option<Vari
     }
 }
 
+/// The most recent scheduled transition at or before `now` (within the last day or so).
+pub fn last_event<Tz: TimeZone>(
+    s: &Schedule,
+    now: &DateTime<Tz>,
+) -> Option<(DateTime<Tz>, Variant)> {
+    events(s, now).into_iter().rev().find(|(at, _)| at <= now)
+}
+
 /// The next time the schedule changes variant, and the variant it changes to.
 pub fn next_transition<Tz: TimeZone>(
     s: &Schedule,

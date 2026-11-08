@@ -153,6 +153,8 @@ pub mod fake {
         /// `Some(msg)` makes `verify` return `Rejected(msg)`.
         pub verify_error: Mutex<Option<String>>,
         pub calls: Mutex<Vec<String>>,
+        /// (main config path, its contents) for every `verify` call.
+        pub verified: Mutex<Vec<(std::path::PathBuf, String)>>,
     }
 
     impl FakeCompositor {
@@ -182,6 +184,11 @@ pub mod fake {
                 .lock()
                 .unwrap()
                 .push(format!("verify {}", main_config.display()));
+            let src = std::fs::read_to_string(main_config).unwrap_or_default();
+            self.verified
+                .lock()
+                .unwrap()
+                .push((main_config.to_path_buf(), src));
             match self.verify_error.lock().unwrap().clone() {
                 Some(msg) => Err(CompositorError::Rejected(msg)),
                 None => Ok(()),

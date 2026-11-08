@@ -2,7 +2,7 @@
 
 use crate::compositor::{Compositor, CompositorError};
 use crate::system::SystemSettings;
-use chrono::{DateTime, Local, TimeZone};
+use chrono::{DateTime, Local, TimeZone, Utc};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -11,7 +11,7 @@ use uq_core::atomic::{atomic_replace_dir, atomic_write};
 use uq_core::lua::{Layout, emit_generated, emit_workspace_rule, lua_string};
 use uq_core::paths::Paths;
 use uq_core::render::render;
-use uq_core::schedule::{Schedule, variant_at};
+use uq_core::schedule::{Schedule, last_event, variant_at};
 use uq_core::state::State;
 use uq_core::theme::{ThemeRegistry, Variant};
 
@@ -50,6 +50,22 @@ pub enum DesktopError {
 
 fn io_err(context: &str) -> impl Fn(std::io::Error) -> DesktopError + '_ {
     move |e| DesktopError::Io(format!("{context}: {e}"))
+}
+
+/// The Hyprland workspace selector for a user-facing workspace name. Hyprland only matches a
+/// name through `name:<n>` (a bare `web` parses as selector syntax and never matches), so plain
+/// names get the prefix; ids, `name:`/`special` selectors and bracket selectors pass through.
+pub fn workspace_selector(ws: &str) -> String {
+    let ws = ws.trim();
+    let passthrough = ws.parse::<i64>().is_ok()
+        || ws.starts_with("name:")
+        || ws.starts_with("special")
+        || ws.contains('[');
+    if passthrough {
+        ws.to_string()
+    } else {
+        format!("name:{ws}")
+    }
 }
 
 /// What a commit changed, which decides how it is applied to the live session.
@@ -141,10 +157,11 @@ impl Desktop {
     }
 
     pub async fn set_layout(&mut self, ws: &str, layout: &str) -> Result<(), DesktopError> {
-        let ws = ws.trim();
-        if ws.is_empty() {
+        if ws.trim().is_empty() {
             return Err(DesktopError::EmptyWorkspace);
         }
+        let ws = workspace_selector(ws);
+        let ws = ws.as_str();
         let layout: Layout = layout
             .parse()
             .map_err(|_| DesktopError::InvalidLayout(layout.to_string()))?;
@@ -167,6 +184,7 @@ impl Desktop {
         s.validate().map_err(DesktopError::InvalidSchedule)?;
         let mut next = self.state.clone();
         let wanted = variant_at(&s, &now);
+        next.schedule_mark = last_event(&s, &now).map(|(at, _)| at.with_timezone(&Utc));
         next.schedule = s;
         let change = match wanted {
             Some(v) if v != next.variant => {
@@ -178,18 +196,27 @@ impl Desktop {
         self.commit(next, change).await
     }
 
-    /// Apply the scheduled variant if it differs from the current one. Returns whether it switched.
+    /// Apply a scheduled transition that is newer than the last one applied. Returns whether the
+    /// variant switched. A manual variant change therefore holds until the next boundary.
     /// Called every minute, so suspend/resume and clock changes are caught on the next tick.
     pub async fn tick_schedule_at<Tz: TimeZone>(
         &mut self,
         now: DateTime<Tz>,
     ) -> Result<bool, DesktopError> {
-        match variant_at(&self.state.schedule, &now) {
-            Some(v) if v != self.state.variant => {
-                let theme = self.state.theme.clone();
-                self.set_theme(&theme, v).await.map(|()| true)
-            }
-            _ => Ok(false),
+        let Some((at, v)) = last_event(&self.state.schedule, &now) else {
+            return Ok(false);
+        };
+        let at = at.with_timezone(&Utc);
+        if self.state.schedule_mark.is_some_and(|mark| mark >= at) {
+            return Ok(false);
+        }
+        let mut next = self.state.clone();
+        next.schedule_mark = Some(at);
+        if v == next.variant {
+            self.commit(next, Change::Quiet).await.map(|()| false)
+        } else {
+            next.variant = v;
+            self.commit(next, Change::Theme).await.map(|()| true)
         }
     }
 
@@ -218,19 +245,21 @@ impl Desktop {
         let generated = emit_generated(&theme, &next.layouts);
 
         self.ensure_user_lua()?;
-        let uq_dir = self
+        let candidate = self
             .paths
             .generated_lua
-            .parent()
-            .expect("generated.lua has a parent")
-            .to_path_buf();
-        let candidate = uq_dir.join("generated.lua.candidate");
-        let verify_main = uq_dir.join(format!(".verify-{}.lua", std::process::id()));
+            .with_file_name("generated.lua.candidate");
+        // The verify config sits beside the real hyprland.lua and mirrors the stub, so relative
+        // requires in user.lua resolve exactly as they do in the session.
+        let verify_main = self
+            .paths
+            .hypr_dir
+            .join(format!(".uq-verify-{}.lua", std::process::id()));
         atomic_write(&candidate, &generated).map_err(io_err("writing candidate config"))?;
-        let main_src = [&self.paths.base_lua, &candidate, &self.paths.user_lua]
-            .iter()
-            .map(|p| format!("require({})\n", lua_string(&p.to_string_lossy())))
-            .collect::<String>();
+        let main_src = format!(
+            "require({})\nrequire(\"./uq/generated.lua.candidate\")\nrequire(\"./uq/user.lua\")\n",
+            lua_string(&self.paths.base_lua.to_string_lossy())
+        );
         let verdict = match atomic_write(&verify_main, &main_src) {
             Ok(()) => self.comp.verify(&verify_main).await,
             Err(e) => Err(CompositorError::Io(e)),
@@ -265,16 +294,19 @@ impl Desktop {
         match change {
             Change::Quiet => {}
             Change::Layout(ws, layout) => {
-                self.live(self.comp.eval(&emit_workspace_rule(&ws, layout)).await);
+                let _ = self.live(self.comp.eval(&emit_workspace_rule(&ws, layout)).await);
                 let _ = self.events.send(Event::LayoutChanged {
                     workspace: ws,
                     layout,
                 });
             }
             Change::Theme => {
-                self.live(self.comp.reload().await);
-                if let Err(e) = self.sys.apply(&theme) {
-                    tracing::warn!("system settings: {e}");
+                // gsettings are desktop-wide: only touch them while a Hyprland session is live,
+                // so a uqd left running never re-themes another desktop.
+                if self.live(self.comp.reload().await) {
+                    if let Err(e) = self.sys.apply(&theme) {
+                        tracing::warn!("system settings: {e}");
+                    }
                 }
                 let _ = self.events.send(Event::ThemeChanged {
                     name: theme.id.clone(),
@@ -287,17 +319,23 @@ impl Desktop {
     }
 
     /// Report the outcome of a live-apply call; the change is already persisted either way.
-    fn live(&self, res: Result<(), CompositorError>) {
+    /// Returns whether a live Hyprland answered.
+    fn live(&self, res: Result<(), CompositorError>) -> bool {
         match res {
-            Ok(()) => {}
+            Ok(()) => true,
             Err(CompositorError::NotRunning) => {
-                tracing::warn!("Hyprland not running; change saved for next start")
+                tracing::warn!("Hyprland not running; change saved for next start");
+                false
             }
             Err(CompositorError::Rejected(msg)) => {
                 tracing::warn!("Hyprland rejected live change: {msg}");
                 let _ = self.events.send(Event::ConfigError(msg));
+                true
             }
-            Err(e) => tracing::warn!("Hyprland: {e}"),
+            Err(e) => {
+                tracing::warn!("Hyprland: {e}");
+                false
+            }
         }
     }
 }
@@ -379,6 +417,103 @@ mod tests {
                 tokens_path: p.theme_dir.join("tokens.json")
             }]
         );
+    }
+
+    #[test]
+    fn workspace_selector_normalisation() {
+        for (input, want) in [
+            ("2", "2"),
+            (" 3 ", "3"),
+            ("web", "name:web"),
+            ("name:web", "name:web"),
+            ("special:magic", "special:magic"),
+            ("special", "special"),
+            ("w[tv1]", "w[tv1]"),
+        ] {
+            assert_eq!(workspace_selector(input), want, "{input:?}");
+        }
+    }
+
+    #[tokio::test]
+    async fn named_workspace_layout_uses_name_selector() {
+        let mut r = rig();
+        r.desktop.set_layout("web", "scrolling").await.unwrap();
+        assert_eq!(
+            r.desktop.get_layouts().get("name:web"),
+            Some(&Layout::Scrolling)
+        );
+        assert!(
+            r.comp.calls().contains(
+                &r#"eval hl.workspace_rule({ workspace = "name:web", layout = "scrolling" })"#
+                    .to_string()
+            ),
+            "{:?}",
+            r.comp.calls()
+        );
+    }
+
+    #[tokio::test]
+    async fn verify_main_lives_in_hypr_dir_with_relative_requires() {
+        let mut r = rig();
+        r.desktop.set_layout("1", "master").await.unwrap();
+        let (path, src) = r.comp.verified.lock().unwrap()[0].clone();
+        assert_eq!(path.parent(), Some(r.desktop.paths().hypr_dir.as_path()));
+        assert!(
+            src.contains(r#"require("./uq/generated.lua.candidate")"#),
+            "{src}"
+        );
+        assert!(src.contains(r#"require("./uq/user.lua")"#), "{src}");
+    }
+
+    #[tokio::test]
+    async fn no_system_settings_without_hyprland() {
+        let mut r = rig_with(false, |_| {});
+        r.desktop.set_theme("matcha", Variant::Light).await.unwrap();
+        assert!(
+            r.sys.applied.lock().unwrap().is_empty(),
+            "gsettings touched outside Hyprland"
+        );
+    }
+
+    #[tokio::test]
+    async fn manual_override_holds_until_next_boundary() {
+        let mut r = rig();
+        let day = chrono::Local::now().date_naive();
+        let at = |d: chrono::NaiveDate, h, m| {
+            d.and_hms_opt(h, m, 0)
+                .unwrap()
+                .and_local_timezone(chrono::Local)
+                .earliest()
+                .unwrap()
+        };
+        let s = Schedule::Fixed {
+            light_at: chrono::NaiveTime::from_hms_opt(7, 0, 0).unwrap(),
+            dark_at: chrono::NaiveTime::from_hms_opt(19, 0, 0).unwrap(),
+        };
+        r.desktop.set_schedule_at(s, at(day, 20, 0)).await.unwrap();
+        assert_eq!(r.desktop.get_theme().1, Variant::Dark);
+        r.desktop
+            .set_theme("graphite", Variant::Light)
+            .await
+            .unwrap();
+        assert!(
+            !r.desktop.tick_schedule_at(at(day, 22, 1)).await.unwrap(),
+            "override reverted"
+        );
+        assert_eq!(r.desktop.get_theme().1, Variant::Light);
+        let tomorrow = day.succ_opt().unwrap();
+        r.desktop
+            .tick_schedule_at(at(tomorrow, 7, 1))
+            .await
+            .unwrap();
+        assert_eq!(r.desktop.get_theme().1, Variant::Light);
+        assert!(
+            r.desktop
+                .tick_schedule_at(at(tomorrow, 19, 1))
+                .await
+                .unwrap()
+        );
+        assert_eq!(r.desktop.get_theme().1, Variant::Dark);
     }
 
     #[tokio::test]
@@ -475,7 +610,7 @@ mod tests {
         let p = r.desktop.paths().clone();
         let s = State::load(&p.state_file);
         assert_eq!(
-            (s.theme.as_str(), s.layouts.get("web")),
+            (s.theme.as_str(), s.layouts.get("name:web")),
             ("matcha", Some(&Layout::Dwindle))
         );
         assert!(p.theme_dir.join("tokens.json").exists());

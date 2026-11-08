@@ -17,6 +17,9 @@ pub struct State {
     pub variant: Variant,
     pub schedule: Schedule,
     pub layouts: BTreeMap<String, Layout>,
+    /// The scheduled transition uqd last applied; a manual change holds until a newer one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub schedule_mark: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 impl Default for State {
@@ -26,6 +29,7 @@ impl Default for State {
             variant: Variant::Dark,
             schedule: Schedule::Off,
             layouts: BTreeMap::new(),
+            schedule_mark: None,
         }
     }
 }
@@ -93,6 +97,7 @@ mod tests {
                 ("2".into(), Layout::Scrolling),
                 ("special:magic".into(), Layout::Master),
             ]),
+            schedule_mark: None,
         };
         s.save(&p).unwrap();
         assert_eq!(State::load(&p), s);

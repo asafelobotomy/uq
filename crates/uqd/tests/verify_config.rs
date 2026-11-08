@@ -21,7 +21,7 @@ fn layouts() -> BTreeMap<String, Layout> {
     BTreeMap::from([
         ("1".into(), Layout::Master),
         ("2".into(), Layout::Scrolling),
-        ("web".into(), Layout::Dwindle),
+        ("name:web".into(), Layout::Dwindle),
     ])
 }
 
