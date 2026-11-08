@@ -26,8 +26,8 @@ PanelWindow {
     // --- search state (all cleared by wipe()) ---
     property string query: ""
     property string searched: ""        // the query behind the current generation
-    // Monotonic across opens: the bridge ignores a Search older than the newest it has seen.
-    property int generation: 0
+    // The shared Surfaces counter: the bridge ignores a Search older than the newest it has seen.
+    readonly property int generation: Surfaces.generation
     property var providerResults: ({})
     property var apps: []
     property var sections: []
@@ -72,6 +72,9 @@ PanelWindow {
         selection = ({ group: -1, index: -1 });
         gotExternal = false;
         deadlinePassed = false;
+        // A new generation makes any answer still in flight stale, so it can't land after a quick
+        // reopen; the empty Search also makes the bridge forget the last `>` command.
+        Bridge.call("Search", ["", Surfaces.nextGeneration()]).catch(function () {});
     }
 
     function edited(text) {
@@ -80,7 +83,7 @@ PanelWindow {
     }
 
     function runSearch() {
-        generation = L.nextGeneration(generation);
+        Surfaces.nextGeneration();
         providerResults = ({});
         gotExternal = false;
         deadlinePassed = false;

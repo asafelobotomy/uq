@@ -35,6 +35,18 @@ TestCase {
         compare(Surfaces.open, "closed");
     }
 
+    // One counter shared by every launcher surface, strictly increasing across opens and closes,
+    // so the bridge never drops a newer surface's Search as stale.
+    function test_shared_generation_strictly_increases() {
+        var a = Surfaces.nextGeneration();
+        var b = Surfaces.nextGeneration();
+        verify(b > a, "next > previous");
+        compare(Surfaces.generation, b);
+        Surfaces.toggle("spotlight");
+        Surfaces.close();
+        verify(Surfaces.nextGeneration() > b, "still increasing after close");
+    }
+
     function test_lock_closes_wipes_and_blocks_toggle() {
         Surfaces.toggle("spotlight");
         Bridge.locked = true;

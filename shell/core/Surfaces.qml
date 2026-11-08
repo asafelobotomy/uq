@@ -12,8 +12,17 @@ QtObject {
     property var screen: null           // ShellScreen, or null for the focused monitor
     property var anchor: null           // Item the app menu hangs from, or null
 
+    // Search generation shared by every launcher surface. It lives here, not on a window, so a
+    // reloaded or second surface can't restart it below what the bridge has already seen.
+    property int generation: 0
+
     // Emitted for each surface that a transition closed: it must clear its query and results.
     signal wipe(string surface)
+
+    function nextGeneration() {
+        root.generation = L.nextGeneration(root.generation);
+        return root.generation;
+    }
 
     function _apply(event) {
         var prev = root.open;
