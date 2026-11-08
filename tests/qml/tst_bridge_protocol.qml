@@ -99,4 +99,10 @@ TestCase {
         wait(150);
         compare(Bridge.attempt, 0);
     }
+
+    function test_double_exit_counts_once() {
+        Bridge.processExited();
+        Bridge.processExited();
+        compare(Bridge.attempt, 1);
+    }
 }

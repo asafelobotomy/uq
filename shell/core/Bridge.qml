@@ -55,6 +55,9 @@ QtObject {
     }
 
     function processExited() {
+        // BridgeIo reports both `exited` and a failed start (runningChanged only); count once.
+        if (!processWanted)
+            return;
         stableTimer.stop();
         connected = false;
         uqdUp = false;

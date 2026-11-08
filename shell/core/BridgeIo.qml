@@ -19,5 +19,8 @@ Item {
             Bridge.processStarted();
         }
         onExited: Bridge.processExited()
+        // A command that fails to start (e.g. uqctl not on PATH) emits neither started nor
+        // exited, only runningChanged; Bridge ignores the duplicate when exited also fires.
+        onRunningChanged: if (!running) Bridge.processExited()
     }
 }
