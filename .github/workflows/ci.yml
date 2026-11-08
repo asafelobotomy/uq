@@ -24,7 +24,7 @@ jobs:
           esac
       # Hyprland refuses to run as root and needs XDG_RUNTIME_DIR, even for --verify-config.
       - name: Create an unprivileged test user
-        run: useradd -m tester && chown -R tester: "$GITHUB_WORKSPACE"
+        run: useradd -m tester && chown -R tester:tester "$GITHUB_WORKSPACE"
       - name: Format, lint and test (including Hyprland --verify-config for every theme)
         run: |
           su tester -c "set -e
