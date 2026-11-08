@@ -5,7 +5,9 @@ mod settings_cmd;
 
 use clap::{Parser, Subcommand};
 use serde_json::Value;
-use settings_cmd::{IdleCmd, LaunchesCmd, NotifCmd, OnOff, PinCmd, PrivacyKey, WeatherCmd};
+use settings_cmd::{
+    IdleCmd, LaunchesCmd, MouseCmd, NotifCmd, OnOff, PinCmd, PrivacyKey, WeatherCmd,
+};
 use std::collections::HashMap;
 use std::process::ExitCode;
 use uq_core::paths::Paths;
@@ -61,6 +63,11 @@ enum Cmd {
     },
     /// Turn a privacy-relevant feature on or off.
     Privacy { key: PrivacyKey, state: OnOff },
+    /// Mouse speed, acceleration, scroll direction and handedness.
+    Mouse {
+        #[command(subcommand)]
+        cmd: MouseCmd,
+    },
     /// App launch counts.
     Launches {
         #[command(subcommand)]
@@ -302,6 +309,17 @@ async fn run(cmd: Cmd) -> Result<(), String> {
         Cmd::Privacy { key, state } => {
             set_setting(&proxy, settings_cmd::privacy_setting(key, state)).await?
         }
+        Cmd::Mouse { cmd } => match settings_cmd::mouse_setting(&cmd) {
+            Some(setting) => set_setting(&proxy, setting).await?,
+            None => {
+                let json: String = proxy.call("GetSettings", &()).await.map_err(describe)?;
+                let v: Value = serde_json::from_str(&json)
+                    .map_err(|e| format!("bad settings from uqd: {e}"))?;
+                settings_cmd::mouse_lines(&v)
+                    .iter()
+                    .for_each(|l| println!("{l}"));
+            }
+        },
         Cmd::Launches {
             cmd: LaunchesCmd::Clear,
         } => proxy

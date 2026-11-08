@@ -10,11 +10,23 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use uq_core::lua::{Layout, emit_generated};
 use uq_core::paths::Paths;
+use uq_core::settings::{AccelProfile, MouseSettings};
 use uq_core::stub::stub_contents;
 use uq_core::theme::ThemeRegistry;
 
 fn repo() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+
+/// Every mouse key away from its default, so the emitted `input` block is fully exercised.
+fn mouse() -> MouseSettings {
+    MouseSettings {
+        sensitivity: -0.25,
+        accel_profile: AccelProfile::Flat,
+        natural_scroll: true,
+        left_handed: true,
+        scroll_factor: 1.5,
+    }
 }
 
 fn layouts() -> BTreeMap<String, Layout> {
@@ -130,7 +142,7 @@ fn lua_mock_runs_every_variant() {
     std::fs::write(&mock, MOCK).unwrap();
     for t in reg.iter() {
         let root = dir.path().join(format!("{}-{}", t.id, t.variant));
-        let (p, _) = tree(&root, &emit_generated(t, &layouts()));
+        let (p, _) = tree(&root, &emit_generated(t, &layouts(), &mouse()));
         let out = Command::new(&lua)
             .arg(&mock)
             .args([&p.base_lua, &p.generated_lua, &p.user_lua])
@@ -154,7 +166,7 @@ fn all_variants_pass_hyprland_verify() {
     let dir = tempfile::tempdir().unwrap();
     for t in reg.iter() {
         let root = dir.path().join(format!("{}-{}", t.id, t.variant));
-        let (_, main) = tree(&root, &emit_generated(t, &layouts()));
+        let (_, main) = tree(&root, &emit_generated(t, &layouts(), &mouse()));
         let out = Command::new("Hyprland")
             .arg("--verify-config")
             .arg("-c")

@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// Every key `Settings::apply` accepts; anything else is rejected.
-pub const SETTING_KEYS: [&str; 12] = [
+pub const SETTING_KEYS: [&str; 17] = [
     "pinned",
     "weather_location",
     "idle.dim",
@@ -17,7 +17,18 @@ pub const SETTING_KEYS: [&str; 12] = [
     "notif.show_summary",
     "privacy.public_ip_lookup",
     "privacy.record_launches",
+    "mouse.sensitivity",
+    "mouse.accel_profile",
+    "mouse.natural_scroll",
+    "mouse.left_handed",
+    "mouse.scroll_factor",
 ];
+
+/// Keys that change Hyprland's config: uqd renders, verifies and reloads for these instead of
+/// taking the light commit path.
+pub fn renders_config(key: &str) -> bool {
+    key.starts_with("mouse.")
+}
 
 const MAX_PINNED: usize = 32;
 const MAX_NAME_CHARS: usize = 100;
@@ -97,6 +108,41 @@ impl Default for PrivacySettings {
     }
 }
 
+/// libinput's pointer acceleration profile; `Default` leaves the device's own choice.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AccelProfile {
+    #[default]
+    Default,
+    Adaptive,
+    Flat,
+}
+
+/// Pointer settings for mice, rendered into the `input` block of `generated.lua`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MouseSettings {
+    /// -1.0 (slowest) to 1.0 (fastest); 0 is unchanged.
+    pub sensitivity: f64,
+    pub accel_profile: AccelProfile,
+    pub natural_scroll: bool,
+    pub left_handed: bool,
+    /// Wheel scroll multiplier, 0.1 to 10.
+    pub scroll_factor: f64,
+}
+
+impl Default for MouseSettings {
+    fn default() -> Self {
+        Self {
+            sensitivity: 0.0,
+            accel_profile: AccelProfile::Default,
+            natural_scroll: false,
+            left_handed: false,
+            scroll_factor: 1.0,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
@@ -105,6 +151,7 @@ pub struct Settings {
     pub idle: IdleTimings,
     pub notif: NotifSettings,
     pub privacy: PrivacySettings,
+    pub mouse: MouseSettings,
 }
 
 fn invalid(key: &str, reason: impl Into<String>) -> SettingError {
@@ -145,6 +192,17 @@ pub fn valid_pinned_id(s: &str) -> bool {
                 .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))
     }
     base(s) || s.strip_suffix(".desktop").is_some_and(base)
+}
+
+fn as_ranged_f64(key: &str, v: &Value, lo: f64, hi: f64) -> Result<f64, SettingError> {
+    let n = v
+        .as_f64()
+        .filter(|n| n.is_finite())
+        .ok_or_else(|| invalid(key, "expected a number"))?;
+    if !(lo..=hi).contains(&n) {
+        return Err(invalid(key, format!("must be between {lo} and {hi}")));
+    }
+    Ok(round2(n))
 }
 
 pub fn round2(x: f64) -> f64 {
@@ -244,6 +302,18 @@ impl Settings {
             "notif.show_summary" => next.notif.show_summary = as_bool(key, &value)?,
             "privacy.public_ip_lookup" => next.privacy.public_ip_lookup = as_bool(key, &value)?,
             "privacy.record_launches" => next.privacy.record_launches = as_bool(key, &value)?,
+            "mouse.sensitivity" => {
+                next.mouse.sensitivity = as_ranged_f64(key, &value, -1.0, 1.0)?;
+            }
+            "mouse.accel_profile" => {
+                next.mouse.accel_profile = serde_json::from_value(value)
+                    .map_err(|_| invalid(key, "expected default, adaptive or flat"))?;
+            }
+            "mouse.natural_scroll" => next.mouse.natural_scroll = as_bool(key, &value)?,
+            "mouse.left_handed" => next.mouse.left_handed = as_bool(key, &value)?,
+            "mouse.scroll_factor" => {
+                next.mouse.scroll_factor = as_ranged_f64(key, &value, 0.1, 10.0)?;
+            }
             _ => return Err(SettingError::UnknownKey(key.to_string())),
         }
         if key.starts_with("idle.") {
@@ -289,6 +359,10 @@ mod tests {
         assert!(!s.notif.show_summary);
         assert!(s.privacy.public_ip_lookup);
         assert!(s.privacy.record_launches);
+        assert_eq!(s.mouse, MouseSettings::default());
+        assert_eq!((s.mouse.sensitivity, s.mouse.scroll_factor), (0.0, 1.0));
+        assert_eq!(s.mouse.accel_profile, AccelProfile::Default);
+        assert!(!s.mouse.natural_scroll && !s.mouse.left_handed);
     }
 
     #[test]
@@ -404,5 +478,60 @@ mod tests {
             let r = s.apply(k, json!("zzz"));
             assert!(!matches!(r, Err(SettingError::UnknownKey(_))), "{k}");
         }
+    }
+
+    #[test]
+    fn mouse_numbers_ranged_and_rounded() {
+        let mut s = Settings::default();
+        s.apply("mouse.sensitivity", json!(-0.456)).unwrap();
+        assert_eq!(s.mouse.sensitivity, -0.46);
+        s.apply("mouse.sensitivity", json!(1)).unwrap();
+        assert_eq!(s.mouse.sensitivity, 1.0);
+        for bad in [json!(1.01), json!(-1.5), json!("fast"), Value::Null] {
+            assert!(s.apply("mouse.sensitivity", bad.clone()).is_err(), "{bad}");
+        }
+        s.apply("mouse.scroll_factor", json!(2.5)).unwrap();
+        assert_eq!(s.mouse.scroll_factor, 2.5);
+        assert!(s.apply("mouse.scroll_factor", json!(0.0)).is_err());
+        assert!(s.apply("mouse.scroll_factor", json!(0.09)).is_err());
+        assert!(s.apply("mouse.scroll_factor", json!(10.5)).is_err());
+        assert_eq!(s.mouse.scroll_factor, 2.5);
+    }
+
+    #[test]
+    fn mouse_profile_and_bools() {
+        let mut s = Settings::default();
+        s.apply("mouse.accel_profile", json!("flat")).unwrap();
+        assert_eq!(s.mouse.accel_profile, AccelProfile::Flat);
+        assert_eq!(
+            serde_json::to_value(s.mouse.accel_profile).unwrap(),
+            json!("flat")
+        );
+        assert!(s.apply("mouse.accel_profile", json!("custom")).is_err());
+        s.apply("mouse.natural_scroll", json!(true)).unwrap();
+        s.apply("mouse.left_handed", json!(true)).unwrap();
+        assert!(s.mouse.natural_scroll && s.mouse.left_handed);
+        assert!(s.apply("mouse.left_handed", json!(1)).is_err());
+    }
+
+    #[test]
+    fn only_mouse_keys_render_config() {
+        assert!(renders_config("mouse.sensitivity"));
+        assert!(!renders_config("idle.lock"));
+        assert!(!renders_config("pinned"));
+    }
+
+    #[test]
+    fn validated_keeps_mouse_and_rejects_bad_files() {
+        let mut s = Settings::default();
+        s.apply("mouse.sensitivity", json!(0.3)).unwrap();
+        s.apply("mouse.accel_profile", json!("adaptive")).unwrap();
+        assert_eq!(s.validated().unwrap(), s);
+        let mut bad = s.clone();
+        bad.mouse.scroll_factor = 50.0;
+        assert!(bad.validated().is_err());
+        // A state file from before mouse settings existed loads with the defaults.
+        let old: Settings = serde_json::from_value(json!({"pinned": ["a"]})).unwrap();
+        assert_eq!(old.mouse, MouseSettings::default());
     }
 }

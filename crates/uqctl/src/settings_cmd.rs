@@ -1,4 +1,4 @@
-//! `uqctl` settings commands: pin, weather, idle, notif, privacy and launches. The mapping from
+//! `uqctl` settings commands: pin, weather, idle, notif, privacy, mouse and launches. The mapping from
 //! a command to the `SetSetting` call it makes is pure and tested here; `main.rs` does the D-Bus.
 
 use crate::bridge::net::GeoHit;
@@ -64,6 +64,31 @@ pub enum OnOff {
     Off,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+pub enum AccelChoice {
+    /// The device's own libinput default.
+    Default,
+    Adaptive,
+    Flat,
+}
+
+#[derive(Subcommand, Debug, PartialEq)]
+pub enum MouseCmd {
+    /// Print the current mouse settings.
+    Show,
+    /// Pointer speed, -1 (slowest) to 1 (fastest); 0 leaves it unchanged.
+    #[command(allow_negative_numbers = true)]
+    Speed { value: f64 },
+    /// Pointer acceleration profile.
+    Accel { profile: AccelChoice },
+    /// Reverse the wheel direction.
+    NaturalScroll { state: OnOff },
+    /// Swap the left and right buttons.
+    LeftHanded { state: OnOff },
+    /// Wheel scroll multiplier, 0.1 to 10.
+    ScrollFactor { value: f64 },
+}
+
 #[derive(Subcommand, Debug, PartialEq)]
 pub enum LaunchesCmd {
     /// Forget every recorded launch count.
@@ -97,6 +122,50 @@ pub fn privacy_setting(key: PrivacyKey, state: OnOff) -> Setting {
         PrivacyKey::Launches => "privacy.record_launches",
     };
     (key, json!(state == OnOff::On))
+}
+
+/// The `SetSetting` a mouse command makes; `None` for `show`. uqd checks the ranges.
+pub fn mouse_setting(cmd: &MouseCmd) -> Option<Setting> {
+    Some(match *cmd {
+        MouseCmd::Show => return None,
+        MouseCmd::Speed { value } => ("mouse.sensitivity", json!(value)),
+        MouseCmd::Accel { profile } => (
+            "mouse.accel_profile",
+            json!(match profile {
+                AccelChoice::Default => "default",
+                AccelChoice::Adaptive => "adaptive",
+                AccelChoice::Flat => "flat",
+            }),
+        ),
+        MouseCmd::NaturalScroll { state } => ("mouse.natural_scroll", json!(state == OnOff::On)),
+        MouseCmd::LeftHanded { state } => ("mouse.left_handed", json!(state == OnOff::On)),
+        MouseCmd::ScrollFactor { value } => ("mouse.scroll_factor", json!(value)),
+    })
+}
+
+/// What `mouse show` prints, from a `GetSettings` JSON object.
+pub fn mouse_lines(settings: &Value) -> Vec<String> {
+    let m = &settings["mouse"];
+    let on_off = |v: &Value| {
+        if v.as_bool() == Some(true) {
+            "on"
+        } else {
+            "off"
+        }
+    };
+    vec![
+        format!("speed\t{}", m["sensitivity"].as_f64().unwrap_or(0.0)),
+        format!(
+            "accel\t{}",
+            m["accel_profile"].as_str().unwrap_or("default")
+        ),
+        format!("natural-scroll\t{}", on_off(&m["natural_scroll"])),
+        format!("left-handed\t{}", on_off(&m["left_handed"])),
+        format!(
+            "scroll-factor\t{}",
+            m["scroll_factor"].as_f64().unwrap_or(1.0)
+        ),
+    ]
 }
 
 pub fn notif_backend_setting(name: &str) -> Setting {
@@ -312,6 +381,102 @@ mod tests {
             notif_backend_setting("shell"),
             ("notif.backend", json!("shell"))
         );
+    }
+
+    #[test]
+    fn parses_mouse_commands() {
+        assert!(matches!(
+            parse(&["mouse", "show"]),
+            Cmd::Mouse {
+                cmd: MouseCmd::Show
+            }
+        ));
+        assert_eq!(
+            parse_mouse(&["speed", "-0.4"]),
+            MouseCmd::Speed { value: -0.4 }
+        );
+        assert_eq!(
+            parse_mouse(&["accel", "flat"]),
+            MouseCmd::Accel {
+                profile: AccelChoice::Flat
+            }
+        );
+        assert_eq!(
+            parse_mouse(&["natural-scroll", "on"]),
+            MouseCmd::NaturalScroll { state: OnOff::On }
+        );
+        assert_eq!(
+            parse_mouse(&["left-handed", "off"]),
+            MouseCmd::LeftHanded { state: OnOff::Off }
+        );
+        assert_eq!(
+            parse_mouse(&["scroll-factor", "2"]),
+            MouseCmd::ScrollFactor { value: 2.0 }
+        );
+        for bad in [
+            &["mouse", "speed", "fast"][..],
+            &["mouse", "accel", "custom"],
+            &["mouse", "left-handed", "yes"],
+            &["mouse", "speed"],
+        ] {
+            let mut v = vec!["uqctl"];
+            v.extend_from_slice(bad);
+            assert!(Cli::try_parse_from(v).is_err(), "{bad:?}");
+        }
+    }
+
+    fn parse_mouse(args: &[&str]) -> MouseCmd {
+        let mut v = vec!["mouse"];
+        v.extend_from_slice(args);
+        match parse(&v) {
+            Cmd::Mouse { cmd } => cmd,
+            _ => panic!("not a mouse command: {args:?}"),
+        }
+    }
+
+    #[test]
+    fn mouse_maps_to_setting_keys() {
+        assert_eq!(mouse_setting(&MouseCmd::Show), None);
+        assert_eq!(
+            mouse_setting(&MouseCmd::Speed { value: -0.4 }),
+            Some(("mouse.sensitivity", json!(-0.4)))
+        );
+        assert_eq!(
+            mouse_setting(&MouseCmd::Accel {
+                profile: AccelChoice::Default
+            }),
+            Some(("mouse.accel_profile", json!("default")))
+        );
+        assert_eq!(
+            mouse_setting(&MouseCmd::NaturalScroll { state: OnOff::On }),
+            Some(("mouse.natural_scroll", json!(true)))
+        );
+        assert_eq!(
+            mouse_setting(&MouseCmd::LeftHanded { state: OnOff::Off }),
+            Some(("mouse.left_handed", json!(false)))
+        );
+        assert_eq!(
+            mouse_setting(&MouseCmd::ScrollFactor { value: 1.5 }),
+            Some(("mouse.scroll_factor", json!(1.5)))
+        );
+    }
+
+    #[test]
+    fn mouse_show_lines() {
+        let v = json!({"mouse": {"sensitivity": -0.5, "accel_profile": "flat",
+            "natural_scroll": true, "left_handed": false, "scroll_factor": 1.0}});
+        assert_eq!(
+            mouse_lines(&v),
+            [
+                "speed\t-0.5",
+                "accel\tflat",
+                "natural-scroll\ton",
+                "left-handed\toff",
+                "scroll-factor\t1"
+            ]
+        );
+        // An older uqd without mouse settings shows the defaults.
+        assert_eq!(mouse_lines(&json!({}))[0], "speed\t0");
     }
 
     #[test]

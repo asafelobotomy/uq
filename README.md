@@ -51,6 +51,9 @@ uqctl weather set "Paris" [--pick 2]   # geocodes, prints the top 5, stores one;
 uqctl idle set lock 300                # dim | lock | screen-off | suspend | locked-screen-off; secs or off
 uqctl notif backend shell
 uqctl privacy public-ip on             # or: privacy launches off
+uqctl mouse speed -0.3                 # -1..1; also: accel default|adaptive|flat,
+                                       # natural-scroll on|off, left-handed on|off,
+                                       # scroll-factor 0.1..10, show
 uqctl launches clear
 ```
 

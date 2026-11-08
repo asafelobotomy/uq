@@ -13,7 +13,7 @@ use uq_core::lua::{Layout, emit_generated, emit_workspace_rule, lua_string};
 use uq_core::paths::Paths;
 use uq_core::render::render;
 use uq_core::schedule::{Schedule, last_event, variant_at};
-use uq_core::settings::{Settings, valid_pinned_id};
+use uq_core::settings::{Settings, renders_config, valid_pinned_id};
 use uq_core::state::State;
 use uq_core::theme::{ThemeRegistry, Variant};
 
@@ -78,6 +78,8 @@ pub fn workspace_selector(ws: &str) -> String {
 /// What a commit changed, which decides how it is applied to the live session.
 enum Change {
     Theme,
+    /// A setting rendered into generated.lua (mouse): reload Hyprland, report SettingsChanged.
+    Input,
     Layout(String, Layout),
     Quiet,
 }
@@ -200,12 +202,21 @@ impl Desktop {
         self.launch_saves
     }
 
-    /// Light commit path (spec §2.4): validate, save `state.toml`, emit. No render, no verify.
-    pub fn set_setting(&mut self, key: &str, value: serde_json::Value) -> Result<(), DesktopError> {
+    /// Validate and store one setting. Most keys take the light commit path (spec §2.4): save
+    /// `state.toml`, emit, no render, no verify. Keys that live in Hyprland's config (mouse)
+    /// render, verify and reload like a theme change.
+    pub async fn set_setting(
+        &mut self,
+        key: &str,
+        value: serde_json::Value,
+    ) -> Result<(), DesktopError> {
         let mut next = self.state.clone();
         next.settings
             .apply(key, value)
             .map_err(|e| DesktopError::InvalidSetting(e.to_string()))?;
+        if renders_config(key) {
+            return self.commit(next, Change::Input).await;
+        }
         next.save(&self.paths.state_file)
             .map_err(io_err("saving state"))?;
         self.state = next;
@@ -393,7 +404,7 @@ impl Desktop {
             .clone();
         let files = render(&theme, &self.paths.templates_dir)
             .map_err(|e| DesktopError::Io(e.to_string()))?;
-        let generated = emit_generated(&theme, &next.layouts);
+        let generated = emit_generated(&theme, &next.layouts, &next.settings.mouse);
 
         self.ensure_user_lua()?;
         let candidate = self
@@ -450,6 +461,12 @@ impl Desktop {
                     workspace: ws,
                     layout,
                 });
+            }
+            Change::Input => {
+                let _ = self.live(self.comp.reload().await);
+                let _ = self
+                    .events
+                    .send(Event::SettingsChanged(self.state.settings.clone()));
             }
             Change::Theme => {
                 // gsettings are desktop-wide: only touch them while a Hyprland session is live,
@@ -927,10 +944,12 @@ mod tests {
         // Defaults are 240/300/360/1200, so lock = 400 needs screen_off moved up first.
         r.desktop
             .set_setting("idle.screen_off", serde_json::json!(500))
+            .await
             .unwrap();
         drain(&mut r.events);
         r.desktop
             .set_setting("idle.lock", serde_json::json!(400))
+            .await
             .unwrap();
         assert_eq!(
             State::load(&r.desktop.paths().state_file)
@@ -959,16 +978,73 @@ mod tests {
         let err = r
             .desktop
             .set_setting("idle.lock", serde_json::json!(1))
+            .await
             .unwrap_err();
         assert!(matches!(err, DesktopError::InvalidSetting(_)), "{err:?}");
         let err = r
             .desktop
             .set_setting("nope", serde_json::json!(1))
+            .await
             .unwrap_err();
         assert!(matches!(err, DesktopError::InvalidSetting(_)), "{err:?}");
         assert_eq!(r.desktop.state(), &before);
         assert!(drain(&mut r.events).is_empty());
         assert!(!r.desktop.paths().state_file.exists());
+    }
+
+    #[tokio::test]
+    async fn mouse_setting_renders_verifies_and_reloads() {
+        let mut r = rig();
+        r.desktop
+            .set_setting("mouse.sensitivity", serde_json::json!(-0.5))
+            .await
+            .unwrap();
+        let p = r.desktop.paths().clone();
+        let generated = fs::read_to_string(&p.generated_lua).unwrap();
+        assert!(generated.contains("sensitivity = -0.5,"), "{generated}");
+        assert_eq!(State::load(&p.state_file).settings.mouse.sensitivity, -0.5);
+        let calls = r.comp.calls();
+        assert!(calls.iter().any(|c| c.starts_with("verify ")), "{calls:?}");
+        assert!(calls.contains(&"reload".to_string()), "{calls:?}");
+        let evs = drain(&mut r.events);
+        assert_eq!(evs.len(), 1, "{evs:?}");
+        let Event::SettingsChanged(s) = &evs[0] else {
+            panic!("{evs:?}")
+        };
+        assert_eq!(s.mouse.sensitivity, -0.5);
+        // Input changes never re-theme the desktop.
+        assert!(r.sys.applied.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn mouse_setting_rejected_by_verify_keeps_old_value() {
+        let mut r = rig();
+        *r.comp.verify_error.lock().unwrap() = Some("input: bad value".into());
+        let err = r
+            .desktop
+            .set_setting("mouse.left_handed", serde_json::json!(true))
+            .await
+            .unwrap_err();
+        assert!(matches!(err, DesktopError::ConfigInvalid(_)), "{err:?}");
+        assert!(!r.desktop.settings().mouse.left_handed);
+        assert!(!r.desktop.paths().state_file.exists());
+        assert_eq!(
+            drain(&mut r.events),
+            vec![Event::ConfigError("input: bad value".into())]
+        );
+    }
+
+    #[tokio::test]
+    async fn invalid_mouse_value_never_renders() {
+        let mut r = rig();
+        let err = r
+            .desktop
+            .set_setting("mouse.scroll_factor", serde_json::json!(99))
+            .await
+            .unwrap_err();
+        assert!(matches!(err, DesktopError::InvalidSetting(_)), "{err:?}");
+        assert!(r.comp.calls().is_empty(), "{:?}", r.comp.calls());
+        assert!(!r.desktop.paths().generated_lua.exists());
     }
 
     #[tokio::test]
@@ -1013,6 +1089,7 @@ mod tests {
         let mut r = rig();
         r.desktop
             .set_setting("privacy.record_launches", serde_json::json!(false))
+            .await
             .unwrap();
         drain(&mut r.events);
         r.desktop.record_launch("a.desktop");

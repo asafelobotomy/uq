@@ -104,7 +104,7 @@ impl DesktopIface {
     async fn set_setting(&self, key: &str, json: &str) -> Result<(), UqError> {
         let value: serde_json::Value = serde_json::from_str(json)
             .map_err(|e| UqError::InvalidSetting(format!("value is not JSON: {e}")))?;
-        Ok(self.desktop.lock().await.set_setting(key, value)?)
+        Ok(self.desktop.lock().await.set_setting(key, value).await?)
     }
 
     async fn record_launch(&self, id: &str) {
