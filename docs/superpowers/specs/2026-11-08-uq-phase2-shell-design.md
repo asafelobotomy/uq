@@ -296,7 +296,7 @@ There's a QML interface, `NotifBackend`, with properties `available`, `count`, `
 
 | Backend | Detect | Updates | Controls |
 |---|---|---|---|
-| noti-fi | `$XDG_RUNTIME_DIR/notifd.sock` accepts, and its greeting identifies it | push: `subscribe` → `state` events (`unread`, `dnd`, `center`, `latest`) | `center`, `dnd`, `osd` over the same socket |
+| noti-fi | `notifd.sock` greets with `name "notifd"`, `protocol 1` (§2.6) | push: `subscribe` → `state` events (`unread`, `dnd`, `center`, `sharing`, `latest`) | `center`, `dnd`, `osd` methods over the same socket (§2.6) |
 | built-in | uq-shell's own `NotificationServer` | full | own popups and centre |
 | swaync | `swaync-client --version` | push: `swaync-client -swb` | `-t`, `-d` |
 | mako | `makoctl --help` | poll `makoctl list` every 5 s | `makoctl mode -t do-not-disturb`; no centre |
@@ -317,25 +317,48 @@ There's a QML interface, `NotifBackend`, with properties `available`, `count`, `
 - Sets `bodyImagesSupported: false` and `bodyHyperlinksSupported: false`.
 - Accepts images only as `image-data` hints or local paths.
 
-### 2.6 noti-fi changes (in the noti-fi repo; sent to its session)
+### 2.6 noti-fi integration (shipped in noti-fi commit `0454a4d`; see its `docs/protocol.md`)
 
-1. **Hyprland mode:** run notifd as a plain user service, without the Plasma takeover. The
-   `x-kde-*` hints become optional.
-2. **Socket API:**
-   - The greeting carries `name: "notifd"` and an API version.
-   - `state` events include `latest: {appIcon, appName, summary}`.
-   - A new `osd {kind: volume|mic|brightness, value, max, muted}` command.
-   - The socket stays mode 0700.
-3. **OSD placement:** on Hyprland's focused monitor (no longer `cfg.screen` or `screens[0]`),
-   and it handles monitor hot-unplug.
-4. **Theming:** read uQ's `tokens.json` when present. Reload on file change and on the
-   directory-swap pattern (watch the parent folder, keep the last good tokens if a read fails).
-5. **Security:**
-   - Every untrusted string is rendered with `Text.PlainText`, or with a sanitised subset that
-     has no `<img>` and no remote loads.
-   - Layer namespaces are never marked to draw above the lock.
-   - Summaries are hidden while screen-sharing (noti-fi already has this behaviour as "share";
-     expose it in `state`).
+noti-fi made the changes uQ asked for. The adapter talks to it over `$XDG_RUNTIME_DIR/notifd.sock`
+using one long-lived connection.
+
+- **Detect:** the first line is
+  `{"event":"hello","name":"notifd","protocol":1,"daemon":"<ver>","pid":N,"seq":N}`. The adapter
+  requires `name == "notifd"` and `protocol == 1`; anything else counts as "noti-fi unavailable".
+- **Requests:** `{"id":N,"method":"<m>","params":{...}}`.
+  - `osd {kind: "volume"|"mic"|"brightness", value, max (default 100), muted}` replies
+    `{"ok":true}`, or the error code `bad_params`. It's cheap, so the adapter sends one line per
+    key-repeat step.
+  - `center {action: "open"|"close"|"toggle"}`.
+  - `dnd {mode: "on"|"off"|"toggle"}`.
+  - `subscribe`.
+- **`state` events** carry the full status object. The fields uQ uses:
+  - `unread`
+  - `dnd`
+  - `center` (whether the list is open)
+  - `sharing`
+  - `latest`: `{id, t, appName, appIcon, summary, read}` or null; `summary` is `""` while sharing
+  - `holding`, which is one of `""`, `"dnd"`, `"inhibited"`, `"screen sharing"`, `"fullscreen"`
+    or `"focus"`
+
+  noti-fi also sends `unreadPerZone` and `inhibitors`, which uQ ignores.
+- **Limits:** 1 MiB per line and 16 connections. uQ's adapter still applies its own text caps
+  and renders everything as plain text.
+- **Placement:** the OSD and the confirmation pill appear on Hyprland's focused monitor, and every
+  window moves off a monitor that's unplugged. Putting `"screen": "focused"` in noti-fi's
+  `rules.json` moves popups and the list there too; uQ documents it rather than writing the
+  user's file.
+- **Theming:** with `theme.tokens` set to `"auto"` (the default), noti-fi reads
+  `$XDG_STATE_HOME/uq/theme/tokens.json` every 2 s. That works with the directory swap. If the
+  file is broken, it keeps the last good tokens; the user's own `rules.json` theme takes
+  precedence.
+- **Hyprland mode:** `notify takeover --plain` (the default outside KDE) installs a plain user
+  service. Other notification daemons have to be stopped first.
+- **Security:** all app-supplied text is plain text, and bodies keep only `b`, `i`, `u` and `br`,
+  with no remote loads. While the screen is shared, popups show only the app name and icon.
+  notifd never sets `above_lock`.
+- **Open item:** Hyprland mode hasn't been tested on a real Hyprland session yet. uQ's
+  notifications slice is that first real test, and reports problems back to noti-fi.
 
 ### 2.7 Lock, sleep and idle
 
@@ -661,9 +684,10 @@ packaging/uq-shell.service, packaging/uq-lock.service, packaging/pam/uq-lock, pa
 2. **Launchers:** app menu, Spotlight, app model and ranking, the calc and run providers,
    external providers with gating and clamping, `.provider` discovery.
 3. **Quick settings and OSD:** all four groups, the OSD keybinds, the fallback OSD, and the
-   noti-fi `osd` command (noti-fi repo).
-4. **Notifications:** `NotifBackend`, the five adapters, the built-in server and its sanitiser,
-   and noti-fi's Hyprland mode and socket additions (noti-fi repo).
+   noti-fi `osd` client. noti-fi already ships the `osd` method.
+4. **Notifications:** `NotifBackend`, the five adapters (the noti-fi one per §2.6), the
+   built-in server and its sanitiser, and a first real-Hyprland check of noti-fi's Hyprland
+   mode.
 5. **Lock, sleep, idle, power, polkit:**
    - `uq-lock` with PAM and fingerprint
    - lock-notify, crash recovery, the logind inhibitor flow
