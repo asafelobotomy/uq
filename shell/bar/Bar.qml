@@ -5,7 +5,6 @@ import Quickshell.Wayland
 import "../core"
 
 // One bar per screen: five floating islands (System, Work, Time/weather, Notifications, Status).
-// Time and Status are empty placeholders until their own tasks land.
 PanelWindow {
     id: bar
     required property ShellScreen modelData
@@ -36,6 +35,6 @@ PanelWindow {
         Item { Layout.fillWidth: true }
         TimeIsland { Layout.fillHeight: true }
         NotifIsland { Layout.fillHeight: true }
-        Island { Layout.fillHeight: true; Layout.preferredWidth: 160 }   // Status
+        StatusIsland { Layout.fillHeight: true }
     }
 }
