@@ -26,9 +26,14 @@ hl.monitor({
 -------------------
 
 -- uqd runs as a systemd user unit, which does not inherit this session's environment:
--- export what it needs to reach Hyprland and the display, then start it.
+-- export what it needs to reach Hyprland and the display, then (re)start it so it always
+-- talks to this session. It is stopped again when Hyprland exits, so it never outlives the
+-- session and re-themes another desktop.
 hl.on("hyprland.start", function()
-    hl.exec_cmd("dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP HYPRLAND_INSTANCE_SIGNATURE QT_QPA_PLATFORMTHEME && systemctl --user start uqd.service")
+    hl.exec_cmd("dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP HYPRLAND_INSTANCE_SIGNATURE QT_QPA_PLATFORMTHEME && systemctl --user restart uqd.service")
+end)
+hl.on("hyprland.shutdown", function()
+    hl.exec_cmd("systemctl --user stop uqd.service")
 end)
 
 -----------------------------

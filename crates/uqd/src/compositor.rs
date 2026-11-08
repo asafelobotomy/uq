@@ -2,6 +2,7 @@
 
 use async_trait::async_trait;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::UnixStream;
 
@@ -11,6 +12,8 @@ pub enum CompositorError {
     NotRunning,
     #[error("Hyprland rejected the request: {0}")]
     Rejected(String),
+    #[error("Hyprland did not answer in time ({0})")]
+    Timeout(String),
     #[error(transparent)]
     Io(#[from] std::io::Error),
 }
@@ -33,7 +36,13 @@ pub struct Hyprland {
     runtime_dir: Option<PathBuf>,
     signature: Option<String>,
     binary: PathBuf,
+    request_timeout: Duration,
+    verify_timeout: Duration,
 }
+
+/// A hung compositor must never wedge uqd (it holds the desktop lock while waiting).
+pub const REQUEST_TIMEOUT: Duration = Duration::from_secs(2);
+pub const VERIFY_TIMEOUT: Duration = Duration::from_secs(10);
 
 impl Hyprland {
     pub fn new(runtime_dir: Option<PathBuf>, signature: Option<String>) -> Self {
@@ -41,6 +50,8 @@ impl Hyprland {
             runtime_dir,
             signature,
             binary: PathBuf::from("Hyprland"),
+            request_timeout: REQUEST_TIMEOUT,
+            verify_timeout: VERIFY_TIMEOUT,
         }
     }
 
@@ -50,6 +61,12 @@ impl Hyprland {
             get("XDG_RUNTIME_DIR").map(PathBuf::from),
             get("HYPRLAND_INSTANCE_SIGNATURE"),
         )
+    }
+
+    pub fn with_timeouts(mut self, request: Duration, verify: Duration) -> Self {
+        self.request_timeout = request;
+        self.verify_timeout = verify;
+        self
     }
 
     pub fn with_binary(mut self, binary: impl Into<PathBuf>) -> Self {
@@ -70,22 +87,28 @@ impl Hyprland {
     /// Send one request on the hyprctl socket and return the whole reply.
     async fn request(&self, req: &str) -> Result<String, CompositorError> {
         let path = self.socket().ok_or(CompositorError::NotRunning)?;
-        let mut s = match UnixStream::connect(&path).await {
-            Ok(s) => s,
-            Err(e)
-                if matches!(
-                    e.kind(),
-                    std::io::ErrorKind::NotFound | std::io::ErrorKind::ConnectionRefused
-                ) =>
-            {
-                return Err(CompositorError::NotRunning);
-            }
-            Err(e) => return Err(e.into()),
+        let exchange = async {
+            let mut s = match UnixStream::connect(&path).await {
+                Ok(s) => s,
+                Err(e)
+                    if matches!(
+                        e.kind(),
+                        std::io::ErrorKind::NotFound | std::io::ErrorKind::ConnectionRefused
+                    ) =>
+                {
+                    return Err(CompositorError::NotRunning);
+                }
+                Err(e) => return Err(e.into()),
+            };
+            s.write_all(req.as_bytes()).await?;
+            let mut reply = String::new();
+            s.read_to_string(&mut reply).await?;
+            Ok(reply)
         };
-        s.write_all(req.as_bytes()).await?;
-        let mut reply = String::new();
-        s.read_to_string(&mut reply).await?;
-        Ok(reply)
+        let verb = req.split_whitespace().next().unwrap_or(req).to_string();
+        tokio::time::timeout(self.request_timeout, exchange)
+            .await
+            .map_err(|_| CompositorError::Timeout(verb))?
     }
 
     async fn expect_ok(&self, req: &str) -> Result<(), CompositorError> {
@@ -100,12 +123,14 @@ impl Hyprland {
 #[async_trait]
 impl Compositor for Hyprland {
     async fn verify(&self, main_config: &Path) -> Result<(), CompositorError> {
-        let out = match tokio::process::Command::new(&self.binary)
-            .arg("--verify-config")
+        let mut cmd = tokio::process::Command::new(&self.binary);
+        cmd.arg("--verify-config")
             .arg("-c")
             .arg(main_config)
-            .output()
+            .kill_on_drop(true);
+        let out = match tokio::time::timeout(self.verify_timeout, cmd.output())
             .await
+            .map_err(|_| CompositorError::Timeout("--verify-config".into()))?
         {
             Ok(o) => o,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
@@ -260,6 +285,54 @@ mod tests {
             server.await.unwrap(),
             vec![format!("eval {rule}"), "reload".to_string()]
         );
+    }
+
+    #[tokio::test]
+    async fn request_times_out_when_hyprland_hangs() {
+        let dir = tempfile::tempdir().unwrap();
+        let sock_dir = dir.path().join("hypr/SIG");
+        std::fs::create_dir_all(&sock_dir).unwrap();
+        let listener = UnixListener::bind(sock_dir.join(".socket.sock")).unwrap();
+        tokio::spawn(async move {
+            let (_held, _) = listener.accept().await.unwrap();
+            tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+        });
+        let h = Hyprland::new(Some(dir.path().into()), Some("SIG".into())).with_timeouts(
+            std::time::Duration::from_millis(100),
+            std::time::Duration::from_secs(1),
+        );
+        let started = std::time::Instant::now();
+        assert!(matches!(
+            h.eval("return 1").await,
+            Err(CompositorError::Timeout(_))
+        ));
+        assert!(started.elapsed() < std::time::Duration::from_secs(2));
+    }
+
+    #[tokio::test]
+    async fn verify_times_out_and_kills_hung_binary() {
+        let dir = tempfile::tempdir().unwrap();
+        let fake = dir.path().join("Hyprland");
+        let marker = dir.path().join("finished");
+        std::fs::write(
+            &fake,
+            format!("#!/bin/sh\nsleep 3\ntouch {}\n", marker.display()),
+        )
+        .unwrap();
+        std::fs::set_permissions(&fake, std::os::unix::fs::PermissionsExt::from_mode(0o755))
+            .unwrap();
+        let h = Hyprland::new(None, None).with_binary(&fake).with_timeouts(
+            std::time::Duration::from_secs(1),
+            std::time::Duration::from_millis(200),
+        );
+        let started = std::time::Instant::now();
+        assert!(matches!(
+            h.verify(std::path::Path::new("/x.lua")).await,
+            Err(CompositorError::Timeout(_))
+        ));
+        assert!(started.elapsed() < std::time::Duration::from_secs(2));
+        tokio::time::sleep(std::time::Duration::from_secs(4)).await;
+        assert!(!marker.exists(), "hung verify process was not killed");
     }
 
     #[tokio::test]

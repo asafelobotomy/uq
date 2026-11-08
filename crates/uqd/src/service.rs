@@ -303,10 +303,10 @@ impl Desktop {
             Change::Theme => {
                 // gsettings are desktop-wide: only touch them while a Hyprland session is live,
                 // so a uqd left running never re-themes another desktop.
-                if self.live(self.comp.reload().await) {
-                    if let Err(e) = self.sys.apply(&theme) {
-                        tracing::warn!("system settings: {e}");
-                    }
+                if self.live(self.comp.reload().await)
+                    && let Err(e) = self.sys.apply(&theme)
+                {
+                    tracing::warn!("system settings: {e}");
                 }
                 let _ = self.events.send(Event::ThemeChanged {
                     name: theme.id.clone(),

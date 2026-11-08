@@ -37,7 +37,12 @@ enum Cmd {
     /// Re-render every config file from uqd's state.
     Reload,
     /// Install uQ's ~/.config/hypr/hyprland.lua (never overwrites an existing one).
-    Setup,
+    Setup {
+        /// Also point GTK, qt6ct, kitty, foot and alacritty at uQ's theme. These files apply in
+        /// every desktop you log in to, not only Hyprland.
+        #[arg(long)]
+        apps: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -99,14 +104,22 @@ fn schedule_json(cmd: &ScheduleCmd) -> Result<String, String> {
     serde_json::to_string(&s).map_err(|e| e.to_string())
 }
 
-/// The `name` of the workspace in `hyprctl -j activeworkspace` output.
-fn active_workspace_name(json: &str) -> Result<String, String> {
+/// A Hyprland workspace selector for `hyprctl -j activeworkspace` output: the numeric id for
+/// normal workspaces, otherwise `special:…` or `name:<name>` (a bare name never matches a rule).
+fn active_workspace_selector(json: &str) -> Result<String, String> {
     let v: serde_json::Value =
         serde_json::from_str(json).map_err(|e| format!("unexpected hyprctl output: {e}"))?;
-    v["name"]
+    if let Some(id) = v["id"].as_i64().filter(|id| *id > 0) {
+        return Ok(id.to_string());
+    }
+    let name = v["name"]
         .as_str()
-        .map(str::to_string)
-        .ok_or_else(|| "hyprctl reported no active workspace name".to_string())
+        .ok_or_else(|| "hyprctl reported no active workspace".to_string())?;
+    Ok(if name.starts_with("special") {
+        name.to_string()
+    } else {
+        format!("name:{name}")
+    })
 }
 
 fn current_workspace() -> Result<String, String> {
@@ -120,10 +133,10 @@ fn current_workspace() -> Result<String, String> {
             String::from_utf8_lossy(&out.stderr).trim()
         ));
     }
-    active_workspace_name(&String::from_utf8_lossy(&out.stdout))
+    active_workspace_selector(&String::from_utf8_lossy(&out.stdout))
 }
 
-fn setup() -> Result<(), String> {
+fn setup(apps: bool) -> Result<(), String> {
     let paths = Paths::from_env();
     match install_stub(&paths).map_err(|e| format!("{}: {e}", paths.main_lua.display()))? {
         StubOutcome::Installed => {
@@ -138,6 +151,13 @@ fn setup() -> Result<(), String> {
             println!("To use uQ, put these lines at the top of it:\n");
             print!("{}", stub_contents(&paths));
         }
+    }
+    if !apps {
+        println!(
+            "App theming (GTK, qt6ct, terminals) not changed. Run `uqctl setup --apps` to opt in; \
+             those files also apply in other desktops."
+        );
+        return Ok(());
     }
     let consumers = install_consumers(&paths).map_err(|e| format!("app theme files: {e}"))?;
     let lines: HashMap<_, _> = consumer_files(&paths).into_iter().collect();
@@ -163,8 +183,8 @@ fn describe(err: zbus::Error) -> String {
 }
 
 async fn run(cmd: Cmd) -> Result<(), String> {
-    if let Cmd::Setup = cmd {
-        return setup();
+    if let Cmd::Setup { apps } = cmd {
+        return setup(apps);
     }
     let conn = zbus::Connection::session().await.map_err(describe)?;
     let proxy = zbus::Proxy::new(&conn, NAME, PATH, NAME)
@@ -222,7 +242,7 @@ async fn run(cmd: Cmd) -> Result<(), String> {
             .call::<_, _, ()>("Reload", &())
             .await
             .map_err(describe)?,
-        Cmd::Setup => unreachable!("handled before connecting"),
+        Cmd::Setup { .. } => unreachable!("handled before connecting"),
     }
     Ok(())
 }
@@ -230,7 +250,11 @@ async fn run(cmd: Cmd) -> Result<(), String> {
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> ExitCode {
     let cli = Cli::parse();
-    match run(cli.cmd).await {
+    // uqd waits at most ~12 s on Hyprland (verify + reload); never hang a keybind forever.
+    let res = tokio::time::timeout(std::time::Duration::from_secs(15), run(cli.cmd))
+        .await
+        .unwrap_or_else(|_| Err("uqd did not answer within 15 s".into()));
+    match res {
         Ok(()) => ExitCode::SUCCESS,
         Err(msg) => {
             eprintln!("uqctl: {msg}");
@@ -277,18 +301,28 @@ mod tests {
     }
 
     #[test]
-    fn active_workspace_name_from_hyprctl_json() {
+    fn active_workspace_selector_prefers_id() {
         let json = r#"{"id": 3, "name": "web", "monitor": "DP-1", "windows": 2}"#;
-        assert_eq!(active_workspace_name(json).unwrap(), "web");
-        assert!(active_workspace_name("not json").is_err());
-        assert!(active_workspace_name(r#"{"id": 1}"#).is_err());
+        assert_eq!(active_workspace_selector(json).unwrap(), "3");
+        let special = r#"{"id": -98, "name": "special:magic"}"#;
+        assert_eq!(active_workspace_selector(special).unwrap(), "special:magic");
+        let named = r#"{"id": -1337, "name": "scratch"}"#;
+        assert_eq!(active_workspace_selector(named).unwrap(), "name:scratch");
+        assert!(active_workspace_selector("not json").is_err());
+        assert!(active_workspace_selector(r#"{"name": 1}"#).is_err());
     }
 
     #[test]
     fn cli_parses_setup() {
         assert!(matches!(
             Cli::try_parse_from(["uqctl", "setup"]).unwrap().cmd,
-            Cmd::Setup
+            Cmd::Setup { apps: false }
+        ));
+        assert!(matches!(
+            Cli::try_parse_from(["uqctl", "setup", "--apps"])
+                .unwrap()
+                .cmd,
+            Cmd::Setup { apps: true }
         ));
     }
 

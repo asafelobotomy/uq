@@ -21,12 +21,14 @@ and, in later phases, a Quickshell shell and integrated apps. See the
 ```bash
 cd packaging/uq-hyprland-pin && makepkg -si
 cd ../uq && makepkg -si
-uqctl setup
+uqctl setup          # add --apps to also theme GTK, qt6ct and terminals
 ```
 
-`uqctl setup` writes `~/.config/hypr/hyprland.lua` and the GTK, qt6ct, kitty, foot and alacritty
-files that load uQ's theme. It never overwrites a file you already have; it prints the line to add
-instead. Then log in to Hyprland.
+`uqctl setup` writes `~/.config/hypr/hyprland.lua`. With `--apps` it also writes the GTK, qt6ct,
+kitty, foot and alacritty files that load uQ's theme; those apply in every desktop you use, not
+only Hyprland, so they are opt-in. It never overwrites a file you already have; it prints the line
+to add instead. Then log in to Hyprland. uqd starts with the Hyprland session and stops when it
+ends.
 
 Hyprland is pinned to **0.56.x** (`uq-hyprland-pin`), the newest release in Arch `extra` on
 2026-11-08. The Lua API uQ uses was checked against the 0.56.2 and 0.57.0 sources.

@@ -43,7 +43,14 @@ local calls = {}
 local function proxy(name)
   return setmetatable({}, {
     __index = function(_, k) return proxy(name .. "." .. k) end,
-    __call = function(_, ...) calls[#calls + 1] = name; return proxy(name .. "()") end,
+    __call = function(_, ...)
+      calls[#calls + 1] = name
+      for _, a in ipairs({...}) do
+        if type(a) == "string" then calls[#calls + 1] = name .. ":" .. a end
+        if type(a) == "function" then a() end
+      end
+      return proxy(name .. "()")
+    end,
   })
 end
 hl = proxy("hl")
@@ -52,6 +59,19 @@ local seen = {}
 for _, c in ipairs(calls) do seen[c] = true end
 for _, want in ipairs({"hl.config", "hl.bind", "hl.on", "hl.workspace_rule"}) do
   if not seen[want] then error("never called " .. want) end
+end
+local function called(prefix, needle)
+  for _, c in ipairs(calls) do
+    if c:sub(1, #prefix) == prefix and c:find(needle, 1, true) then return true end
+  end
+  return false
+end
+for _, want in ipairs({
+  {"hl.on:", "hyprland.start"}, {"hl.on:", "hyprland.shutdown"},
+  {"hl.exec_cmd:", "systemctl --user restart uqd.service"},
+  {"hl.exec_cmd:", "systemctl --user stop uqd.service"},
+}) do
+  if not called(want[1], want[2]) then error("missing " .. want[1] .. want[2]) end
 end
 print("ok " .. #calls)
 "#;
