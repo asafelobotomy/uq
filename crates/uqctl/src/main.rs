@@ -3,7 +3,9 @@
 use clap::{Parser, Subcommand};
 use std::collections::HashMap;
 use std::process::ExitCode;
+use uq_core::paths::Paths;
 use uq_core::schedule::Schedule;
+use uq_core::stub::{StubOutcome, consumer_files, install_consumers, install_stub, stub_contents};
 
 const NAME: &str = "org.uq.Desktop1";
 const PATH: &str = "/org/uq/Desktop1";
@@ -34,6 +36,8 @@ enum Cmd {
     },
     /// Re-render every config file from uqd's state.
     Reload,
+    /// Install uQ's ~/.config/hypr/hyprland.lua (never overwrites an existing one).
+    Setup,
 }
 
 #[derive(Subcommand)]
@@ -50,7 +54,7 @@ enum ThemeCmd {
 #[derive(Subcommand)]
 enum LayoutCmd {
     Get,
-    /// e.g. `uqctl layout set 2 scrolling`
+    /// e.g. `uqctl layout set 2 scrolling`; WORKSPACE may be `current`.
     Set {
         workspace: String,
         layout: String,
@@ -95,6 +99,61 @@ fn schedule_json(cmd: &ScheduleCmd) -> Result<String, String> {
     serde_json::to_string(&s).map_err(|e| e.to_string())
 }
 
+/// The `name` of the workspace in `hyprctl -j activeworkspace` output.
+fn active_workspace_name(json: &str) -> Result<String, String> {
+    let v: serde_json::Value =
+        serde_json::from_str(json).map_err(|e| format!("unexpected hyprctl output: {e}"))?;
+    v["name"]
+        .as_str()
+        .map(str::to_string)
+        .ok_or_else(|| "hyprctl reported no active workspace name".to_string())
+}
+
+fn current_workspace() -> Result<String, String> {
+    let out = std::process::Command::new("hyprctl")
+        .args(["-j", "activeworkspace"])
+        .output()
+        .map_err(|e| format!("running hyprctl: {e}"))?;
+    if !out.status.success() {
+        return Err(format!(
+            "hyprctl failed: {}",
+            String::from_utf8_lossy(&out.stderr).trim()
+        ));
+    }
+    active_workspace_name(&String::from_utf8_lossy(&out.stdout))
+}
+
+fn setup() -> Result<(), String> {
+    let paths = Paths::from_env();
+    match install_stub(&paths).map_err(|e| format!("{}: {e}", paths.main_lua.display()))? {
+        StubOutcome::Installed => {
+            println!("uQ config installed at {}", paths.main_lua.display());
+            println!("Log out and choose Hyprland, or run `hyprctl reload` in a running session.");
+        }
+        StubOutcome::AlreadyPresent => {
+            println!(
+                "{} already exists and was left alone.",
+                paths.main_lua.display()
+            );
+            println!("To use uQ, put these lines at the top of it:\n");
+            print!("{}", stub_contents(&paths));
+        }
+    }
+    let consumers = install_consumers(&paths).map_err(|e| format!("app theme files: {e}"))?;
+    let lines: HashMap<_, _> = consumer_files(&paths).into_iter().collect();
+    for (path, outcome) in consumers {
+        match outcome {
+            StubOutcome::Installed => println!("themed: {}", path.display()),
+            StubOutcome::AlreadyPresent => println!(
+                "left alone: {} (add this to use uQ's theme):\n  {}",
+                path.display(),
+                lines[&path].trim_end().replace('\n', "\n  ")
+            ),
+        }
+    }
+    Ok(())
+}
+
 fn describe(err: zbus::Error) -> String {
     match err {
         zbus::Error::MethodError(_, Some(msg), _) => msg,
@@ -104,6 +163,9 @@ fn describe(err: zbus::Error) -> String {
 }
 
 async fn run(cmd: Cmd) -> Result<(), String> {
+    if let Cmd::Setup = cmd {
+        return setup();
+    }
     let conn = zbus::Connection::session().await.map_err(describe)?;
     let proxy = zbus::Proxy::new(&conn, NAME, PATH, NAME)
         .await
@@ -140,6 +202,11 @@ async fn run(cmd: Cmd) -> Result<(), String> {
         Cmd::Layout {
             cmd: LayoutCmd::Set { workspace, layout },
         } => {
+            let workspace = if workspace == "current" {
+                current_workspace()?
+            } else {
+                workspace
+            };
             proxy
                 .call::<_, _, ()>("SetLayout", &(workspace, layout))
                 .await
@@ -155,6 +222,7 @@ async fn run(cmd: Cmd) -> Result<(), String> {
             .call::<_, _, ()>("Reload", &())
             .await
             .map_err(describe)?,
+        Cmd::Setup => unreachable!("handled before connecting"),
     }
     Ok(())
 }
@@ -206,6 +274,22 @@ mod tests {
             schedule_json(&ScheduleCmd::Off).unwrap(),
             r#"{"mode":"off"}"#
         );
+    }
+
+    #[test]
+    fn active_workspace_name_from_hyprctl_json() {
+        let json = r#"{"id": 3, "name": "web", "monitor": "DP-1", "windows": 2}"#;
+        assert_eq!(active_workspace_name(json).unwrap(), "web");
+        assert!(active_workspace_name("not json").is_err());
+        assert!(active_workspace_name(r#"{"id": 1}"#).is_err());
+    }
+
+    #[test]
+    fn cli_parses_setup() {
+        assert!(matches!(
+            Cli::try_parse_from(["uqctl", "setup"]).unwrap().cmd,
+            Cmd::Setup
+        ));
     }
 
     #[test]

@@ -6,4 +6,5 @@ pub mod paths;
 pub mod render;
 pub mod schedule;
 pub mod state;
+pub mod stub;
 pub mod theme;

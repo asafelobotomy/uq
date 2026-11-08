@@ -1,0 +1,203 @@
+//! The three-line `~/.config/hypr/hyprland.lua` that turns a Hyprland session into uQ.
+
+use crate::atomic::atomic_write;
+use crate::lua::lua_string;
+use crate::paths::Paths;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StubOutcome {
+    /// The uQ stub is now in place (written now, or already there).
+    Installed,
+    /// The user has their own hyprland.lua; it was left untouched.
+    AlreadyPresent,
+}
+
+pub fn stub_contents(p: &Paths) -> String {
+    format!(
+        "require({})\nrequire(\"./uq/generated.lua\")\nrequire(\"./uq/user.lua\")\n",
+        lua_string(&p.base_lua.to_string_lossy())
+    )
+}
+
+/// Write the stub unless a different `hyprland.lua` exists. Never overwrites the user's file.
+pub fn install_stub(p: &Paths) -> std::io::Result<StubOutcome> {
+    let wanted = stub_contents(p);
+    match std::fs::read_to_string(&p.main_lua) {
+        Ok(existing) if existing == wanted => Ok(StubOutcome::Installed),
+        Ok(_) => Ok(StubOutcome::AlreadyPresent),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            atomic_write(&p.main_lua, &wanted)?;
+            Ok(StubOutcome::Installed)
+        }
+        Err(e) => Err(e),
+    }
+}
+
+/// Per-app config files that pull in uQ's rendered theme: (path, contents to create it with).
+pub fn consumer_files(p: &Paths) -> Vec<(std::path::PathBuf, String)> {
+    let cfg = p.hypr_dir.parent().expect("hypr dir has a parent");
+    let theme = p.theme_dir.to_string_lossy();
+    vec![
+        (
+            cfg.join("gtk-3.0/gtk.css"),
+            format!("@import url(\"file://{theme}/gtk-3.0/gtk.css\");\n"),
+        ),
+        (
+            cfg.join("gtk-4.0/gtk.css"),
+            format!("@import url(\"file://{theme}/gtk-4.0/gtk.css\");\n"),
+        ),
+        (
+            cfg.join("qt6ct/qt6ct.conf"),
+            format!(
+                "[Appearance]\ncolor_scheme_path={theme}/qt6ct/colors/uq.conf\ncustom_palette=true\nstyle=Fusion\n"
+            ),
+        ),
+        (
+            cfg.join("kitty/kitty.conf"),
+            format!("include {theme}/terminal/kitty.conf\n"),
+        ),
+        (
+            cfg.join("foot/foot.ini"),
+            format!("[main]\ninclude={theme}/terminal/foot.ini\n"),
+        ),
+        (
+            cfg.join("alacritty/alacritty.toml"),
+            format!("[general]\nimport = [\"{theme}/terminal/alacritty.toml\"]\n"),
+        ),
+    ]
+}
+
+/// Create each consumer config that doesn't exist. An existing file counts as `Installed` if it
+/// already references uQ's theme directory; otherwise it is left alone (`AlreadyPresent`).
+pub fn install_consumers(p: &Paths) -> std::io::Result<Vec<(std::path::PathBuf, StubOutcome)>> {
+    let theme = p.theme_dir.to_string_lossy().into_owned();
+    let mut out = Vec::new();
+    for (path, content) in consumer_files(p) {
+        let marker = content
+            .lines()
+            .find(|l| l.contains(&theme))
+            .unwrap_or_default()
+            .to_string();
+        let outcome = match std::fs::read_to_string(&path) {
+            Ok(existing) if existing.contains(&marker) => StubOutcome::Installed,
+            Ok(_) => StubOutcome::AlreadyPresent,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                atomic_write(&path, &content)?;
+                StubOutcome::Installed
+            }
+            Err(e) => return Err(e),
+        };
+        out.push((path, outcome));
+    }
+    Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::path::Path;
+
+    #[test]
+    fn stub_requires_base_generated_user_in_order() {
+        let p = Paths::under(Path::new("/r"));
+        assert_eq!(
+            stub_contents(&p),
+            "require(\"/r/share/hypr/base.lua\")\nrequire(\"./uq/generated.lua\")\nrequire(\"./uq/user.lua\")\n"
+        );
+    }
+
+    #[test]
+    fn installs_when_absent() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = Paths::under(dir.path());
+        assert_eq!(install_stub(&p).unwrap(), StubOutcome::Installed);
+        assert_eq!(fs::read_to_string(&p.main_lua).unwrap(), stub_contents(&p));
+    }
+
+    #[test]
+    fn leaves_existing_config_alone() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = Paths::under(dir.path());
+        fs::create_dir_all(&p.hypr_dir).unwrap();
+        fs::write(&p.main_lua, "-- mine\n").unwrap();
+        assert_eq!(install_stub(&p).unwrap(), StubOutcome::AlreadyPresent);
+        assert_eq!(fs::read_to_string(&p.main_lua).unwrap(), "-- mine\n");
+    }
+
+    #[test]
+    fn consumer_files_point_at_theme_dir() {
+        let p = Paths::under(Path::new("/r"));
+        let files = consumer_files(&p);
+        let get = |rel: &str| {
+            files
+                .iter()
+                .find(|(path, _)| path.ends_with(rel))
+                .map(|(_, line)| line.clone())
+                .unwrap_or_else(|| panic!("no {rel}"))
+        };
+        assert_eq!(
+            get("gtk-4.0/gtk.css"),
+            "@import url(\"file:///r/state/uq/theme/gtk-4.0/gtk.css\");\n"
+        );
+        assert_eq!(
+            get("gtk-3.0/gtk.css"),
+            "@import url(\"file:///r/state/uq/theme/gtk-3.0/gtk.css\");\n"
+        );
+        assert!(
+            get("qt6ct/qt6ct.conf")
+                .contains("color_scheme_path=/r/state/uq/theme/qt6ct/colors/uq.conf")
+        );
+        assert!(get("qt6ct/qt6ct.conf").contains("custom_palette=true"));
+        assert_eq!(
+            get("kitty/kitty.conf"),
+            "include /r/state/uq/theme/terminal/kitty.conf\n"
+        );
+        assert!(get("foot/foot.ini").contains("include=/r/state/uq/theme/terminal/foot.ini"));
+        assert!(
+            get("alacritty/alacritty.toml")
+                .contains("\"/r/state/uq/theme/terminal/alacritty.toml\"")
+        );
+        assert!(files.iter().all(|(path, _)| path.starts_with("/r/config")));
+    }
+
+    #[test]
+    fn install_consumers_creates_missing_and_keeps_existing() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = Paths::under(dir.path());
+        let kitty = p.hypr_dir.parent().unwrap().join("kitty/kitty.conf");
+        fs::create_dir_all(kitty.parent().unwrap()).unwrap();
+        fs::write(&kitty, "font_size 12\n").unwrap();
+        let foot = p.hypr_dir.parent().unwrap().join("foot/foot.ini");
+        let foot_line = consumer_files(&p)
+            .into_iter()
+            .find(|(f, _)| *f == foot)
+            .unwrap()
+            .1;
+        fs::create_dir_all(foot.parent().unwrap()).unwrap();
+        fs::write(&foot, format!("# mine\n{foot_line}")).unwrap();
+
+        let results = install_consumers(&p).unwrap();
+        let outcome = |f: &Path| results.iter().find(|(path, _)| path == f).unwrap().1;
+        assert_eq!(outcome(&kitty), StubOutcome::AlreadyPresent);
+        assert_eq!(fs::read_to_string(&kitty).unwrap(), "font_size 12\n");
+        assert_eq!(
+            outcome(&foot),
+            StubOutcome::Installed,
+            "existing file already includes uQ"
+        );
+        for (path, content) in consumer_files(&p) {
+            if path != kitty && path != foot {
+                assert_eq!(fs::read_to_string(&path).unwrap(), content, "{path:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn existing_uq_stub_counts_as_installed() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = Paths::under(dir.path());
+        install_stub(&p).unwrap();
+        assert_eq!(install_stub(&p).unwrap(), StubOutcome::Installed);
+    }
+}

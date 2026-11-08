@@ -1,0 +1,12 @@
+[Unit]
+Description=uQ desktop daemon (theme, layouts, schedule)
+Documentation=https://github.com/asafelobotomy/uq
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=dbus
+BusName=org.uq.Desktop1
+ExecStart=/usr/bin/uqd
+Restart=on-failure
+RestartSec=2

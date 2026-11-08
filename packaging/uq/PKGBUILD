@@ -1,0 +1,47 @@
+# Maintainer: asafelobotomy
+# Builds from this checkout: run `makepkg -si` inside packaging/uq.
+pkgname=uq
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Themeable Hyprland desktop: theme and layout daemon, CLI and base config"
+arch=(x86_64)
+url="https://github.com/asafelobotomy/uq"
+license=(MIT)
+depends=(uq-hyprland-pin dbus glib2 qt6ct gcc-libs)
+makedepends=(cargo)
+checkdepends=(lua)
+optdepends=(
+  'kitty: default terminal (SUPER+Return)'
+  'papirus-icon-theme: icon theme used by every uQ theme'
+  'bibata-cursor-theme: cursor theme used by every uQ theme'
+  'ttf-jetbrains-mono: monospace font'
+  'inter-font: interface font'
+  'wireplumber: volume keys'
+  'brightnessctl: brightness keys'
+  'playerctl: media keys'
+)
+options=(!lto)
+
+_root() { realpath "$startdir/../.."; }
+
+build() {
+  cd "$(_root)"
+  cargo build --release --locked -p uqd -p uqctl
+}
+
+check() {
+  cd "$(_root)"
+  cargo test --release --locked --workspace
+}
+
+package() {
+  cd "$(_root)"
+  install -Dm755 target/release/uqd "$pkgdir/usr/bin/uqd"
+  install -Dm755 target/release/uqctl "$pkgdir/usr/bin/uqctl"
+  install -Dm644 config/hypr/base.lua "$pkgdir/usr/share/uq/hypr/base.lua"
+  install -dm755 "$pkgdir/usr/share/uq"
+  cp -r --no-preserve=ownership themes templates "$pkgdir/usr/share/uq/"
+  install -Dm644 packaging/uqd.service "$pkgdir/usr/lib/systemd/user/uqd.service"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 themes/CREDITS.md "$pkgdir/usr/share/licenses/$pkgname/THEME-CREDITS.md"
+}
