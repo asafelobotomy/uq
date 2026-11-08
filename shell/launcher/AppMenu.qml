@@ -100,7 +100,6 @@ PanelWindow {
         currentCategory = favList.length > 0 ? M.FAVOURITES : M.ALL;
         powerState = M.initialPower();
         powerLabel = "";
-        avatarIndex = 0;
         grid.currentIndex = 0;
         grid.positionViewAtBeginning();
     }
