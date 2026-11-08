@@ -6,7 +6,8 @@
 #   - smoke_launch_survives_restart: a Launch'd app scope outlives a shell restart
 #   - hot-plug: a new headless output gets a bar, and removing it removes the bar
 #
-# Exit 0: passed. Exit 77: skipped (no headless Hyprland here); CI prints a notice and carries on.
+# Exit 0: the bar check ran and every check that could run passed. Exit 77: skipped (no headless
+# Hyprland here, or the compositor cannot host layer surfaces; a broken shell is a failure, not a skip); CI prints a notice and carries on.
 # A sub-check that cannot run in this environment (no systemd user manager, no Wayland client)
 # is skipped with a message and does not fail the run.
 #
@@ -103,8 +104,17 @@ start_shell() {
 }
 start_shell
 if ! wait_bars ge 1; then
-    # Hyprland came up but Quickshell cannot draw on it here: a skip, not a failure.
-    skip "uq-bar never appeared on headless Hyprland (see below)$(echo; tail -n 15 "$tmp/qs.log")"
+    # Only an environment that cannot host the shell is a skip. A dead shell or QML errors mean
+    # the shell is broken: fail, with the log.
+    if ! kill -0 "$shell" 2>/dev/null; then
+        fail "qs exited before uq-bar appeared"
+    elif grep -qE 'TypeError|ReferenceError|is not a type|Cannot assign|Unable to assign|is not a valid import|Failed to load configuration|Cannot read property|is not a function|SyntaxError|[A-Za-z]+\.qml:[0-9]+:[0-9]*:? ' "$tmp/qs.log"; then
+        fail "QML errors, uq-bar never appeared"
+    elif grep -qiE 'layer.?shell.*(not|unsupported|unavailable)|(not|unsupported|unavailable).*layer.?shell|compositor does not support|failed to create.*(wl_display|egl|opengl|rhi)|could not connect to (display|wayland)|no (screens|outputs)' "$tmp/qs.log"; then
+        skip "the compositor here cannot host the shell's layer surfaces$(echo; tail -n 15 "$tmp/qs.log")"
+    else
+        fail "uq-bar never appeared although qs is running and logged no known environment limit"
+    fi
 fi
 base=$(bars)
 echo "ok: uq-bar present ($base layer(s))"
@@ -186,13 +196,21 @@ smoke_launch_survives_restart() {
 smoke_launch_survives_restart
 
 # --- hot-plug -------------------------------------------------------------------------------
-before=$(bars)
-hc output create headless >/dev/null 2>&1 || skip "hyprctl output create headless failed"
-wait_bars eq $((before + 1)) || fail "bar count did not go from $before to $((before + 1)) after plugging an output (now $(bars))"
-name=$(hc monitors -j | jq -r '.[].name' | grep -E '^HEADLESS-' | tail -n1)
-[ -n "$name" ] || fail "no HEADLESS-* output to remove"
-hc output remove "$name" >/dev/null 2>&1
-wait_bars eq "$before" || fail "bar count did not return to $before after unplugging $name (now $(bars))"
-echo "ok: hot-plug ($before -> $((before + 1)) -> $before)"
+hotplug() {
+    local before name
+    before=$(bars)
+    if ! hc output create headless >/dev/null 2>&1; then
+        echo "SKIP (sub-check): hot-plug: hyprctl output create headless failed here"
+        return 0
+    fi
+    wait_bars eq $((before + 1)) || fail "bar count did not go from $before to $((before + 1)) after plugging an output (now $(bars))"
+    name=$(hc monitors -j | jq -r '.[].name' | grep -E '^HEADLESS-' | tail -n1)
+    [ -n "$name" ] || fail "no HEADLESS-* output to remove"
+    hc output remove "$name" >/dev/null 2>&1
+    wait_bars eq "$before" || fail "bar count did not return to $before after unplugging $name (now $(bars))"
+    echo "ok: hot-plug ($before -> $((before + 1)) -> $before)"
+}
+hotplug
 
+# Reaching here means the bar check ran and every check that could run passed.
 echo "smoke-shell ok"

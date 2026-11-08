@@ -49,7 +49,7 @@ jobs:
           su tester -c "cd '$GITHUB_WORKSPACE'
             export XDG_RUNTIME_DIR=\$(mktemp -d)
             export UQCTL='$GITHUB_WORKSPACE/target/debug/uqctl'
-            scripts/smoke-shell.sh" || rc=$?
+            timeout 300 scripts/smoke-shell.sh" || rc=$?
           if [ "$rc" -eq 77 ]; then
             echo "::notice::Shell smoke test skipped (exit 77): headless Hyprland cannot host Quickshell in this container. Check it by hand."
           elif [ "$rc" -ne 0 ]; then

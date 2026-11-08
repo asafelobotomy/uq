@@ -95,6 +95,10 @@ for _, want in ipairs({
     error("missing in " .. want[1] .. " hook: " .. want[2])
   end
 end
+local start = in_hook["hyprland.start"] or ""
+if start:find("uqd.service &&", 1, true) or start:find("&& systemctl --user restart uq-shell", 1, true) then
+  error("the shell must start even when uqd fails: no && before the uq-shell restart")
+end
 if not called("hl.dsp.exec_cmd:", "systemctl --user restart uq-lock.service || hyprlock") then
   error("missing the SUPER+CTRL+L recovery bind")
 end
