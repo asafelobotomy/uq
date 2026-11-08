@@ -5,8 +5,9 @@ use super::protocol::Outbound;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
-use tokio::sync::{Mutex, mpsc, watch};
+use tokio::sync::{Mutex, Notify, mpsc, watch};
 use tokio_util::sync::CancellationToken;
 use uq_core::settings::{Location, Settings, round2};
 
@@ -238,6 +239,21 @@ impl IpGate {
 pub const WEATHER_EVERY: Duration = Duration::from_secs(30 * 60);
 /// Quiet time after a network change before the public-IP lookup runs.
 pub const SETTLE: Duration = Duration::from_secs(5);
+/// Waits before retrying a failed weather fetch (the network is often not up yet at login);
+/// after the last step the regular period applies. A success starts over.
+pub const WEATHER_RETRY: [Duration; 4] = [
+    Duration::from_secs(30),
+    Duration::from_secs(60),
+    Duration::from_secs(120),
+    Duration::from_secs(300),
+];
+
+/// Outcome of one weather fetch.
+enum Fetch {
+    Ok,
+    Failed,
+    Stopping,
+}
 
 /// The bridge's network features: the weather loop and the gated public-IP lookup. Background
 /// work stops on `stop`, including while blocked in a send.
@@ -247,6 +263,10 @@ pub struct Net {
     settings: watch::Receiver<Option<Settings>>,
     stop: CancellationToken,
     settle: Duration,
+    retry: Vec<Duration>,
+    /// The last weather fetch failed; a network change then triggers a refetch.
+    wx_failed: AtomicBool,
+    wx_kick: Notify,
     ip: Mutex<IpState>,
 }
 
@@ -264,7 +284,21 @@ impl Net {
         stop: CancellationToken,
         settle: Duration,
     ) -> Arc<Net> {
+        Net::new_with_retry(client, tx, settings, stop, settle, WEATHER_RETRY.to_vec())
+    }
+
+    pub fn new_with_retry(
+        client: NetClient,
+        tx: mpsc::Sender<Outbound>,
+        settings: watch::Receiver<Option<Settings>>,
+        stop: CancellationToken,
+        settle: Duration,
+        retry: Vec<Duration>,
+    ) -> Arc<Net> {
         Arc::new(Net {
+            retry,
+            wx_failed: AtomicBool::new(false),
+            wx_kick: Notify::new(),
             client,
             tx,
             settings,
@@ -293,11 +327,13 @@ impl Net {
     }
 
     /// Weather at start, when the location changes, and every `period`. A failed fetch emits
-    /// nothing, so the shell keeps the last value.
+    /// nothing (the shell keeps the last value) and is retried after `self.retry` steps, capped
+    /// at `period`; a network change after a failure retries at once.
     pub async fn weather_loop(self: Arc<Self>, period: Duration) {
         let mut rx = self.settings.clone();
         let mut current: Option<Location> = None;
         let mut next: Option<tokio::time::Instant> = None;
+        let mut failures = 0usize;
         loop {
             let want = rx
                 .borrow_and_update()
@@ -308,13 +344,14 @@ impl Net {
                 current = want;
                 match &current {
                     Some(l) => {
-                        if !self.fetch_weather(l).await {
+                        if !self.refresh(l, period, &mut failures, &mut next).await {
                             return;
                         }
-                        next = Some(tokio::time::Instant::now() + period);
                     }
                     None => {
                         next = None;
+                        failures = 0;
+                        self.wx_failed.store(false, Ordering::SeqCst);
                         if had && !self.emit("Weather", Value::Null).await {
                             return;
                         }
@@ -324,33 +361,100 @@ impl Net {
             tokio::select! {
                 _ = self.stop.cancelled() => return,
                 r = rx.changed() => if r.is_err() { return },
-                _ = tokio::time::sleep_until(next.unwrap_or_else(tokio::time::Instant::now)), if next.is_some() => {
-                    if let Some(l) = &current
-                        && !self.fetch_weather(l).await
+                _ = self.wx_kick.notified() => {
+                    if self.wx_failed.load(Ordering::SeqCst)
+                        && let Some(l) = &current
+                        && !self.refresh(l, period, &mut failures, &mut next).await
                     {
                         return;
                     }
-                    next = Some(tokio::time::Instant::now() + period);
+                }
+                _ = tokio::time::sleep_until(next.unwrap_or_else(tokio::time::Instant::now)), if next.is_some() => {
+                    if let Some(l) = &current
+                        && !self.refresh(l, period, &mut failures, &mut next).await
+                    {
+                        return;
+                    }
                 }
             }
         }
     }
 
-    /// Fetch and emit; false only when the bridge is stopping.
-    async fn fetch_weather(&self, loc: &Location) -> bool {
-        let got = tokio::select! { _ = self.stop.cancelled() => return false, r = self.client.weather(loc) => r };
+    /// Fetch, then schedule the next one; false only when the bridge is stopping.
+    async fn refresh(
+        &self,
+        loc: &Location,
+        period: Duration,
+        failures: &mut usize,
+        next: &mut Option<tokio::time::Instant>,
+    ) -> bool {
+        let wait = match self.fetch_weather(loc).await {
+            Fetch::Stopping => return false,
+            Fetch::Ok => {
+                *failures = 0;
+                self.wx_failed.store(false, Ordering::SeqCst);
+                period
+            }
+            Fetch::Failed => {
+                let step = self.retry.get(*failures).copied().unwrap_or(period);
+                *failures += 1;
+                self.wx_failed.store(true, Ordering::SeqCst);
+                step.min(period)
+            }
+        };
+        *next = Some(tokio::time::Instant::now() + wait);
+        true
+    }
+
+    async fn fetch_weather(&self, loc: &Location) -> Fetch {
+        let got = tokio::select! { _ = self.stop.cancelled() => return Fetch::Stopping, r = self.client.weather(loc) => r };
         match got {
             Ok(w) => {
-                self.emit(
-                    "Weather",
-                    json!({"temp_c": w.temp_c, "code": w.code, "is_day": w.is_day, "location_name": w.location_name}),
-                )
-                .await
+                let sent = self
+                    .emit(
+                        "Weather",
+                        json!({"temp_c": w.temp_c, "code": w.code, "is_day": w.is_day, "location_name": w.location_name}),
+                    )
+                    .await;
+                if sent { Fetch::Ok } else { Fetch::Stopping }
             }
             Err(e) => {
                 eprintln!("uqctl bridge: weather lookup failed: {e}");
-                !self.stop.is_cancelled()
+                if self.stop.is_cancelled() {
+                    Fetch::Stopping
+                } else {
+                    Fetch::Failed
+                }
             }
+        }
+    }
+
+    /// Turning the public-IP lookup off clears the shown country at once and drops any pending
+    /// lookup.
+    pub async fn privacy_loop(self: Arc<Self>) {
+        let mut rx = self.settings.clone();
+        let mut was = rx
+            .borrow_and_update()
+            .as_ref()
+            .is_some_and(|s| s.privacy.public_ip_lookup);
+        loop {
+            tokio::select! {
+                _ = self.stop.cancelled() => return,
+                r = rx.changed() => if r.is_err() { return },
+            }
+            let now = rx
+                .borrow_and_update()
+                .as_ref()
+                .is_some_and(|s| s.privacy.public_ip_lookup);
+            if was && !now {
+                if let Some(h) = self.ip.lock().await.pending.take() {
+                    h.abort();
+                }
+                if !self.emit("PublicIp", Value::Null).await {
+                    return;
+                }
+            }
+            was = now;
         }
     }
 
@@ -358,6 +462,9 @@ impl Net {
     /// one, the lookup waits out the settle time (a newer change restarts it), then runs if the
     /// gate and the privacy setting allow.
     pub async fn network_changed(self: &Arc<Self>, vpn_active: bool) {
+        if self.wx_failed.load(Ordering::SeqCst) {
+            self.wx_kick.notify_one();
+        }
         let mut st = self.ip.lock().await;
         st.gate.vpn_active = vpn_active;
         if let Some(h) = st.pending.take() {
@@ -680,5 +787,174 @@ mod tests {
         net.network_changed(false).await;
         assert_eq!(event(&mut rx).await, ("PublicIp".into(), Value::Null));
         stop.cancel();
+    }
+
+    /// Serves WX (200) except for the 1-based request numbers in `fail` (500); records the time
+    /// of each request.
+    async fn scripted(fail: &'static [usize]) -> (String, Arc<std::sync::Mutex<Vec<Instant>>>) {
+        let l = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", l.local_addr().unwrap());
+        let times = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let t2 = times.clone();
+        tokio::spawn(async move {
+            loop {
+                let Ok((mut sock, _)) = l.accept().await else {
+                    return;
+                };
+                let n = {
+                    let mut t = t2.lock().unwrap();
+                    t.push(Instant::now());
+                    t.len()
+                };
+                tokio::spawn(async move {
+                    let mut buf = Vec::new();
+                    let mut chunk = [0u8; 1024];
+                    while !buf.windows(4).any(|w| w == b"\r\n\r\n") {
+                        match sock.read(&mut chunk).await {
+                            Ok(0) | Err(_) => return,
+                            Ok(k) => buf.extend_from_slice(&chunk[..k]),
+                        }
+                    }
+                    let resp = if fail.contains(&n) {
+                        "HTTP/1.1 500 Err\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                            .to_string()
+                    } else {
+                        format!(
+                            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{WX}",
+                            WX.len()
+                        )
+                    };
+                    let _ = sock.write_all(resp.as_bytes()).await;
+                });
+            }
+        });
+        (base, times)
+    }
+
+    fn ms(a: Instant, b: Instant) -> u128 {
+        b.duration_since(a).as_millis()
+    }
+
+    #[tokio::test]
+    async fn weather_retries_with_backoff_and_success_resets() {
+        // Requests 1-3 fail, 4 succeeds, 5 fails, 6 succeeds.
+        let (base, times) = scripted(&[1, 2, 3, 5]).await;
+        let (tx, mut rx) = mpsc::channel(16);
+        let (stx, srx) = watch::channel(settings(Some(("Here", 1.0)), false));
+        let stop = CancellationToken::new();
+        let net = Net::new_with_retry(
+            NetClient::with_bases(&base, &base, &base),
+            tx,
+            srx,
+            stop.clone(),
+            SETTLE,
+            vec![
+                Duration::from_millis(50),
+                Duration::from_millis(100),
+                Duration::from_millis(200),
+            ],
+        );
+        let task = tokio::spawn(net.weather_loop(Duration::from_millis(500)));
+        event(&mut rx).await; // request 4's weather
+        event(&mut rx).await; // request 6's weather
+        let t = times.lock().unwrap().clone();
+        assert!(t.len() >= 6, "{}", t.len());
+        let gaps: Vec<u128> = t.windows(2).take(5).map(|w| ms(w[0], w[1])).collect();
+        // 50, 100, 200 backoff, then the regular period, then the reset first step (50).
+        assert!((45..95).contains(&gaps[0]), "{gaps:?}");
+        assert!((95..190).contains(&gaps[1]), "{gaps:?}");
+        assert!((195..320).contains(&gaps[2]), "{gaps:?}");
+        assert!((495..650).contains(&gaps[3]), "{gaps:?}");
+        assert!((45..95).contains(&gaps[4]), "{gaps:?}");
+        stop.cancel();
+        drop(stx);
+        tokio::time::timeout(Duration::from_secs(2), task)
+            .await
+            .unwrap()
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn weather_backoff_caps_at_the_period() {
+        let (base, times) = scripted(&[1, 2, 3, 4]).await;
+        let (tx, _rx) = mpsc::channel(16);
+        let (_stx, srx) = watch::channel(settings(Some(("Here", 1.0)), false));
+        let stop = CancellationToken::new();
+        let net = Net::new_with_retry(
+            NetClient::with_bases(&base, &base, &base),
+            tx,
+            srx,
+            stop.clone(),
+            SETTLE,
+            vec![Duration::from_millis(400)],
+        );
+        let task = tokio::spawn(net.weather_loop(Duration::from_millis(100)));
+        tokio::time::sleep(Duration::from_millis(450)).await;
+        stop.cancel();
+        let _ = task.await;
+        // A step longer than the period is capped: retries every 100 ms, not 400.
+        assert!(times.lock().unwrap().len() >= 4);
+    }
+
+    #[tokio::test]
+    async fn network_changed_after_failed_weather_refetches() {
+        let (base, times) = scripted(&[1]).await;
+        let (tx, mut rx) = mpsc::channel(16);
+        let (_stx, srx) = watch::channel(settings(Some(("Here", 1.0)), false));
+        let stop = CancellationToken::new();
+        let net = Net::new_with_retry(
+            NetClient::with_bases(&base, &base, &base),
+            tx,
+            srx,
+            stop.clone(),
+            SETTLE,
+            vec![Duration::from_secs(60)],
+        );
+        let task = tokio::spawn(net.clone().weather_loop(Duration::from_secs(600)));
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert_eq!(times.lock().unwrap().len(), 1);
+        net.network_changed(false).await;
+        let mut got = Vec::new();
+        got.push(event(&mut rx).await);
+        got.push(event(&mut rx).await);
+        assert!(got.iter().any(|(e, _)| e == "Weather"), "{got:?}");
+        assert_eq!(times.lock().unwrap().len(), 2);
+        // With the last fetch good, a further change does not refetch.
+        net.network_changed(false).await;
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert_eq!(times.lock().unwrap().len(), 2);
+        stop.cancel();
+        let _ = task.await;
+    }
+
+    #[tokio::test]
+    async fn ip_lookup_turned_off_clears_country_and_aborts_pending() {
+        let (base, seen) = fake(r#"{"ip":"203.0.113.9","country":"NL"}"#).await;
+        let (tx, mut rx) = mpsc::channel(16);
+        let (stx, srx) = watch::channel(settings(None, true));
+        let stop = CancellationToken::new();
+        let net = Net::new(
+            NetClient::with_bases(&base, &base, &base),
+            tx,
+            srx,
+            stop.clone(),
+            Duration::from_millis(300),
+        );
+        let task = tokio::spawn(net.clone().privacy_loop());
+        // A lookup is pending (settle not elapsed) when the setting goes off.
+        net.network_changed(true).await;
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        stx.send_replace(settings(None, false));
+        assert_eq!(event(&mut rx).await, ("PublicIp".into(), Value::Null));
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        assert!(seen.lock().unwrap().is_empty(), "pending lookup aborted");
+        assert!(rx.try_recv().is_err());
+        // Unrelated or off-to-on changes emit nothing.
+        stx.send_replace(settings(Some(("X", 1.0)), false));
+        stx.send_replace(settings(Some(("X", 1.0)), true));
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert!(rx.try_recv().is_err());
+        stop.cancel();
+        let _ = task.await;
     }
 }

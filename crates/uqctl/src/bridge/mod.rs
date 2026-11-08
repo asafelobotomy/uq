@@ -138,6 +138,7 @@ where
         net::SETTLE,
     );
     let weather = tokio::spawn(net.clone().weather_loop(net::WEATHER_EVERY));
+    let privacy = tokio::spawn(net.clone().privacy_loop());
     let notif = tokio::spawn(watch_notif_owner(
         link.clone(),
         out_tx.clone(),
@@ -187,6 +188,7 @@ where
     // Abort rather than await: the watcher may be blocked on a full channel or the bus.
     watcher.abort();
     weather.abort();
+    privacy.abort();
     notif.abort();
     drop(net);
     reader.abort();
