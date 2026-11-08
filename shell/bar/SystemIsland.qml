@@ -7,7 +7,7 @@ import "../core"
 import "../logic/dock.js" as Dock
 import "../logic/minimise.js" as Min
 
-// App-menu button (inert until slice 2), workspaces, and the merged pinned/running dock.
+// App-menu button, workspaces, and the merged pinned/running dock.
 Island {
     id: root
     property var screen: null
@@ -169,16 +169,28 @@ Island {
         anchors.left: parent.left
         spacing: Theme.gapIn
 
-        // App menu: inert until slice 2.
+        // App menu: opens AppMenu under this button, on this island's screen.
         Rectangle {
+            id: menuButton
+            // Read by AppMenu: its focus grab includes this bar so a second click toggles it shut.
+            readonly property var barWindow: root.QsWindow.window
+            readonly property bool open: Surfaces.open === "appmenu" && Surfaces.anchor === menuButton
             Layout.preferredWidth: root.cell
             Layout.preferredHeight: root.cell
             radius: Theme.radius - 2
-            color: Theme.surfaceAlt
+            color: open ? Theme.accent : (menuMouse.containsMouse ? Theme.overlay : Theme.surfaceAlt)
+            Accessible.role: Accessible.Button
+            Accessible.name: "App menu"
             UqText {
                 anchors.centerIn: parent
                 text: "☰"
-                color: Theme.textMuted
+                color: menuButton.open ? Theme.accentText : Theme.textMuted
+            }
+            MouseArea {
+                id: menuMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                onClicked: Surfaces.toggle("appmenu", root.screen, menuButton)
             }
         }
 
