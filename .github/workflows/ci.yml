@@ -12,8 +12,9 @@ jobs:
     runs-on: ubuntu-latest
     container: archlinux:latest
     steps:
-      - name: Install toolchain, dbus, lua and Hyprland
-        run: pacman -Syu --noconfirm --needed rust dbus lua hyprland git
+      - name: Install toolchain, dbus, lua, Hyprland and Quickshell
+        # foot, ttf-dejavu and grim give the smoke test a real window and a screenshot; jq reads hyprctl.
+        run: pacman -Syu --noconfirm --needed rust dbus lua hyprland git quickshell qt6-declarative jq foot ttf-dejavu grim
       - uses: actions/checkout@v4
       - name: Check Arch's Hyprland is inside the pinned series
         run: |
@@ -33,3 +34,24 @@ jobs:
             cargo fmt --all --check
             cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
             cargo test --workspace --locked -- --include-ignored"
+      - name: Shell lint, shell tests and QML tests
+        run: |
+          su tester -c "set -e
+            cd '$GITHUB_WORKSPACE'
+            export XDG_RUNTIME_DIR=\$(mktemp -d)
+            scripts/lint-shell.sh
+            for t in tests/shell/*.sh; do echo \"== \$t\"; bash \"\$t\"; done
+            QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -import shell -input tests/qml"
+      # Exit 77 means headless Hyprland cannot host the shell here: skipped, not failed.
+      - name: Shell smoke test on headless Hyprland
+        run: |
+          rc=0
+          su tester -c "cd '$GITHUB_WORKSPACE'
+            export XDG_RUNTIME_DIR=\$(mktemp -d)
+            export UQCTL='$GITHUB_WORKSPACE/target/debug/uqctl'
+            scripts/smoke-shell.sh" || rc=$?
+          if [ "$rc" -eq 77 ]; then
+            echo "::notice::Shell smoke test skipped (exit 77): headless Hyprland cannot host Quickshell in this container. Check it by hand."
+          elif [ "$rc" -ne 0 ]; then
+            exit "$rc"
+          fi

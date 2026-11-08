@@ -43,6 +43,20 @@ uqctl layout set 2 scrolling
 uqctl schedule fixed 07:00 19:00   # or: uqctl schedule sun 51.5 -0.13, or: uqctl schedule off
 ```
 
+Shell settings (all go through `uqd`; values are validated there):
+
+```bash
+uqctl pin add org.mozilla.firefox      # also: pin rm <id>, pin list
+uqctl weather set "Paris" [--pick 2]   # geocodes, prints the top 5, stores one; weather off
+uqctl idle set lock 300                # dim | lock | screen-off | suspend | locked-screen-off; secs or off
+uqctl notif backend shell
+uqctl privacy public-ip on             # or: privacy launches off
+uqctl launches clear
+```
+
+The shell runs as `uq-shell.service` (Quickshell, started with the session). `SUPER+CTRL+L`
+restarts the lock surface (`uq-lock.service`, else `hyprlock`) if it ever dies.
+
 Your own Hyprland settings go in `~/.config/hypr/uq/user.lua`, which uQ loads last and never
 rewrites.
 
@@ -51,4 +65,8 @@ rewrites.
 ```bash
 cargo test --workspace                     # unit, golden, D-Bus and Lua-mock tests
 cargo test -p uqd --test verify_config -- --ignored   # needs Hyprland installed
+scripts/lint-shell.sh                      # no bare Text, Label or Qt.createQmlObject in shell/
+for t in tests/shell/*.sh; do bash "$t"; done
+QT_QPA_PLATFORM=offscreen qmltestrunner -import shell -input tests/qml
+scripts/smoke-shell.sh                     # needs Hyprland, quickshell, jq; exit 77 = skipped
 ```

@@ -1,8 +1,11 @@
 //! uqctl: command-line client for uqd (`org.uq.Desktop1`).
 
 mod bridge;
+mod settings_cmd;
 
 use clap::{Parser, Subcommand};
+use serde_json::Value;
+use settings_cmd::{IdleCmd, LaunchesCmd, NotifCmd, OnOff, PinCmd, PrivacyKey, WeatherCmd};
 use std::collections::HashMap;
 use std::process::ExitCode;
 use uq_core::paths::Paths;
@@ -35,6 +38,33 @@ enum Cmd {
     Schedule {
         #[command(subcommand)]
         cmd: ScheduleCmd,
+    },
+    /// Pin, unpin or list dock apps.
+    Pin {
+        #[command(subcommand)]
+        cmd: PinCmd,
+    },
+    /// Choose the weather location (or turn weather off).
+    Weather {
+        #[command(subcommand)]
+        cmd: WeatherCmd,
+    },
+    /// Idle timings: dim, lock, screen-off, suspend, locked-screen-off.
+    Idle {
+        #[command(subcommand)]
+        cmd: IdleCmd,
+    },
+    /// Notification settings.
+    Notif {
+        #[command(subcommand)]
+        cmd: NotifCmd,
+    },
+    /// Turn a privacy-relevant feature on or off.
+    Privacy { key: PrivacyKey, state: OnOff },
+    /// App launch counts.
+    Launches {
+        #[command(subcommand)]
+        cmd: LaunchesCmd,
     },
     /// Re-render every config file from uqd's state.
     Reload,
@@ -249,9 +279,71 @@ async fn run(cmd: Cmd) -> Result<(), String> {
             .call::<_, _, ()>("Reload", &())
             .await
             .map_err(describe)?,
+        Cmd::Pin { cmd } => pin(&proxy, cmd).await?,
+        Cmd::Weather { cmd } => match cmd {
+            WeatherCmd::Off => set_setting(&proxy, ("weather_location", Value::Null)).await?,
+            WeatherCmd::Set { city, pick } => {
+                // No network means no geocode: fail before anything is written.
+                let hits = bridge::net::NetClient::new()
+                    .geocode(&city)
+                    .await
+                    .map_err(|e| format!("looking up {city:?}: {e}"))?;
+                let (lines, setting) = settings_cmd::weather_choice(&hits, pick)?;
+                lines.iter().for_each(|l| println!("{l}"));
+                set_setting(&proxy, setting).await?;
+            }
+        },
+        Cmd::Idle {
+            cmd: IdleCmd::Set { stage, value },
+        } => set_setting(&proxy, settings_cmd::idle_setting(stage, &value)?).await?,
+        Cmd::Notif {
+            cmd: NotifCmd::Backend { name },
+        } => set_setting(&proxy, settings_cmd::notif_backend_setting(&name)).await?,
+        Cmd::Privacy { key, state } => {
+            set_setting(&proxy, settings_cmd::privacy_setting(key, state)).await?
+        }
+        Cmd::Launches {
+            cmd: LaunchesCmd::Clear,
+        } => proxy
+            .call::<_, _, ()>("ClearLaunchCounts", &())
+            .await
+            .map_err(describe)?,
         Cmd::Setup { .. } | Cmd::Bridge => unreachable!("handled before connecting"),
     }
     Ok(())
+}
+
+async fn set_setting(
+    proxy: &zbus::Proxy<'_>,
+    (key, value): settings_cmd::Setting,
+) -> Result<(), String> {
+    proxy
+        .call::<_, _, ()>("SetSetting", &(key, value.to_string()))
+        .await
+        .map_err(describe)
+}
+
+async fn current_pinned(proxy: &zbus::Proxy<'_>) -> Result<Vec<String>, String> {
+    let json: String = proxy.call("GetSettings", &()).await.map_err(describe)?;
+    let v: Value =
+        serde_json::from_str(&json).map_err(|e| format!("bad settings from uqd: {e}"))?;
+    Ok(settings_cmd::pinned_of(&v))
+}
+
+async fn pin(proxy: &zbus::Proxy<'_>, cmd: PinCmd) -> Result<(), String> {
+    let current = current_pinned(proxy).await?;
+    let next = match &cmd {
+        PinCmd::List => {
+            current.iter().for_each(|id| println!("{id}"));
+            return Ok(());
+        }
+        PinCmd::Add { id } => settings_cmd::pinned_with(&current, id),
+        PinCmd::Rm { id } => settings_cmd::pinned_without(&current, id),
+    };
+    match next {
+        Some(list) => set_setting(proxy, ("pinned", serde_json::json!(list))).await,
+        None => Ok(()), // already as asked
+    }
 }
 
 #[tokio::main(flavor = "current_thread")]

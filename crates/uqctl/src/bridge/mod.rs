@@ -5,7 +5,7 @@
 
 mod dispatch;
 mod launch;
-mod net;
+pub(crate) mod net;
 mod notifowner;
 pub mod protocol;
 mod uqd;

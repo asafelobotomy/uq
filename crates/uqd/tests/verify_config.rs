@@ -40,14 +40,25 @@ fn tree(root: &Path, generated: &str) -> (Paths, PathBuf) {
 
 const MOCK: &str = r#"
 local calls = {}
+-- exec_cmd strings seen while a given hl.on("<event>", fn) callback runs.
+local hook, in_hook = nil, {}
 local function proxy(name)
   return setmetatable({}, {
     __index = function(_, k) return proxy(name .. "." .. k) end,
     __call = function(_, ...)
       calls[#calls + 1] = name
+      local first = ({...})[1]
       for _, a in ipairs({...}) do
-        if type(a) == "string" then calls[#calls + 1] = name .. ":" .. a end
-        if type(a) == "function" then a() end
+        if type(a) == "string" then
+          calls[#calls + 1] = name .. ":" .. a
+          if hook and name == "hl.exec_cmd" then in_hook[hook] = (in_hook[hook] or "") .. a .. "\n" end
+        end
+        if type(a) == "function" then
+          local outer = hook
+          if name == "hl.on" then hook = first end
+          a()
+          hook = outer
+        end
       end
       return proxy(name .. "()")
     end,
@@ -73,8 +84,35 @@ for _, want in ipairs({
 }) do
   if not called(want[1], want[2]) then error("missing " .. want[1] .. want[2]) end
 end
+for _, want in ipairs({
+  {"hyprland.start", "systemctl --user restart uqd.service"},
+  {"hyprland.start", "systemctl --user restart uq-shell.service"},
+  {"hyprland.start", "XDG_SESSION_TYPE"},
+  {"hyprland.shutdown", "systemctl --user stop uqd.service"},
+  {"hyprland.shutdown", "stop uq-shell.service"},
+}) do
+  if not (in_hook[want[1]] or ""):find(want[2], 1, true) then
+    error("missing in " .. want[1] .. " hook: " .. want[2])
+  end
+end
+if not called("hl.dsp.exec_cmd:", "systemctl --user restart uq-lock.service || hyprlock") then
+  error("missing the SUPER+CTRL+L recovery bind")
+end
 print("ok " .. #calls)
 "#;
+
+#[test]
+fn base_lua_enables_session_lock_restore() {
+    let base = std::fs::read_to_string(repo().join("config/hypr/base.lua")).unwrap();
+    for needle in [
+        "allow_session_lock_restore = true",
+        "session_lock_xray",
+        "key_press_enables_dpms",
+        "mouse_move_enables_dpms",
+    ] {
+        assert!(base.contains(needle), "base.lua lacks {needle}");
+    }
+}
 
 #[test]
 fn lua_mock_runs_every_variant() {

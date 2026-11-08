@@ -25,15 +25,16 @@ hl.monitor({
 ---- AUTOSTART ----
 -------------------
 
--- uqd runs as a systemd user unit, which does not inherit this session's environment:
--- export what it needs to reach Hyprland and the display, then (re)start it so it always
--- talks to this session. It is stopped again when Hyprland exits, so it never outlives the
+-- uqd and the shell run as systemd user units, which do not inherit this session's environment:
+-- export what they need to reach Hyprland and the display, then (re)start them so they always
+-- talk to this session. Both are stopped again when Hyprland exits, so neither outlives the
 -- session and re-themes another desktop.
+local session_env = "WAYLAND_DISPLAY XDG_CURRENT_DESKTOP HYPRLAND_INSTANCE_SIGNATURE QT_QPA_PLATFORMTHEME DISPLAY XCURSOR_SIZE HYPRCURSOR_SIZE XCURSOR_THEME XDG_SESSION_TYPE"
 hl.on("hyprland.start", function()
-    hl.exec_cmd("dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP HYPRLAND_INSTANCE_SIGNATURE QT_QPA_PLATFORMTHEME && systemctl --user restart uqd.service")
+    hl.exec_cmd("dbus-update-activation-environment --systemd " .. session_env .. " && systemctl --user restart uqd.service && systemctl --user restart uq-shell.service")
 end)
 hl.on("hyprland.shutdown", function()
-    hl.exec_cmd("systemctl --user stop uqd.service")
+    hl.exec_cmd("systemctl --user stop uq-shell.service; systemctl --user stop uqd.service")
 end)
 
 -----------------------------
@@ -85,6 +86,12 @@ hl.config({
     misc = {
         force_default_wallpaper = 0,
         disable_hyprland_logo   = true,
+        -- Session lock (slice 5): survive a lock client crash, keep the lock opaque, and wake
+        -- the screen on input.
+        allow_session_lock_restore = true,
+        session_lock_xray          = false,
+        key_press_enables_dpms     = true,
+        mouse_move_enables_dpms    = true,
     },
 })
 
@@ -157,6 +164,10 @@ hl.bind(mainMod .. " + mouse_up",   hl.dsp.focus({ workspace = "e-1" }))
 -- Move/resize with the mouse
 hl.bind(mainMod .. " + mouse:272", hl.dsp.window.drag(),   { mouse = true })
 hl.bind(mainMod .. " + mouse:273", hl.dsp.window.resize(), { mouse = true })
+
+-- Lock recovery: if the lock surface dies, this restarts it (locked = true, so it works over the
+-- lock screen). uq-lock.service arrives in a later slice; until then hyprlock takes over.
+hl.bind(mainMod .. " + CTRL + L", hl.dsp.exec_cmd("systemctl --user restart uq-lock.service || hyprlock"), { locked = true })
 
 -- Media and brightness keys
 hl.bind("XF86AudioRaiseVolume",  hl.dsp.exec_cmd("wpctl set-volume -l 1 @DEFAULT_AUDIO_SINK@ 5%+"), { locked = true, repeating = true })
