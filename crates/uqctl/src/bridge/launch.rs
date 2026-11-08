@@ -232,12 +232,23 @@ pub struct Plan {
     pub record: Option<String>,
 }
 
-pub fn plan(arg: Option<&Value>, dirs: &Dirs, rand: u32) -> Result<Plan, String> {
+pub fn plan(
+    arg: Option<&Value>,
+    dirs: &Dirs,
+    rand: u32,
+    runs: &super::run::RunState,
+) -> Result<Plan, String> {
     let obj = arg
         .and_then(Value::as_object)
         .ok_or("Launch takes an object argument")?;
-    if obj.contains_key("run_id") {
-        return Err("run ids arrive in slice 2".into());
+    if let Some(run_id) = obj.get("run_id") {
+        let cmd =
+            super::run::take_command(runs, run_id.as_str().ok_or("run_id must be a string")?)?;
+        let argv = ["sh".to_string(), "-c".to_string(), cmd];
+        return Ok(Plan {
+            command: scope_command("run", &argv, rand),
+            record: None,
+        });
     }
     if let Some(argv) = obj.get("argv") {
         let argv: Vec<String> = argv
@@ -312,8 +323,15 @@ pub async fn dispatch(hypr: &HyprSocket, plan: &Plan) -> Result<(), String> {
 }
 
 /// The bridge's `Launch` call.
-pub async fn launch(link: &Link, args: &[Value]) -> Result<Value, String> {
-    let plan = plan(args.first(), &Dirs::from_env(), random_suffix())?;
+pub async fn launch(
+    link: &Link,
+    args: &[Value],
+    runs: &std::sync::Mutex<super::run::RunState>,
+) -> Result<Value, String> {
+    let plan = {
+        let runs = runs.lock().unwrap_or_else(|e| e.into_inner());
+        plan(args.first(), &Dirs::from_env(), random_suffix(), &runs)?
+    };
     dispatch(&HyprSocket::from_env(), &plan).await?;
     if let Some(id) = &plan.record {
         // Counting is best effort: a launch that worked must not fail because uqd is down.
@@ -327,6 +345,7 @@ pub async fn launch(link: &Link, args: &[Value]) -> Result<Value, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::bridge::run::{RunState, run_item};
 
     fn v(a: &[&str]) -> Vec<String> {
         a.iter().map(|s| s.to_string()).collect()
@@ -413,7 +432,13 @@ mod tests {
             "org.a.B.desktop",
             "[Desktop Entry]\nType=Application\nExec=b --x %U\nName=B\n[Desktop Action n]\nExec=zzz\n",
         )]);
-        let p = plan(Some(&json!({"desktop_id":"org.a.B"})), &d, 1).unwrap();
+        let p = plan(
+            Some(&json!({"desktop_id":"org.a.B"})),
+            &d,
+            1,
+            &RunState::default(),
+        )
+        .unwrap();
         assert_eq!(
             p.command,
             "systemd-run --user --scope --collect --unit=app-uq-org_a_B-00000001 -- 'b' '--x'"
@@ -432,7 +457,13 @@ mod tests {
             ),
             ("d.desktop", "[Desktop Entry]\nExec=d %d\n"),
         ]);
-        let p = plan(Some(&json!({"desktop_id":"t.desktop"})), &d, 0).unwrap();
+        let p = plan(
+            Some(&json!({"desktop_id":"t.desktop"})),
+            &d,
+            0,
+            &RunState::default(),
+        )
+        .unwrap();
         assert!(
             p.command.ends_with("-- 'kitty' '-e' 'htop'"),
             "{}",
@@ -440,13 +471,13 @@ mod tests {
         );
         for id in ["h", "m", "d", "absent"] {
             assert!(
-                plan(Some(&json!({"desktop_id":id})), &d, 0).is_err(),
+                plan(Some(&json!({"desktop_id":id})), &d, 0, &RunState::default()).is_err(),
                 "{id}"
             );
         }
         // Ids that could escape the applications folder never reach the filesystem.
         for id in ["../x", "a/b", "", "a b"] {
-            let e = plan(Some(&json!({"desktop_id":id})), &d, 0).unwrap_err();
+            let e = plan(Some(&json!({"desktop_id":id})), &d, 0, &RunState::default()).unwrap_err();
             assert!(e.starts_with("invalid desktop id"), "{e}");
         }
     }
@@ -454,25 +485,43 @@ mod tests {
     #[test]
     fn argv_and_run_id_and_junk() {
         let d = Dirs(vec![]);
-        let p = plan(Some(&json!({"argv":["/usr/bin/foot","-e","a b"]})), &d, 2).unwrap();
+        let p = plan(
+            Some(&json!({"argv":["/usr/bin/foot","-e","a b"]})),
+            &d,
+            2,
+            &RunState::default(),
+        )
+        .unwrap();
         assert_eq!(
             p.command,
             "systemd-run --user --scope --collect --unit=app-uq-foot-00000002 -- '/usr/bin/foot' '-e' 'a b'"
         );
         assert_eq!(p.record, None);
+        let mut runs = RunState::default();
+        run_item("> echo hi", 7, &mut runs).unwrap();
+        let p = plan(Some(&json!({"run_id":"run-7"})), &d, 3, &runs).unwrap();
         assert_eq!(
-            plan(Some(&json!({"run_id":"x"})), &d, 0).unwrap_err(),
-            "run ids arrive in slice 2"
+            p.command,
+            "systemd-run --user --scope --collect --unit=app-uq-run-00000003 -- 'sh' '-c' 'echo hi'"
         );
+        assert_eq!(p.record, None);
+        assert_eq!(
+            plan(Some(&json!({"run_id":"run-8"})), &d, 0, &runs).unwrap_err(),
+            "unknown run id"
+        );
+        assert!(plan(Some(&json!({"run_id":5})), &d, 0, &runs).is_err());
         for bad in [
             json!({"argv":[]}),
             json!({"argv":[1]}),
             json!({}),
             json!("x"),
         ] {
-            assert!(plan(Some(&bad), &d, 0).is_err(), "{bad}");
+            assert!(
+                plan(Some(&bad), &d, 0, &RunState::default()).is_err(),
+                "{bad}"
+            );
         }
-        assert!(plan(None, &d, 0).is_err());
+        assert!(plan(None, &d, 0, &RunState::default()).is_err());
     }
 
     #[tokio::test]

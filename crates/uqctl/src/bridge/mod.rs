@@ -9,12 +9,13 @@ mod launch;
 pub(crate) mod net;
 mod notifowner;
 pub mod protocol;
+mod run;
 mod uqd;
 
 use protocol::{Inbound, MAX_LINE, Outbound, Rejected, encode, read_lines};
 use serde_json::{Value, json};
 use std::process::ExitCode;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use tokio::sync::{Semaphore, mpsc};
@@ -30,6 +31,7 @@ const DRAIN: Duration = Duration::from_secs(2);
 async fn handle(
     link: &uqd::Link,
     net: &Arc<net::Net>,
+    runs: &Mutex<run::RunState>,
     call: &str,
     args: &[Value],
 ) -> Result<Value, String> {
@@ -39,7 +41,7 @@ async fn handle(
         | "Reload" | "GetSettings" | "SetSetting" | "GetLaunchCounts" | "RecordLaunch" => {
             link.call(call, args).await
         }
-        "Launch" => launch::launch(link, args).await,
+        "Launch" => launch::launch(link, args, runs).await,
         "Dispatch" => dispatch::dispatch(args).await,
         "GeocodeCity" => match args {
             [Value::String(name)] => net.geocode(name).await,
@@ -146,6 +148,7 @@ where
         stop.clone(),
     ));
 
+    let runs = Arc::new(Mutex::new(run::RunState::default()));
     let slots = Arc::new(Semaphore::new(MAX_IN_FLIGHT));
     let mut requests = tokio::task::JoinSet::new();
     while let Some(item) = in_rx.recv().await {
@@ -154,9 +157,10 @@ where
                 let Ok(permit) = slots.clone().acquire_owned().await else {
                     break;
                 };
-                let (link, net, tx) = (link.clone(), net.clone(), out_tx.clone());
+                let (link, net, runs, tx) =
+                    (link.clone(), net.clone(), runs.clone(), out_tx.clone());
                 requests.spawn(async move {
-                    let reply = match handle(&link, &net, &call, &args).await {
+                    let reply = match handle(&link, &net, &runs, &call, &args).await {
                         Ok(ok) => Outbound::Ok { id, ok },
                         Err(err) => Outbound::Err { id, err },
                     };
