@@ -138,7 +138,7 @@ fn as_opt_secs(key: &str, v: &Value) -> Result<Option<u32>, SettingError> {
 }
 
 /// `^[A-Za-z0-9._-]{1,128}(\.desktop)?$`
-fn valid_pinned_id(s: &str) -> bool {
+pub fn valid_pinned_id(s: &str) -> bool {
     fn base(s: &str) -> bool {
         (1..=128).contains(&s.len())
             && s.bytes()
@@ -152,6 +152,32 @@ fn round2(x: f64) -> f64 {
 }
 
 impl Settings {
+    /// Re-validate settings that came from outside (a hand-edited file): every key is replayed
+    /// through [`Settings::apply`] from a blank idle table, so the result is normalised
+    /// (de-duplicated, rounded) and holds every §2.4 invariant.
+    pub fn validated(&self) -> Result<Settings, SettingError> {
+        let json = serde_json::to_value(self).expect("settings serialise");
+        let mut out = Settings {
+            idle: IdleTimings {
+                dim: None,
+                lock: None,
+                screen_off: None,
+                suspend_battery: None,
+                ..IdleTimings::default()
+            },
+            ..Settings::default()
+        };
+        for key in SETTING_KEYS {
+            let value = key
+                .split('.')
+                .try_fold(&json, |v, part| v.get(part))
+                .cloned()
+                .unwrap_or(Value::Null);
+            out.apply(key, value)?;
+        }
+        Ok(out)
+    }
+
     /// Validate and apply one setting. On error `self` is left unchanged.
     pub fn apply(&mut self, key: &str, value: Value) -> Result<(), SettingError> {
         let mut next = self.clone();

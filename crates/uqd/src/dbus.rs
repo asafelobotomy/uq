@@ -24,6 +24,7 @@ pub enum UqError {
     EmptyWorkspace(String),
     InvalidSchedule(String),
     InvalidArgument(String),
+    InvalidSetting(String),
     ConfigInvalid(String),
     Io(String),
 }
@@ -36,6 +37,7 @@ impl From<DesktopError> for UqError {
             DesktopError::InvalidLayout(_) => UqError::InvalidLayout(msg),
             DesktopError::EmptyWorkspace => UqError::EmptyWorkspace(msg),
             DesktopError::InvalidSchedule(_) => UqError::InvalidSchedule(msg),
+            DesktopError::InvalidSetting(_) => UqError::InvalidSetting(msg),
             DesktopError::ConfigInvalid(_) => UqError::ConfigInvalid(msg),
             DesktopError::Io(_) => UqError::Io(msg),
         }
@@ -92,6 +94,44 @@ impl DesktopIface {
     async fn list_themes(&self) -> Vec<String> {
         self.desktop.lock().await.theme_ids()
     }
+
+    /// The settings as JSON (never includes launch counts).
+    async fn get_settings(&self) -> Result<String, UqError> {
+        serde_json::to_string(self.desktop.lock().await.settings())
+            .map_err(|e| UqError::Io(e.to_string()))
+    }
+
+    async fn set_setting(&self, key: &str, json: &str) -> Result<(), UqError> {
+        let value: serde_json::Value = serde_json::from_str(json)
+            .map_err(|e| UqError::InvalidSetting(format!("value is not JSON: {e}")))?;
+        Ok(self.desktop.lock().await.set_setting(key, value)?)
+    }
+
+    async fn record_launch(&self, id: &str) {
+        self.desktop.lock().await.record_launch(id);
+    }
+
+    async fn get_launch_counts(&self) -> HashMap<String, u32> {
+        self.desktop
+            .lock()
+            .await
+            .get_launch_counts()
+            .into_iter()
+            .collect()
+    }
+
+    async fn clear_launch_counts(&self) {
+        self.desktop.lock().await.clear_launch_counts();
+    }
+
+    #[zbus(signal)]
+    async fn settings_changed(e: &SignalEmitter<'_>, json: &str) -> zbus::Result<()>;
+
+    #[zbus(signal)]
+    async fn launch_counts_changed(
+        e: &SignalEmitter<'_>,
+        counts: HashMap<String, u32>,
+    ) -> zbus::Result<()>;
 
     #[zbus(signal)]
     async fn theme_changed(
@@ -162,6 +202,17 @@ pub async fn serve(
                     DesktopIface::layout_changed(e, workspace, layout.as_str()).await
                 }
                 Event::ConfigError(msg) => DesktopIface::config_error(e, msg).await,
+                Event::SettingsChanged(settings) => match serde_json::to_string(settings) {
+                    Ok(json) => DesktopIface::settings_changed(e, &json).await,
+                    Err(err) => Err(zbus::Error::Failure(err.to_string())),
+                },
+                Event::LaunchCountsChanged(counts) => {
+                    DesktopIface::launch_counts_changed(
+                        e,
+                        counts.iter().map(|(k, v)| (k.clone(), *v)).collect(),
+                    )
+                    .await
+                }
             };
             if let Err(err) = res {
                 tracing::warn!("emitting {ev:?}: {err}");

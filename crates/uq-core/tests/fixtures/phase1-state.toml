@@ -1,0 +1,11 @@
+theme = "dracula"
+variant = "light"
+
+[schedule]
+mode = "fixed"
+light_at = "07:00:00"
+dark_at = "19:00:00"
+
+[layouts]
+"2" = "scrolling"
+"special:magic" = "master"

@@ -85,6 +85,43 @@ async fn dbus_round_trip() {
     assert_eq!((name.as_str(), variant.as_str()), ("dracula", "light"));
     assert!(tokens.ends_with("tokens.json"), "{tokens}");
 
+    let mut settings_changed = proxy.receive_signal("SettingsChanged").await.unwrap();
+    let () = proxy
+        .call("SetSetting", &("notif.backend", "\"mako\""))
+        .await
+        .unwrap();
+    let json: String = proxy.call("GetSettings", &()).await.unwrap();
+    assert!(json.contains("\"mako\""), "{json}");
+    assert!(!json.contains("launch_counts"), "{json}");
+    let msg = tokio::time::timeout(std::time::Duration::from_secs(5), settings_changed.next())
+        .await
+        .unwrap()
+        .unwrap();
+    let body: String = msg.body().deserialize().unwrap();
+    assert!(body.contains("\"mako\""), "{body}");
+    let err = proxy
+        .call::<_, _, ()>("SetSetting", &("nope", "1"))
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(err, zbus::Error::MethodError(ref n, _, _) if n.as_str() == "org.uq.Desktop1.Error.InvalidSetting"),
+        "{err:?}"
+    );
+
+    let mut launches = proxy.receive_signal("LaunchCountsChanged").await.unwrap();
+    let () = proxy.call("RecordLaunch", &("a.desktop",)).await.unwrap();
+    let counts: HashMap<String, u32> = proxy.call("GetLaunchCounts", &()).await.unwrap();
+    assert_eq!(counts.get("a.desktop"), Some(&1));
+    let msg = tokio::time::timeout(std::time::Duration::from_secs(5), launches.next())
+        .await
+        .unwrap()
+        .unwrap();
+    let body: HashMap<String, u32> = msg.body().deserialize().unwrap();
+    assert_eq!(body.get("a.desktop"), Some(&1));
+    let () = proxy.call("ClearLaunchCounts", &()).await.unwrap();
+    let counts: HashMap<String, u32> = proxy.call("GetLaunchCounts", &()).await.unwrap();
+    assert!(counts.is_empty());
+
     let () = proxy.call("SetLayout", &("2", "scrolling")).await.unwrap();
     let layouts: HashMap<String, String> = proxy.call("GetLayouts", &()).await.unwrap();
     assert_eq!(layouts.get("2").map(String::as_str), Some("scrolling"));

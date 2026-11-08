@@ -7,7 +7,7 @@ use tracing_subscriber::EnvFilter;
 use uq_core::paths::Paths;
 use uqd::compositor::Hyprland;
 use uqd::dbus::serve;
-use uqd::service::Desktop;
+use uqd::service::{Desktop, desktop_file_installed, xdg_data_dirs};
 use uqd::system::GSettings;
 
 #[tokio::main]
@@ -24,6 +24,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Arc::new(GSettings::default()),
     )?;
     desktop.startup().await;
+    let data_dirs = xdg_data_dirs();
+    desktop.prune_launch_counts(&|id| desktop_file_installed(id, &data_dirs));
     let (_conn, shared) = serve(zbus::connection::Builder::session()?, desktop).await?;
     tracing::info!("serving org.uq.Desktop1");
 
@@ -32,6 +34,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     loop {
         tokio::select! {
             _ = tick.tick() => {
+                shared.lock().await.flush_launch_counts();
                 if let Err(e) = shared.lock().await.tick_schedule_at(chrono::Local::now()).await {
                     tracing::warn!("scheduled theme change failed: {e}");
                 }
@@ -40,6 +43,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             _ = term.recv() => break,
         }
     }
+    shared
+        .lock()
+        .await
+        .flush_launch_counts_at(std::time::Instant::now() + Duration::from_secs(60));
     tracing::info!("shutting down");
     Ok(())
 }
