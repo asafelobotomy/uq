@@ -17,13 +17,19 @@ pub(crate) struct RunState {
     command: Option<String>,
 }
 
-/// The `Run` row for a `>` query, remembering the command for `generation`.
+/// The `Run` row for a `>` query, remembering the command for `generation`. Call it once per
+/// search: every generation at least as new as the stored one advances the state and drops the
+/// old command, even when it yields no item; an older (late) generation changes nothing.
 pub(crate) fn run_item(query: &str, generation: u64, state: &mut RunState) -> Option<ProviderItem> {
+    if generation < state.generation {
+        return None;
+    }
+    state.generation = generation;
+    state.command = None;
     let cmd = query.strip_prefix('>')?.trim();
     if cmd.is_empty() || cmd.len() > MAX_COMMAND_BYTES || cmd.contains('\0') {
         return None;
     }
-    state.generation = generation;
     state.command = Some(cmd.to_string());
     let mut shown: String = cmd.chars().take(MAX_TITLE_CHARS).collect();
     if cmd.chars().count() > MAX_TITLE_CHARS {
@@ -93,6 +99,28 @@ mod tests {
         let long = format!("> {}", "é".repeat(90));
         let it = run_item(&long, 2, &mut s).unwrap();
         assert_eq!(it.title, format!("Run \"{}…\"", "é".repeat(80)));
+    }
+
+    #[test]
+    fn late_older_generation_cannot_overwrite() {
+        let mut s = RunState::default();
+        run_item("> pwd", 5, &mut s).unwrap();
+        assert!(run_item("> ls", 4, &mut s).is_none());
+        assert!(take_command(&s, "run-4").is_err());
+        assert_eq!(take_command(&s, "run-5").unwrap(), "pwd");
+    }
+
+    #[test]
+    fn search_without_item_clears_stored_command() {
+        let mut s = RunState::default();
+        run_item("> ls", 3, &mut s).unwrap();
+        assert!(run_item("firefox", 4, &mut s).is_none());
+        assert!(take_command(&s, "run-3").is_err());
+        assert!(take_command(&s, "run-4").is_err());
+        assert!(s.command.is_none());
+        assert!(run_item(">", 5, &mut s).is_none());
+        assert!(s.command.is_none());
+        assert!(take_command(&s, "run-5").is_err());
     }
 
     #[test]
