@@ -134,16 +134,12 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let log = dir.path().join("log");
         let bin = dir.path().join("gsettings");
-        std::fs::write(
+        crate::test_util::write_script(
             &bin,
-            format!("#!/bin/sh\necho \"$@\" >> {}\n", log.display()),
-        )
-        .unwrap();
-        std::fs::set_permissions(&bin, std::os::unix::fs::PermissionsExt::from_mode(0o755))
-            .unwrap();
-        GSettings::with_binary(&bin)
-            .apply(&theme("dracula", Variant::Dark))
-            .unwrap();
+            &format!("#!/bin/sh\necho \"$@\" >> {}\n", log.display()),
+        );
+        let t = theme("dracula", Variant::Dark);
+        crate::test_util::retry_busy(|| GSettings::with_binary(&bin).apply(&t)).unwrap();
         let lines = std::fs::read_to_string(&log).unwrap();
         assert_eq!(lines.lines().count(), 6);
         assert!(

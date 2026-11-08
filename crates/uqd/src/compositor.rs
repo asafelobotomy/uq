@@ -185,6 +185,19 @@ mod tests {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::UnixListener;
 
+    /// `verify`, retrying while exec fails with ETXTBSY (see `test_util`).
+    async fn verify_retrying_busy(h: &Hyprland, cfg: &str) -> Result<(), CompositorError> {
+        for _ in 0..250 {
+            match h.verify(std::path::Path::new(cfg)).await {
+                Err(CompositorError::Io(e)) if crate::test_util::is_busy(&e) => {
+                    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+                }
+                other => return other,
+            }
+        }
+        h.verify(std::path::Path::new(cfg)).await
+    }
+
     #[tokio::test]
     async fn hyprland_without_signature_is_not_running() {
         let h = Hyprland::new(Some("/run/user/1000".into()), None);
@@ -262,22 +275,27 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let fake = dir.path().join("Hyprland");
         let marker = dir.path().join("finished");
-        std::fs::write(
+        crate::test_util::write_script(
             &fake,
-            format!("#!/bin/sh\nsleep 3\ntouch {}\n", marker.display()),
-        )
-        .unwrap();
-        std::fs::set_permissions(&fake, std::os::unix::fs::PermissionsExt::from_mode(0o755))
-            .unwrap();
+            &format!("#!/bin/sh\nsleep 3\ntouch {}\n", marker.display()),
+        );
         let h = Hyprland::new(None, None).with_binary(&fake).with_timeouts(
             std::time::Duration::from_secs(1),
             std::time::Duration::from_millis(200),
         );
-        let started = std::time::Instant::now();
-        assert!(matches!(
-            h.verify(std::path::Path::new("/x.lua")).await,
-            Err(CompositorError::Timeout(_))
-        ));
+        // Retry ETXTBSY (script just written, other threads forking) before timing the real run.
+        let mut tries = 0;
+        let started = loop {
+            let started = std::time::Instant::now();
+            match h.verify(std::path::Path::new("/x.lua")).await {
+                Err(CompositorError::Timeout(_)) => break started,
+                Err(CompositorError::Io(e)) if crate::test_util::is_busy(&e) && tries < 250 => {
+                    tries += 1;
+                    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+                }
+                other => panic!("expected Timeout, got {other:?}"),
+            }
+        };
         assert!(started.elapsed() < std::time::Duration::from_secs(2));
         tokio::time::sleep(std::time::Duration::from_secs(4)).await;
         assert!(!marker.exists(), "hung verify process was not killed");
@@ -317,15 +335,12 @@ mod tests {
     async fn verify_uses_exit_code() {
         let dir = tempfile::tempdir().unwrap();
         let fake = dir.path().join("Hyprland");
-        std::fs::write(
+        crate::test_util::write_script(
             &fake,
             "#!/bin/sh\necho \"Your config has errors: $3\"\nexit 1\n",
-        )
-        .unwrap();
-        std::fs::set_permissions(&fake, std::os::unix::fs::PermissionsExt::from_mode(0o755))
-            .unwrap();
+        );
         let h = Hyprland::new(None, None).with_binary(&fake);
-        match h.verify(std::path::Path::new("/cfg/hyprland.lua")).await {
+        match verify_retrying_busy(&h, "/cfg/hyprland.lua").await {
             Err(CompositorError::Rejected(msg)) => {
                 assert!(msg.contains("/cfg/hyprland.lua"), "{msg}")
             }

@@ -128,6 +128,11 @@ impl Bridge {
     /// Send a call and return its reply, skipping any events that arrive first.
     async fn call(&mut self, id: u64, call: &str, args: Value) -> Value {
         self.send(id, call, args).await;
+        self.reply(id).await
+    }
+
+    /// Wait for the reply with this id, queuing any events that arrive first.
+    async fn reply(&mut self, id: u64) -> Value {
         loop {
             let v = self.next().await;
             if v["id"] == id {
@@ -266,16 +271,16 @@ async fn bridge_starts_with_uqd_down_and_exits_on_eof() {
 async fn bad_id_request_gets_error_reply() {
     let bus = private_bus();
     let mut b = Bridge::start(&bus);
-    b.next().await;
+    b.event("Hello").await;
     let stdin = b.stdin.as_mut().unwrap();
     stdin
         .write_all(b"{\"v\":1,\"id\":7,\"call\":5}\n{\"v\":2,\"id\":8,\"call\":\"Ping\"}\n")
         .await
         .unwrap();
-    let r = b.next().await;
+    let r = b.reply(7).await;
     assert_eq!(r["id"], 7);
     assert!(r["err"].is_string());
-    let r = b.next().await;
+    let r = b.reply(8).await;
     assert_eq!(r["id"], 8);
     assert!(r["err"].is_string());
 }
