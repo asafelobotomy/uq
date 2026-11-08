@@ -1,0 +1,15 @@
+[Unit]
+Description=uQ desktop shell (Quickshell)
+Documentation=https://github.com/asafelobotomy/uq
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+ExecStart=/usr/bin/qs -p /usr/share/uq/shell
+Restart=always
+RestartSec=1
+StartLimitIntervalSec=0
+KillMode=process
+
+[Install]
+WantedBy=graphical-session.target
