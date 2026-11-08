@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fails (exit 1, listing file:line) if any .qml/.js under shell/, other than shell/core/UqText.qml,
+# Fails (exit 1, listing file:line) if any .qml/.js under shell/, other than shell/core/UqText.qml and shell/core/UqInput.qml,
 #   - instantiates Text, Label, TextEdit or TextInput (qualified, aliased, inline, or with the
 #     brace on the next line), or
 #   - calls Qt.createQmlObject.
@@ -10,7 +10,7 @@ cd "$(dirname "$0")/.." || exit 2
 
 types='(Text|Label|TextEdit|TextInput)'
 qual='([A-Za-z_][A-Za-z0-9_]*\.)*'
-files=$(find shell -type f \( -name '*.qml' -o -name '*.js' \) ! -path 'shell/core/UqText.qml' | sort)
+files=$(find shell -type f \( -name '*.qml' -o -name '*.js' \) ! -path 'shell/core/UqText.qml' ! -path 'shell/core/UqInput.qml' | sort)
 [ -z "$files" ] && exit 0
 
 hits=$(
@@ -31,7 +31,7 @@ hits=$(
 )
 if [ -n "$hits" ]; then
     echo "lint-shell: Text/Label/TextEdit/TextInput objects and Qt.createQmlObject are forbidden" >&2
-    echo "in shell/ outside shell/core/UqText.qml; use UqText:" >&2
+    echo "in shell/ outside shell/core/UqText.qml (and TextInput in shell/core/UqInput.qml); use UqText:" >&2
     echo "$hits" >&2
     exit 1
 fi

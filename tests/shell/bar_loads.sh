@@ -14,13 +14,14 @@ ShellRoot {
         SystemIsland { id: sys }
         NotifIsland { x: 500 }
         WorkIsland { id: work; x: 200 }
-        Component.onCompleted: console.log("LOADED", sys.width > 0, work.width > 0)
+        TimeIsland { id: time; x: 350 }
+        Component.onCompleted: console.log("LOADED", sys.width > 0, work.width > 0, time.width > 0)
     }
     Timer { interval: 1500; running: true; onTriggered: Qt.quit() }
 }
 QML
 out=$(env -u HYPRLAND_INSTANCE_SIGNATURE -u WAYLAND_DISPLAY QT_QPA_PLATFORM=offscreen timeout 30 qs -p "$tmp/shell.qml" --no-duplicate 2>&1)
-echo "$out" | grep -q 'LOADED true true' || { echo "FAIL: islands did not load"; echo "$out"; exit 1; }
+echo "$out" | grep -q 'LOADED true true true' || { echo "FAIL: islands did not load"; echo "$out"; exit 1; }
 if echo "$out" | grep -E 'ERROR|TypeError|ReferenceError|is not a type|unavailable' | grep -v 'Hyprland'; then
     echo "FAIL: QML errors"; echo "$out"; exit 1
 fi

@@ -34,7 +34,7 @@ PanelWindow {
             barWidth: bar.width
         }
         Item { Layout.fillWidth: true }
-        Island { Layout.fillHeight: true; Layout.preferredWidth: 120 }   // Time / weather
+        TimeIsland { Layout.fillHeight: true }
         NotifIsland { Layout.fillHeight: true }
         Island { Layout.fillHeight: true; Layout.preferredWidth: 160 }   // Status
     }

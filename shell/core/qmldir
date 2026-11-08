@@ -3,5 +3,6 @@ singleton Theme 1.0 Theme.qml
 singleton Bridge 1.0 Bridge.qml
 singleton Settings 1.0 Settings.qml
 UqText 1.0 UqText.qml
+UqInput 1.0 UqInput.qml
 ThemeIo 1.0 ThemeIo.qml
 BridgeIo 1.0 BridgeIo.qml
