@@ -21,6 +21,8 @@ QtObject {
     signal settingsChanged(var settings)
     signal layoutChanged(int ws, string layout)
     signal notifOwner(string owner)
+    // Spotlight results: {generation, provider, provider_name, source_dir, items}.
+    signal searchResults(var data)
 
     // --- transport, set by BridgeIo ---
     property var writer: null           // function(line)
@@ -155,6 +157,9 @@ QtObject {
         case "Weather": weather = data; break;
         case "PublicIp": publicIp = data; break;
         case "NotifOwner": notifOwner(data ? String(data.owner) : ""); break;
+        case "SearchResults":
+            if (data && typeof data === "object") searchResults(data);
+            break;
         case "ConfigError": configError = data ? String(data.message) : ""; break;
         }
         event(name, data);

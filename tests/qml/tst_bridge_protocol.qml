@@ -9,13 +9,14 @@ TestCase {
     SignalSpy { id: themeSpy; target: Bridge; signalName: "themeChanged" }
     SignalSpy { id: layoutSpy; target: Bridge; signalName: "layoutChanged" }
     SignalSpy { id: eventSpy; target: Bridge; signalName: "event" }
+    SignalSpy { id: resultsSpy; target: Bridge; signalName: "searchResults" }
 
     function init() {
         sent = [];
         Bridge.reset();
         Bridge.writer = function (s) { sent.push(s); };
         Bridge.processStarted();
-        themeSpy.clear(); layoutSpy.clear(); eventSpy.clear();
+        themeSpy.clear(); layoutSpy.clear(); eventSpy.clear(); resultsSpy.clear();
     }
 
     function test_hello_sets_state() {
@@ -67,6 +68,15 @@ TestCase {
         Bridge.feed('{"v":1,"event":"UqdUp","data":{}}');
         verify(Bridge.uqdUp);
         verify(eventSpy.count >= 6);
+    }
+
+    function test_search_results_signal() {
+        Bridge.feed('{"v":1,"event":"SearchResults","data":{"generation":3,"provider":"calc","provider_name":"Calculator","source_dir":"builtin","items":[{"id":"calc","title":"2"}]}}');
+        compare(resultsSpy.count, 1);
+        compare(resultsSpy.signalArguments[0][0].generation, 3);
+        compare(resultsSpy.signalArguments[0][0].items[0].title, "2");
+        Bridge.feed('{"v":1,"event":"SearchResults","data":null}');
+        compare(resultsSpy.count, 1);
     }
 
     function test_junk_ignored() {

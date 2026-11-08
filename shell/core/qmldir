@@ -2,6 +2,7 @@ module core
 singleton Theme 1.0 Theme.qml
 singleton Bridge 1.0 Bridge.qml
 singleton Settings 1.0 Settings.qml
+singleton Surfaces 1.0 Surfaces.qml
 UqText 1.0 UqText.qml
 UqInput 1.0 UqInput.qml
 ThemeIo 1.0 ThemeIo.qml
