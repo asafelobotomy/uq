@@ -18,4 +18,5 @@ tempfile = "3"
 minijinja = { version = "2", features = ["json"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "process", "time", "sync", "fs", "signal"] }
 async-trait = "0.1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-native-roots"] }
 uq-core = { path = "crates/uq-core" }

@@ -8,6 +8,7 @@ license.workspace = true
 uq-core.workspace = true
 uqd = { path = "../uqd" }
 tokio = { workspace = true, features = ["io-std", "io-util"] }
+serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 chrono = "0.4"
@@ -15,6 +16,7 @@ clap = { version = "4", features = ["derive"] }
 zbus = { version = "5", default-features = false, features = ["tokio"] }
 futures-util = "0.3.34"
 tokio-util = "0.7"
+reqwest.workspace = true
 
 [dev-dependencies]
 uqd = { path = "../uqd", features = ["fake"] }

@@ -6,8 +6,9 @@ use serde_json::{Map, Value, json};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
-use tokio::sync::{Mutex, mpsc};
+use tokio::sync::{Mutex, mpsc, watch};
 use tokio_util::sync::CancellationToken;
+use uq_core::settings::Settings;
 use zbus::fdo::DBusProxy;
 use zbus::message::Type;
 use zbus::{Connection, MatchRule, MessageStream};
@@ -27,6 +28,8 @@ pub struct Link {
     up: AtomicBool,
     /// Subscriptions made in `open`, before the first state check, so nothing is missed.
     first: Mutex<Option<Subs>>,
+    /// The latest settings seen (from `GetSettings` and `SettingsChanged`); None until known.
+    settings: watch::Sender<Option<Settings>>,
 }
 
 struct Subs {
@@ -96,7 +99,29 @@ impl Link {
             conn: Mutex::new(conn),
             up: AtomicBool::new(up),
             first: Mutex::new(first),
+            settings: watch::channel(None).0,
         }
+    }
+
+    pub fn settings_rx(&self) -> watch::Receiver<Option<Settings>> {
+        self.settings.subscribe()
+    }
+
+    /// Fetch the settings from uqd and publish them (a failure leaves the last value).
+    async fn refresh_settings(&self) {
+        if let Ok(v) = self.call("GetSettings", &[]).await
+            && let Ok(s) = serde_json::from_value::<Settings>(v)
+        {
+            self.settings.send_replace(Some(s));
+        }
+    }
+
+    /// Record a state change, tell the shell, and learn the settings when uqd appears.
+    async fn state_changed(&self, tx: &mpsc::Sender<Outbound>, up: bool) -> bool {
+        if up {
+            self.refresh_settings().await;
+        }
+        emit_state(tx, up).await
     }
 
     pub fn is_up(&self) -> bool {
@@ -108,7 +133,7 @@ impl Link {
         self.up.swap(up, Ordering::SeqCst) != up
     }
 
-    async fn connection(&self) -> Option<Connection> {
+    pub async fn connection(&self) -> Option<Connection> {
         self.conn.lock().await.clone()
     }
 
@@ -134,6 +159,9 @@ impl Link {
         let mut poll = tokio::time::interval(POLL);
         poll.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         let mut first = self.first.lock().await.take();
+        if self.is_up() {
+            self.refresh_settings().await;
+        }
         'outer: loop {
             if owner.is_none() {
                 let subs = match first.take() {
@@ -142,7 +170,7 @@ impl Link {
                         Some((conn, s)) => {
                             let up = has_owner(&conn).await;
                             *self.conn.lock().await = Some(conn);
-                            if self.set_up(up) && !emit_state(&tx, up).await {
+                            if self.set_up(up) && !self.state_changed(&tx, up).await {
                                 break;
                             }
                             Some(s)
@@ -152,7 +180,12 @@ impl Link {
                 };
                 if let Some(Subs { owner: o, signals }) = subs {
                     owner = Some(o);
-                    listener = Some(tokio::spawn(forward(signals, tx.clone(), stop.clone())));
+                    listener = Some(tokio::spawn(forward(
+                        signals,
+                        tx.clone(),
+                        stop.clone(),
+                        self.settings.clone(),
+                    )));
                 }
             }
             tokio::select! {
@@ -163,7 +196,7 @@ impl Link {
                         && let Some(conn) = self.connection().await
                     {
                         let up = has_owner(&conn).await;
-                        if self.set_up(up) && !emit_state(&tx, up).await {
+                        if self.set_up(up) && !self.state_changed(&tx, up).await {
                             break 'outer;
                         }
                     }
@@ -171,7 +204,7 @@ impl Link {
                 ev = next_owner_change(&mut owner), if owner.is_some() => {
                     match ev {
                         Some(up) => {
-                            if self.set_up(up) && !emit_state(&tx, up).await {
+                            if self.set_up(up) && !self.state_changed(&tx, up).await {
                                 break 'outer;
                             }
                         }
@@ -182,7 +215,7 @@ impl Link {
                                 l.abort();
                             }
                             *self.conn.lock().await = None;
-                            if self.set_up(false) && !emit_state(&tx, false).await {
+                            if self.set_up(false) && !self.state_changed(&tx, false).await {
                                 break 'outer;
                             }
                         }
@@ -218,7 +251,12 @@ async fn emit_state(tx: &mpsc::Sender<Outbound>, up: bool) -> bool {
 
 /// Turn uqd's signals into bridge events. Only messages from the owner of the well-known name
 /// arrive (the daemon resolves the name in the match rule).
-async fn forward(mut stream: MessageStream, tx: mpsc::Sender<Outbound>, stop: CancellationToken) {
+async fn forward(
+    mut stream: MessageStream,
+    tx: mpsc::Sender<Outbound>,
+    stop: CancellationToken,
+    settings: watch::Sender<Option<Settings>>,
+) {
     // Own the cancellation check: this task holds a sender clone, and aborting the watcher does
     // not abort it.
     while let Some(m) = tokio::select! { _ = stop.cancelled() => None, m = stream.next() => m } {
@@ -242,6 +280,11 @@ async fn forward(mut stream: MessageStream, tx: mpsc::Sender<Outbound>, stop: Ca
         };
         match parsed {
             Ok(data) => {
+                if member.as_str() == "SettingsChanged"
+                    && let Ok(s) = serde_json::from_value::<Settings>(data.clone())
+                {
+                    settings.send_replace(Some(s));
+                }
                 let out = Outbound::Event {
                     event: member.to_string(),
                     data,

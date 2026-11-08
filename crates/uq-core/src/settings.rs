@@ -147,7 +147,7 @@ pub fn valid_pinned_id(s: &str) -> bool {
     base(s) || s.strip_suffix(".desktop").is_some_and(base)
 }
 
-fn round2(x: f64) -> f64 {
+pub fn round2(x: f64) -> f64 {
     (x * 100.0).round() / 100.0
 }
 

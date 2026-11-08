@@ -5,6 +5,8 @@
 
 mod dispatch;
 mod launch;
+mod net;
+mod notifowner;
 pub mod protocol;
 mod uqd;
 
@@ -24,7 +26,12 @@ const DRAIN: Duration = Duration::from_secs(2);
 
 /// Handle one request. This is the single dispatch point later tasks extend with new calls;
 /// anything not matched is an error reply.
-async fn handle(link: &uqd::Link, call: &str, args: &[Value]) -> Result<Value, String> {
+async fn handle(
+    link: &uqd::Link,
+    net: &Arc<net::Net>,
+    call: &str,
+    args: &[Value],
+) -> Result<Value, String> {
     match call {
         "Ping" => Ok(json!("pong")),
         "GetTheme" | "SetTheme" | "ListThemes" | "GetLayouts" | "SetLayout" | "SetSchedule"
@@ -33,7 +40,33 @@ async fn handle(link: &uqd::Link, call: &str, args: &[Value]) -> Result<Value, S
         }
         "Launch" => launch::launch(link, args).await,
         "Dispatch" => dispatch::dispatch(args).await,
+        "GeocodeCity" => match args {
+            [Value::String(name)] => net.geocode(name).await,
+            _ => Err("GeocodeCity takes one string argument (the city name)".into()),
+        },
+        "NetworkChanged" => match args {
+            [Value::Object(o)] if o.get("vpn_active").is_some_and(Value::is_boolean) => {
+                net.network_changed(o["vpn_active"] == true).await;
+                Ok(Value::Null)
+            }
+            _ => Err("NetworkChanged takes {vpn_active: bool}".into()),
+        },
         other => Err(format!("unknown call {other}")),
+    }
+}
+
+/// Run the notification-owner watch on the bridge's bus connection, waiting for the bus to be
+/// reachable and starting over if the connection goes away.
+async fn watch_notif_owner(
+    link: Arc<uqd::Link>,
+    tx: mpsc::Sender<Outbound>,
+    stop: CancellationToken,
+) {
+    while !stop.is_cancelled() {
+        if let Some(conn) = link.connection().await {
+            notifowner::watch(conn, tx.clone(), stop.clone()).await;
+        }
+        tokio::select! { _ = stop.cancelled() => return, _ = tokio::time::sleep(Duration::from_secs(5)) => {} }
     }
 }
 
@@ -97,6 +130,20 @@ where
         async move { link.watch(tx, stop).await }
     });
 
+    let net = net::Net::new(
+        net::NetClient::new(),
+        out_tx.clone(),
+        link.settings_rx(),
+        stop.clone(),
+        net::SETTLE,
+    );
+    let weather = tokio::spawn(net.clone().weather_loop(net::WEATHER_EVERY));
+    let notif = tokio::spawn(watch_notif_owner(
+        link.clone(),
+        out_tx.clone(),
+        stop.clone(),
+    ));
+
     let slots = Arc::new(Semaphore::new(MAX_IN_FLIGHT));
     let mut requests = tokio::task::JoinSet::new();
     while let Some(item) = in_rx.recv().await {
@@ -105,9 +152,9 @@ where
                 let Ok(permit) = slots.clone().acquire_owned().await else {
                     break;
                 };
-                let (link, tx) = (link.clone(), out_tx.clone());
+                let (link, net, tx) = (link.clone(), net.clone(), out_tx.clone());
                 requests.spawn(async move {
-                    let reply = match handle(&link, &call, &args).await {
+                    let reply = match handle(&link, &net, &call, &args).await {
                         Ok(ok) => Outbound::Ok { id, ok },
                         Err(err) => Outbound::Err { id, err },
                     };
@@ -139,6 +186,9 @@ where
     requests.abort_all();
     // Abort rather than await: the watcher may be blocked on a full channel or the bus.
     watcher.abort();
+    weather.abort();
+    notif.abort();
+    drop(net);
     reader.abort();
     drop(out_tx);
     if tokio::time::timeout(DRAIN, writer).await.is_err() {
