@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/uq-core"]
+members = ["crates/uq-core", "crates/uqd"]
 
 [workspace.package]
 edition = "2024"
@@ -16,3 +16,6 @@ thiserror = "2"
 tracing = "0.1"
 tempfile = "3"
 minijinja = { version = "2", features = ["json"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "process", "time", "sync", "fs"] }
+async-trait = "0.1"
+uq-core = { path = "crates/uq-core" }

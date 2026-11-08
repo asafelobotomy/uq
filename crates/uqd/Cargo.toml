@@ -1,0 +1,19 @@
+[package]
+name = "uqd"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[features]
+fake = []
+
+[dependencies]
+uq-core.workspace = true
+tokio.workspace = true
+async-trait.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
