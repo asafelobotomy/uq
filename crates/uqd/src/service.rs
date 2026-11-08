@@ -178,6 +178,21 @@ impl Desktop {
         self.commit(next, change).await
     }
 
+    /// Apply the scheduled variant if it differs from the current one. Returns whether it switched.
+    /// Called every minute, so suspend/resume and clock changes are caught on the next tick.
+    pub async fn tick_schedule_at<Tz: TimeZone>(
+        &mut self,
+        now: DateTime<Tz>,
+    ) -> Result<bool, DesktopError> {
+        match variant_at(&self.state.schedule, &now) {
+            Some(v) if v != self.state.variant => {
+                let theme = self.state.theme.clone();
+                self.set_theme(&theme, v).await.map(|()| true)
+            }
+            _ => Ok(false),
+        }
+    }
+
     /// Re-render every file from current state and re-theme the session.
     pub async fn reload(&mut self) -> Result<(), DesktopError> {
         self.commit(self.state.clone(), Change::Theme).await
@@ -515,6 +530,48 @@ mod tests {
             ("graphite".to_string(), Variant::Light)
         );
         assert_eq!(State::load(&r.desktop.paths().state_file).schedule, s);
+    }
+
+    #[tokio::test]
+    async fn schedule_tick_switches_variant_when_due() {
+        let mut r = rig();
+        let at = |h| {
+            chrono::Local::now()
+                .date_naive()
+                .and_hms_opt(h, 0, 0)
+                .unwrap()
+                .and_local_timezone(chrono::Local)
+                .earliest()
+                .unwrap()
+        };
+        let s = Schedule::Fixed {
+            light_at: chrono::NaiveTime::from_hms_opt(7, 0, 0).unwrap(),
+            dark_at: chrono::NaiveTime::from_hms_opt(19, 0, 0).unwrap(),
+        };
+        r.desktop.set_schedule_at(s, at(12)).await.unwrap();
+        assert_eq!(r.desktop.get_theme().1, Variant::Light);
+        drain(&mut r.events);
+        assert!(
+            !r.desktop.tick_schedule_at(at(13)).await.unwrap(),
+            "nothing due at 13:00"
+        );
+        assert!(drain(&mut r.events).is_empty());
+        assert!(
+            r.desktop.tick_schedule_at(at(20)).await.unwrap(),
+            "dark due at 20:00"
+        );
+        assert_eq!(r.desktop.get_theme().1, Variant::Dark);
+    }
+
+    #[tokio::test]
+    async fn schedule_tick_off_does_nothing() {
+        let mut r = rig();
+        assert!(
+            !r.desktop
+                .tick_schedule_at(chrono::Utc::now())
+                .await
+                .unwrap()
+        );
     }
 
     #[tokio::test]
