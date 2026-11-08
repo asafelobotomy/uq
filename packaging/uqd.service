@@ -7,6 +7,7 @@ After=graphical-session.target
 [Service]
 Type=dbus
 BusName=org.uq.Desktop1
+ExecCondition=/bin/sh -c 'test -n "$HYPRLAND_INSTANCE_SIGNATURE" && test -S "$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket.sock"'
 ExecStart=/usr/bin/uqd
 Restart=on-failure
 RestartSec=2
