@@ -19,7 +19,6 @@ Island {
     property var layouts: ({})
     property var dockModel: []
     property var menuEntry: null
-    property bool needRefresh: false
     readonly property var refreshEvents: ["openwindow", "closewindow", "movewindow", "movewindowv2",
         "windowtitle", "windowtitlev2", "changefloatingmode", "activewindowv2", "workspace", "workspacev2"]
 
@@ -114,29 +113,41 @@ Island {
 
     Component.onCompleted: { rebuildDock(); refreshLayouts(); }
 
+    // Events only request a refresh; the reply arrives asynchronously and shows up as
+    // lastIpcObjectChanged on the toplevels, which is what triggers the rebuild.
+    Timer {
+        id: refreshTimer
+        interval: 60
+        onTriggered: Hyprland.refreshToplevels()
+    }
     Timer {
         id: debounce
         interval: 60
-        onTriggered: {
-            if (root.needRefresh) {
-                root.needRefresh = false;
-                Hyprland.refreshToplevels();   // lastIpcObject (class, tags) is only re-read on refresh
-            }
-            root.rebuildDock();
-        }
+        onTriggered: root.rebuildDock()
     }
     Connections {
         target: Hyprland
         function onRawEvent(event) {
-            if (root.refreshEvents.indexOf(event.name) >= 0) {
-                root.needRefresh = true;
-                debounce.restart();
-            }
+            if (root.refreshEvents.indexOf(event.name) >= 0)
+                refreshTimer.restart();
         }
     }
     Connections {
         target: Hyprland.toplevels
         function onValuesChanged() { debounce.restart(); }
+    }
+    // One watcher per toplevel: refreshed class/tags/title/workspace rebuild the dock.
+    Instantiator {
+        model: Hyprland.toplevels.values
+        delegate: QtObject {
+            required property var modelData
+            property Connections watch: Connections {
+                target: modelData
+                function onLastIpcObjectChanged() { debounce.restart(); }
+                function onTitleChanged() { debounce.restart(); }
+                function onWorkspaceChanged() { debounce.restart(); }
+            }
+        }
     }
     Connections {
         target: Settings
