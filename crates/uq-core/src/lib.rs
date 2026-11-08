@@ -4,4 +4,6 @@ pub mod contrast;
 pub mod lua;
 pub mod paths;
 pub mod render;
+pub mod schedule;
+pub mod state;
 pub mod theme;
