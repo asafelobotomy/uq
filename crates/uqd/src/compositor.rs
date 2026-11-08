@@ -3,8 +3,6 @@
 use async_trait::async_trait;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::UnixStream;
 
 #[derive(Debug, thiserror::Error)]
 pub enum CompositorError {
@@ -33,38 +31,33 @@ pub trait Compositor: Send + Sync {
 /// Hyprland over its request socket, plus `Hyprland --verify-config` for validation.
 #[derive(Debug, Clone)]
 pub struct Hyprland {
-    runtime_dir: Option<PathBuf>,
-    signature: Option<String>,
+    socket: HyprSocket,
     binary: PathBuf,
-    request_timeout: Duration,
     verify_timeout: Duration,
 }
 
-/// A hung compositor must never wedge uqd (it holds the desktop lock while waiting).
-pub const REQUEST_TIMEOUT: Duration = Duration::from_secs(2);
+pub use crate::hypr::{HyprSocket, REQUEST_TIMEOUT};
 pub const VERIFY_TIMEOUT: Duration = Duration::from_secs(10);
 
 impl Hyprland {
     pub fn new(runtime_dir: Option<PathBuf>, signature: Option<String>) -> Self {
         Hyprland {
-            runtime_dir,
-            signature,
+            socket: HyprSocket::new(runtime_dir, signature),
             binary: PathBuf::from("Hyprland"),
-            request_timeout: REQUEST_TIMEOUT,
             verify_timeout: VERIFY_TIMEOUT,
         }
     }
 
     pub fn from_env() -> Self {
-        let get = |k| std::env::var(k).ok().filter(|v: &String| !v.is_empty());
-        Hyprland::new(
-            get("XDG_RUNTIME_DIR").map(PathBuf::from),
-            get("HYPRLAND_INSTANCE_SIGNATURE"),
-        )
+        Hyprland {
+            socket: HyprSocket::from_env(),
+            binary: PathBuf::from("Hyprland"),
+            verify_timeout: VERIFY_TIMEOUT,
+        }
     }
 
     pub fn with_timeouts(mut self, request: Duration, verify: Duration) -> Self {
-        self.request_timeout = request;
+        self.socket = self.socket.with_timeout(request);
         self.verify_timeout = verify;
         self
     }
@@ -72,51 +65,6 @@ impl Hyprland {
     pub fn with_binary(mut self, binary: impl Into<PathBuf>) -> Self {
         self.binary = binary.into();
         self
-    }
-
-    fn socket(&self) -> Option<PathBuf> {
-        Some(
-            self.runtime_dir
-                .as_ref()?
-                .join("hypr")
-                .join(self.signature.as_ref()?)
-                .join(".socket.sock"),
-        )
-    }
-
-    /// Send one request on the hyprctl socket and return the whole reply.
-    async fn request(&self, req: &str) -> Result<String, CompositorError> {
-        let path = self.socket().ok_or(CompositorError::NotRunning)?;
-        let exchange = async {
-            let mut s = match UnixStream::connect(&path).await {
-                Ok(s) => s,
-                Err(e)
-                    if matches!(
-                        e.kind(),
-                        std::io::ErrorKind::NotFound | std::io::ErrorKind::ConnectionRefused
-                    ) =>
-                {
-                    return Err(CompositorError::NotRunning);
-                }
-                Err(e) => return Err(e.into()),
-            };
-            s.write_all(req.as_bytes()).await?;
-            let mut reply = String::new();
-            s.read_to_string(&mut reply).await?;
-            Ok(reply)
-        };
-        let verb = req.split_whitespace().next().unwrap_or(req).to_string();
-        tokio::time::timeout(self.request_timeout, exchange)
-            .await
-            .map_err(|_| CompositorError::Timeout(verb))?
-    }
-
-    async fn expect_ok(&self, req: &str) -> Result<(), CompositorError> {
-        let reply = self.request(req).await?;
-        match reply.trim() {
-            "ok" => Ok(()),
-            other => Err(CompositorError::Rejected(other.to_string())),
-        }
     }
 }
 
@@ -151,15 +99,15 @@ impl Compositor for Hyprland {
     }
 
     async fn eval(&self, lua: &str) -> Result<(), CompositorError> {
-        self.expect_ok(&format!("eval {lua}")).await
+        self.socket.eval(lua).await
     }
 
     async fn reload(&self) -> Result<(), CompositorError> {
-        self.expect_ok("reload").await
+        self.socket.expect_ok("reload").await
     }
 
     async fn config_errors(&self) -> Result<Vec<String>, CompositorError> {
-        let reply = self.request("j/configerrors").await?;
+        let reply = self.socket.request("j/configerrors").await?;
         let lines: Vec<String> = serde_json::from_str(&reply)
             .unwrap_or_else(|_| reply.lines().map(str::to_string).collect());
         Ok(lines.into_iter().filter(|l| !l.trim().is_empty()).collect())
