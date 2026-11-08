@@ -3,6 +3,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Hyprland
 import "core"
+import "bar"
 
 ShellRoot {
     Component.onCompleted: Quickshell.watchFiles = false
