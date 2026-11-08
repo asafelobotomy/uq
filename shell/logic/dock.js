@@ -43,3 +43,37 @@ function nextWindow(entry, focusOrder) {
     }
     return list[0];
 }
+
+var MAX_PINS = 32;
+
+// Unresolved apps ("class:<cls>") have no desktop id, so they can be neither pinned nor launched.
+function isClassId(id) {
+    return String(id).indexOf("class:") === 0;
+}
+function canPin(entry) {
+    return !!entry && !isClassId(entry.id);
+}
+// The desktop id to hand to Launch, or null when the entry must not be launched.
+function launchId(entry) {
+    return canPin(entry) ? String(entry.id) : null;
+}
+// New pin list after toggling `id`, or null when the change must not be made (settings not
+// loaded yet, unpinnable id, or the list is full). Result is de-duplicated.
+function togglePin(pins, id, loaded) {
+    if (!loaded || !Array.isArray(pins) || isClassId(id))
+        return null;
+    var out = [];
+    pins.forEach(function (p) {
+        if (out.indexOf(p) < 0)
+            out.push(p);
+    });
+    var i = out.indexOf(id);
+    if (i >= 0) {
+        out.splice(i, 1);
+        return out;
+    }
+    if (out.length >= MAX_PINS)
+        return null;
+    out.push(id);
+    return out;
+}

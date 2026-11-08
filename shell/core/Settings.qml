@@ -6,12 +6,16 @@ QtObject {
     id: root
 
     property var values: ({})
+    // True once settings have been read from uqd; pin edits must wait for it.
+    property bool loaded: false
     property var launchCounts: ({})
 
     function refresh() {
         Bridge.call("GetSettings", []).then(function (s) {
-            if (s && typeof s === "object")
+            if (s && typeof s === "object") {
                 root.values = s;
+                root.loaded = true;
+            }
         }).catch(function () {});
         Bridge.call("GetLaunchCounts", []).then(function (c) {
             if (c && typeof c === "object")
@@ -22,8 +26,10 @@ QtObject {
     property Connections conn: Connections {
         target: Bridge
         function onSettingsChanged(s) {
-            if (s && typeof s === "object")
+            if (s && typeof s === "object") {
                 root.values = s;
+                root.loaded = true;
+            }
         }
         function onEvent(name, data) {
             if (name === "UqdUp")

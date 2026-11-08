@@ -66,4 +66,29 @@ TestCase {
         var e = Dock.entries([], [tl("0xa", "code"), tl("0xb", "code", true), tl("0xc", "code")], lookup)[0];
         compare(Dock.nextWindow(e, ["0xa"]), "0xc");
     }
+
+    function test_class_entries_not_pinnable_or_launchable() {
+        var e = Dock.entries([], [tl("0x1", "weird.app")], lookup)[0];
+        compare(Dock.canPin(e), false);
+        compare(Dock.launchId(e), null);
+        compare(Dock.togglePin([], e.id, true), null);
+        var k = Dock.entries(["code"], [], lookup)[0];
+        compare(Dock.canPin(k), true);
+        compare(Dock.launchId(k), "code");
+    }
+    function test_toggle_pin() {
+        compare(JSON.stringify(Dock.togglePin(["a"], "b", true)), '["a","b"]');
+        compare(JSON.stringify(Dock.togglePin(["a", "b"], "a", true)), '["b"]');
+        compare(JSON.stringify(Dock.togglePin(["a", "a", "b"], "c", true)), '["a","b","c"]');
+    }
+    function test_toggle_pin_requires_loaded() {
+        compare(Dock.togglePin(["a"], "b", false), null);
+        compare(Dock.togglePin(undefined, "b", true), null);
+    }
+    function test_toggle_pin_caps_at_32() {
+        var pins = [];
+        for (var i = 0; i < 32; i++) pins.push("app" + i);
+        compare(Dock.togglePin(pins, "extra", true), null);
+        compare(Dock.togglePin(pins, "app0", true).length, 31);
+    }
 }
