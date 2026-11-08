@@ -8,6 +8,7 @@ mod dispatch;
 mod launch;
 pub(crate) mod net;
 mod notifowner;
+mod power;
 pub mod protocol;
 mod providers;
 mod run;
@@ -47,6 +48,7 @@ async fn handle(
         "Search" => providers.search(link, runs, args).await,
         "Activate" => providers.activate(link, runs, args).await,
         "Dispatch" => dispatch::dispatch(args).await,
+        "Power" => power::power(args).await,
         "GeocodeCity" => match args {
             [Value::String(name)] => net.geocode(name).await,
             _ => Err("GeocodeCity takes one string argument (the city name)".into()),
