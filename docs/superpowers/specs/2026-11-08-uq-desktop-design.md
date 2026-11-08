@@ -103,6 +103,12 @@ Four layers; each talks only to the layer below through a defined interface.
 | Widget | QML component in `/usr/share/uq/shell/widgets/<id>/` plus the app's own D-Bus status interface |
 | Launcher provider | D-Bus interface `org.uq.Launcher1.Provider` (`Search(query) → results`, `Activate(id, action)`); registered via a `.provider` file in `/usr/share/uq/launcher/` |
 
+**Stack convention.** uQ's own components use one stack: Rust for logic, Quickshell for the shell,
+and Rust + cxx-qt + Kirigami for windowed apps. New apps written for uQ start there. Integrated
+repos keep their own toolkits (Tauri, Slint, GTK4, PySide6, Electron). Their consistency comes
+from the extension points above: theme tokens, D-Bus, and small QML adapter files for settings
+pages and widgets. Web-based apps (Tauri, Electron) follow the theme through `uq-tokens` (Phase 4).
+
 ### 2.5 Theme pipeline
 
 - Theme source: `uq-themes/<name>/<dark|light>.toml` — semantic tokens (surface levels, text,
@@ -177,7 +183,16 @@ Each phase leaves a usable daily driver.
 2. **Shell:** bar, quick settings, launcher, OSDs, power menu, noti-fi port, lock screen.
 3. **Settings:** `uq-settings` core pages; extension-point SDK, manifests and templates.
 4. **Repo integrations**, in order: scale_tail, appOFholding, hauler, emobie, XZram, scdr, crumBS,
-   oysterAV, romforge (noti-fi lands in phase 2).
+   oysterAV, romforge (noti-fi lands in phase 2). Also in this phase:
+   - **`uq-tokens`**, a small dependency-free JS/CSS snippet for web-based apps (Tauri, Electron).
+     It reads `~/.local/state/uq/theme/tokens.json` (through the app's backend or a file read
+     allowed by the app's own policy) and maps it to CSS custom properties (`--uq-bg`,
+     `--uq-text`, `--uq-accent` …). It re-applies on change, watching the parent directory
+     because the theme dir is swapped atomically, and falls back to the app's own theme when the
+     file is missing. It ships in the uq repo under `web/uq-tokens/` and is vendored into
+     romforge, SonicSound, emobie, noveleditor and gutcheck as each one is integrated.
+   - **emobie** becomes a headless `:` launcher provider over D-Bus, so uQ doesn't need its
+     Tauri window. Its standalone app stays for other desktops.
 5. **Login and first run:** `uq-greeter`, bindle hand-off, Welcome flow.
 
 ## 8. Repository layout
