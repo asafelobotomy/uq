@@ -8,4 +8,4 @@ pkgdesc="Pins Hyprland to the release series uQ is tested against"
 arch=(any)
 url="https://github.com/asafelobotomy/uq"
 license=(MIT)
-depends=('hyprland>=0.56.2' 'hyprland<0.57.0')
+depends=('hyprland>=0.56.2' 'hyprland<0.58.0')

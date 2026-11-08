@@ -30,8 +30,9 @@ only Hyprland, so they are opt-in. It never overwrites a file you already have; 
 to add instead. Then log in to Hyprland. uqd starts with the Hyprland session and stops when it
 ends.
 
-Hyprland is pinned to **0.56.x** (`uq-hyprland-pin`), the newest release in Arch `extra` on
-2026-11-08. The Lua API uQ uses was checked against the 0.56.2 and 0.57.0 sources.
+Hyprland is pinned to **0.56.2–0.57.x** (`uq-hyprland-pin`): Manjaro ships 0.56.2 and Arch
+0.57.1 as of 2026-11-08. The Lua API uQ uses is identical in the 0.56.2 and 0.57 sources; CI runs
+`Hyprland --verify-config` on every theme against Arch's current release.
 
 ## Use
 

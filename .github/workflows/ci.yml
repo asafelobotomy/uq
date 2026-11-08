@@ -19,8 +19,8 @@ jobs:
         run: |
           v=$(pacman -Q hyprland | awk '{print $2}')
           case "$v" in
-            0.56.*) echo "Hyprland $v matches uq-hyprland-pin (0.56.x)" ;;
-            *) echo "::error::Arch ships Hyprland $v, outside uq-hyprland-pin (0.56.x). Bump the pin and re-check base.lua."; exit 1 ;;
+            0.56.*|0.57.*) echo "Hyprland $v matches uq-hyprland-pin (0.56.2–0.57.x)" ;;
+            *) echo "::error::Arch ships Hyprland $v, outside uq-hyprland-pin (0.56.2–0.57.x). Bump the pin and re-check base.lua."; exit 1 ;;
           esac
       # Hyprland refuses to run as root and needs XDG_RUNTIME_DIR, even for --verify-config.
       - name: Create an unprivileged test user
