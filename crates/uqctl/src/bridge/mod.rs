@@ -3,6 +3,7 @@
 //! stdout is protocol only; everything else goes to stderr. One task owns stdout and receives
 //! `Outbound` over an mpsc channel, so concurrent replies and events never interleave mid-line.
 
+mod calc;
 mod dispatch;
 mod launch;
 pub(crate) mod net;
