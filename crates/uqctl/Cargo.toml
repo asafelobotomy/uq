@@ -11,3 +11,9 @@ serde_json.workspace = true
 chrono = "0.4"
 clap = { version = "4", features = ["derive"] }
 zbus = { version = "5", default-features = false, features = ["tokio"] }
+futures-util = "0.3.34"
+tokio-util = "0.7"
+
+[dev-dependencies]
+uqd = { path = "../uqd", features = ["fake"] }
+tempfile.workspace = true

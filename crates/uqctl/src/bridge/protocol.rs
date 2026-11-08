@@ -42,6 +42,32 @@ impl std::fmt::Display for FrameError {
     }
 }
 
+/// A rejected input line. `id` is set when the line was valid JSON carrying a `u64` id, so the
+/// bridge can answer that request with an error instead of leaving the caller waiting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Rejected {
+    pub id: Option<u64>,
+    pub error: FrameError,
+}
+
+impl Rejected {
+    fn new(id: Option<u64>, error: FrameError) -> Self {
+        Rejected { id, error }
+    }
+}
+
+pub type Item = Result<Inbound, Rejected>;
+
+/// `decode_line`, keeping the request id (if any) of a rejected line.
+pub fn decode_item(line: &[u8]) -> Item {
+    decode_line(line).map_err(|error| {
+        let id = serde_json::from_slice::<Value>(line)
+            .ok()
+            .and_then(|v| v.get("id").and_then(Value::as_u64));
+        Rejected::new(id, error)
+    })
+}
+
 pub fn decode_line(line: &[u8]) -> Result<Inbound, FrameError> {
     if line.len() > MAX_LINE {
         return Err(FrameError::TooLong);
@@ -83,16 +109,12 @@ pub fn encode(msg: &Outbound) -> Vec<u8> {
 /// Read newline-delimited requests from `r`. Never buffers more than `MAX_LINE` bytes: an
 /// over-long line is discarded as it streams past and reported once as `FrameError::TooLong`.
 /// Returns at EOF or when the receiver is gone.
-pub async fn read_lines<R: AsyncRead + Unpin>(r: R, tx: mpsc::Sender<Result<Inbound, FrameError>>) {
+pub async fn read_lines<R: AsyncRead + Unpin>(r: R, tx: mpsc::Sender<Item>) {
     read_lines_inner(r, tx, &mut 0).await
 }
 
 /// As `read_lines`, recording the largest line buffer held in `peak`.
-async fn read_lines_inner<R: AsyncRead + Unpin>(
-    r: R,
-    tx: mpsc::Sender<Result<Inbound, FrameError>>,
-    peak: &mut usize,
-) {
+async fn read_lines_inner<R: AsyncRead + Unpin>(r: R, tx: mpsc::Sender<Item>, peak: &mut usize) {
     let mut r = BufReader::with_capacity(8192, r);
     let mut buf: Vec<u8> = Vec::new();
     let mut discarding = false;
@@ -124,11 +146,11 @@ async fn read_lines_inner<R: AsyncRead + Unpin>(
         r.consume(consumed);
         if found_nl {
             let item = if discarding {
-                Some(Err(FrameError::TooLong))
+                Some(Err(Rejected::new(None, FrameError::TooLong)))
             } else if buf.is_empty() {
                 None
             } else {
-                Some(decode_line(&buf))
+                Some(decode_item(&buf))
             };
             buf.clear();
             discarding = false;
@@ -141,11 +163,11 @@ async fn read_lines_inner<R: AsyncRead + Unpin>(
     }
     // EOF: a final unterminated line still counts.
     let item = if discarding {
-        Some(Err(FrameError::TooLong))
+        Some(Err(Rejected::new(None, FrameError::TooLong)))
     } else if buf.is_empty() {
         None
     } else {
-        Some(decode_line(&buf))
+        Some(decode_item(&buf))
     };
     if let Some(item) = item {
         let _ = tx.send(item).await;
@@ -207,10 +229,11 @@ mod tests {
         );
     }
 
-    /// Hands out data in small chunks so the reader's own buffering stays tiny.
+    /// Hands out data in `chunk`-sized pieces so the reader's own buffering stays tiny.
     struct Chunked {
         data: Vec<u8>,
         pos: usize,
+        chunk: usize,
     }
     impl AsyncRead for Chunked {
         fn poll_read(
@@ -218,7 +241,9 @@ mod tests {
             _: &mut Context<'_>,
             buf: &mut ReadBuf<'_>,
         ) -> Poll<std::io::Result<()>> {
-            let n = (self.data.len() - self.pos).min(buf.remaining()).min(4096);
+            let n = (self.data.len() - self.pos)
+                .min(buf.remaining())
+                .min(self.chunk);
             let p = self.pos;
             buf.put_slice(&self.data[p..p + n]);
             self.pos += n;
@@ -226,37 +251,146 @@ mod tests {
         }
     }
 
+    const CHUNKS: [usize; 6] = [1, 7, 4096, MAX_LINE, MAX_LINE + 1, 1 << 20];
+
+    /// A valid request line of exactly `len` bytes (no newline).
+    fn request_of_len(id: u64, len: usize) -> Vec<u8> {
+        let head = format!("{{\"v\":1,\"id\":{id},\"call\":\"");
+        let tail = "\",\"args\":[]}";
+        let pad = len - head.len() - tail.len();
+        let line = format!("{head}{}{tail}", "a".repeat(pad));
+        assert_eq!(line.len(), len);
+        line.into_bytes()
+    }
+
+    async fn read_all(data: Vec<u8>, chunk: usize) -> (Vec<Item>, usize) {
+        let (tx, mut rx) = mpsc::channel(64);
+        let mut peak = 0;
+        read_lines_inner(
+            Chunked {
+                data,
+                pos: 0,
+                chunk,
+            },
+            tx,
+            &mut peak,
+        )
+        .await;
+        let mut items = Vec::new();
+        while let Some(i) = rx.recv().await {
+            items.push(i);
+        }
+        (items, peak)
+    }
+
+    fn ping(id: u64) -> Vec<u8> {
+        format!("{{\"v\":1,\"id\":{id},\"call\":\"Ping\",\"args\":[]}}\n").into_bytes()
+    }
+
+    fn too_long() -> Item {
+        Err(Rejected::new(None, FrameError::TooLong))
+    }
+
+    fn is_ping(i: &Item, id: u64) -> bool {
+        matches!(i, Ok(Inbound::Request { id: got, call, .. }) if *got == id && call == "Ping")
+    }
+
+    #[tokio::test]
+    async fn exact_max_line_accepted_at_any_chunking() {
+        for chunk in CHUNKS {
+            let mut data = request_of_len(1, MAX_LINE);
+            data.push(b'\n');
+            data.extend(ping(2));
+            let (items, peak) = read_all(data, chunk).await;
+            assert_eq!(items.len(), 2, "chunk {chunk}");
+            assert!(matches!(items[0], Ok(Inbound::Request { id: 1, .. })));
+            assert!(is_ping(&items[1], 2));
+            assert!(peak <= MAX_LINE, "peak {peak}");
+        }
+    }
+
+    #[tokio::test]
+    async fn max_line_plus_one_is_too_long_at_any_chunking() {
+        for chunk in CHUNKS {
+            let mut data = request_of_len(1, MAX_LINE + 1);
+            data.push(b'\n');
+            data.extend(ping(2));
+            let (items, peak) = read_all(data, chunk).await;
+            assert_eq!(items.len(), 2, "chunk {chunk}");
+            assert_eq!(items[0], too_long(), "chunk {chunk}");
+            assert!(is_ping(&items[1], 2));
+            assert!(peak <= MAX_LINE, "peak {peak}");
+        }
+    }
+
     #[tokio::test]
     async fn overlong_line_dropped_next_ok() {
         let mut data = vec![b'a'; 300 * 1024];
         data.push(b'\n');
-        data.extend_from_slice(b"{\"v\":1,\"id\":9,\"call\":\"Ping\",\"args\":[]}\n");
-        let (tx, mut rx) = mpsc::channel(8);
-        let mut peak = 0;
-        read_lines_inner(Chunked { data, pos: 0 }, tx, &mut peak).await;
-        assert_eq!(rx.recv().await, Some(Err(FrameError::TooLong)));
-        assert_eq!(
-            rx.recv().await,
-            Some(Ok(Inbound::Request {
-                id: 9,
-                call: "Ping".into(),
-                args: vec![]
-            }))
-        );
-        assert_eq!(rx.recv().await, None);
+        data.extend(ping(9));
+        let (items, peak) = read_all(data, 4096).await;
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0], too_long());
+        assert!(is_ping(&items[1], 9));
         assert!(peak <= MAX_LINE, "peak buffer {peak}");
     }
 
     #[tokio::test]
-    async fn exactly_max_line_is_accepted_and_final_unterminated_line_read() {
-        let pad = MAX_LINE - 40;
-        let line = format!(
-            "{{\"v\":1,\"id\":1,\"call\":\"{}\",\"args\":[]}}",
-            "a".repeat(pad - 3)
-        );
-        assert!(line.len() <= MAX_LINE);
-        let (tx, mut rx) = mpsc::channel(8);
-        read_lines(std::io::Cursor::new(line.into_bytes()), tx).await;
-        assert!(matches!(rx.recv().await, Some(Ok(_))));
+    async fn unterminated_lines_at_eof() {
+        let (items, _) = read_all(vec![b'a'; MAX_LINE + 10], 4096).await;
+        assert_eq!(items, vec![too_long()]);
+        let (items, _) = read_all(request_of_len(3, MAX_LINE), 4096).await;
+        assert!(matches!(items[..], [Ok(Inbound::Request { id: 3, .. })]));
+        let mut data = ping(1);
+        data.extend(b"{\"v\":1,\"id\":4,\"call\":\"Ping\"}");
+        let (items, _) = read_all(data, 4096).await;
+        assert_eq!(items.len(), 2);
+        assert!(is_ping(&items[1], 4));
+    }
+
+    #[tokio::test]
+    async fn empty_lines_skipped() {
+        let mut data = b"\n\n".to_vec();
+        data.extend(ping(1));
+        data.extend(b"\n");
+        let (items, _) = read_all(data, 1).await;
+        assert_eq!(items.len(), 1);
+        assert!(is_ping(&items[0], 1));
+    }
+
+    #[tokio::test]
+    async fn malformed_lines_keep_id_only_when_valid_u64() {
+        let bad = |id| Err(Rejected::new(id, FrameError::BadJson));
+        let cases: Vec<(&[u8], Item)> = vec![
+            (b"\xff\xfe not utf8\n", bad(None)),
+            (b"{\"v\":1,\"id\":\"\xff\",\"call\":\"Ping\"}\n", bad(None)),
+            (b"{\"v\":1,\"id\":-1,\"call\":\"Ping\"}\n", bad(None)),
+            (
+                b"{\"v\":1,\"id\":18446744073709551616,\"call\":\"Ping\"}\n",
+                bad(None),
+            ),
+            (b"{\"v\":1,\"id\":7,\"call\":5}\n", bad(Some(7))),
+            (
+                b"{\"v\":1,\"id\":7,\"call\":\"P\",\"args\":3}\n",
+                bad(Some(7)),
+            ),
+            (
+                b"{\"v\":2,\"id\":8,\"call\":\"Ping\"}\n",
+                Err(Rejected::new(Some(8), FrameError::BadVersion)),
+            ),
+        ];
+        for (line, want) in cases {
+            let (items, _) = read_all(line.to_vec(), 4096).await;
+            assert_eq!(items, vec![want], "{}", String::from_utf8_lossy(line));
+        }
+        let (items, _) = read_all(
+            b"{\"v\":1,\"id\":18446744073709551615,\"call\":\"P\"}\n".to_vec(),
+            4096,
+        )
+        .await;
+        assert!(matches!(
+            items[..],
+            [Ok(Inbound::Request { id: u64::MAX, .. })]
+        ));
     }
 }

@@ -1,0 +1,419 @@
+//! Forwarding between the bridge protocol and `org.uq.Desktop1` on the session bus.
+
+use super::protocol::Outbound;
+use futures_util::StreamExt;
+use serde_json::{Map, Value, json};
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
+use tokio::sync::{Mutex, mpsc};
+use tokio_util::sync::CancellationToken;
+use zbus::fdo::DBusProxy;
+use zbus::message::Type;
+use zbus::{Connection, MatchRule, MessageStream};
+
+pub const NAME: &str = "org.uq.Desktop1";
+const PATH: &str = "/org/uq/Desktop1";
+const IFACE: &str = "org.uq.Desktop1";
+pub const DOWN: &str = "uqd is not running";
+/// `Reload` can take about 12 s inside uqd (verify + reload); never wait forever.
+const CALL_TIMEOUT: Duration = Duration::from_secs(20);
+const POLL: Duration = Duration::from_secs(5);
+
+/// The bridge's view of uqd: a (lazily established) bus connection plus whether the name is owned.
+pub struct Link {
+    addr: Option<String>,
+    conn: Mutex<Option<Connection>>,
+    up: AtomicBool,
+    /// Subscriptions made in `open`, before the first state check, so nothing is missed.
+    first: Mutex<Option<Subs>>,
+}
+
+struct Subs {
+    owner: OwnerStream,
+    signals: MessageStream,
+}
+
+type OwnerStream = zbus::fdo::NameOwnerChangedStream;
+
+/// Connect and subscribe to owner changes and uqd's signals.
+async fn subscribe(addr: Option<&str>) -> Option<(Connection, Subs)> {
+    let conn = connect(addr).await.ok()?;
+    let owner = DBusProxy::new(&conn)
+        .await
+        .ok()?
+        .receive_name_owner_changed()
+        .await
+        .ok()?;
+    let rule = MatchRule::builder()
+        .msg_type(Type::Signal)
+        .sender(NAME)
+        .and_then(|b| b.path(PATH))
+        .and_then(|b| b.interface(IFACE))
+        .map(|b| b.build())
+        .ok()?;
+    let signals = MessageStream::for_match_rule(rule, &conn, Some(64))
+        .await
+        .ok()?;
+    Some((conn, Subs { owner, signals }))
+}
+
+async fn connect(addr: Option<&str>) -> zbus::Result<Connection> {
+    match addr {
+        Some(a) => zbus::connection::Builder::address(a)?.build().await,
+        None => Connection::session().await,
+    }
+}
+
+async fn has_owner(conn: &Connection) -> bool {
+    match DBusProxy::new(conn).await {
+        Ok(p) => p
+            .name_has_owner(NAME.try_into().expect("valid bus name"))
+            .await
+            .unwrap_or(false),
+        Err(_) => false,
+    }
+}
+
+impl Link {
+    /// Connect to the bus (if it is reachable) and learn whether uqd owns its name right now.
+    /// Call before sending `Hello` so `uqd_up` is truthful.
+    pub async fn open(addr: Option<&str>) -> Link {
+        let sub = subscribe(addr).await;
+        if sub.is_none() {
+            eprintln!("uqctl bridge: no session bus yet");
+        }
+        let (conn, first) = match sub {
+            Some((c, s)) => (Some(c), Some(s)),
+            None => (None, None),
+        };
+        let up = match &conn {
+            Some(c) => has_owner(c).await,
+            None => false,
+        };
+        Link {
+            addr: addr.map(str::to_owned),
+            conn: Mutex::new(conn),
+            up: AtomicBool::new(up),
+            first: Mutex::new(first),
+        }
+    }
+
+    pub fn is_up(&self) -> bool {
+        self.up.load(Ordering::SeqCst)
+    }
+
+    /// Record the current state; returns true when it changed.
+    fn set_up(&self, up: bool) -> bool {
+        self.up.swap(up, Ordering::SeqCst) != up
+    }
+
+    async fn connection(&self) -> Option<Connection> {
+        self.conn.lock().await.clone()
+    }
+
+    /// Forward one bridge call to uqd.
+    pub async fn call(&self, call: &str, args: &[Value]) -> Result<Value, String> {
+        // Validate before touching the bus so argument errors do not depend on uqd's state.
+        let req = Request::parse(call, args)?;
+        let conn = match self.connection().await {
+            Some(c) if self.is_up() => c,
+            _ => return Err(DOWN.into()),
+        };
+        match tokio::time::timeout(CALL_TIMEOUT, req.send(&conn)).await {
+            Ok(r) => r,
+            Err(_) => Err("uqd did not answer within 20 s".into()),
+        }
+    }
+
+    /// Watch the name owner and forward uqd's signals until `stop` is cancelled. Events go to
+    /// `tx`. Reconnects to the bus if it goes away.
+    pub async fn watch(&self, tx: mpsc::Sender<Outbound>, stop: CancellationToken) {
+        let mut listener: Option<tokio::task::JoinHandle<()>> = None;
+        let mut owner: Option<OwnerStream> = None;
+        let mut poll = tokio::time::interval(POLL);
+        poll.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        let mut first = self.first.lock().await.take();
+        'outer: loop {
+            if owner.is_none() {
+                let subs = match first.take() {
+                    Some(s) => Some(s),
+                    None => match subscribe(self.addr.as_deref()).await {
+                        Some((conn, s)) => {
+                            let up = has_owner(&conn).await;
+                            *self.conn.lock().await = Some(conn);
+                            if self.set_up(up) && !emit_state(&tx, up).await {
+                                break;
+                            }
+                            Some(s)
+                        }
+                        None => None,
+                    },
+                };
+                if let Some(Subs { owner: o, signals }) = subs {
+                    owner = Some(o);
+                    listener = Some(tokio::spawn(forward(signals, tx.clone())));
+                }
+            }
+            tokio::select! {
+                _ = stop.cancelled() => break 'outer,
+                _ = poll.tick() => {
+                    // Belt and braces while down; NameOwnerChanged covers the normal case.
+                    if !self.is_up()
+                        && let Some(conn) = self.connection().await
+                    {
+                        let up = has_owner(&conn).await;
+                        if self.set_up(up) && !emit_state(&tx, up).await {
+                            break 'outer;
+                        }
+                    }
+                }
+                ev = next_owner_change(&mut owner), if owner.is_some() => {
+                    match ev {
+                        Some(up) => {
+                            if self.set_up(up) && !emit_state(&tx, up).await {
+                                break 'outer;
+                            }
+                        }
+                        // The bus connection ended: uqd is unreachable until we reconnect.
+                        None => {
+                            owner = None;
+                            if let Some(l) = listener.take() {
+                                l.abort();
+                            }
+                            *self.conn.lock().await = None;
+                            if self.set_up(false) && !emit_state(&tx, false).await {
+                                break 'outer;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if let Some(l) = listener {
+            l.abort();
+        }
+    }
+}
+
+async fn next_owner_change(s: &mut Option<OwnerStream>) -> Option<bool> {
+    loop {
+        let ev = s.as_mut()?.next().await?;
+        let Ok(args) = ev.args() else { continue };
+        if args.name().as_str() == NAME {
+            return Some(args.new_owner().is_some());
+        }
+    }
+}
+
+async fn emit_state(tx: &mpsc::Sender<Outbound>, up: bool) -> bool {
+    let event = if up { "UqdUp" } else { "UqdDown" };
+    tx.send(Outbound::Event {
+        event: event.into(),
+        data: Value::Null,
+    })
+    .await
+    .is_ok()
+}
+
+/// Turn uqd's signals into bridge events. Only messages from the owner of the well-known name
+/// arrive (the daemon resolves the name in the match rule).
+async fn forward(mut stream: MessageStream, tx: mpsc::Sender<Outbound>) {
+    while let Some(m) = stream.next().await {
+        let Ok(msg) = m else { break };
+        let header = msg.header();
+        let Some(member) = header.member() else {
+            continue;
+        };
+        let body = msg.body();
+        let parsed = match member.as_str() {
+            "ThemeChanged" => body
+                .deserialize::<(String, String, String)>()
+                .map(|(n, v, p)| json!({"name": n, "variant": v, "tokens_path": p})),
+            "LayoutChanged" => body
+                .deserialize::<(String, String)>()
+                .map(|(w, l)| json!({"workspace": w, "layout": l})),
+            "ConfigError" => body.deserialize::<String>().map(|m| json!({"message": m})),
+            "SettingsChanged" => body.deserialize::<String>().map(|j| parse_json(&j)),
+            "LaunchCountsChanged" => body.deserialize::<HashMap<String, u32>>().map(|c| json!(c)),
+            _ => continue,
+        };
+        match parsed {
+            Ok(data) => {
+                let out = Outbound::Event {
+                    event: member.to_string(),
+                    data,
+                };
+                if tx.send(out).await.is_err() {
+                    return;
+                }
+            }
+            Err(e) => eprintln!("uqctl bridge: bad {member} signal: {e}"),
+        }
+    }
+}
+
+fn parse_json(s: &str) -> Value {
+    serde_json::from_str(s).unwrap_or(Value::Null)
+}
+
+/// A validated call, ready to send.
+enum Request {
+    GetTheme,
+    SetTheme(String, String),
+    ListThemes,
+    GetLayouts,
+    SetLayout(String, String),
+    SetSchedule(String),
+    Reload,
+    GetSettings,
+    SetSetting(String, String),
+    GetLaunchCounts,
+    RecordLaunch(String),
+}
+
+fn string_arg(args: &[Value], i: usize, what: &str) -> Result<String, String> {
+    args.get(i)
+        .and_then(Value::as_str)
+        .map(str::to_owned)
+        .ok_or_else(|| format!("argument {} ({what}) must be a string", i + 1))
+}
+
+fn arity(call: &str, args: &[Value], n: usize) -> Result<(), String> {
+    if args.len() == n {
+        Ok(())
+    } else {
+        Err(format!("{call} takes {n} argument(s), got {}", args.len()))
+    }
+}
+
+impl Request {
+    fn parse(call: &str, args: &[Value]) -> Result<Request, String> {
+        let r = match call {
+            "GetTheme" => (0, Request::GetTheme),
+            "ListThemes" => (0, Request::ListThemes),
+            "GetLayouts" => (0, Request::GetLayouts),
+            "Reload" => (0, Request::Reload),
+            "GetSettings" => (0, Request::GetSettings),
+            "GetLaunchCounts" => (0, Request::GetLaunchCounts),
+            "SetTheme" => {
+                arity(call, args, 2)?;
+                (
+                    2,
+                    Request::SetTheme(
+                        string_arg(args, 0, "name")?,
+                        string_arg(args, 1, "variant")?,
+                    ),
+                )
+            }
+            "SetLayout" => {
+                arity(call, args, 2)?;
+                (
+                    2,
+                    Request::SetLayout(
+                        string_arg(args, 0, "workspace")?,
+                        string_arg(args, 1, "layout")?,
+                    ),
+                )
+            }
+            "SetSchedule" => {
+                arity(call, args, 1)?;
+                // The schedule is a JSON object (a pre-encoded JSON string is accepted too).
+                let json = match &args[0] {
+                    Value::String(s) => s.clone(),
+                    v @ Value::Object(_) => v.to_string(),
+                    _ => return Err("argument 1 (schedule) must be an object".into()),
+                };
+                (1, Request::SetSchedule(json))
+            }
+            "SetSetting" => {
+                arity(call, args, 2)?;
+                (
+                    2,
+                    Request::SetSetting(string_arg(args, 0, "key")?, args[1].to_string()),
+                )
+            }
+            "RecordLaunch" => {
+                arity(call, args, 1)?;
+                (1, Request::RecordLaunch(string_arg(args, 0, "desktop id")?))
+            }
+            other => return Err(format!("unknown call {other}")),
+        };
+        if r.0 == 0 {
+            arity(call, args, 0)?;
+        }
+        Ok(r.1)
+    }
+
+    async fn send(self, conn: &Connection) -> Result<Value, String> {
+        let proxy = zbus::Proxy::new(conn, NAME, PATH, IFACE)
+            .await
+            .map_err(describe)?;
+        match self {
+            Request::GetTheme => {
+                let (n, v): (String, String) =
+                    proxy.call("GetTheme", &()).await.map_err(describe)?;
+                Ok(json!([n, v]))
+            }
+            Request::ListThemes => {
+                let ids: Vec<String> = proxy.call("ListThemes", &()).await.map_err(describe)?;
+                Ok(json!(ids))
+            }
+            Request::GetLayouts => {
+                let m: HashMap<String, String> =
+                    proxy.call("GetLayouts", &()).await.map_err(describe)?;
+                Ok(json!(m))
+            }
+            Request::GetSettings => {
+                let s: String = proxy.call("GetSettings", &()).await.map_err(describe)?;
+                let v: Value =
+                    serde_json::from_str(&s).map_err(|e| format!("bad settings: {e}"))?;
+                Ok(if v.is_object() {
+                    v
+                } else {
+                    Value::Object(Map::new())
+                })
+            }
+            Request::GetLaunchCounts => {
+                let m: HashMap<String, u32> =
+                    proxy.call("GetLaunchCounts", &()).await.map_err(describe)?;
+                Ok(json!(m))
+            }
+            Request::Reload => unit(proxy.call("Reload", &()).await),
+            Request::SetTheme(a, b) => unit(proxy.call("SetTheme", &(a, b)).await),
+            Request::SetLayout(a, b) => unit(proxy.call("SetLayout", &(a, b)).await),
+            Request::SetSchedule(j) => unit(proxy.call("SetSchedule", &(j,)).await),
+            Request::SetSetting(k, j) => unit(proxy.call("SetSetting", &(k, j)).await),
+            Request::RecordLaunch(id) => unit(proxy.call("RecordLaunch", &(id,)).await),
+        }
+    }
+}
+
+fn unit(r: zbus::Result<()>) -> Result<Value, String> {
+    r.map(|()| Value::Null).map_err(describe)
+}
+
+/// D-Bus error to the `err` text: uqd's own message when it gave one, "not running" when the
+/// name has no owner.
+fn describe(err: zbus::Error) -> String {
+    match err {
+        zbus::Error::MethodError(name, msg, _) => {
+            if matches!(
+                name.as_str(),
+                "org.freedesktop.DBus.Error.ServiceUnknown"
+                    | "org.freedesktop.DBus.Error.NameHasNoOwner"
+            ) {
+                DOWN.into()
+            } else {
+                msg.unwrap_or_else(|| name.to_string())
+            }
+        }
+        zbus::Error::FDO(e) => match *e {
+            zbus::fdo::Error::ServiceUnknown(_) | zbus::fdo::Error::NameHasNoOwner(_) => {
+                DOWN.into()
+            }
+            other => other.to_string(),
+        },
+        other => other.to_string(),
+    }
+}
