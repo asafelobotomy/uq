@@ -122,4 +122,11 @@ TestCase {
         compare(Net.finishRun(1, "partial").text, "");
         compare(Net.finishRun(0, null).text, "");
     }
+    // A non-zero exit (service not ready, restarting) is a normal result, polled again in 10 s;
+    // only a failed start (binary missing) is cached.
+    function test_failure_cache_only_for_failed_start() {
+        compare(Net.finishRun(1, "").ok, false);
+        compare(Net.failedStart(false), true);
+        compare(Net.failedStart(true), false);
+    }
 }

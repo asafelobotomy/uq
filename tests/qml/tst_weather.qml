@@ -46,4 +46,12 @@ TestCase {
         compare(Weather.locationArg({ name: "Oslo" }), null);
         compare(Weather.locationArg(null), null);
     }
+    function test_canTurnOff() {
+        var loc = { name: "Oslo", lat: 59.9, lon: 10.7 };
+        verify(Weather.canTurnOff(loc, null));          // offline at login: no Weather event yet
+        verify(Weather.canTurnOff(loc, undefined));
+        verify(Weather.canTurnOff(loc, { temp_c: 1 }));
+        verify(!Weather.canTurnOff(null, null));
+        verify(!Weather.canTurnOff(undefined, { temp_c: 1 }));
+    }
 }

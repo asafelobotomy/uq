@@ -217,7 +217,7 @@ Island {
                     }
                 }
                 Rectangle {
-                    visible: root.hasWeather
+                    visible: Weather.canTurnOff(Settings.values.weather_location, root.wx)
                     Layout.fillWidth: true
                     Layout.preferredHeight: visible ? root.cell : 0
                     radius: Theme.radius - 2

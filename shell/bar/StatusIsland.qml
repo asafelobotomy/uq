@@ -110,8 +110,8 @@ Island {
         }
     }
 
-    // A failed start (missing tool) emits runningChanged(false) without started(); a failed
-    // run exits non-zero. Both are cached for 5 minutes by pollNetwork().
+    // A failed start (missing tool) emits runningChanged(false) without started(); a non-zero
+    // exit is an ordinary result. Only the failed start is cached for 5 minutes by pollNetwork().
     Process {
         id: nm
         property bool didStart: false
@@ -130,7 +130,8 @@ Island {
                 root.nmFailedAt = 0;
                 root.vpnConn = Net.vpnName(Net.parseNmcliActive(res.text));
             } else {
-                root.nmFailedAt = Date.now();
+                // Non-zero exit (NetworkManager not ready, restarting): polled again in 10 s.
+                root.nmFailedAt = 0;
                 root.vpnConn = null;
             }
         }
@@ -151,7 +152,7 @@ Island {
         onRunningChanged: {
             if (running)
                 return;
-            if (!didStart) {
+            if (Net.failedStart(didStart)) {
                 root.nmFailedAt = Date.now();
                 root.vpnConn = null;
             }
@@ -176,7 +177,8 @@ Island {
                 root.tsFailedAt = 0;
                 root.exitNode = Net.parseTailscale(res.text).exitNode;
             } else {
-                root.tsFailedAt = Date.now();
+                // Non-zero exit (tailscaled not ready, restarting): polled again in 10 s.
+                root.tsFailedAt = 0;
                 root.exitNode = null;
             }
         }
@@ -197,7 +199,7 @@ Island {
         onRunningChanged: {
             if (running)
                 return;
-            if (!didStart) {
+            if (Net.failedStart(didStart)) {
                 root.tsFailedAt = Date.now();
                 root.exitNode = null;
             }

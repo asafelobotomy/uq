@@ -83,7 +83,8 @@ function vpnActive(vpn, exitNode) {
     return !!vpn || !!exitNode;
 }
 
-// A failed or missing tool is not retried until `ttl` ms after `failedAt` (0 = never failed).
+// A tool that failed to start (binary missing) is not retried until `ttl` ms after `failedAt`
+// (0 = not failed). A non-zero exit is a normal result and never sets failedAt.
 function retryDue(failedAt, now, ttl) {
     return !failedAt || now - failedAt >= ttl;
 }
@@ -148,4 +149,9 @@ function finishRun(code, text) {
     if (code !== 0)
         return { ok: false, text: "" };
     return { ok: true, text: typeof text === "string" ? text : "" };
+}
+
+// True when the process never started (binary missing): the only case cached by retryDue.
+function failedStart(didStart) {
+    return !didStart;
 }

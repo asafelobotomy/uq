@@ -46,3 +46,9 @@ function locationArg(r) {
         return null;
     return { name: r.name, lat: r.lat, lon: r.lon };
 }
+
+// "Turn off weather" is offered whenever a location is set, even before any Weather event
+// arrives (e.g. offline at login).
+function canTurnOff(location, weather) {
+    return location !== null && location !== undefined;
+}
