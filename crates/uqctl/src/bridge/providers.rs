@@ -595,6 +595,11 @@ mod tests {
             "",
             "/a/../b",
             "/a?b",
+            "//host/x.png",
+            "/a//b",
+            ".",
+            "..",
+            "...",
         ] {
             assert_eq!(
                 clamp(raw("a", "t", bad, 0.5)).icon,
