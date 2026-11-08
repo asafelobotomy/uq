@@ -139,6 +139,12 @@ hl.bind(mainMod .. " + Q",      hl.dsp.window.close())
 hl.bind(mainMod .. " + V",      hl.dsp.window.float({ action = "toggle" }))
 hl.bind(mainMod .. " + SHIFT + M", hl.dsp.exec_cmd("command -v hyprshutdown >/dev/null 2>&1 && hyprshutdown || hyprctl dispatch 'hl.dsp.exit()'"))
 
+-- Launchers: Quickshell GlobalShortcuts (appid "uq"). Never locked, so they don't work over the
+-- lock screen. The app menu bind fires when a tap of left SUPER is released; Hyprland shadows it
+-- once another key or button has been pressed and released while SUPER is held.
+hl.bind(mainMod .. " + Space",   hl.dsp.global("uq:spotlight"))
+hl.bind(mainMod .. " + SUPER_L", hl.dsp.global("uq:appmenu"), { release = true })
+
 -- Per-workspace layout (persisted by uqd)
 hl.bind(mainMod .. " + ALT + D", hl.dsp.exec_cmd("uqctl layout set current dwindle"))
 hl.bind(mainMod .. " + ALT + M", hl.dsp.exec_cmd("uqctl layout set current master"))

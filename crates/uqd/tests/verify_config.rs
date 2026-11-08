@@ -54,14 +54,24 @@ const MOCK: &str = r#"
 local calls = {}
 -- exec_cmd strings seen while a given hl.on("<event>", fn) callback runs.
 local hook, in_hook = nil, {}
+-- What each returned proxy stands for, e.g. `hl.dsp.global(uq:spotlight)`, and every hl.bind
+-- call as {key, dsp, opts}.
+local desc = setmetatable({}, { __mode = "k" })
+local binds = {}
 local function proxy(name)
   return setmetatable({}, {
     __index = function(_, k) return proxy(name .. "." .. k) end,
     __call = function(_, ...)
       calls[#calls + 1] = name
-      local first = ({...})[1]
-      for _, a in ipairs({...}) do
+      local args = {...}
+      local first = args[1]
+      local strs = {}
+      if name == "hl.bind" then
+        binds[#binds + 1] = { key = args[1], dsp = desc[args[2]] or tostring(args[2]), opts = args[3] }
+      end
+      for _, a in ipairs(args) do
         if type(a) == "string" then
+          strs[#strs + 1] = a
           calls[#calls + 1] = name .. ":" .. a
           if hook and name == "hl.exec_cmd" then in_hook[hook] = (in_hook[hook] or "") .. a .. "\n" end
         end
@@ -72,7 +82,9 @@ local function proxy(name)
           hook = outer
         end
       end
-      return proxy(name .. "()")
+      local ret = proxy(name .. "()")
+      desc[ret] = name .. "(" .. table.concat(strs, ",") .. ")"
+      return ret
     end,
   })
 end
@@ -114,8 +126,39 @@ end
 if not called("hl.dsp.exec_cmd:", "systemctl --user restart uq-lock.service || hyprlock") then
   error("missing the SUPER+CTRL+L recovery bind")
 end
+local function bind_for(dsp)
+  for _, b in ipairs(binds) do
+    if b.dsp == dsp then return b end
+  end
+  error("no bind runs " .. dsp)
+end
+local function opt(b, k) return type(b.opts) == "table" and b.opts[k] or nil end
+local spotlight = bind_for("hl.dsp.global(uq:spotlight)")
+if spotlight.key ~= "SUPER + Space" then error("uq:spotlight is bound to " .. tostring(spotlight.key)) end
+local appmenu = bind_for("hl.dsp.global(uq:appmenu)")
+if appmenu.key ~= "SUPER + SUPER_L" then error("uq:appmenu is bound to " .. tostring(appmenu.key)) end
+if opt(appmenu, "release") ~= true then error("the uq:appmenu bind needs release = true (tap SUPER)") end
+for _, b in ipairs({spotlight, appmenu}) do
+  if opt(b, "locked") then error(b.dsp .. " must not be locked") end
+end
 print("ok " .. #calls)
 "#;
+
+/// Spec §2.12: the launcher binds never work over the lock screen.
+#[test]
+fn base_lua_launcher_binds_are_not_locked() {
+    let base = std::fs::read_to_string(repo().join("config/hypr/base.lua")).unwrap();
+    for name in ["uq:spotlight", "uq:appmenu"] {
+        let lines: Vec<&str> = base.lines().filter(|l| l.contains(name)).collect();
+        assert!(!lines.is_empty(), "base.lua has no {name} bind");
+        for line in lines {
+            assert!(
+                !line.contains("locked"),
+                "{name} bind must not be locked: {line}"
+            );
+        }
+    }
+}
 
 #[test]
 fn base_lua_enables_session_lock_restore() {

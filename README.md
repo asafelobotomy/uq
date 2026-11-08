@@ -60,6 +60,60 @@ uqctl launches clear
 The shell runs as `uq-shell.service` (Quickshell, started with the session). `SUPER+CTRL+L`
 restarts the lock surface (`uq-lock.service`, else `hyprlock`) if it ever dies.
 
+### Launchers
+
+- `SUPER+Space` opens or closes Spotlight: apps, a calculator (`=2+2`), a command runner
+  (`>cmd`) and any installed search providers.
+- Tapping `SUPER` (left SUPER, pressed and released alone) opens or closes the app menu. It
+  doesn't open when you press and release another key or mouse button while SUPER is held. On
+  Hyprland 0.56 it can still open if you release SUPER while that other key is still down.
+- Neither works over the lock screen. Both open on the focused monitor.
+
+Scripts can drive them through the shell's IPC (ignored while the screen is locked):
+
+```bash
+qs ipc -p /usr/share/uq/shell call uq open spotlight    # or: close, toggle; spotlight | appmenu
+```
+
+`open` only opens and `close` only closes that surface; any other name is ignored. Each call
+prints `ok` or `ignored`.
+
+#### Search providers
+
+Any app can add rows to Spotlight by owning a D-Bus name on the session bus and dropping a
+`.provider` file in `/usr/share/uq/launcher/` or `~/.local/share/uq/launcher/`
+(`$XDG_DATA_HOME/uq/launcher/`). If two files name the same `BusName`, the system one wins.
+
+```ini
+[Launcher Provider]
+BusName=org.example.Notes
+Name=Notes
+# Optional, 1-4 characters, no spaces: only queries starting with it reach this provider,
+# with the prefix stripped.
+Prefix=n:
+```
+
+The provider serves `org.uq.Launcher1.Provider` at `/org/uq/Launcher1`:
+
+- `Search(s query) → a(sssssd)`: rows of (id, title, subtitle, icon, actions_json, score).
+  `actions_json` is a JSON list of strings, and `score` is between 0 and 1.
+- `Activate(s id, s action)`: called when the user picks a row, with that row's first action
+  (empty if it has none). It has 1 s to answer.
+
+The provider has 300 ms to answer. It's only called while its name has an owner (never
+auto-started). Unless it has a `Prefix`, it gets queries of 2 or more characters. Queries
+starting with `>` or `=` never go to providers.
+
+Results are clamped:
+
+- at most 20 rows;
+- title 200 bytes, subtitle 300 bytes, id 512 bytes, actions 2 KiB;
+- an icon that isn't an icon-theme name or an absolute path becomes `system-search`;
+- scores are scaled by 0.9, so a provider never outranks an exact or prefix app-name match.
+
+They are shown as plain text, labelled with the provider's `Name`. uQ never runs anything a
+provider sends; picking a row only calls back its `Activate`.
+
 Your own Hyprland settings go in `~/.config/hypr/uq/user.lua`, which uQ loads last and never
 rewrites.
 

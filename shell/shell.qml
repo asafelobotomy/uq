@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Hyprland
 import "core"
 import "bar"
+import "launcher"
 
 ShellRoot {
     Component.onCompleted: Quickshell.watchFiles = false
@@ -20,4 +21,7 @@ ShellRoot {
         model: Quickshell.screens
         delegate: Bar {}
     }
+
+    // One Spotlight and one app menu (not per screen): they move to the focused monitor.
+    Launchers {}
 }

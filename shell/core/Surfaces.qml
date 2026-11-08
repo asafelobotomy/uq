@@ -59,6 +59,32 @@ QtObject {
         root._apply("close");
     }
 
+    // Shell IPC (`qs ipc ... call uq open|close|toggle spotlight|appmenu`) and the keybinds land
+    // here. open only opens, close only closes that surface; unknown verbs or names, and every
+    // call while locked, are ignored. Always the focused monitor, no anchor. Returns "ok" or
+    // "ignored" (what `qs ipc call` prints).
+    function ipc(verb, name) {
+        if (Bridge.locked || (name !== "spotlight" && name !== "appmenu"))
+            return "ignored";
+        switch (verb) {
+        case "open":
+            if (root.open === name)
+                return "ignored";
+            break;
+        case "close":
+            if (root.open !== name)
+                return "ignored";
+            root.close();
+            return "ok";
+        case "toggle":
+            break;
+        default:
+            return "ignored";
+        }
+        root.toggle(name, null, null);
+        return "ok";
+    }
+
     function lock() {
         root._apply("lock");
     }

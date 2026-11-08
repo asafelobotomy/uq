@@ -60,4 +60,45 @@ TestCase {
         Surfaces.lock();
         compare(Surfaces.open, "closed");
     }
+
+    // Shell IPC: open only opens, close only closes that surface, unknown names and anything
+    // while locked are ignored. IPC always opens on the focused monitor (screen and anchor null).
+    function test_ipc_open_close_toggle() {
+        Surfaces.toggle("appmenu", { name: "DP-2" }, { id: "button" });
+        Surfaces.close();
+        compare(Surfaces.ipc("open", "spotlight"), "ok");
+        compare(Surfaces.open, "spotlight");
+        compare(Surfaces.screen, null);
+        compare(Surfaces.anchor, null);
+        compare(Surfaces.ipc("open", "spotlight"), "ignored");
+        compare(Surfaces.open, "spotlight");
+        compare(Surfaces.ipc("close", "appmenu"), "ignored");
+        compare(Surfaces.open, "spotlight");
+        compare(Surfaces.ipc("open", "appmenu"), "ok");
+        compare(Surfaces.open, "appmenu");
+        compare(Surfaces.ipc("close", "appmenu"), "ok");
+        compare(Surfaces.open, "closed");
+        compare(Surfaces.ipc("toggle", "appmenu"), "ok");
+        compare(Surfaces.open, "appmenu");
+        compare(Surfaces.ipc("toggle", "appmenu"), "ok");
+        compare(Surfaces.open, "closed");
+    }
+
+    function test_ipc_ignores_unknown_names_and_verbs() {
+        compare(Surfaces.ipc("open", "bogus"), "ignored");
+        compare(Surfaces.ipc("open", ""), "ignored");
+        compare(Surfaces.ipc("lock", "spotlight"), "ignored");
+        compare(Surfaces.ipc("unlock", "spotlight"), "ignored");
+        compare(Surfaces.open, "closed");
+    }
+
+    function test_ipc_ignored_while_locked() {
+        Surfaces.ipc("open", "spotlight");
+        Bridge.locked = true;
+        compare(Surfaces.open, "closed");
+        compare(Surfaces.ipc("open", "spotlight"), "ignored");
+        compare(Surfaces.ipc("toggle", "appmenu"), "ignored");
+        compare(Surfaces.ipc("close", "spotlight"), "ignored");
+        compare(Surfaces.open, "closed");
+    }
 }
