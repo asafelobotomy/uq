@@ -144,7 +144,9 @@ pub(crate) fn load_defs(dirs: &[PathBuf]) -> Vec<ProviderDef> {
 }
 
 /// The query to send this provider, or None when it should not see it.
-pub(crate) fn route(query: &str, def: &ProviderDef) -> Option<String> {
+/// `all` is every registered provider: a query starting with any registered prefix goes only
+/// to the providers with that prefix.
+pub(crate) fn route(query: &str, def: &ProviderDef, all: &[ProviderDef]) -> Option<String> {
     if query.starts_with('>') || query.starts_with('=') {
         return None;
     }
@@ -153,7 +155,13 @@ pub(crate) fn route(query: &str, def: &ProviderDef) -> Option<String> {
             let rest = query.strip_prefix(p.as_str())?.trim();
             (!rest.is_empty()).then(|| rest.to_string())
         }
-        None => (query.chars().count() >= 2).then(|| query.to_string()),
+        None => {
+            let prefixed = all
+                .iter()
+                .filter_map(|d| d.prefix.as_deref())
+                .any(|p| query.starts_with(p));
+            (!prefixed && query.chars().count() >= 2).then(|| query.to_string())
+        }
     }
 }
 
@@ -169,7 +177,7 @@ fn truncate(s: &str, max: usize) -> String {
 }
 
 fn valid_icon(icon: &str) -> bool {
-    let theme = !icon.is_empty()
+    let theme = icon.chars().any(|c| c.is_ascii_alphanumeric())
         && icon.len() <= 128
         && icon
             .chars()
@@ -179,7 +187,10 @@ fn valid_icon(icon: &str) -> bool {
         && icon
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || "._-/+ @,~".contains(c))
-        && !icon.split('/').any(|seg| seg == "..");
+        && !icon
+            .split('/')
+            .skip(1)
+            .any(|seg| seg.is_empty() || seg == "..");
     theme || path
 }
 
@@ -389,9 +400,10 @@ impl Providers {
         }
 
         let defs = lock(&self.defs).current();
+        let all = defs.clone();
         let routed: Vec<(ProviderDef, String)> = defs
             .into_iter()
-            .filter_map(|d| route(query, &d).map(|q| (d, q)))
+            .filter_map(|d| route(query, &d, &all).map(|q| (d, q)))
             .collect();
         if routed.is_empty() {
             return Ok(Value::Null);
@@ -528,13 +540,19 @@ mod tests {
     #[test]
     fn route_prefix_and_gating() {
         let p = def(Some(":"));
-        assert_eq!(route(":smi", &p).as_deref(), Some("smi"));
-        assert_eq!(route("smi", &p), None);
         let n = def(None);
-        assert_eq!(route("a", &n), None);
-        assert_eq!(route("ab", &n).as_deref(), Some("ab"));
-        assert_eq!(route(">ls", &n), None);
-        assert_eq!(route("=1+1", &n), None);
+        let all = [p.clone(), n.clone()];
+        assert_eq!(route(":smi", &p, &all).as_deref(), Some("smi"));
+        assert_eq!(route(":smi", &n, &all), None);
+        assert_eq!(route("smi", &p, &all), None);
+        assert_eq!(route("smi", &n, &all).as_deref(), Some("smi"));
+        assert_eq!(route("a", &n, &all), None);
+        assert_eq!(route(">ls", &n, &all), None);
+        assert_eq!(route("=1+1", &n, &all), None);
+        assert_eq!(
+            route("ab", &n, std::slice::from_ref(&n)).as_deref(),
+            Some("ab")
+        );
     }
 
     #[test]
