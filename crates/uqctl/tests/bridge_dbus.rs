@@ -1,59 +1,18 @@
 //! End-to-end: the real `uqctl bridge` binary against a private dbus-daemon serving a real
 //! `Desktop` with fakes. Never touches the user's session bus.
 
+mod common;
+
+use common::{Bridge, Bus, private_bus};
 use serde_json::{Value, json};
-use std::io::{BufRead, BufReader as StdBufReader};
 use std::path::PathBuf;
-use std::process::{Child as StdChild, Command as StdCommand, Stdio};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::process::{Child, ChildStdin, ChildStdout, Command};
+use tokio::io::AsyncWriteExt;
 use uqd::compositor::fake::FakeCompositor;
 use uqd::dbus::{NAME, serve};
 use uqd::service::Desktop;
 use uqd::system::FakeSystem;
-
-struct Bus {
-    child: StdChild,
-    address: String,
-    _dir: tempfile::TempDir,
-}
-
-impl Drop for Bus {
-    fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
-    }
-}
-
-/// Unix socket paths must stay under 108 bytes, so the bus lives in a short /tmp directory.
-fn private_bus() -> Bus {
-    let dir = tempfile::Builder::new()
-        .prefix("uqb")
-        .tempdir_in("/tmp")
-        .unwrap();
-    let mut child = StdCommand::new("dbus-daemon")
-        .args(["--session", "--nofork", "--print-address"])
-        .arg(format!(
-            "--address=unix:path={}",
-            dir.path().join("b").display()
-        ))
-        .stdout(Stdio::piped())
-        .spawn()
-        .expect("dbus-daemon");
-    let mut line = String::new();
-    StdBufReader::new(child.stdout.take().unwrap())
-        .read_line(&mut line)
-        .unwrap();
-    let address = line.trim().to_string();
-    assert!(address.len() < 108, "{address}");
-    Bus {
-        child,
-        address,
-        _dir: dir,
-    }
-}
 
 async fn serve_uqd(bus: &Bus, root: &std::path::Path) -> zbus::Connection {
     let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
@@ -73,87 +32,6 @@ async fn serve_uqd(bus: &Bus, root: &std::path::Path) -> zbus::Connection {
     .await
     .unwrap()
     .0
-}
-
-struct Bridge {
-    child: Child,
-    stdin: Option<ChildStdin>,
-    out: BufReader<ChildStdout>,
-    /// Events that arrived while waiting for a reply; signals and replies race.
-    events: std::collections::VecDeque<Value>,
-}
-
-impl Bridge {
-    fn start(bus: &Bus) -> Bridge {
-        let mut child = Command::new(env!("CARGO_BIN_EXE_uqctl"))
-            .arg("bridge")
-            .env("DBUS_SESSION_BUS_ADDRESS", &bus.address)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .kill_on_drop(true)
-            .spawn()
-            .unwrap();
-        let stdin = child.stdin.take();
-        let out = BufReader::new(child.stdout.take().unwrap());
-        Bridge {
-            child,
-            stdin,
-            out,
-            events: Default::default(),
-        }
-    }
-
-    async fn next(&mut self) -> Value {
-        let mut l = String::new();
-        let n = tokio::time::timeout(Duration::from_secs(10), self.out.read_line(&mut l))
-            .await
-            .expect("bridge output within 10 s")
-            .unwrap();
-        assert!(n > 0, "bridge closed stdout");
-        let v: Value = serde_json::from_str(&l).unwrap();
-        assert_eq!(v["v"], 1);
-        v
-    }
-
-    async fn send(&mut self, id: u64, call: &str, args: Value) {
-        let line = format!("{}\n", json!({"v":1,"id":id,"call":call,"args":args}));
-        self.stdin
-            .as_mut()
-            .unwrap()
-            .write_all(line.as_bytes())
-            .await
-            .unwrap();
-    }
-
-    /// Send a call and return its reply, skipping any events that arrive first.
-    async fn call(&mut self, id: u64, call: &str, args: Value) -> Value {
-        self.send(id, call, args).await;
-        self.reply(id).await
-    }
-
-    /// Wait for the reply with this id, queuing any events that arrive first.
-    async fn reply(&mut self, id: u64) -> Value {
-        loop {
-            let v = self.next().await;
-            if v["id"] == id {
-                return v;
-            }
-            self.events.push_back(v);
-        }
-    }
-
-    /// Skip until an event with this name arrives.
-    async fn event(&mut self, name: &str) -> Value {
-        loop {
-            let v = match self.events.pop_front() {
-                Some(v) => v,
-                None => self.next().await,
-            };
-            if v["event"] == name {
-                return v["data"].clone();
-            }
-        }
-    }
 }
 
 #[tokio::test]

@@ -2,8 +2,6 @@
 //!
 //! The command text never leaves the bridge in a result: the shell only sees a per-generation
 //! id, and `Launch {run_id}` looks the command up here.
-// `run_item` is wired into Search by a later task.
-#![allow(dead_code)]
 
 use super::calc::ProviderItem;
 

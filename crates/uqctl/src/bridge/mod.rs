@@ -9,6 +9,7 @@ mod launch;
 pub(crate) mod net;
 mod notifowner;
 pub mod protocol;
+mod providers;
 mod run;
 mod uqd;
 
@@ -32,6 +33,7 @@ async fn handle(
     link: &uqd::Link,
     net: &Arc<net::Net>,
     runs: &Mutex<run::RunState>,
+    providers: &Arc<providers::Providers>,
     call: &str,
     args: &[Value],
 ) -> Result<Value, String> {
@@ -42,6 +44,8 @@ async fn handle(
             link.call(call, args).await
         }
         "Launch" => launch::launch(link, args, runs).await,
+        "Search" => providers.search(link, runs, args).await,
+        "Activate" => providers.activate(link, runs, args).await,
         "Dispatch" => dispatch::dispatch(args).await,
         "GeocodeCity" => match args {
             [Value::String(name)] => net.geocode(name).await,
@@ -149,6 +153,8 @@ where
     ));
 
     let runs = Arc::new(Mutex::new(run::RunState::default()));
+    let providers =
+        providers::Providers::new(out_tx.clone(), stop.clone(), providers::default_dirs());
     let slots = Arc::new(Semaphore::new(MAX_IN_FLIGHT));
     let mut requests = tokio::task::JoinSet::new();
     while let Some(item) = in_rx.recv().await {
@@ -157,10 +163,15 @@ where
                 let Ok(permit) = slots.clone().acquire_owned().await else {
                     break;
                 };
-                let (link, net, runs, tx) =
-                    (link.clone(), net.clone(), runs.clone(), out_tx.clone());
+                let (link, net, runs, providers, tx) = (
+                    link.clone(),
+                    net.clone(),
+                    runs.clone(),
+                    providers.clone(),
+                    out_tx.clone(),
+                );
                 requests.spawn(async move {
-                    let reply = match handle(&link, &net, &runs, &call, &args).await {
+                    let reply = match handle(&link, &net, &runs, &providers, &call, &args).await {
                         Ok(ok) => Outbound::Ok { id, ok },
                         Err(err) => Outbound::Err { id, err },
                     };
@@ -196,6 +207,7 @@ where
     privacy.abort();
     notif.abort();
     drop(net);
+    drop(providers);
     reader.abort();
     drop(out_tx);
     if tokio::time::timeout(DRAIN, writer).await.is_err() {

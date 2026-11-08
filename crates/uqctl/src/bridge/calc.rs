@@ -2,8 +2,6 @@
 //!
 //! Tokenizer plus precedence climbing with explicit stacks (no recursion), so
 //! hostile input cannot overflow the stack. Nothing here executes code.
-// Wired into Search by a later task.
-#![allow(dead_code)]
 
 use serde::Serialize;
 
