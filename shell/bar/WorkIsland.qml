@@ -35,11 +35,44 @@ Island {
         var name = d && d.icon ? d.icon : cls.toLowerCase();
         return Quickshell.iconPath(name, true) || Quickshell.iconPath("application-x-executable");
     }
+    // The menu acts on the window captured when it opened, never on the live focus.
+    property var menuTarget: null   // { addr, ws, floating, pinned }
     function dispatch(name, args) {
+        var d = Work.buildDispatch(name, { addr: addr, ws: tl && tl.workspace ? tl.workspace.id : null }, args);
+        if (d !== null)
+            Bridge.call("Dispatch", d);
+    }
+    function menuDispatch(name, args) {
+        var d = Work.buildDispatch(name, menuTarget, args);
+        if (d !== null)
+            Bridge.call("Dispatch", d);
+        menu.visible = false;
+    }
+    function openMenu(item) {
         if (!actionable)
             return;
-        var a = Object.assign({ address: addr }, args || ({}));
-        Bridge.call("Dispatch", [name, a]);
+        menuTarget = { addr: addr, ws: tl.workspace ? tl.workspace.id : null,
+            floating: isFloating, pinned: isPinned };
+        menu.anchor.item = item;
+        menu.visible = true;
+    }
+    function menuTargetAlive() {
+        if (!menuTarget)
+            return false;
+        var vals = Hyprland.toplevels.values;
+        for (var i = 0; i < vals.length; i++)
+            if (Work.normAddr(vals[i].address) === menuTarget.addr)
+                return true;
+        return false;
+    }
+    function checkMenu() {
+        if (menu.visible && (!actionable || !menuTargetAlive()))
+            menu.visible = false;
+    }
+    onActionableChanged: checkMenu()
+    Connections {
+        target: Hyprland.toplevels
+        function onValuesChanged() { root.checkMenu(); }
     }
 
     Connections {
@@ -106,8 +139,10 @@ Island {
                     onClicked: {
                         switch (btn.modelData.kind) {
                         case "menu":
-                            menu.anchor.item = btn;
-                            menu.visible = !menu.visible;
+                            if (menu.visible)
+                                menu.visible = false;
+                            else
+                                root.openMenu(btn);
                             break;
                         case "min":
                             root.dispatch("minimise", { from_ws: root.fromWs });
@@ -150,8 +185,8 @@ Island {
 
                 Repeater {
                     model: [
-                        { label: root.isFloating ? "Tile" : "Float", act: "toggle_float", args: {} },
-                        { label: root.isPinned ? "Unpin" : "Pin", act: "pin", args: {} },
+                        { label: (root.menuTarget && root.menuTarget.floating) ? "Tile" : "Float", act: "toggle_float", args: {} },
+                        { label: (root.menuTarget && root.menuTarget.pinned) ? "Unpin" : "Pin", act: "pin", args: {} },
                         { label: "Fullscreen", act: "fullscreen", args: { mode: "full" } }
                     ]
                     delegate: Rectangle {
@@ -172,8 +207,7 @@ Island {
                             anchors.fill: parent
                             hoverEnabled: true
                             onClicked: {
-                                root.dispatch(item.modelData.act, item.modelData.args);
-                                menu.visible = false;
+                                root.menuDispatch(item.modelData.act, item.modelData.args);
                             }
                         }
                     }
@@ -205,8 +239,7 @@ Island {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 onClicked: {
-                                    root.dispatch("move", { workspace: wsBtn.modelData });
-                                    menu.visible = false;
+                                    root.menuDispatch("move", { workspace: wsBtn.modelData });
                                 }
                             }
                         }
@@ -229,8 +262,7 @@ Island {
                         anchors.fill: parent
                         hoverEnabled: true
                         onClicked: {
-                            root.dispatch("close");
-                            menu.visible = false;
+                            root.menuDispatch("close");
                         }
                     }
                 }
