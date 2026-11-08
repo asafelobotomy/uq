@@ -33,9 +33,16 @@ fn argv_with(action: &str, has_bin: impl Fn(&str) -> bool) -> Result<PowerCmd, S
     }
 }
 
+/// An executable regular file called `name` in an absolute PATH entry. Relative and empty
+/// entries are skipped, so a file in the bridge's working directory never counts.
 fn on_path(name: &str) -> bool {
-    std::env::var_os("PATH")
-        .is_some_and(|p| std::env::split_paths(&p).any(|d| d.join(name).is_file()))
+    use std::os::unix::fs::PermissionsExt;
+    std::env::var_os("PATH").is_some_and(|p| {
+        std::env::split_paths(&p)
+            .filter(|d| d.is_absolute())
+            .filter_map(|d| std::fs::metadata(d.join(name)).ok())
+            .any(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+    })
 }
 
 pub fn argv_for(action: &str) -> Result<PowerCmd, String> {
