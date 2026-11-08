@@ -152,7 +152,7 @@ impl Link {
                 };
                 if let Some(Subs { owner: o, signals }) = subs {
                     owner = Some(o);
-                    listener = Some(tokio::spawn(forward(signals, tx.clone())));
+                    listener = Some(tokio::spawn(forward(signals, tx.clone(), stop.clone())));
                 }
             }
             tokio::select! {
@@ -218,8 +218,10 @@ async fn emit_state(tx: &mpsc::Sender<Outbound>, up: bool) -> bool {
 
 /// Turn uqd's signals into bridge events. Only messages from the owner of the well-known name
 /// arrive (the daemon resolves the name in the match rule).
-async fn forward(mut stream: MessageStream, tx: mpsc::Sender<Outbound>) {
-    while let Some(m) = stream.next().await {
+async fn forward(mut stream: MessageStream, tx: mpsc::Sender<Outbound>, stop: CancellationToken) {
+    // Own the cancellation check: this task holds a sender clone, and aborting the watcher does
+    // not abort it.
+    while let Some(m) = tokio::select! { _ = stop.cancelled() => None, m = stream.next() => m } {
         let Ok(msg) = m else { break };
         let header = msg.header();
         let Some(member) = header.member() else {
@@ -244,7 +246,8 @@ async fn forward(mut stream: MessageStream, tx: mpsc::Sender<Outbound>) {
                     event: member.to_string(),
                     data,
                 };
-                if tx.send(out).await.is_err() {
+                let sent = tokio::select! { _ = stop.cancelled() => return, r = tx.send(out) => r };
+                if sent.is_err() {
                     return;
                 }
             }

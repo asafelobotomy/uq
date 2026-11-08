@@ -163,12 +163,14 @@ async fn bridge_forwards_set_theme() {
         json!({"v":1,"event":"Hello","data":{"v":1,"uqd_up":true,"locked":false}})
     );
 
-    b.send(1, "SetTheme", json!(["dracula", "light"])).await;
-    assert_eq!(b.next().await, json!({"v":1,"id":1,"ok":null}));
-    let ev = b.next().await;
-    assert_eq!(ev["event"], "ThemeChanged");
-    assert_eq!(ev["data"]["name"], "dracula");
-    assert_eq!(ev["data"]["variant"], "light");
+    // Signal and reply race (uqd may emit inside the method), so do not assume an order.
+    assert_eq!(
+        b.call(1, "SetTheme", json!(["dracula", "light"])).await,
+        json!({"v":1,"id":1,"ok":null})
+    );
+    let ev = b.event("ThemeChanged").await;
+    assert_eq!(ev["name"], "dracula");
+    assert_eq!(ev["variant"], "light");
 
     assert_eq!(
         b.call(2, "GetTheme", json!([])).await["ok"],
@@ -276,4 +278,38 @@ async fn bad_id_request_gets_error_reply() {
     let r = b.next().await;
     assert_eq!(r["id"], 8);
     assert!(r["err"].is_string());
+}
+
+/// A real restart: the first connection gives up the name and a second `Desktop` is served on a
+/// NEW connection (new unique name). Signals must still reach the bridge.
+#[tokio::test]
+async fn signals_survive_uqd_restart_on_new_connection() {
+    let bus = private_bus();
+    let dir1 = tempfile::tempdir().unwrap();
+    let first = serve_uqd(&bus, dir1.path()).await;
+    let mut b = Bridge::start(&bus);
+    assert_eq!(b.next().await["data"]["uqd_up"], true);
+
+    first.release_name(NAME).await.unwrap();
+    b.event("UqdDown").await;
+    let dir2 = tempfile::tempdir().unwrap();
+    let _second = serve_uqd(&bus, dir2.path()).await;
+    b.event("UqdUp").await;
+
+    assert_eq!(
+        b.call(1, "SetTheme", json!(["dracula", "light"])).await["ok"],
+        Value::Null
+    );
+    assert_eq!(b.event("ThemeChanged").await["name"], "dracula");
+    let ws = b.call(2, "GetLayouts", json!([])).await["ok"]
+        .as_object()
+        .unwrap()
+        .keys()
+        .next()
+        .cloned()
+        .unwrap_or_else(|| "1".into());
+    let reply = b.call(3, "SetLayout", json!([ws, "scrolling"])).await;
+    assert_eq!(reply["ok"], Value::Null, "{reply}");
+    let ev = b.event("LayoutChanged").await;
+    assert_eq!(ev["layout"], "scrolling", "{ev}");
 }

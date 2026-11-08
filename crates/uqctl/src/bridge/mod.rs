@@ -133,7 +133,8 @@ where
     // stdin EOF: stop background work, then let the writer drain what is queued (bounded).
     stop.cancel();
     requests.abort_all();
-    let _ = watcher.await;
+    // Abort rather than await: the watcher may be blocked on a full channel or the bus.
+    watcher.abort();
     reader.abort();
     drop(out_tx);
     if tokio::time::timeout(DRAIN, writer).await.is_err() {
@@ -246,5 +247,20 @@ mod tests {
             next(&mut r).await,
             json!({"v":1,"id":3,"err":"response too large"})
         );
+    }
+
+    #[tokio::test]
+    async fn eof_returns_within_budget_when_stdout_is_stalled() {
+        let (in_w, in_r) = duplex(4096);
+        // Tiny pipe that nobody reads: the writer blocks on Hello.
+        let (out_w, _out_r) = duplex(8);
+        let task = tokio::spawn(run_with_bus(in_r, out_w, Some(NO_BUS)));
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        drop(in_w);
+        let code = tokio::time::timeout(Duration::from_millis(3500), task)
+            .await
+            .expect("run returns despite a stalled stdout")
+            .unwrap();
+        assert_eq!(code, ExitCode::SUCCESS);
     }
 }
