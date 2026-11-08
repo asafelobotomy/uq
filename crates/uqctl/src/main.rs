@@ -1,5 +1,7 @@
 //! uqctl: command-line client for uqd (`org.uq.Desktop1`).
 
+mod bridge;
+
 use clap::{Parser, Subcommand};
 use std::collections::HashMap;
 use std::process::ExitCode;
@@ -36,6 +38,8 @@ enum Cmd {
     },
     /// Re-render every config file from uqd's state.
     Reload,
+    /// Run the shell's JSON-lines bridge on stdin/stdout (started by the shell, not by hand).
+    Bridge,
     /// Install uQ's ~/.config/hypr/hyprland.lua (never overwrites an existing one).
     Setup {
         /// Also point GTK, qt6ct, kitty, foot and alacritty at uQ's theme. These files apply in
@@ -186,6 +190,9 @@ async fn run(cmd: Cmd) -> Result<(), String> {
     if let Cmd::Setup { apps } = cmd {
         return setup(apps);
     }
+    if matches!(cmd, Cmd::Bridge) {
+        unreachable!("handled in main");
+    }
     let conn = zbus::Connection::session().await.map_err(describe)?;
     let proxy = zbus::Proxy::new(&conn, NAME, PATH, NAME)
         .await
@@ -242,7 +249,7 @@ async fn run(cmd: Cmd) -> Result<(), String> {
             .call::<_, _, ()>("Reload", &())
             .await
             .map_err(describe)?,
-        Cmd::Setup { .. } => unreachable!("handled before connecting"),
+        Cmd::Setup { .. } | Cmd::Bridge => unreachable!("handled before connecting"),
     }
     Ok(())
 }
@@ -250,6 +257,10 @@ async fn run(cmd: Cmd) -> Result<(), String> {
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> ExitCode {
     let cli = Cli::parse();
+    if matches!(cli.cmd, Cmd::Bridge) {
+        // Long-lived: no timeout; ends on stdin EOF.
+        return bridge::run(tokio::io::stdin(), tokio::io::stdout()).await;
+    }
     // uqd waits at most ~12 s on Hyprland (verify + reload); never hang a keybind forever.
     let res = tokio::time::timeout(std::time::Duration::from_secs(15), run(cli.cmd))
         .await

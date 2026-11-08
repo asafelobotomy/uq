@@ -6,7 +6,7 @@ license.workspace = true
 
 [dependencies]
 uq-core.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["io-std", "io-util"] }
 serde_json.workspace = true
 chrono = "0.4"
 clap = { version = "4", features = ["derive"] }
