@@ -65,7 +65,8 @@ Island {
 
     property double nmFailedAt: 0
     property double tsFailedAt: 0
-    property var lastSent: null
+    property var lastSent: null         // identity string last sent, null = nothing sent
+    readonly property string vpnId: Net.vpnIdentity(vpnConn, exitNode)
 
     function pollNetwork() {
         var now = Date.now();
@@ -75,13 +76,13 @@ Island {
             ts.running = true;
     }
     function sendVpn() {
-        var v = vpnActive;
-        if (lastSent === v)
+        var id = vpnId;
+        if (!Net.identityChanged(lastSent, id))
             return;
-        lastSent = v;
-        Bridge.call("NetworkChanged", [{ vpn_active: v }]).catch(function () {});
+        lastSent = id;
+        Bridge.call("NetworkChanged", [{ vpn_active: vpnActive }]).catch(function () {});
     }
-    onVpnActiveChanged: settle.restart()
+    onVpnIdChanged: settle.restart()
 
     Component.onCompleted: {
         pollNetwork();
@@ -114,19 +115,38 @@ Island {
     Process {
         id: nm
         property bool didStart: false
-        command: ["nmcli", "-t", "-f", "NAME,TYPE", "con", "show", "--active"]
-        stdout: StdioCollector {
-            onStreamFinished: {
+        property bool gotExit: false
+        property bool gotOut: false
+        property int exitCode: 0
+        property string outText: ""
+        // Exit code and stdout arrive in either order; decide once both are in.
+        function conclude() {
+            if (!gotExit || !gotOut)
+                return;
+            gotExit = false;
+            gotOut = false;
+            var res = Net.finishRun(exitCode, outText);
+            if (res.ok) {
                 root.nmFailedAt = 0;
-                root.vpnConn = Net.vpnName(Net.parseNmcliActive(text));
-            }
-        }
-        onStarted: didStart = true
-        onExited: function (code) {
-            if (code !== 0) {
+                root.vpnConn = Net.vpnName(Net.parseNmcliActive(res.text));
+            } else {
                 root.nmFailedAt = Date.now();
                 root.vpnConn = null;
             }
+        }
+        command: ["nmcli", "-t", "-f", "NAME,TYPE", "con", "show", "--active"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                nm.outText = text;
+                nm.gotOut = true;
+                nm.conclude();
+            }
+        }
+        onStarted: { didStart = true; gotExit = false; gotOut = false; }
+        onExited: function (code) {
+            exitCode = code;
+            gotExit = true;
+            conclude();
         }
         onRunningChanged: {
             if (running)
@@ -141,19 +161,38 @@ Island {
     Process {
         id: ts
         property bool didStart: false
-        command: ["tailscale", "status", "--json"]
-        stdout: StdioCollector {
-            onStreamFinished: {
+        property bool gotExit: false
+        property bool gotOut: false
+        property int exitCode: 0
+        property string outText: ""
+        // Exit code and stdout arrive in either order; decide once both are in.
+        function conclude() {
+            if (!gotExit || !gotOut)
+                return;
+            gotExit = false;
+            gotOut = false;
+            var res = Net.finishRun(exitCode, outText);
+            if (res.ok) {
                 root.tsFailedAt = 0;
-                root.exitNode = Net.parseTailscale(text).exitNode;
-            }
-        }
-        onStarted: didStart = true
-        onExited: function (code) {
-            if (code !== 0) {
+                root.exitNode = Net.parseTailscale(res.text).exitNode;
+            } else {
                 root.tsFailedAt = Date.now();
                 root.exitNode = null;
             }
+        }
+        command: ["tailscale", "status", "--json"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                ts.outText = text;
+                ts.gotOut = true;
+                ts.conclude();
+            }
+        }
+        onStarted: { didStart = true; gotExit = false; gotOut = false; }
+        onExited: function (code) {
+            exitCode = code;
+            gotExit = true;
+            conclude();
         }
         onRunningChanged: {
             if (running)
@@ -204,7 +243,8 @@ Island {
                     implicitSize: root.iconSize
                     width: root.iconSize
                     height: root.iconSize
-                    source: trayItem.modelData.icon
+                    source: Net.safeIconSource(trayItem.modelData.icon,
+                        Quickshell.iconPath("application-x-executable", true))
                 }
                 QsMenuAnchor {
                     id: trayMenu

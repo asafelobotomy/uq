@@ -124,3 +124,28 @@ function batteryPct(p) {
         return 0;
     return Math.max(0, Math.min(100, Math.round(p * 100)));
 }
+
+// Identity of the current VPN: changes when the VPN or exit node changes, not only on/off.
+function vpnIdentity(vpn, exitNode) {
+    return (vpn ? String(vpn) : "") + "\u0000" + (exitNode ? String(exitNode) : "");
+}
+
+// prev is null until something has been sent.
+function identityChanged(prev, cur) {
+    return prev === null || prev === undefined || prev !== cur;
+}
+
+// Tray icons may only come from the icon provider or an absolute local path.
+function safeIconSource(s, fallback) {
+    if (typeof s === "string" && (s.indexOf("image://") === 0
+        || (s.charAt(0) === "/" && s.charAt(1) !== "/")))
+        return s;
+    return fallback;
+}
+
+// Joins process exit code and collected stdout: output of a failed run is discarded.
+function finishRun(code, text) {
+    if (code !== 0)
+        return { ok: false, text: "" };
+    return { ok: true, text: typeof text === "string" ? text : "" };
+}

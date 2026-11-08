@@ -97,4 +97,29 @@ TestCase {
         compare(Net.batteryPct(-1), 0);
         compare(Net.batteryPct("x"), 0);
     }
+
+    function test_vpn_identity() {
+        compare(Net.vpnIdentity(null, null), Net.vpnIdentity("", ""));
+        verify(Net.identityChanged(Net.vpnIdentity(null, "A"), Net.vpnIdentity(null, "B")));
+        verify(Net.identityChanged(Net.vpnIdentity("wg0", null), Net.vpnIdentity("wg1", null)));
+        verify(Net.identityChanged(Net.vpnIdentity(null, null), Net.vpnIdentity(null, "A")));
+        verify(Net.identityChanged(Net.vpnIdentity(null, "A"), Net.vpnIdentity("A", null)));
+        verify(!Net.identityChanged(Net.vpnIdentity("wg0", "A"), Net.vpnIdentity("wg0", "A")));
+        verify(Net.identityChanged(null, Net.vpnIdentity(null, null)));   // nothing sent yet
+    }
+    function test_safe_icon_source() {
+        compare(Net.safeIconSource("image://icon/x", "fb"), "image://icon/x");
+        compare(Net.safeIconSource("/usr/share/x.png", "fb"), "/usr/share/x.png");
+        var bad = ["http://e.com/a.png", "https://e.com/a.png", "file://x/a.png", "file:///etc/x",
+            "data:image/png;base64,AA", "", "rel/x.png", "x.png", "//host/x", null, undefined, 5];
+        for (var i = 0; i < bad.length; i++)
+            compare(Net.safeIconSource(bad[i], "fb"), "fb", String(bad[i]));
+    }
+    function test_finish_run() {
+        compare(Net.finishRun(0, "x").ok, true);
+        compare(Net.finishRun(0, "x").text, "x");
+        compare(Net.finishRun(1, "partial").ok, false);
+        compare(Net.finishRun(1, "partial").text, "");
+        compare(Net.finishRun(0, null).text, "");
+    }
 }
