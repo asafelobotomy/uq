@@ -15,3 +15,4 @@ toml = "0.9"
 thiserror = "2"
 tracing = "0.1"
 tempfile = "3"
+minijinja = { version = "2", features = ["json"] }

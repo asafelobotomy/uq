@@ -6,7 +6,9 @@ fn themes_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../themes")
 }
 
-const IDS: [&str; 7] = ["dracula", "forest", "graphite", "gruvbox", "matcha", "rosewood", "velvet"];
+const IDS: [&str; 7] = [
+    "dracula", "forest", "graphite", "gruvbox", "matcha", "rosewood", "velvet",
+];
 
 #[test]
 fn all_fourteen_variants_load() {
@@ -25,10 +27,17 @@ fn all_variants_pass_contrast() {
     let mut problems = Vec::new();
     for t in reg.iter() {
         for f in check_theme(t) {
-            problems.push(format!("{} {}: {} on {} = {:.2}", t.id, t.variant, f.fg, f.bg, f.ratio));
+            problems.push(format!(
+                "{} {}: {} on {} = {:.2}",
+                t.id, t.variant, f.fg, f.bg, f.ratio
+            ));
         }
     }
-    assert!(problems.is_empty(), "contrast failures:\n{}", problems.join("\n"));
+    assert!(
+        problems.is_empty(),
+        "contrast failures:\n{}",
+        problems.join("\n")
+    );
 }
 
 #[test]
