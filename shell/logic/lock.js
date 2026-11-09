@@ -51,6 +51,27 @@ function messageView(message, isError) {
     return { text: text, error: text !== "" && !!isError };
 }
 
+// How many of an attempt's PAM messages a failure shows (pam_faillock sends two).
+var FAILURE_LINES = 2;
+
+// What a failed password attempt shows: the attempt's last non-prompt PAM messages (messageView
+// results, oldest first), e.g. pam_faillock's "The account is locked due to 3 failed logins." and
+// "(10 minutes left to unlock)"; else `fallback` ("Authentication failed"). Always an error.
+function failureView(views, fallback) {
+    var texts = [];
+    var list = Array.isArray(views) ? views : [];
+    for (var i = 0; i < list.length; i++) {
+        var v = list[i];
+        var t = v && typeof v.text === "string" ? Notif.cleanText(v.text, MAX_MESSAGE) : "";
+        if (t !== "" && texts[texts.length - 1] !== t)
+            texts.push(t);
+    }
+    var text = Notif.cleanText(texts.slice(-FAILURE_LINES).join(" "), MAX_MESSAGE);
+    if (text === "")
+        text = typeof fallback === "string" && fallback !== "" ? fallback : "Authentication failed";
+    return { text: text, error: true };
+}
+
 // The shell config next to the lock config: <dir>/../shell, normalised (uq-lock calls the shell's
 // `lockSecure` IPC there).
 function siblingShellDir(lockDir) {

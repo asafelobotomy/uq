@@ -66,6 +66,27 @@ TestCase {
         compare(L.messageView(new Array(300).join("a"), false).text.length, 200);
     }
 
+    // L21: faillock's info messages, sent during the attempt, are what a failed attempt shows.
+    function test_failure_view() {
+        var info = function (t) { return L.messageView(t, false); };
+        compare(L.failureView([]), { text: "Authentication failed", error: true });
+        compare(L.failureView(undefined), { text: "Authentication failed", error: true });
+        compare(L.failureView([], "Authentication error"),
+                { text: "Authentication error", error: true });
+        compare(L.failureView([info("The account is locked due to 3 failed logins."),
+                               info("(10 minutes left to unlock)")]),
+                { text: "The account is locked due to 3 failed logins. (10 minutes left to unlock)",
+                  error: true });
+        // The last two, without repeats or empties.
+        compare(L.failureView([info("a"), info("b"), info(""), info("c"), info("c")]).text, "b c");
+        compare(L.failureView([L.messageView("Bad thing", true)]),
+                { text: "Bad thing", error: true });
+        // Still sanitised and bounded.
+        var long = new Array(150).join("x");
+        compare(L.failureView([info(long), info(long + "y")]).text.length, 200);
+        compare(L.failureView([{ text: "line\none", error: false }]).text, "line one");
+    }
+
     function test_sibling_shell_dir() {
         compare(L.siblingShellDir("/usr/share/uq/lock"), "/usr/share/uq/shell");
         compare(L.siblingShellDir("/usr/share/uq/lock/"), "/usr/share/uq/shell");

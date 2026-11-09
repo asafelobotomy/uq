@@ -16,6 +16,8 @@ Item {
     readonly property string configDirectory: pamDir !== "" ? pamDir : "/etc/pam.d"
     // {text, error} from lock.js messageView: the latest password-side PAM message.
     property var message: ({ text: "", error: false })
+    // The password attempt's non-prompt PAM messages (messageView results), shown if it fails.
+    property var attemptMessages: []
     // The fingerprint conversation's own latest message (shown with its hint).
     property var fprintMessage: ({ text: "", error: false })
     readonly property bool fprintRunning: fp.active
@@ -62,6 +64,7 @@ Item {
             return false;
         }
         message = { text: "", error: false };
+        attemptMessages = [];
         pending = typed;
         if (!pw.start()) {
             pending = null;
@@ -86,21 +89,22 @@ Item {
                 return;
             }
             auth.message = L.messageView(pw.message, pw.messageIsError);
+            auth.attemptMessages = auth.attemptMessages.concat([auth.message]);
         }
         onCompleted: function (result) {
             auth.pending = null;
             console.info("uq-lock: password", auth.resultName(result));
-            if (result === PamResult.Success) {
+            if (result === PamResult.Success)
                 auth.succeed();
-            } else if (!auth.message.error) {
-                auth.message = { text: "Authentication failed", error: true };
-            }
+            else
+                auth.message = L.failureView(auth.attemptMessages, "Authentication failed");
+            auth.attemptMessages = [];
         }
         onError: function (error) {
             auth.pending = null;
             console.info("uq-lock: password error");
-            if (!auth.message.error)
-                auth.message = { text: "Authentication error", error: true };
+            auth.message = L.failureView(auth.attemptMessages, "Authentication error");
+            auth.attemptMessages = [];
         }
     }
 

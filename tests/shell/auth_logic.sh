@@ -8,6 +8,8 @@
 #           context aborts without ever responding, then fprintd-list is polled again 10 s later.
 #   fpfail: fprintd-list exits 1 -> polled again at the 10 s throttle.
 #   fpnone: fprintd-list not on PATH (failed start) -> polled again at the 10 s throttle.
+#   info  : a stack that sends two info messages (as pam_faillock does when the account is locked)
+#           before failing -> the failure shows those messages, not "Authentication failed" (L21).
 # As `nobody`, unix_chkpwd rejects any password, so `pw` proves rejection and the no-unlock path, not
 # that the stack validates a correct password.
 set -u
@@ -30,6 +32,11 @@ for f in system-local-login system-login system-auth; do
     [ -f "/etc/pam.d/$f" ] && cp "/etc/pam.d/$f" "$tmp/pam.d/"
 done
 printf 'auth required pam_unix.so\n' > "$tmp/pam.d/uq-lock-fingerprint"
+mkdir -p "$tmp/pam-info.d"
+cp "$tmp/pam.d/uq-lock-fingerprint" "$tmp/pam-info.d/"
+printf '%s\n' 'auth optional pam_echo.so The account is locked due to 3 failed logins.' \
+    'auth optional pam_echo.so (10 minutes left to unlock)' 'auth required pam_unix.so' \
+    > "$tmp/pam-info.d/uq-lock"
 
 # fprintd-list stubs; each call appends a line to its scenario's log.
 mkbin() { # dir, exit code, output
@@ -41,7 +48,7 @@ mkbin "$tmp/bin-listed" 0 'Fingerprints for user nobody on X (press):\n - #0: ri
 mkbin "$tmp/bin-fail" 1 'No devices available\n'
 mkdir -p "$tmp/bin-none"
 
-run() { # scenario, PATH dir
+run() { # scenario, PATH dir[, PAM dir]
     local cfg="$tmp/cfg-$1"
     mkdir -p "$cfg"
     # The real Auth.qml, imported from inside the config dir (Quickshell refuses outside imports).
@@ -53,12 +60,12 @@ import Quickshell
 ShellRoot {
     Auth {
         id: a
-        pamDir: "$tmp/pam.d"
+        pamDir: "${3:-$tmp/pam.d}"
         onUnlocked: console.log("UNLOCKED")
     }
     property int polls: 0
     Timer {
-        interval: 200; running: "$1" === "pw"
+        interval: 200; running: "$1" === "pw" || "$1" === "info"
         onTriggered: {
             console.log("SUBMIT1", a.submit("definitely-wrong"));
             console.log("SUBMIT2", a.submit("second"), a.message.text);
@@ -68,6 +75,7 @@ ShellRoot {
         interval: 12500; running: true
         onTriggered: {
             console.log("STATE pending", a.pending === null, "busy", a.busy, "done", a.done);
+            console.log("MSG", a.message.text, "error", a.message.error);
             Qt.quit();
         }
     }
@@ -81,6 +89,7 @@ run pw "$tmp/bin-fail"
 run fpask "$tmp/bin-listed"
 run fpfail "$tmp/bin-fail"
 run fpnone "$tmp/bin-none"
+run info "$tmp/bin-fail" "$tmp/pam-info.d"
 for p in "${pids[@]}"; do wait "$p"; done
 pids=()
 
@@ -88,7 +97,7 @@ fail=0
 calls() { [ -f "$1/calls" ] && wc -l < "$1/calls" || echo 0; }
 check() { grep -q "$2" "$tmp/out-$1" || { echo "FAIL ($1): no '$2'"; fail=1; }; }
 none() { if grep -q "$2" "$tmp/out-$1"; then echo "FAIL ($1): unexpected '$2'"; fail=1; fi; }
-for s in pw fpask fpfail fpnone; do
+for s in pw fpask fpfail fpnone info; do
     none $s UNLOCKED
     check $s 'STATE pending true busy false done false'
     if grep -E 'TypeError|ReferenceError|is not a type|Cannot assign|Unable to assign|is not a function|Syntax[Ee]rror|Failed to load' "$tmp/out-$s"; then
@@ -100,16 +109,19 @@ check pw 'SUBMIT2 false Checking'
 check pw 'uq-lock: password Failed'
 none pw 'definitely-wrong'
 none pw 'second'
+check info 'uq-lock: password Failed'
+check info 'MSG The account is locked due to 3 failed logins. (10 minutes left to unlock) error true'
+none info 'definitely-wrong'
 # fpask: the prompt is aborted, never answered, and the list is polled again (attempt + retry).
 check fpask 'Relaying pam message'
 none fpask 'Got response'
 none fpask 'uq-lock: fingerprint Success'
 # pw, fpfail and fpask share counting stubs; fpnone counts through Quickshell's failed-start warning.
 n=$(calls "$tmp/bin-listed"); [ "$n" -ge 2 ] || { echo "FAIL (fpask): fprintd-list polled $n times, want >= 2"; fail=1; }
-n=$(calls "$tmp/bin-fail"); [ "$n" -ge 4 ] || { echo "FAIL (fpfail+pw): fprintd-list polled $n times, want >= 4"; fail=1; }
+n=$(calls "$tmp/bin-fail"); [ "$n" -ge 4 ] || { echo "FAIL (fpfail+pw+info): fprintd-list polled $n times, want >= 4"; fail=1; }
 n=$(grep -c 'Process failed to start' "$tmp/out-fpnone"); [ "$n" -ge 2 ] || { echo "FAIL (fpnone): $n start attempts, want >= 2"; fail=1; }
 if [ "$fail" != 0 ] || [ -n "${SHOW:-}" ]; then
-    for s in pw fpask fpfail fpnone; do echo "== $s"; cat "$tmp/out-$s"; done
+    for s in pw fpask fpfail fpnone info; do echo "== $s"; cat "$tmp/out-$s"; done
 fi
 [ "$fail" = 0 ] && echo "auth_logic ok"
 exit "$fail"
