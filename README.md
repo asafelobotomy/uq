@@ -197,7 +197,9 @@ fprintd-enroll
 
 Whichever succeeds first unlocks. The PAM stacks are `/etc/pam.d/uq-lock` (password, via
 `system-local-login`) and `/etc/pam.d/uq-lock-fingerprint` (fingerprint only). Both are marked
-`backup` in the package, so your edits are kept on upgrade.
+`backup` in the package, so your edits are kept on upgrade. The lock runs only PAM's auth phase,
+not the account phase, so account checks such as password or account expiry don't stop an
+unlock; faillock still applies, since it hooks the auth phase.
 
 The screen locks before the machine sleeps: uQ holds a logind delay inhibitor and releases it
 once the lock is secure (or after 2 s at the latest).

@@ -30,7 +30,7 @@ hl.monitor({
 -- talk to this session. Both are stopped again when Hyprland exits, so neither outlives the
 -- session and re-themes another desktop. The steps are separated by `;`, not `&&`: uqd failing
 -- to start degrades the widgets but must never keep the bar from starting.
-local session_env = "WAYLAND_DISPLAY XDG_CURRENT_DESKTOP HYPRLAND_INSTANCE_SIGNATURE QT_QPA_PLATFORMTHEME DISPLAY XCURSOR_SIZE HYPRCURSOR_SIZE XCURSOR_THEME XDG_SESSION_TYPE"
+local session_env = "WAYLAND_DISPLAY XDG_CURRENT_DESKTOP HYPRLAND_INSTANCE_SIGNATURE QT_QPA_PLATFORMTHEME DISPLAY XCURSOR_SIZE HYPRCURSOR_SIZE XCURSOR_THEME XDG_SESSION_TYPE XDG_SESSION_ID"
 hl.on("hyprland.start", function()
     hl.exec_cmd("dbus-update-activation-environment --systemd " .. session_env .. "; systemctl --user restart uqd.service; systemctl --user restart uq-shell.service")
 end)

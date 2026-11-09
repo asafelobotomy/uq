@@ -25,18 +25,26 @@ const DEST: &str = "org.freedesktop.login1";
 const PATH: &str = "/org/freedesktop/login1";
 const MANAGER: &str = "org.freedesktop.login1.Manager";
 const SESSION: &str = "org.freedesktop.login1.Session";
+const USER: &str = "org.freedesktop.login1.User";
 
 /// How long a pending sleep may wait for `SleepLockReady` before the inhibitor is dropped anyway.
 pub const SLEEP_FALLBACK_MS: u64 = 2000;
 /// How often a failed `Inhibit` is tried again while awake.
 pub const INHIBIT_RETRY: Duration = Duration::from_secs(30);
 
-/// The `Lock` call's command: a fixed argv, run directly, never through a shell.
-pub fn lock_argv() -> [&'static str; 4] {
-    ["systemctl", "--user", "start", "uq-lock.service"]
+/// The `Lock` call's command: a fixed argv, run directly, never through a shell. `--no-block`
+/// queues the start and returns, so a stuck job never holds the caller (or `Session.starting`).
+pub fn lock_argv() -> [&'static str; 5] {
+    [
+        "systemctl",
+        "--user",
+        "start",
+        "--no-block",
+        "uq-lock.service",
+    ]
 }
 
-/// The bridge's `Lock` call: start the lock unit.
+/// The bridge's `Lock` call: queue a start of the lock unit.
 pub async fn lock(args: &[Value]) -> Result<Value, String> {
     if !args.is_empty() {
         return Err("Lock takes no arguments".into());
@@ -209,7 +217,7 @@ impl Logind {
             Err(e) => return self.warn(e),
         };
         let mut locks = None;
-        match find_session(&conn, std::env::var("XDG_SESSION_ID").ok()).await {
+        match find_session(&conn, own_uid(), std::env::var("XDG_SESSION_ID").ok()).await {
             Some(path) => {
                 if let Ok(r) = signal_rule(path.as_str(), SESSION, "Lock") {
                     locks = MessageStream::for_match_rule(r, &conn, Some(16)).await.ok();
@@ -356,8 +364,14 @@ fn signal_rule(path: &str, iface: &str, member: &str) -> zbus::Result<MatchRule<
         .build())
 }
 
-/// Our session: by our pid, else by `XDG_SESSION_ID`.
-async fn find_session(conn: &Connection, xdg_id: Option<String>) -> Option<OwnedObjectPath> {
+/// Our session. The bridge runs in a user service, outside any session scope, so the pid lookup
+/// usually fails; then the user's display session (logind's pick of the graphical session); then
+/// `XDG_SESSION_ID`, which may be missing or stale.
+async fn find_session(
+    conn: &Connection,
+    uid: Option<u32>,
+    xdg_id: Option<String>,
+) -> Option<OwnedObjectPath> {
     let by_pid = conn
         .call_method(
             Some(DEST),
@@ -370,12 +384,44 @@ async fn find_session(conn: &Connection, xdg_id: Option<String>) -> Option<Owned
     if let Ok(p) = by_pid.and_then(|m| m.body().deserialize::<OwnedObjectPath>()) {
         return Some(p);
     }
+    if let Some(uid) = uid
+        && let Some(p) = display_session(conn, uid).await
+    {
+        return Some(p);
+    }
     let id = xdg_id.filter(|s| !s.is_empty())?;
     let reply = conn
         .call_method(Some(DEST), PATH, Some(MANAGER), "GetSession", &(id,))
         .await
         .ok()?;
     reply.body().deserialize::<OwnedObjectPath>().ok()
+}
+
+/// The `Display` session of user `uid`, if logind has one ("/" means none).
+async fn display_session(conn: &Connection, uid: u32) -> Option<OwnedObjectPath> {
+    let reply = conn
+        .call_method(Some(DEST), PATH, Some(MANAGER), "GetUser", &(uid,))
+        .await
+        .ok()?;
+    let user = reply.body().deserialize::<OwnedObjectPath>().ok()?;
+    let props = zbus::fdo::PropertiesProxy::builder(conn)
+        .destination(DEST)
+        .ok()?
+        .path(user)
+        .ok()?
+        .build()
+        .await
+        .ok()?;
+    let iface = zbus::names::InterfaceName::from_static_str(USER).ok()?;
+    let value = props.get(iface, "Display").await.ok()?;
+    let (_id, path) = <(String, OwnedObjectPath)>::try_from(value).ok()?;
+    (path.as_str() != "/").then_some(path)
+}
+
+/// Our uid: the owner of `/proc/self`.
+fn own_uid() -> Option<u32> {
+    use std::os::unix::fs::MetadataExt;
+    std::fs::metadata("/proc/self").ok().map(|m| m.uid())
 }
 
 #[cfg(test)]
@@ -387,6 +433,8 @@ mod tests {
     use std::time::Instant;
 
     const SESSION_PATH: &str = "/org/freedesktop/login1/session/_31";
+    const USER_PATH: &str = "/org/freedesktop/login1/user/_1000";
+    const DISPLAY_PATH: &str = "/org/freedesktop/login1/session/_32";
 
     struct Bus(Child, String, #[allow(dead_code)] tempfile::TempDir);
     impl Drop for Bus {
@@ -436,6 +484,12 @@ mod tests {
         hints: Vec<bool>,
         by_pid_fails: bool,
         get_session_ids: Vec<String>,
+        /// Uids asked for with GetUser.
+        get_user_uids: Vec<u32>,
+        /// GetUser fails (no such user).
+        no_user: bool,
+        /// The user's Display property; `None` reads as ("", "/").
+        display: Option<(String, String)>,
         /// Fail this many Inhibit calls before succeeding again.
         inhibit_fails: usize,
         hint_fails: bool,
@@ -479,6 +533,32 @@ mod tests {
             self.0.lock().unwrap().get_session_ids.push(id);
             OwnedObjectPath::try_from(SESSION_PATH).unwrap()
         }
+
+        fn get_user(&self, uid: u32) -> zbus::fdo::Result<OwnedObjectPath> {
+            let mut f = self.0.lock().unwrap();
+            f.get_user_uids.push(uid);
+            if f.no_user {
+                return Err(zbus::fdo::Error::Failed("no such user".into()));
+            }
+            Ok(OwnedObjectPath::try_from(USER_PATH).unwrap())
+        }
+    }
+
+    struct FakeUser(Shared);
+
+    #[zbus::interface(name = "org.freedesktop.login1.User")]
+    impl FakeUser {
+        #[zbus(property)]
+        fn display(&self) -> (String, OwnedObjectPath) {
+            let (id, path) = self
+                .0
+                .lock()
+                .unwrap()
+                .display
+                .clone()
+                .unwrap_or_else(|| (String::new(), "/".into()));
+            (id, OwnedObjectPath::try_from(path).unwrap())
+        }
     }
 
     struct FakeSession(Shared);
@@ -511,6 +591,10 @@ mod tests {
             .serve_at(PATH, FakeManager(shared.clone()))
             .unwrap()
             .serve_at(SESSION_PATH, FakeSession(shared.clone()))
+            .unwrap()
+            .serve_at(DISPLAY_PATH, FakeSession(shared.clone()))
+            .unwrap()
+            .serve_at(USER_PATH, FakeUser(shared.clone()))
             .unwrap()
             .build()
             .await
@@ -628,7 +712,13 @@ mod tests {
     fn lock_argv_is_fixed() {
         assert_eq!(
             lock_argv(),
-            ["systemctl", "--user", "start", "uq-lock.service"]
+            [
+                "systemctl",
+                "--user",
+                "start",
+                "--no-block",
+                "uq-lock.service"
+            ]
         );
     }
 
@@ -742,10 +832,15 @@ mod tests {
         };
         let mut r = rig_with(logind, rx, fake).await;
         assert_eq!(r.attempts(), 3, "two failures, then held");
-        assert!(
-            !r.logind.inhibit_fail.0.load(Ordering::Relaxed),
-            "success ended the streak"
-        );
+        // The fake records the inhibitor before the bridge reads the reply: give it a moment.
+        let t = Instant::now();
+        while r.logind.inhibit_fail.0.load(Ordering::Relaxed) {
+            assert!(
+                t.elapsed() < Duration::from_secs(1),
+                "success ended the streak"
+            );
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
         tokio::time::sleep(Duration::from_millis(600)).await;
         assert_eq!(r.attempts(), 3, "no retry while held");
 
@@ -883,6 +978,26 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn run_uses_display_session_without_pid() {
+        let (tx, rx) = mpsc::channel(16);
+        let fake = Fake {
+            by_pid_fails: true,
+            display: Some(("2".into(), DISPLAY_PATH.into())),
+            ..Fake::default()
+        };
+        let mut r = rig_with(Logind::new(tx), rx, fake).await;
+        // The bridge is subscribed by the time it takes its inhibitor (rig_with waits for it).
+        r.fake_conn
+            .emit_signal(None::<()>, DISPLAY_PATH, SESSION, "Lock", &())
+            .await
+            .unwrap();
+        assert_eq!(r.next().await, ("LockRequested".into(), json!({})));
+        r.logind.set_locked_hint(true).await;
+        assert_eq!(r.fake.lock().unwrap().hints, vec![true]);
+        assert!(!r.logind.warned.load(Ordering::Relaxed), "session found");
+    }
+
+    #[tokio::test]
     async fn locked_hint_forwarded() {
         let r = rig().await;
         r.logind.set_locked_hint(true).await;
@@ -891,20 +1006,83 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn session_falls_back_to_xdg_session_id() {
+    async fn session_by_pid_comes_first() {
         let bus = private_bus();
         let fake = Fake {
-            by_pid_fails: true,
+            display: Some(("2".into(), DISPLAY_PATH.into())),
             ..Fake::default()
         };
         let (_fake_conn, shared) = serve_fake(&bus, fake).await;
         let c = conn(&bus.1).await;
         assert_eq!(
-            find_session(&c, Some("7".into())).await.unwrap().as_str(),
+            find_session(&c, Some(1000), Some("7".into()))
+                .await
+                .unwrap()
+                .as_str(),
             SESSION_PATH
         );
-        assert_eq!(shared.lock().unwrap().get_session_ids, vec!["7"]);
-        assert_eq!(find_session(&c, None).await, None);
+        let f = shared.lock().unwrap();
+        assert!(f.get_user_uids.is_empty());
+        assert!(f.get_session_ids.is_empty());
+    }
+
+    #[tokio::test]
+    async fn session_falls_back_to_user_display() {
+        let bus = private_bus();
+        let fake = Fake {
+            by_pid_fails: true,
+            display: Some(("2".into(), DISPLAY_PATH.into())),
+            ..Fake::default()
+        };
+        let (_fake_conn, shared) = serve_fake(&bus, fake).await;
+        let c = conn(&bus.1).await;
+        assert_eq!(
+            find_session(&c, Some(1000), Some("7".into()))
+                .await
+                .unwrap()
+                .as_str(),
+            DISPLAY_PATH,
+            "the display session wins over a (maybe stale) XDG_SESSION_ID"
+        );
+        let f = shared.lock().unwrap();
+        assert_eq!(f.get_user_uids, vec![1000]);
+        assert!(f.get_session_ids.is_empty());
+    }
+
+    #[tokio::test]
+    async fn session_falls_back_to_xdg_session_id() {
+        let bus = private_bus();
+        // No display session ("/"), then no user at all: both fall through to XDG_SESSION_ID.
+        for no_user in [false, true] {
+            let fake = Fake {
+                by_pid_fails: true,
+                no_user,
+                ..Fake::default()
+            };
+            let (fake_conn, shared) = serve_fake(&bus, fake).await;
+            let c = conn(&bus.1).await;
+            assert_eq!(
+                find_session(&c, Some(1000), Some("7".into()))
+                    .await
+                    .unwrap()
+                    .as_str(),
+                SESSION_PATH
+            );
+            assert_eq!(shared.lock().unwrap().get_user_uids, vec![1000]);
+            assert_eq!(shared.lock().unwrap().get_session_ids, vec!["7"]);
+            assert_eq!(find_session(&c, Some(1000), None).await, None);
+            // Without a uid the user step is skipped.
+            assert_eq!(
+                find_session(&c, None, Some("8".into()))
+                    .await
+                    .unwrap()
+                    .as_str(),
+                SESSION_PATH
+            );
+            assert_eq!(shared.lock().unwrap().get_user_uids, vec![1000, 1000]);
+            drop(c);
+            fake_conn.release_name(DEST).await.unwrap();
+        }
     }
 
     #[tokio::test]

@@ -62,3 +62,54 @@ function siblingShellDir(lockDir) {
 function recoveryDecision(locked, unitActive, starting) {
     return locked && !unitActive && !starting ? "start" : "none";
 }
+
+// How long a lockSecure that arrives before LockState(true) is remembered, and how recent a Lock
+// request must be for such an early lockSecure to count.
+var EARLY_SECURE_MS = 5000;
+
+// Sleep and secure state, one event at a time. Times are ms; -1 means "never".
+// s:  {locked, secure, sleepPending, earlySecureAt, lockRequestedAt, starting}
+// ev: "secure"   uq-lock reported WlSessionLock.secure
+//     "locked"   LockState(true)
+//     "unlocked" LockState(false)
+//     "sleep"    PrepareForSleep(true)
+//     "wake"     PrepareForSleep(false)
+// Returns {secure, sleepPending, earlySecureAt, sleepReady, lock}: the new state, whether to send
+// SleepLockReady now, and whether to start the lock. Nothing here can unlock: `secure` only lets
+// a pending sleep go ahead.
+function secureStep(s, ev, nowMs) {
+    var r = { secure: !!s.secure, sleepPending: !!s.sleepPending, earlySecureAt: s.earlySecureAt,
+              sleepReady: false, lock: false };
+    if (typeof r.earlySecureAt !== "number")
+        r.earlySecureAt = -1;
+    var requested = s.starting || (s.lockRequestedAt >= 0 && nowMs - s.lockRequestedAt <= EARLY_SECURE_MS);
+    switch (ev) {
+    case "secure":
+        if (s.locked)
+            r.secure = true;
+        else if (requested)
+            r.earlySecureAt = nowMs;
+        break;
+    case "locked":
+        if (r.earlySecureAt >= 0 && nowMs - r.earlySecureAt <= EARLY_SECURE_MS)
+            r.secure = true;
+        r.earlySecureAt = -1;
+        break;
+    case "unlocked":
+        r.secure = false;
+        r.earlySecureAt = -1;
+        break;
+    case "sleep":
+        r.sleepPending = true;
+        r.lock = !r.secure && !s.locked;
+        break;
+    case "wake":
+        r.sleepPending = false;
+        break;
+    }
+    if (r.secure && r.sleepPending) {
+        r.sleepReady = true;
+        r.sleepPending = false;
+    }
+    return r;
+}

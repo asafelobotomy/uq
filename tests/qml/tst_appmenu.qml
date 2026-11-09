@@ -93,10 +93,11 @@ TestCase {
         compare(M.category(m[0]), "Multimedia");
     }
 
-    // lock, logout and suspend run straight from the app menu; restart and shut down open the
-    // power menu at that action's confirm step. Anything else does nothing.
+    // lock goes to Session.lock() (as the power menu's does); logout and suspend run straight
+    // from the app menu; restart and shut down open the power menu at that action's confirm
+    // step. Anything else does nothing.
     function test_power_click() {
-        compare(M.powerClick("lock"), "fire");
+        compare(M.powerClick("lock"), "lock");
         compare(M.powerClick("logout"), "fire");
         compare(M.powerClick("suspend"), "fire");
         compare(M.powerClick("reboot"), "powermenu");

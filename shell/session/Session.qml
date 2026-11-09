@@ -8,7 +8,8 @@ import "../logic/lock.js" as L
 // truth; this only ever starts the lock (`Lock` starts uq-lock.service) and never unlocks.
 // - lock(): SUPER+L, `qs ipc call uq lock`, logind's Lock signal and PrepareForSleep(true).
 // - lockSecure(): uq-lock reports WlSessionLock.secure; a pending sleep then gets SleepLockReady
-//   so the bridge drops its delay inhibitor.
+//   so the bridge drops its delay inhibitor. One that beats LockState(true) is remembered for
+//   L.EARLY_SECURE_MS and counted once the lock lands (lock.js secureStep holds the rules).
 // - Recovery: while locked, every 3 s, `systemctl --user is-active uq-lock.service`; when it isn't
 //   active (the lock client died), start it again.
 QtObject {
@@ -20,6 +21,8 @@ QtObject {
 
     // --- internals ---
     property bool starting: false       // a Lock call is in flight
+    property real lockRequestedAt: -1   // when startUnit last asked for the lock (ms)
+    property real earlySecureAt: -1     // a lockSecure that came before LockState(true) (ms)
     property bool checkStarted: false
     property int recoveryMs: 3000
 
@@ -31,20 +34,37 @@ QtObject {
         return "ok";
     }
 
-    // Only marks the lock secure while locked; it can't unlock anything. Always "ok".
+    // Only marks the lock secure (now, or once LockState(true) lands); it can't unlock anything.
+    // Always "ok".
     function lockSecure() {
-        if (Bridge.locked) {
-            secure = true;
-            if (sleepPending)
-                sleepReady();
-        }
+        step("secure");
         return "ok";
+    }
+
+    // Runs one secureStep event and acts on its result.
+    function step(ev) {
+        var r = L.secureStep({
+            locked: Bridge.locked,
+            secure: secure,
+            sleepPending: sleepPending,
+            earlySecureAt: earlySecureAt,
+            lockRequestedAt: lockRequestedAt,
+            starting: starting
+        }, ev, Date.now());
+        secure = r.secure;
+        sleepPending = r.sleepPending;
+        earlySecureAt = r.earlySecureAt;
+        if (r.sleepReady)
+            sleepReady();
+        if (r.lock)
+            lock();
     }
 
     function startUnit() {
         if (starting)
             return;
         starting = true;
+        lockRequestedAt = Date.now();
         Bridge.call("Lock").then(function () {
             root.starting = false;
         }).catch(function (e) {
@@ -54,7 +74,6 @@ QtObject {
     }
 
     function sleepReady() {
-        sleepPending = false;
         Bridge.call("SleepLockReady").catch(function (e) {
             console.log("uq: SleepLockReady failed: " + e);
         });
@@ -77,22 +96,12 @@ QtObject {
     property Connections bridgeConn: Connections {
         target: Bridge
         function onLockedChanged() {
-            if (Bridge.locked) {
+            root.step(Bridge.locked ? "locked" : "unlocked");
+            if (Bridge.locked)
                 root.check();
-            } else {
-                root.secure = false;
-            }
         }
         function onPrepareForSleep(sleeping) {
-            if (!sleeping) {
-                root.sleepPending = false;
-                return;
-            }
-            root.sleepPending = true;
-            if (root.secure)
-                root.sleepReady();
-            else
-                root.lock();
+            root.step(sleeping ? "sleep" : "wake");
         }
         function onLockRequested() {
             root.lock();

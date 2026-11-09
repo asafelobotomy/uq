@@ -7,6 +7,7 @@ import Quickshell.Wayland
 import Quickshell.Hyprland
 import Quickshell.Widgets
 import "../core"
+import "../session"
 import "../logic/launcher.js" as L
 import "../logic/rank.js" as Rank
 import "../logic/appmenu.js" as M
@@ -14,7 +15,7 @@ import "../logic/appmenu.js" as M
 // KDE-style app menu, hung under the System island's app-menu button: avatar and an apps-only
 // search at the top, categories on the left, an app grid on the right, and user@host plus the
 // power buttons at the bottom. Logic lives in appmenu.js; app names go through UqText, and
-// clicks only ever make bridge calls (Launch / Power). Search is local (rank.searchApps).
+// clicks only ever make bridge calls (Launch / Power) or Session.lock(). Search is local (rank.searchApps).
 PanelWindow {
     id: root
 
@@ -114,12 +115,17 @@ PanelWindow {
         Surfaces.close();
     }
 
-    // lock, logout and suspend run at once; restart and shut down hand over to the power menu
-    // (on this menu's screen) at their confirm step, which closes the app menu.
+    // lock, logout and suspend run at once (lock through Session.lock(), like the power menu);
+    // restart and shut down hand over to the power menu (on this menu's screen) at their
+    // confirm step, which closes the app menu.
     function power(action) {
         if (Bridge.locked)
             return;
         switch (M.powerClick(action)) {
+        case "lock":
+            Surfaces.close();
+            Session.lock();
+            break;
         case "fire":
             Bridge.call("Power", [action]).catch(function () {});
             Surfaces.close();

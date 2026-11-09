@@ -112,6 +112,7 @@ for _, want in ipairs({
   {"hyprland.start", "systemctl --user restart uqd.service"},
   {"hyprland.start", "systemctl --user restart uq-shell.service"},
   {"hyprland.start", "XDG_SESSION_TYPE"},
+  {"hyprland.start", "XDG_SESSION_ID"},
   {"hyprland.shutdown", "systemctl --user stop uqd.service"},
   {"hyprland.shutdown", "stop uq-shell.service"},
 }) do

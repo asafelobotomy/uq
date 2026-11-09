@@ -82,4 +82,82 @@ TestCase {
         compare(L.recoveryDecision(false, true, false), "none");
         compare(L.recoveryDecision(false, false, true), "none");
     }
+
+    // --- sleep and secure (secureStep) ---
+    function st(o) {
+        var s = { locked: false, secure: false, sleepPending: false, earlySecureAt: -1,
+                  lockRequestedAt: -1, starting: false };
+        for (var k in o)
+            s[k] = o[k];
+        return s;
+    }
+
+    function test_secure_while_locked() {
+        var r = L.secureStep(st({ locked: true }), "secure", 1000);
+        compare(r.secure, true);
+        compare(r.sleepReady, false);
+        compare(r.lock, false);
+    }
+
+    function test_secure_releases_pending_sleep() {
+        var r = L.secureStep(st({ locked: true, sleepPending: true }), "secure", 1000);
+        compare(r.secure, true);
+        compare(r.sleepReady, true);
+        compare(r.sleepPending, false);
+    }
+
+    function test_sleep_when_secure_is_ready_at_once() {
+        var r = L.secureStep(st({ locked: true, secure: true }), "sleep", 1000);
+        compare(r.sleepReady, true);
+        compare(r.sleepPending, false);
+        compare(r.lock, false);
+    }
+
+    function test_sleep_when_not_secure_locks_and_waits() {
+        var r = L.secureStep(st({}), "sleep", 1000);
+        compare(r.lock, true);
+        compare(r.sleepPending, true);
+        compare(r.sleepReady, false);
+        r = L.secureStep(st({ sleepPending: true }), "wake", 2000);
+        compare(r.sleepPending, false);
+    }
+
+    // A lockSecure that beats LockState(true) is remembered and promoted on lock.
+    function test_early_secure_promoted() {
+        var r = L.secureStep(st({ lockRequestedAt: 1000, sleepPending: true }), "secure", 1500);
+        compare(r.secure, false);
+        compare(r.earlySecureAt, 1500);
+        compare(r.sleepReady, false);
+        r = L.secureStep(st({ earlySecureAt: 1500, sleepPending: true }), "locked", 1700);
+        compare(r.secure, true);
+        compare(r.earlySecureAt, -1);
+        compare(r.sleepReady, true);
+        compare(r.sleepPending, false);
+        // While a Lock call is in flight, even with no recent request time.
+        r = L.secureStep(st({ starting: true }), "secure", 99000);
+        compare(r.earlySecureAt, 99000);
+    }
+
+    function test_early_secure_expires() {
+        var r = L.secureStep(st({ earlySecureAt: 1000 }), "locked", 1000 + L.EARLY_SECURE_MS + 1);
+        compare(r.secure, false);
+        compare(r.earlySecureAt, -1);
+        r = L.secureStep(st({ earlySecureAt: 1000 }), "locked", 1000 + L.EARLY_SECURE_MS);
+        compare(r.secure, true);
+    }
+
+    // With no Lock in flight or recently asked for, an unlocked lockSecure is dropped.
+    function test_unrequested_secure_dropped() {
+        var r = L.secureStep(st({}), "secure", 1000);
+        compare(r.secure, false);
+        compare(r.earlySecureAt, -1);
+        r = L.secureStep(st({ lockRequestedAt: 1000 }), "secure", 1000 + L.EARLY_SECURE_MS + 1);
+        compare(r.earlySecureAt, -1);
+    }
+
+    function test_unlock_clears() {
+        var r = L.secureStep(st({ secure: true, earlySecureAt: 500 }), "unlocked", 1000);
+        compare(r.secure, false);
+        compare(r.earlySecureAt, -1);
+    }
 }

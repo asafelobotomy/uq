@@ -112,12 +112,15 @@ function menuEntries(list) {
 }
 
 // --- power ---
-// powerClick(action) -> "fire" | "powermenu" | ""
-//   "fire":      lock, logout and suspend: send Power [action] now.
+// powerClick(action) -> "lock" | "fire" | "powermenu" | ""
+//   "lock":      close the app menu and call Session.lock(), as the power menu does.
+//   "fire":      logout and suspend: send Power [action] now.
 //   "powermenu": reboot and poweroff: close the app menu and open the power menu at that
 //                action's confirm step (its 30 s countdown, power.js).
 //   "":          anything else does nothing.
 function powerClick(action) {
+    if (action === "lock")
+        return "lock";
     if (P.needsConfirm(action))
         return "powermenu";
     return P.ACTIONS.indexOf(action) >= 0 ? "fire" : "";

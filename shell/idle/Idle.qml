@@ -77,7 +77,7 @@ Scope {
         onIsIdleChanged: if (isIdle) root.act("suspend")
     }
 
-    // Created when the lock begins, so its timeout counts from the moment of locking.
+    // Enabled when the lock begins, so its timeout counts from the moment of locking.
     IdleMonitor {
         enabled: root.on("lockedOff")
         timeout: root.stages.lockedOff || 0
