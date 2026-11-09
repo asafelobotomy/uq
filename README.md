@@ -254,7 +254,7 @@ cargo test -p uqd --test verify_config -- --ignored   # needs Hyprland installed
 scripts/lint-shell.sh                      # no bare Text, Label or Qt.createQmlObject in shell/
 for t in tests/shell/*.sh; do bash "$t"; done
 QT_QPA_PLATFORM=offscreen qmltestrunner -import shell -input tests/qml
-scripts/smoke-shell.sh                     # needs Hyprland, quickshell, jq; exit 77 = skipped
+scripts/smoke-shell.sh                     # needs Hyprland, quickshell, jq, a DRM card and a seat; 77 = skipped
 ```
 
 ## Credits

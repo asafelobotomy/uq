@@ -57,7 +57,13 @@ cat > "$tmp/hypr.lua" <<'LUA'
 hl.monitor({ output = "", mode = "1280x720", position = "auto", scale = 1 })
 hl.config({ misc = { disable_hyprland_logo = true, disable_splash_rendering = true } })
 LUA
-hypr_env=(env XDG_RUNTIME_DIR="$rt" AQ_BACKENDS=headless WLR_RENDERER_ALLOW_SOFTWARE=1 LIBGL_ALWAYS_SOFTWARE=1)
+# Hyprland always asks Aquamarine for its headless backend, but Aquamarine allocates every
+# buffer through GBM on a DRM node that only its DRM or Wayland backend provides, so with no
+# /dev/dri at all it aborts ("CBackend::create() failed!"). A KMS-only virtual device is enough:
+# CI loads vkms on the runner, passes the card in and runs seatd (Hyprland's DRM backend needs a
+# seat); mesa renders on it in software. LIBSEAT_BACKEND (seatd in CI) comes from the caller.
+ls /dev/dri/card* >/dev/null 2>&1 || skip "no DRM device (/dev/dri/card*): Hyprland cannot start without one, even headless"
+hypr_env=(env XDG_RUNTIME_DIR="$rt" LIBGL_ALWAYS_SOFTWARE=1)
 [ "$have_systemd" = 1 ] && hypr_env+=(DBUS_SESSION_BUS_ADDRESS="unix:path=$orig_rt/bus")
 "${hypr_env[@]}" Hyprland -c "$tmp/hypr.lua" >"$tmp/hypr.log" 2>&1 &
 hypr=$!
@@ -97,7 +103,7 @@ wait_bars() { # wait_bars <predicate-op> <n> : poll up to 10 s until count <op> 
 
 shell_env=(env XDG_RUNTIME_DIR="$rt" WAYLAND_DISPLAY="$wl" HYPRLAND_INSTANCE_SIGNATURE="$sig"
     DBUS_SESSION_BUS_ADDRESS="$bus" PATH="$(dirname "$uqctl"):$PATH" XDG_STATE_HOME="$tmp/state"
-    QT_QPA_PLATFORM=wayland)
+    QT_QPA_PLATFORM=wayland LC_ALL=C.UTF-8)
 start_shell() {
     "${shell_env[@]}" qs -p "$root/shell" --no-duplicate >"$tmp/qs.log" 2>&1 &
     shell=$!
@@ -136,15 +142,17 @@ wait_layer() { # wait_layer <namespace> <n>: poll up to 5 s until exactly n such
     return 1
 }
 smoke_ipc_spotlight() {
+    # The reply is stdout only (stderr is kept for the message). shell_env sets a UTF-8 locale:
+    # under LANG=C, Qt prints its locale warning on qs ipc's stdout, ahead of the reply.
     local r
-    if ! r=$("${shell_env[@]}" timeout 10 qs ipc -p "$root/shell" call uq open spotlight 2>&1); then
-        echo "SKIP (sub-check): IPC open spotlight: qs ipc could not reach the shell here ($r)"
+    if ! r=$("${shell_env[@]}" timeout 10 qs ipc -p "$root/shell" call uq open spotlight 2>"$tmp/ipc.err"); then
+        echo "SKIP (sub-check): IPC open spotlight: qs ipc could not reach the shell here ($r $(tail -n 3 "$tmp/ipc.err"))"
         return 0
     fi
-    [ "$r" = ok ] || fail "qs ipc call uq open spotlight printed '$r', not ok"
+    [ "$r" = ok ] || fail "qs ipc call uq open spotlight printed '$r', not ok ($(tail -n 3 "$tmp/ipc.err"))"
     wait_layer uq-spotlight 1 || fail "no uq-spotlight layer after qs ipc call uq open spotlight"
-    r=$("${shell_env[@]}" timeout 10 qs ipc -p "$root/shell" call uq close spotlight 2>&1)
-    [ "$r" = ok ] || fail "qs ipc call uq close spotlight printed '$r', not ok"
+    r=$("${shell_env[@]}" timeout 10 qs ipc -p "$root/shell" call uq close spotlight 2>"$tmp/ipc.err")
+    [ "$r" = ok ] || fail "qs ipc call uq close spotlight printed '$r', not ok ($(tail -n 3 "$tmp/ipc.err"))"
     wait_layer uq-spotlight 0 || fail "the uq-spotlight layer stayed after qs ipc call uq close spotlight"
     echo "ok: qs ipc open/close spotlight (uq-spotlight layer mapped and unmapped)"
 }
