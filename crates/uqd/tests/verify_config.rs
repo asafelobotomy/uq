@@ -142,7 +142,12 @@ local quick = bind_for("hl.dsp.global(uq:quick-settings)")
 if quick.key ~= "SUPER + A" then error("uq:quick-settings is bound to " .. tostring(quick.key)) end
 local notif = bind_for("hl.dsp.global(uq:notif-centre)")
 if notif.key ~= "SUPER + N" then error("uq:notif-centre is bound to " .. tostring(notif.key)) end
-for _, b in ipairs({spotlight, appmenu, quick, notif}) do
+local lock = bind_for("hl.dsp.global(uq:lock)")
+if lock.key ~= "SUPER + L" then error("uq:lock is bound to " .. tostring(lock.key)) end
+for _, b in ipairs(binds) do
+  if b.key == "SUPER + L" and b ~= lock then error("SUPER + L is also bound to " .. b.dsp) end
+end
+for _, b in ipairs({spotlight, appmenu, quick, notif, lock}) do
   if opt(b, "locked") then error(b.dsp .. " must not be locked") end
 end
 local osd_keys = {
@@ -177,6 +182,7 @@ fn base_lua_launcher_binds_are_not_locked() {
         "uq:appmenu",
         "uq:quick-settings",
         "uq:notif-centre",
+        "uq:lock",
     ] {
         let lines: Vec<&str> = base.lines().filter(|l| l.contains(name)).collect();
         assert!(!lines.is_empty(), "base.lua has no {name} bind");

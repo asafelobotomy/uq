@@ -72,4 +72,14 @@ TestCase {
         compare(L.siblingShellDir("/home/u/Projects/uq/lock//"), "/home/u/Projects/uq/shell");
         compare(L.siblingShellDir("/lock"), "/shell");
     }
+
+    function test_recovery_decision() {
+        compare(L.recoveryDecision(true, false, false), "start");
+        compare(L.recoveryDecision(true, true, false), "none");
+        compare(L.recoveryDecision(true, false, true), "none");
+        compare(L.recoveryDecision(true, true, true), "none");
+        compare(L.recoveryDecision(false, false, false), "none");
+        compare(L.recoveryDecision(false, true, false), "none");
+        compare(L.recoveryDecision(false, false, true), "none");
+    }
 }

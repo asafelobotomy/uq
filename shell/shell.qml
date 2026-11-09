@@ -8,6 +8,7 @@ import "launcher"
 import "osd"
 import "notif"
 import "notif/builtin"
+import "session"
 
 ShellRoot {
     // NotifBackend is a lazily created singleton: this binding touches it so it picks a backend
@@ -15,6 +16,9 @@ ShellRoot {
     // NotifBackend's Binding is what sets Builtin.wanted, so without this reference nothing would
     // create the singleton before something binds to Builtin.
     readonly property var notifBackend: NotifBackend
+    // Session is lazy too: touch it at startup so its Bridge connections (LockState recovery,
+    // PrepareForSleep, logind Lock) run before anything else uses it.
+    readonly property var session: Session
 
     Component.onCompleted: Quickshell.watchFiles = false
 

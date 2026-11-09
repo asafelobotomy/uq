@@ -56,3 +56,9 @@ function messageView(message, isError) {
 function siblingShellDir(lockDir) {
     return String(lockDir).replace(/\/+$/, "").replace(/\/[^\/]*$/, "") + "/shell";
 }
+
+// Recovery: while the session is locked, uq-lock.service must be running. Start it unless it's
+// active or a start is already in flight.
+function recoveryDecision(locked, unitActive, starting) {
+    return locked && !unitActive && !starting ? "start" : "none";
+}

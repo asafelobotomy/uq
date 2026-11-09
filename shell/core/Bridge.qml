@@ -24,6 +24,9 @@ QtObject {
     signal layoutChanged(int ws, string layout)
     // Spotlight results: {generation, provider, provider_name, source_dir, items}.
     signal searchResults(var data)
+    // logind PrepareForSleep (true before sleep, false on resume) and the session's Lock signal.
+    signal prepareForSleep(bool sleeping)
+    signal lockRequested()
 
     // --- transport, set by BridgeIo ---
     property var writer: null           // function(line)
@@ -146,9 +149,18 @@ QtObject {
         switch (name) {
         case "Hello":
             uqdUp = !!(data && data.uqd_up);
-            locked = !!(data && data.locked);
+            locked = !!(data && data.locked);   // initial value; LockState events follow
             connected = true;
             break;
+        case "LockState":
+            if (data && typeof data === "object" && typeof data.locked === "boolean")
+                locked = data.locked;
+            break;
+        case "PrepareForSleep":
+            if (data && typeof data === "object" && typeof data.sleeping === "boolean")
+                prepareForSleep(data.sleeping);
+            break;
+        case "LockRequested": lockRequested(); break;
         case "UqdUp": uqdUp = true; break;
         case "UqdDown": uqdUp = false; break;
         case "ThemeChanged": themeChanged(); break;

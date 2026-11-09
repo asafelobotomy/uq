@@ -4,22 +4,26 @@ import Quickshell.Io
 import Quickshell.Hyprland
 import "../core"
 import "../notif"
+import "../session"
 
 // Everything that opens the launchers from outside the bar, routed to Surfaces: the Hyprland
 // global shortcuts (base.lua binds `uq:spotlight`, `uq:appmenu`, `uq:quick-settings` and
-// `uq:notif-centre`, the last routed to NotifBackend) and the shell IPC target `uq`. No windows in here, so it also loads headless (tests/shell/bar_loads.sh). Shortcuts and
-// IPC pass no screen, so a surface opens on Hyprland.focusedMonitor.
+// `uq:notif-centre`, the last routed to NotifBackend, and `uq:lock`, routed to Session) and the
+// shell IPC target `uq`. No windows in here, so it also loads headless (tests/shell/bar_loads.sh).
+// Shortcuts and IPC pass no screen, so a surface opens on Hyprland.focusedMonitor.
 Scope {
     id: root
 
-    // True once all four shortcuts and the IPC handler exist with the names base.lua and the
+    // True once all five shortcuts and the IPC handler exist with the names base.lua and the
     // README use (tests/shell/bar_loads.sh prints it).
     readonly property bool routed: spotlightKey.appid === "uq" && spotlightKey.name === "spotlight"
         && appMenuKey.appid === "uq" && appMenuKey.name === "appmenu"
         && quickSettingsKey.appid === "uq" && quickSettingsKey.name === "quick-settings"
         && notifCentreKey.appid === "uq" && notifCentreKey.name === "notif-centre"
+        && lockKey.appid === "uq" && lockKey.name === "lock"
         && ipc.target === "uq" && typeof ipc.open === "function"
         && typeof ipc.close === "function" && typeof ipc.toggle === "function"
+        && typeof ipc.lock === "function" && typeof ipc.lockSecure === "function"
 
     // SUPER+Space: Hyprland sends `pressed` on the key press (and `released` after).
     GlobalShortcut {
@@ -62,8 +66,18 @@ Scope {
         }
     }
 
+    // SUPER+L: lock the session (ignored when already locked).
+    GlobalShortcut {
+        id: lockKey
+        appid: "uq"
+        name: "lock"
+        description: "Lock the screen"
+        onPressed: Session.lock()
+    }
+
     // qs ipc -p /usr/share/uq/shell call uq open|close|toggle spotlight|appmenu|quicksettings
-    // Only these three verbs and three names; all ignored while locked. Nothing here unlocks.
+    // Only these three verbs and three names; all ignored while locked. Nothing here unlocks:
+    // `lock` only locks and `lockSecure` (from uq-lock) only marks the lock secure.
     IpcHandler {
         id: ipc
         target: "uq"
@@ -78,6 +92,16 @@ Scope {
 
         function toggle(surface: string): string {
             return Surfaces.ipc("toggle", surface);
+        }
+
+        // qs ipc ... call uq lock: "ok", or "ignored" when already locked.
+        function lock(): string {
+            return Session.lock();
+        }
+
+        // uq-lock calls this once WlSessionLock.secure is true. Always "ok".
+        function lockSecure(): string {
+            return Session.lockSecure();
         }
     }
 }

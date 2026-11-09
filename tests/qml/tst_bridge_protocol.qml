@@ -10,6 +10,8 @@ TestCase {
     SignalSpy { id: layoutSpy; target: Bridge; signalName: "layoutChanged" }
     SignalSpy { id: eventSpy; target: Bridge; signalName: "event" }
     SignalSpy { id: resultsSpy; target: Bridge; signalName: "searchResults" }
+    SignalSpy { id: sleepSpy; target: Bridge; signalName: "prepareForSleep" }
+    SignalSpy { id: lockReqSpy; target: Bridge; signalName: "lockRequested" }
 
     function init() {
         sent = [];
@@ -17,6 +19,7 @@ TestCase {
         Bridge.writer = function (s) { sent.push(s); };
         Bridge.processStarted();
         themeSpy.clear(); layoutSpy.clear(); eventSpy.clear(); resultsSpy.clear();
+        sleepSpy.clear(); lockReqSpy.clear();
     }
 
     function test_hello_sets_state() {
@@ -140,5 +143,34 @@ TestCase {
         Bridge.processExited();
         Bridge.processExited();
         compare(Bridge.attempt, 1);
+    }
+
+    function test_lockstate_event() {
+        Bridge.feed('{"v":1,"event":"Hello","data":{"v":1,"uqd_up":true,"locked":true}}');
+        verify(Bridge.locked);
+        Bridge.feed('{"v":1,"event":"LockState","data":{"locked":false}}');
+        verify(!Bridge.locked);
+        Bridge.feed('{"v":1,"event":"LockState","data":{"locked":true}}');
+        verify(Bridge.locked);
+        Bridge.feed('{"v":1,"event":"LockState","data":null}');
+        verify(Bridge.locked);
+        Bridge.feed('{"v":1,"event":"LockState","data":{"locked":false}}');
+        verify(!Bridge.locked);
+        // Hello's value is only the initial one: a later Hello without the field doesn't lock.
+        Bridge.feed('{"v":1,"event":"Hello","data":{"v":1,"uqd_up":true,"locked":false}}');
+        verify(!Bridge.locked);
+    }
+
+    function test_sleep_signals() {
+        Bridge.feed('{"v":1,"event":"PrepareForSleep","data":{"sleeping":true}}');
+        compare(sleepSpy.count, 1);
+        compare(sleepSpy.signalArguments[0][0], true);
+        Bridge.feed('{"v":1,"event":"PrepareForSleep","data":{"sleeping":false}}');
+        compare(sleepSpy.count, 2);
+        compare(sleepSpy.signalArguments[1][0], false);
+        Bridge.feed('{"v":1,"event":"PrepareForSleep","data":null}');
+        compare(sleepSpy.count, 2);
+        Bridge.feed('{"v":1,"event":"LockRequested","data":{}}');
+        compare(lockReqSpy.count, 1);
     }
 }
