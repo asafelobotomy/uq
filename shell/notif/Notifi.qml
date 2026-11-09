@@ -128,11 +128,40 @@ QtObject {
     // Retry step: probe for the socket file first, quietly. Quickshell's Socket logs a warning
     // on every failed connect, so a missing file (noti-fi not installed or not running) must not
     // reach it. Any other probe result (a socket is not a regular file) goes on to connect.
+    // Each attempt is a fresh FileView created with its path: in Quickshell 0.3.2 a reused
+    // `preload: false` FileView's reload() reports neither loaded nor loadFailed, while one
+    // created with its path reports at once (loadFailed FileNotFound, or NotAFile for a socket).
     function attemptConnect() {
-        if (socketPath === "")
+        if (socketPath === "" || live)
             return;
-        probe.path = socketPath;
-        probe.reload();
+        dropProbe();
+        probe = probeComponent.createObject(root, { path: socketPath });
+        if (probe === null) {
+            connect();
+            return;
+        }
+        probeTimer.restart();
+    }
+
+    function dropProbe() {
+        probeTimer.stop();
+        if (probe !== null) {
+            var p = probe;
+            probe = null;
+            // Not inside its own signal handler.
+            Qt.callLater(function () { p.destroy(); });
+        }
+    }
+
+    // The probe's answer; `p` is the FileView that answered (a stale one is ignored).
+    function probed(p, found) {
+        if (p !== probe)
+            return;
+        dropProbe();
+        if (found)
+            connect();
+        else
+            scheduleRetry();
     }
 
     function connect() {
@@ -249,15 +278,22 @@ QtObject {
         }
     }
 
-    property FileView probe: FileView {
-        preload: false
-        printErrors: false
-        onLoaded: root.connect()
-        onLoadFailed: error => {
-            if (error === FileViewError.FileNotFound)
-                root.scheduleRetry();
-            else
-                root.connect();
+    property var probe: null
+    property Component probeComponent: Component {
+        FileView {
+            id: pv
+            printErrors: false
+            onLoaded: root.probed(pv, true)
+            onLoadFailed: error => root.probed(pv, error !== FileViewError.FileNotFound)
+        }
+    }
+    // A probe that never answers must not stall the client: connect anyway (at worst one Socket
+    // warning per retry).
+    property Timer probeTimer: Timer {
+        interval: 3000
+        onTriggered: {
+            root.dropProbe();
+            root.connect();
         }
     }
 
