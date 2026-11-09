@@ -23,6 +23,7 @@ optdepends=(
   'wireplumber: volume keys'
   'playerctl: media keys'
   'networkmanager: network status in the shell'
+  'scdr: CPU priorities for the focused app and builds (enable scdr-session; uQ starts it)'
   'tailscale: exit-node and VPN status in the shell'
   'bluez: Bluetooth status in the shell'
   'power-profiles-daemon: power profile switching'

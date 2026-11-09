@@ -30,12 +30,15 @@ hl.monitor({
 -- talk to this session. Both are stopped again when Hyprland exits, so neither outlives the
 -- session and re-themes another desktop. The steps are separated by `;`, not `&&`: uqd failing
 -- to start degrades the widgets but must never keep the bar from starting.
+-- scdr's session agent (optional) follows Hyprland focus for scdr's scheduling roles. It is tied
+-- to graphical-session.target, which a plain Hyprland session never reaches, so it is (re)started
+-- here as well, once the environment is in place, if the user enabled it; and stopped with uQ.
 local session_env = "WAYLAND_DISPLAY XDG_CURRENT_DESKTOP HYPRLAND_INSTANCE_SIGNATURE QT_QPA_PLATFORMTHEME DISPLAY XCURSOR_SIZE HYPRCURSOR_SIZE XCURSOR_THEME XDG_SESSION_TYPE XDG_SESSION_ID"
 hl.on("hyprland.start", function()
-    hl.exec_cmd("dbus-update-activation-environment --systemd " .. session_env .. "; systemctl --user restart uqd.service; systemctl --user restart uq-shell.service")
+    hl.exec_cmd("dbus-update-activation-environment --systemd " .. session_env .. "; systemctl --user restart uqd.service; systemctl --user restart uq-shell.service; systemctl --user -q is-enabled scdr-session.service && systemctl --user restart scdr-session.service")
 end)
 hl.on("hyprland.shutdown", function()
-    hl.exec_cmd("systemctl --user stop uq-shell.service; systemctl --user stop uqd.service")
+    hl.exec_cmd("systemctl --user stop uq-shell.service; systemctl --user stop uqd.service; systemctl --user stop scdr-session.service")
 end)
 
 -----------------------------

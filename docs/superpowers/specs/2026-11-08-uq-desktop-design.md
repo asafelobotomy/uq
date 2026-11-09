@@ -79,7 +79,9 @@ Four layers; each talks only to the layer below through a defined interface.
     `SetLayout(workspace, layout)`, `GetLayouts()`, `Reload()`.
   - Signals: `ThemeChanged(name, variant, tokens_path)`, `LayoutChanged(workspace, layout)`,
     `ConfigError(message)`.
-- Feeds the focused window's PID to scdr (if present) from Hyprland `activewindow` events.
+- Does not feed focus to scdr itself: scdr's own session agent (`scdr-session`) follows Hyprland
+  `activewindowv2` events. `base.lua` (re)starts that agent with the session environment, if the
+  user enabled it, since a plain Hyprland session never reaches `graphical-session.target`.
 - `uqctl`: CLI client for the same D-Bus API.
 
 ### 2.3 Shell — `uq-shell` (Quickshell)
@@ -128,7 +130,7 @@ Each repo keeps its own releases. Integration lives either in the repo (`uq/` fo
 | noti-fi | Notification daemon + centre (Plasma → Hyprland port) | theme, widget (bell + do-not-disturb), settings page |
 | scale_tail | Tailscale toggle in quick settings; its tray app becomes optional | widget, settings page |
 | XZram | "Memory & swap" settings page over existing `xzramd` D-Bus | settings page |
-| scdr | Scheduler service on by default; receives focused-window PID from `uqd` | settings page |
+| scdr | Scheduler service on by default; `scdr-session` follows Hyprland focus itself (started by `base.lua`); uQ's units run in `session.slice` so scdr treats them as the desktop, not apps | settings page |
 | bindle | First-run installer: installs the `uq` profile, then hands off to Welcome in `uq-settings` | settings page (re-run setup) |
 | appOFholding | AppImages as launcher results; update badge in quick settings | launcher, widget, settings page |
 | crumBS | "Storage & cleanup" settings page; "uninstall…" launcher action | settings page, launcher action |

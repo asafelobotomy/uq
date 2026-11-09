@@ -7,6 +7,14 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **scdr alignment.** `uqd`, `uq-shell` and `uq-lock` run in `session.slice` instead of the
+  default `app.slice`, so priority daemons such as scdr treat them as the desktop rather than
+  apps (scdr would otherwise demote the bar and lock screen under CPU load). When scdr's session
+  agent is enabled, Hyprland's start hook (re)starts it with the session environment, so scdr's
+  focus roles work on uQ; it stops with the session. scdr is a new optional dependency.
+
 ## [0.2.0] - 2026-11-09
 
 Phase 2: the uQ shell, a Quickshell desktop shell that runs as `uq-shell.service`.

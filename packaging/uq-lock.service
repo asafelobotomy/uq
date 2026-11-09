@@ -6,6 +6,9 @@ After=graphical-session.target
 StartLimitIntervalSec=0
 
 [Service]
+# A session component, not an app: user services default to app.slice, where
+# priority daemons such as scdr treat it as an app (and demote it under load).
+Slice=session.slice
 ExecCondition=/bin/sh -c 'test -n "$HYPRLAND_INSTANCE_SIGNATURE" && test -S "$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket.sock"'
 # Runs `qs -p /usr/share/uq/lock` (exec'd: qs is the main PID) with the PAM relay lines filtered
 # out of its stderr.
