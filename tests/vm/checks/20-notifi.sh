@@ -3,16 +3,24 @@
 # from $NOTIFI_SRC (default ~/Projects/noti-fi, `cargo build --release -p notify-cli`) and copied
 # into the guest by run.sh. The second monitor is a Hyprland headless output.
 
+# The notification island moves with its width (its text differs per backend), so it is found by
+# its bell (templates/island-bell.png) in the bar's right half; this is the fallback.
 ISLAND_XY=(1193 29)
+island_xy() {
+    local p
+    if p=$(FIND_MAX_RMSE=0.05 find_template island-bell 640x60+640+0); then echo "$p"; else echo "${ISLAND_XY[*]}"; fi
+}
 
 nstatus() { vgh notifi-call status 2>/dev/null; }
 nfield() { nstatus | jq -r "$1" 2>/dev/null; }
 nfieldc() { nstatus | jq -c "$1" 2>/dev/null; }
 notif_owner() { vg busctl --user status org.freedesktop.Notifications 2>/dev/null | sed -n 's/^UserUnit=//p'; }
 # Is uq-shell's qs process connected to noti-fi's socket?
+# The client end of a unix socket has no path in ss, so match it by inode: a connection whose server
+# end is notifd.sock and whose peer inode is a socket of the shell's qs.
 shell_on_notifi() {
     local pid; pid=$(unit_prop uq-shell.service MainPID)
-    vgsh "ss -xp 2>/dev/null | grep -F \"/notifd.sock\" | grep -q 'pid=$pid,'"
+    vgsh "ss -xpH 2>/dev/null | awk -v me='pid=$pid,' '\$5 ~ /\/notifd\.sock\$/ { peer[\$8] = 1 } index(\$0, me) { mine[\$6] = 1 } END { for (i in mine) if (i in peer) exit 0; exit 1 }'"
 }
 head2() { vgh hyprctl monitors -j 2>/dev/null | jq -r '.[].name' | grep '^HEADLESS-' | head -n1; }
 ensure_head2() {
@@ -138,7 +146,9 @@ c_N6() {
     qmp key meta_l-n; sleep 1.5; c2=$(nfield .center)
     note "SUPER+N: noti-fi center $c0 -> $c1 -> $c2; layers: $(layer_names | sort -u | tr '\n' ' ')"
     { [ "$c1" = true ] && [ "$c2" = false ]; } || bad "expected SUPER+N to open noti-fi's list then close it; observed center $c0 -> $c1 -> $c2"
-    qmp click "${ISLAND_XY[@]}"; sleep 1.5
+    local ixy; read -ra ixy <<<"$(island_xy)"
+    note "island at ${ixy[*]}"
+    qmp click "${ixy[@]}"; sleep 1.5
     local c3; c3=$(nfield .center)
     note "left click on the island: center -> $c3"
     snap island-click
@@ -183,7 +193,8 @@ c_N8() {
     sleep 1.5
     note "latest on the socket while sharing: $(nfieldc .latest)"
     [ "$(nfield '.latest.summary // empty')" = "" ] || bad "noti-fi's latest still has a title while sharing"
-    qmp move "${ISLAND_XY[@]}"; sleep 1
+    local mxy; read -ra mxy <<<"$(island_xy)"
+    qmp move "${mxy[@]}"; sleep 1
     snap hover-island
     vg systemctl --user stop uqvm-share.service >/dev/null 2>&1
 }

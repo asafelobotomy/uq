@@ -7,7 +7,8 @@ POWER_CANCEL=(688 414)
 APPMENU_LOCK=(284 445) APPMENU_RESTART=(390 445) APPMENU_SHUTDOWN=(424 445)
 WRONG_PW=wrongpass1
 
-lock_key() { qmp key meta_l-l; wait_for 5 is_locked && { wait_for 20 lock_visible || true; }; }
+# The lock can take several seconds to load under llvmpipe (see L6/L7), so allow 10 s.
+lock_key() { qmp key meta_l-l; wait_for 10 is_locked && { wait_for 20 lock_visible || true; }; }
 uq_lock_pid() { unit_prop uq-lock.service MainPID; }
 uq_shell_pid() { unit_prop uq-shell.service MainPID; }
 boot_id() { vg cat /proc/sys/kernel/random/boot_id 2>/dev/null; }
@@ -16,7 +17,7 @@ boot_id() { vg cat /proc/sys/kernel/random/boot_id 2>/dev/null; }
 c_L1() {
     local restarts0 props
     restarts0=$(unit_prop uq-lock.service NRestarts)
-    lock_key || { bad "SUPER+L did not lock within 5 s (LockedHint=$(locked_hint))"; return; }
+    lock_key || { bad "SUPER+L did not lock within 10 s (LockedHint=$(locked_hint))"; return; }
     note "SUPER+L: LockedHint=yes, uq-lock $(unit_prop uq-lock.service ActiveState)"
     sleep 1
     snap locked
@@ -619,12 +620,14 @@ c_L21() {
         bad "after 3 wrong passwords the right one unlocked at once: expected faillock to lock the account (pam_faillock records nothing, see the tally above)"
     else
         note "right password during the lockout: still locked"
-        if ujournal "$t0" uq-lock | grep -q 'The account is locked'; then
-            note "PAM sent faillock's message: $(ujournal "$t0" uq-lock | grep -o 'The account is locked[^"]*' | head -n1)"
-            FIND_MAX_RMSE=0.12 find_template auth-failed 500x120+390+500 "$RUN_DIR/L21-right-password-during-lockout.png" >/dev/null &&
-                bad "expected faillock's message on the lock; observed 'Authentication failed' (the info message PAM sent is not shown)"
+        # uq-lock-run keeps PAM's messages out of the journal, so the screen is the evidence.
+        local png=$RUN_DIR/L21-right-password-during-lockout.png
+        if FIND_MAX_RMSE=0.12 find_template account-locked 500x160+390+500 "$png" >/dev/null; then
+            note "the lock shows faillock's message (templates/account-locked.png: 'The account is locked …')"
+        elif FIND_MAX_RMSE=0.12 find_template auth-failed 500x120+390+500 "$png" >/dev/null; then
+            bad "expected faillock's message on the lock; observed 'Authentication failed'"
         else
-            note "PAM sent no faillock message to the lock"
+            bad "expected faillock's message on the lock; found neither it nor 'Authentication failed' (see the screenshot)"
         fi
         if fp_ready; then
             vroot fp-virtual SCAN finger-1
@@ -687,6 +690,10 @@ c_LJ() {
     note "PAM lines in journalctl --user -u uq-shell -u uq-lock (this boot):"
     printf '%s\n' "$hits" | sed 's/^/    /' >>"$EVID/$CUR.txt"
     [ -z "$hits" ] || bad "PAM messages reach the journal (uq-lock-run's filter misses them): $(printf '%s' "$hits" | head -2 | sed 's/^ *//' | tr '\n' ';')"
+    # The filter (uq-lock-run's grep) must not outlive the lock unit.
+    hits=$(vg journalctl --user --no-pager -o cat -b -u uq-lock 2>/dev/null | grep -c 'remains running after unit stopped')
+    note "'remains running after unit stopped' lines for uq-lock this boot: ${hits:-0}"
+    [ "${hits:-0}" = 0 ] || bad "a uq-lock process outlived the unit ($hits times this boot)"
 }
 
 check L1 "Lock and unlock with a password" c_L1

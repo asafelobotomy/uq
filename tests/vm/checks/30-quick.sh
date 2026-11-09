@@ -107,6 +107,14 @@ c_Q2() {
     # A secured, unknown network says "Set up in Settings"; an open one must not, and must connect.
     [ -n "$setup" ] && [ "${setup#* }" = "${sec#* }" ] || bad "expected 'Set up in Settings' on the secured network's row only"
     [ -n "$setup" ] && [ "${setup#* }" = "${open#* }" ] && bad "the open network says 'Set up in Settings' (treated as secured)"
+    # The open network's row says "Open"; the secured one's doesn't.
+    local lbl; lbl=$(find_in_panel wifi-open-label) || true
+    note "'Open' label at y=${lbl#* }"
+    if [ -z "$lbl" ]; then
+        bad "no 'Open' label in the list (expected on uq-open's row)"
+    elif [ "${lbl#* }" != "${open#* }" ]; then
+        bad "the 'Open' label is not on uq-open's row (y=${lbl#* }, uq-open at y=${open#* })"
+    fi
     qmp click "${open% *}" "${open#* }"
     if wait_for 20 vgsh 'nmcli -t -f NAME con show --active | grep -qx uq-open'; then
         note "one click on uq-open connected it (treated as open)"
