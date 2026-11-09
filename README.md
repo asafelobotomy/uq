@@ -87,11 +87,13 @@ Any app can add rows to Spotlight by owning a D-Bus name on the session bus and 
 ```ini
 [Launcher Provider]
 BusName=org.example.Notes
+# 1-64 characters, no control characters; shown next to every row from this provider.
 Name=Notes
-# Optional, 1-4 characters, no spaces: only queries starting with it reach this provider,
-# with the prefix stripped.
+# Optional, 1-4 characters, no whitespace or control characters.
 Prefix=n:
 ```
+
+A file with a missing or invalid `BusName` or `Name`, or an invalid `Prefix`, is skipped.
 
 The provider serves `org.uq.Launcher1.Provider` at `/org/uq/Launcher1`:
 
@@ -100,18 +102,26 @@ The provider serves `org.uq.Launcher1.Provider` at `/org/uq/Launcher1`:
 - `Activate(s id, s action)`: called when the user picks a row, with that row's first action
   (empty if it has none). It has 1 s to answer.
 
-The provider has 300 ms to answer. It's only called while its name has an owner (never
-auto-started). Unless it has a `Prefix`, it gets queries of 2 or more characters. Queries
-starting with `>` or `=` never go to providers.
+Which queries a provider gets:
 
-Results are clamped:
+- Queries starting with `>` or `=` never go to providers.
+- A query that starts with any registered provider's `Prefix` goes only to the providers with
+  that prefix, with the prefix stripped (and nothing is sent if only the prefix was typed).
+- A provider without a `Prefix` gets every other query of 2 or more characters.
+- It's only called while its name has an owner (never auto-started), and it has 300 ms to
+  answer.
 
-- at most 20 rows;
-- title 200 bytes, subtitle 300 bytes, id 512 bytes, actions 2 KiB;
-- an icon that isn't an icon-theme name or an absolute path becomes `system-search`;
-- scores are scaled by 0.9, so a provider never outranks an exact or prefix app-name match.
+What the bridge does with the rows:
 
-They are shown as plain text, labelled with the provider's `Name`. uQ never runs anything a
+- Rows with an empty id, or an id over 512 bytes, are dropped. At most 20 of the rest are kept.
+- Titles are truncated to 200 bytes and subtitles to 300 bytes.
+- Each action is truncated to 256 bytes. Whole actions are kept up to 2 KiB in all, and
+  `actions_json` that isn't a JSON list of strings means no actions.
+- An icon that isn't an icon-theme name or an absolute path becomes `system-search`.
+- Scores are clamped to 0-1 and scaled by 0.9, so a provider never outranks an exact or prefix
+  app-name match.
+
+Rows are shown as plain text, labelled with the provider's `Name`. uQ never runs anything a
 provider sends; picking a row only calls back its `Activate`.
 
 Your own Hyprland settings go in `~/.config/hypr/uq/user.lua`, which uQ loads last and never

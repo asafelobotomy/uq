@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Headless smoke test: Bar's islands and the launchers (Spotlight, app menu, their shortcuts and
-# IPC) compile and instantiate (offscreen, no Hyprland, no bridge).
+# Headless smoke test: Bar's islands and the launcher routes (global shortcuts and the `uq` IPC
+# handler) compile and instantiate (offscreen, no Hyprland, no bridge). Spotlight and the app menu
+# are PanelWindows, which need a Wayland backend; smoke-shell.sh covers them.
 set -u
 root=$(cd "$(dirname "$0")/../.." && pwd)
 tmp=$(mktemp -d)
@@ -11,7 +12,7 @@ import Quickshell
 import "file:$root/shell/bar"
 import "file:$root/shell/launcher"
 ShellRoot {
-    Launchers { id: launchers }
+    LauncherRoutes { id: routes }
     FloatingWindow {
         implicitWidth: 800; implicitHeight: 60
         SystemIsland { id: sys }
@@ -19,13 +20,13 @@ ShellRoot {
         WorkIsland { id: work; x: 200 }
         TimeIsland { id: time; x: 350 }
         StatusIsland { id: status; x: 450 }
-        Component.onCompleted: console.log("LOADED", sys.width > 0, work.width > 0, time.width > 0, status.width > 0, launchers.loaded)
+        Component.onCompleted: console.log("LOADED", sys.width > 0, work.width > 0, time.width > 0, status.width > 0, routes.routed)
     }
     Timer { interval: 1500; running: true; onTriggered: Qt.quit() }
 }
 QML
 out=$(env -u HYPRLAND_INSTANCE_SIGNATURE -u WAYLAND_DISPLAY QT_QPA_PLATFORM=offscreen timeout 30 qs -p "$tmp/shell.qml" --no-duplicate 2>&1)
-echo "$out" | grep -q 'LOADED true true true true true' || { echo "FAIL: islands or launchers did not load"; echo "$out"; exit 1; }
+echo "$out" | grep -q 'LOADED true true true true true' || { echo "FAIL: islands or launcher routes did not load"; echo "$out"; exit 1; }
 # Fail on QML/JS errors from the shell's own files, not on environment services the machine
 # lacks (PipeWire, NetworkManager, UPower, MPRIS, tray, D-Bus log ERROR lines of their own).
 # The scanner's `Ignoring unresolvable import ".../file:/..."` warning is harmless: Quickshell's

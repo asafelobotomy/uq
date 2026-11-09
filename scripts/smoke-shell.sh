@@ -2,6 +2,7 @@
 # Smoke test: the shell on a real (headless) Hyprland.
 #
 #   - the uq-bar layer appears within 10 s
+#   - qs ipc call uq open/close spotlight maps and unmaps the uq-spotlight layer
 #   - Dispatch focus_window / move against a real window moves it (hyprctl clients -j)
 #   - smoke_launch_survives_restart: a Launch'd app scope outlives a shell restart
 #   - hot-plug: a new headless output gets a bar, and removing it removes the bar
@@ -124,6 +125,30 @@ if command -v grim >/dev/null 2>&1; then
     mkdir -p "$out"
     env XDG_RUNTIME_DIR="$rt" WAYLAND_DISPLAY="$wl" grim "$out/bar.png" 2>/dev/null && echo "ok: screenshot $out/bar.png"
 fi
+
+# --- shell IPC opens Spotlight --------------------------------------------------------------
+layer_count() { hc layers -j 2>/dev/null | grep -o "\"namespace\": *\"$1\"" | wc -l; }
+wait_layer() { # wait_layer <namespace> <n>: poll up to 5 s until exactly n such layers exist
+    for _ in $(seq 1 25); do
+        [ "$(layer_count "$1")" -eq "$2" ] && return 0
+        sleep 0.2
+    done
+    return 1
+}
+smoke_ipc_spotlight() {
+    local r
+    if ! r=$("${shell_env[@]}" timeout 10 qs ipc -p "$root/shell" call uq open spotlight 2>&1); then
+        echo "SKIP (sub-check): IPC open spotlight: qs ipc could not reach the shell here ($r)"
+        return 0
+    fi
+    [ "$r" = ok ] || fail "qs ipc call uq open spotlight printed '$r', not ok"
+    wait_layer uq-spotlight 1 || fail "no uq-spotlight layer after qs ipc call uq open spotlight"
+    r=$("${shell_env[@]}" timeout 10 qs ipc -p "$root/shell" call uq close spotlight 2>&1)
+    [ "$r" = ok ] || fail "qs ipc call uq close spotlight printed '$r', not ok"
+    wait_layer uq-spotlight 0 || fail "the uq-spotlight layer stayed after qs ipc call uq close spotlight"
+    echo "ok: qs ipc open/close spotlight (uq-spotlight layer mapped and unmapped)"
+}
+smoke_ipc_spotlight
 
 # One bridge request, answered on stdout (the bridge stays up 1.5 s so the reply is flushed).
 bridge_call() {
