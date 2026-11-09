@@ -1,0 +1,4 @@
+#%PAM-1.0
+# uQ lock screen, fingerprint only (no password module: the password has its own stack).
+# Installed to /etc/pam.d/uq-lock-fingerprint.
+auth      required  pam_fprintd.so max-tries=3 timeout=30

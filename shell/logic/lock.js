@@ -50,3 +50,9 @@ function messageView(message, isError) {
     var text = Notif.cleanText(message, MAX_MESSAGE);
     return { text: text, error: text !== "" && !!isError };
 }
+
+// The shell config next to the lock config: <dir>/../shell, normalised (uq-lock calls the shell's
+// `lockSecure` IPC there).
+function siblingShellDir(lockDir) {
+    return String(lockDir).replace(/\/+$/, "").replace(/\/[^\/]*$/, "") + "/shell";
+}

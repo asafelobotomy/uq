@@ -1,0 +1,16 @@
+[Unit]
+Description=uQ lock screen (Quickshell)
+Documentation=https://github.com/asafelobotomy/uq
+PartOf=graphical-session.target
+After=graphical-session.target
+StartLimitIntervalSec=0
+
+[Service]
+ExecCondition=/bin/sh -c 'test -n "$HYPRLAND_INSTANCE_SIGNATURE" && test -S "$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket.sock"'
+ExecStart=/usr/bin/qs -p /usr/share/uq/lock
+# A crash or kill -9 brings the lock back (Hyprland keeps the session locked meanwhile); the only
+# clean exit is after a successful unlock, so exit 0 is not restarted.
+Restart=always
+RestartPreventExitStatus=0
+RestartSec=1
+KillMode=process

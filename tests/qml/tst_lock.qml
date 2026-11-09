@@ -65,4 +65,11 @@ TestCase {
         compare(L.messageView("hi\nthere", false).text, "hi there");
         compare(L.messageView(new Array(300).join("a"), false).text.length, 200);
     }
+
+    function test_sibling_shell_dir() {
+        compare(L.siblingShellDir("/usr/share/uq/lock"), "/usr/share/uq/shell");
+        compare(L.siblingShellDir("/usr/share/uq/lock/"), "/usr/share/uq/shell");
+        compare(L.siblingShellDir("/home/u/Projects/uq/lock//"), "/home/u/Projects/uq/shell");
+        compare(L.siblingShellDir("/lock"), "/shell");
+    }
 }

@@ -59,5 +59,16 @@ else case "$out" in *"shell/notif/builtin/Other.qml:2"*) ;; *) echo "FAIL (Other
 case "$out" in *"shell/notif/builtin/NotifBody.qml:"*) echo "FAIL: NotifBody.qml reported: $out"; fail=1;; esac
 rm -rf "$tmp/shell/notif"
 
+# lock/ is scanned too, with no exemptions of its own.
+mkdir -p "$tmp/lock"
+printf 'Item {\n    Text {\n    }\n}\n' > "$tmp/lock/Case.qml"
+if out=$(run); then echo "FAIL (accepted): Text in lock/Case.qml"; fail=1
+else case "$out" in *"lock/Case.qml:2"*) ;; *) echo "FAIL (lock): no file:line in: $out"; fail=1;; esac; fi
+printf 'Item {\n    UqText { text: "x" }\n}\n' > "$tmp/lock/Case.qml"
+if ! out=$(run); then echo "FAIL (rejected): UqText in lock/: $out"; fail=1; fi
+printf 'TextInput {\n}\n' > "$tmp/lock/UqInput.qml"
+if run >/dev/null; then echo "FAIL (accepted): TextInput in lock/UqInput.qml"; fail=1; fi
+rm -rf "$tmp/lock"
+
 [ $fail = 0 ] && echo "lint_test ok"
 exit $fail

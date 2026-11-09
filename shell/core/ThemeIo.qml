@@ -7,6 +7,9 @@ Item {
     id: io
 
     property bool ready: false
+    // Also reload on the bridge's ThemeChanged. uq-lock sets this false: it never touches Bridge
+    // (the ternary below keeps the lazy singleton from being created at all).
+    property bool bridged: true
 
     // Re-reads by path each time: a fresh FileView per read avoids a stale inode watch.
     Component {
@@ -37,7 +40,7 @@ Item {
     }
 
     Connections {
-        target: Bridge
+        target: io.bridged ? Bridge : null
         function onThemeChanged() { Theme.reload(); }
     }
 

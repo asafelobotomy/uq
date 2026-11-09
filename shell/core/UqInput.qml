@@ -1,13 +1,16 @@
 import QtQuick
 
 // The only TextInput in the shell: plain single-line text, no predictive text, length-capped.
+// `secret` makes it a password field (echo off, sensitive-data hints, room for long passwords).
 // scripts/lint-shell.sh forbids a bare TextInput outside this file.
 Item {
     id: root
     property alias text: input.text
     property string placeholder: ""
-    property alias maximumLength: input.maximumLength
+    property bool secret: false
+    property int maximumLength: secret ? 512 : 100
     signal edited(string text)
+    signal accepted()
     implicitHeight: 26
     implicitWidth: 180
 
@@ -25,13 +28,16 @@ Item {
         anchors.rightMargin: Theme.gapIn
         verticalAlignment: TextInput.AlignVCenter
         clip: true
-        maximumLength: 100
-        inputMethodHints: Qt.ImhNoPredictiveText
+        maximumLength: root.maximumLength
+        echoMode: root.secret ? TextInput.Password : TextInput.Normal
+        inputMethodHints: root.secret ? (Qt.ImhSensitiveData | Qt.ImhNoPredictiveText | Qt.ImhHiddenText)
+                                      : Qt.ImhNoPredictiveText
         color: Theme.text
         font.family: Theme.fontUi
         font.pixelSize: Theme.fontSize
-        selectByMouse: true
+        selectByMouse: !root.secret
         onTextEdited: root.edited(text)
+        onAccepted: root.accepted()
     }
     UqText {
         anchors.verticalCenter: parent.verticalCenter
@@ -42,4 +48,5 @@ Item {
         color: Theme.textMuted
     }
     function forceActiveFocus() { input.forceActiveFocus(); }
+    function clear() { input.clear(); }
 }

@@ -27,6 +27,7 @@ optdepends=(
   'fprintd: fingerprint unlock'
 )
 options=(!lto)
+backup=(etc/pam.d/uq-lock etc/pam.d/uq-lock-fingerprint)
 
 _root() { realpath "$startdir/../.."; }
 
@@ -56,8 +57,16 @@ package() {
   cp -r --no-preserve=ownership themes templates "$pkgdir/usr/share/uq/"
   # The whole shell tree (QML, shell/core/qmldir, logic/*.js).
   find shell -type f -exec install -Dm644 {} "$pkgdir/usr/share/uq/{}" \;
+  # The lock instance (its own Quickshell config). lock/core and lock/logic are symlinks to the
+  # shell's: Quickshell only imports from inside the config directory.
+  find lock -type f -exec install -Dm644 {} "$pkgdir/usr/share/uq/{}" \;
+  ln -s ../shell/core "$pkgdir/usr/share/uq/lock/core"
+  ln -s ../shell/logic "$pkgdir/usr/share/uq/lock/logic"
   install -Dm644 packaging/uqd.service "$pkgdir/usr/lib/systemd/user/uqd.service"
   install -Dm644 packaging/uq-shell.service "$pkgdir/usr/lib/systemd/user/uq-shell.service"
+  install -Dm644 packaging/uq-lock.service "$pkgdir/usr/lib/systemd/user/uq-lock.service"
+  install -Dm644 packaging/pam/uq-lock "$pkgdir/etc/pam.d/uq-lock"
+  install -Dm644 packaging/pam/uq-lock-fingerprint "$pkgdir/etc/pam.d/uq-lock-fingerprint"
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
   install -Dm644 themes/CREDITS.md "$pkgdir/usr/share/licenses/$pkgname/THEME-CREDITS.md"
 }
