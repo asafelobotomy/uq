@@ -1,3 +1,4 @@
 module notif
 singleton Notifi 1.0 Notifi.qml
 singleton Builtin 1.0 Builtin.qml
+singleton NotifBackend 1.0 NotifBackend.qml
