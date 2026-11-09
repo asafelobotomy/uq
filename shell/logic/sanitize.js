@@ -22,6 +22,7 @@ var DEFAULT_TIMEOUT_MS = 5000;
 var MAX_TIMEOUT_MS = 60000;
 var MIN_TIMEOUT_MS = 1000;
 var MAX_HREF = 512;
+var MAX_DEPTH = 16;         // deeper opens are dropped tags (text kept)
 
 var URGENCY_CRITICAL = 2;   // Quickshell NotificationUrgency: Low 0, Normal 1, Critical 2
 
@@ -108,11 +109,21 @@ function escapeChar(c) {
     return c;
 }
 
-function escape(s) {
-    var out = "";
-    for (var i = 0; i < s.length; i++)
-        out += escapeChar(s.charAt(i));
-    return out;
+// Qt's StyledText reads attribute values literally (no entity decoding) and ends a quoted value
+// at either quote character, so an href is percent-encoded instead of entity-escaped: nothing
+// in it can end the value or the tag. `&` stays raw, as Qt shows it.
+function hrefChar(c) {
+    if (isControl(c) || c === "\n" || c === "\t" || c === "\r")
+        return " ";
+    if (c === "\"")
+        return "%22";
+    if (c === "'")
+        return "%27";
+    if (c === "<")
+        return "%3C";
+    if (c === ">")
+        return "%3E";
+    return c;
 }
 
 // Control characters (other than \n and \t) and bidi overrides become spaces, as in cleanText.
@@ -170,7 +181,8 @@ function walk(body, plain) {
     var s = body.length > MAX_BODY_IN ? body.slice(0, MAX_BODY_IN) : body;
     var lower = s.toLowerCase();
     var out = [];
-    var stack = [];         // open allowed tags, innermost last
+    var stack = [];         // open allowed tags, innermost last; at most MAX_DEPTH
+    var aOpen = false;      // an `a` is on the stack
     var visible = 0;
     var truncated = false;
     var nextGt = -2;        // cached index of the next `>` at or after the cursor (-1: none)
@@ -180,7 +192,9 @@ function walk(body, plain) {
     function text(c) {
         if (c === "\r")
             return;
-        if (visible >= MAX_BODY_OUT) {
+        // Never split a surrogate pair at the cap.
+        var high = c.charCodeAt(0) >= 0xd800 && c.charCodeAt(0) <= 0xdbff;
+        if (visible >= MAX_BODY_OUT || (high && visible + 1 >= MAX_BODY_OUT)) {
             truncated = true;
             return;
         }
@@ -197,6 +211,8 @@ function walk(body, plain) {
     function closeTo(depth) {
         while (stack.length > depth) {
             var t = stack.pop();
+            if (t === "a")
+                aOpen = false;
             if (!plain)
                 out.push("</" + t + ">");
         }
@@ -282,22 +298,23 @@ function walk(body, plain) {
         }
         if (selfClosing)
             continue;
+        if (stack.length >= MAX_DEPTH)
+            continue;
         if (INLINE[name] === true) {
             stack.push(name);
             if (!plain)
                 out.push("<" + name + ">");
             continue;
         }
-        if (name === "a" && stack.indexOf("a") < 0) {
+        if (name === "a" && !aOpen) {
             var href = hrefOf(attrs);
             if (href !== "") {
                 href = href.slice(0, MAX_HREF);
                 var h = "";
-                for (var x = 0; x < href.length; x++) {
-                    var hc = href.charAt(x);
-                    h += isControl(hc) || hc === "\n" || hc === "\t" ? " " : escapeChar(hc);
-                }
+                for (var x = 0; x < href.length; x++)
+                    h += hrefChar(href.charAt(x));
                 stack.push("a");
+                aOpen = true;
                 if (!plain)
                     out.push("<a href=\"" + h + "\">");
             }
@@ -367,6 +384,7 @@ function popupView(n, sharing) {
         appName: N.cleanText(o.appName, N.MAX_APP),
         appIcon: typeof o.appIcon === "string" ? o.appIcon : "",
         summary: sharing ? "" : N.cleanText(o.summary, N.MAX_SUMMARY),
+        // raw: only NotifBody may render this (it sanitises it)
         body: sharing || typeof o.body !== "string" ? "" : o.body,
         actions: actions
     };

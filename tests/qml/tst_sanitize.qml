@@ -6,6 +6,13 @@ import "../../shell/notif/builtin"
 TestCase {
     name: "sanitize"
 
+    // Renders sanitiser output in a real StyledText to check what Qt makes of it.
+    Text {
+        id: styled
+        width: 400
+        textFormat: Text.StyledText
+    }
+
     NotifBody {
         id: nb
         width: 200
@@ -30,7 +37,7 @@ TestCase {
                 if (m[3] !== "" || stack.pop() !== name)
                     return "misnested at " + m[0];
             } else {
-                if (name === "a" ? !/^ href="[^"<>]*"$/.test(m[3]) : m[3] !== "")
+                if (name === "a" ? !/^ href="[^"'<>]*"$/.test(m[3]) : m[3] !== "")
                     return "bad attrs " + m[0];
                 stack.push(name);
             }
@@ -41,7 +48,7 @@ TestCase {
         var rest = s.replace(re, "");
         if (/[<>]/.test(rest))
             return "stray angle bracket";
-        if (/&(?!(amp|lt|gt|quot);)/.test(s))
+        if (/&(?!(amp|lt|gt|quot);)/.test(rest))
             return "unescaped &";
         return "";
     }
@@ -109,9 +116,11 @@ TestCase {
     function test_sanitize_href() {
         var js = S.sanitize('<a href="javascript:alert(1)" onclick="evil()">j</a>');
         compare(js, '<a href="javascript:alert(1)">j</a>');
-        compare(S.sanitize('<a href="http://x/?a=1&amp;b=2">h</a>'), '<a href="http://x/?a=1&amp;b=2">h</a>');
-        compare(S.sanitize("<a href='x\"onmouseover=\"y'>q</a>"), '<a href="x&quot;onmouseover=&quot;y">q</a>');
-        compare(S.sanitize("<a href=x<y>q</a>"), '<a href="x&lt;y">q</a>');
+        compare(S.sanitize('<a href="http://x/?a=1&amp;b=2">h</a>'), '<a href="http://x/?a=1&b=2">h</a>');
+        compare(S.sanitize('<a href="x\' href=\'javascript:evil">A</a>'),
+                '<a href="x%27 href=%27javascript:evil">A</a>');
+        compare(S.sanitize("<a href='x\"onmouseover=\"y'>q</a>"), '<a href="x%22onmouseover=%22y">q</a>');
+        compare(S.sanitize("<a href=x<y>q</a>"), '<a href="x%3Cy">q</a>');
         compare(S.sanitize("<a href=unq onclick=z>q</a>"), '<a href="unq">q</a>');
         compare(S.sanitize("<a>plain</a>"), "plain");
         compare(S.sanitize('<a name="n" href="">e</a>'), "e");
@@ -273,5 +282,49 @@ TestCase {
         t.linkHovered("");
         compare(nb.hoveredLink, "");
         compare(nb.children[1].text, "");
+    }
+
+    function linkOf(raw) {
+        styled.text = S.sanitize(raw);
+        return styled.linkAt(2, styled.height / 2);
+    }
+
+    function test_href_in_styled_text() {
+        compare(linkOf('<a href="x\' href=\'javascript:evil">AAAAAAAA</a>'), "x%27 href=%27javascript:evil");
+        compare(linkOf("<a href='x\"onclick=\"y'>AAAAAAAA</a>"), "x%22onclick=%22y");
+        compare(linkOf('<a href="http://x/?a=1&amp;b=2&c=3">AAAAAAAA</a>'), "http://x/?a=1&b=2&c=3");
+        compare(linkOf('<a href="a&lt;b&gt;c">AAAAAAAA</a>'), "a%3Cb%3Ec");
+        compare(linkOf("<a href=plain>AAAAAAAA</a>"), "plain");
+        compare(linkOf("<a>AAAAAAAA</a>"), "");
+    }
+
+    function test_depth_cap() {
+        var deep = "";
+        while (deep.length < 4096)
+            deep += "<b>";
+        var closes = "";
+        while (closes.length < 4096)
+            closes += "</i>";
+        var t0 = Date.now();
+        var out = S.sanitize(deep + "x" + closes);
+        verify(Date.now() - t0 < 500, "took " + (Date.now() - t0) + " ms");
+        compare(wellFormed(out), "");
+        compare(out.split("<b>").length - 1, 16);
+        var mixed = "";
+        for (var i = 0; i < 20; i++)
+            mixed += "<i>";
+        compare(S.sanitize(mixed + '<a href="h">x</a>').indexOf("<a"), -1);
+        compare(S.sanitize('<a href="1">x</a><a href="2">y</a>'), '<a href="1">x</a><a href="2">y</a>');
+    }
+
+    function test_truncate_surrogate() {
+        var a = "";
+        for (var i = 0; i < 1999; i++)
+            a += "a";
+        var out = S.sanitize(a + "\ud83d\ude00tail");
+        compare(out, a + "…");
+        compare(S.plainBody(a + "\ud83d\ude00"), a + "…");
+        var b = a.slice(1);
+        compare(S.sanitize(b + "\ud83d\ude00z"), b + "\ud83d\ude00…");
     }
 }
