@@ -124,6 +124,22 @@ function wifiAction(row) {
     return row.connectable ? "connect" : "setup";
 }
 
+// A Wi-Fi row's status text: "Open" for an unsecured network (with " · Connected" when it is),
+// "Connected", "Set up in Settings" for a secured one that can't be joined here, or "".
+function wifiStatus(row) {
+    if (!row)
+        return "";
+    var parts = [];
+    if (!row.secure)
+        parts.push("Open");
+    var a = wifiAction(row);
+    if (a === "disconnect")
+        parts.push("Connected");
+    else if (a === "setup")
+        parts.push("Set up in Settings");
+    return parts.join(" · ");
+}
+
 // One line for a WiredDevice ({connected, hasLink, linkSpeed in Mb/s}).
 function wiredLabel(dev) {
     if (!dev)

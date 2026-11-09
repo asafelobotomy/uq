@@ -115,6 +115,16 @@ TestCase {
         compare(U.wifiAction(null), "");
     }
 
+    // The row's status text (Q2: open networks are shown as Open).
+    function test_wifi_status() {
+        compare(U.wifiStatus({ connected: false, connectable: true, secure: false }), "Open");
+        compare(U.wifiStatus({ connected: true, connectable: true, secure: false }), "Open · Connected");
+        compare(U.wifiStatus({ connected: true, connectable: true, secure: true }), "Connected");
+        compare(U.wifiStatus({ connected: false, connectable: true, secure: true }), "");
+        compare(U.wifiStatus({ connected: false, connectable: false, secure: true }), "Set up in Settings");
+        compare(U.wifiStatus(null), "");
+    }
+
     function test_wired_label() {
         compare(U.wiredLabel({ connected: true, hasLink: true, linkSpeed: 1000 }), "Wired · Connected · 1000 Mb/s");
         compare(U.wiredLabel({ connected: true, hasLink: true, linkSpeed: 0 }), "Wired · Connected");

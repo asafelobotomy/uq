@@ -115,8 +115,7 @@ ColumnLayout {
             id: net
             required property var modelData
             readonly property string action: U.wifiAction(modelData)
-            readonly property string status: modelData.connected ? "Connected"
-                : (action === "setup" ? "Set up in Settings" : "")
+            readonly property string status: U.wifiStatus(modelData)
             Layout.fillWidth: true
             implicitHeight: 28
             radius: Theme.radius - 2
