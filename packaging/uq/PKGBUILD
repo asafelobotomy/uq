@@ -11,7 +11,7 @@ pkgdesc="Themeable Hyprland desktop: shell, theme and layout daemon, CLI and bas
 arch=(x86_64)
 url="https://github.com/asafelobotomy/uq"
 license=(MIT)
-depends=(uq-hyprland-pin dbus glib2 qt6ct gcc-libs 'quickshell>=0.3.1' 'quickshell<0.4' brightnessctl upower systemd)
+depends=(uq-hyprland-pin dbus glib2 qt6ct gcc-libs 'quickshell>=0.3.1' 'quickshell<0.4' brightnessctl upower systemd noto-fonts-emoji)
 makedepends=(cargo)
 checkdepends=(lua qt6-declarative)
 optdepends=(
