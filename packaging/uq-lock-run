@@ -1,0 +1,8 @@
+#!/bin/bash
+# uq-lock.service's ExecStart. Quickshell's PAM subprocess relays every PAM prompt and message to
+# stderr ("quickshell.service.pam.subprocess: Relaying pam message: ..."); drop those lines so they
+# never reach the journal (LogFilterPatterns= only works in system services).
+# exec keeps qs as the unit's main PID with its own exit status, so RestartPreventExitStatus=0 still
+# means "unlocked"; the grep child ends on EOF when qs exits.
+# UQ_LOCK_QS replaces the qs binary for tests/shell/lock_wrapper.sh only.
+exec "${UQ_LOCK_QS:-/usr/bin/qs}" -p /usr/share/uq/lock 2> >(grep --line-buffered -v 'quickshell\.service\.pam' >&2)

@@ -22,9 +22,11 @@ f="$root/packaging/uq-lock.service"
 if [ -f "$f" ]; then
     for want in '^Restart=always$' '^RestartPreventExitStatus=0$' '^RestartSec=1$' '^StartLimitIntervalSec=0$' \
         '^KillMode=process$' '^PartOf=graphical-session.target$' \
-        '^LogFilterPatterns=~quickshell\\\.service\\\.pam$' '^ExecStart=/usr/bin/qs -p /usr/share/uq/lock$'; do
+        '^ExecStart=/usr/lib/uq/uq-lock-run$'; do
         grep -q "$want" "$f" || { echo "FAIL: uq-lock.service lacks $want"; fail=1; }
     done
+    # LogFilterPatterns only works in system services; the wrapper filters the PAM relay lines.
+    if grep -q '^LogFilterPatterns=' "$f"; then echo "FAIL: uq-lock.service has a no-op LogFilterPatterns"; fail=1; fi
 fi
 [ "$fail" = 0 ] && echo "units ok"
 exit "$fail"

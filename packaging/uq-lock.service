@@ -7,13 +7,12 @@ StartLimitIntervalSec=0
 
 [Service]
 ExecCondition=/bin/sh -c 'test -n "$HYPRLAND_INSTANCE_SIGNATURE" && test -S "$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket.sock"'
-ExecStart=/usr/bin/qs -p /usr/share/uq/lock
+# Runs `qs -p /usr/share/uq/lock` (exec'd: qs is the main PID) with the PAM relay lines filtered
+# out of its stderr.
+ExecStart=/usr/lib/uq/uq-lock-run
 # A crash or kill -9 brings the lock back (Hyprland keeps the session locked meanwhile); the only
 # clean exit is after a successful unlock, so exit 0 is not restarted.
 Restart=always
 RestartPreventExitStatus=0
 RestartSec=1
 KillMode=process
-# Quickshell's PAM subprocess relays every PAM prompt and message to stderr ("Relaying pam
-# message: ..."); keep those out of the journal (never the password, but still PAM messages).
-LogFilterPatterns=~quickshell\.service\.pam
