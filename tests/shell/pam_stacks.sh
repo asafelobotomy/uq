@@ -32,7 +32,8 @@ for f in system-local-login system-login system-auth; do
     [ -f "/etc/pam.d/$f" ] && cp "/etc/pam.d/$f" "$tmp/pam.d/"
 done
 # The password stack's file must be the packaged one, unchanged.
-cmp -s "$root/packaging/pam/uq-lock" "$tmp/pam.d/uq-lock" || { echo "FAIL: uq-lock copy differs"; exit 1; }
+# (Plain bash, not cmp: CI's container has no diffutils.)
+[ "$(cat "$root/packaging/pam/uq-lock")" = "$(cat "$tmp/pam.d/uq-lock")" ] || { echo "FAIL: uq-lock copy differs"; exit 1; }
 
 user=nobody
 getent passwd "$user" >/dev/null || { echo "pam_stacks skipped: no $user user"; exit 0; }
