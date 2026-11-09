@@ -1,8 +1,12 @@
 # Maintainer: asafelobotomy
-# Builds from this checkout: run `makepkg -si` inside packaging/uq.
+# Builds from the tagged GitHub Release's source tarball (the AUR package). To build this
+# checkout instead, run scripts/build-local-pkg.sh (it swaps the source for `git archive HEAD`).
+# pkgver is the Cargo.toml version with '-rc.N' written 'rcN' (pacman forbids '-');
+# scripts/bump-version.sh keeps them in step.
 pkgname=uq
 pkgver=0.1.0
 pkgrel=1
+_tag=${pkgver/rc/-rc.}
 pkgdesc="Themeable Hyprland desktop: shell, theme and layout daemon, CLI and base config"
 arch=(x86_64)
 url="https://github.com/asafelobotomy/uq"
@@ -28,17 +32,30 @@ optdepends=(
 )
 options=(!lto)
 backup=(etc/pam.d/uq-lock etc/pam.d/uq-lock-fingerprint)
+# The release asset, not GitHub's /archive/ tarball: that one is generated on demand and its bytes
+# (so its checksum) can change. The release workflow uploads exactly this file and prints its sum.
+source=("$pkgname-$_tag.tar.gz::$url/releases/download/v$_tag/$pkgname-$_tag.tar.gz")
+# Replaced with the release asset's sha256 for each tag (docs/releasing.md); SKIP until v0.2.0.
+sha256sums=('SKIP')
 
-_root() { realpath "$startdir/../.."; }
+prepare() {
+  cd "$srcdir/$pkgname-$_tag"
+  export RUSTUP_TOOLCHAIN=stable
+  cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
+}
 
 build() {
-  cd "$(_root)"
-  cargo build --release --locked -p uqd -p uqctl
+  cd "$srcdir/$pkgname-$_tag"
+  export RUSTUP_TOOLCHAIN=stable
+  export CARGO_TARGET_DIR=target
+  cargo build --frozen --release -p uqd -p uqctl
 }
 
 check() {
-  cd "$(_root)"
-  cargo test --release --locked --workspace
+  cd "$srcdir/$pkgname-$_tag"
+  export RUSTUP_TOOLCHAIN=stable
+  export CARGO_TARGET_DIR=target
+  cargo test --frozen --release --workspace
   # Shell checks, when the tools are present (qs and qmltestrunner ship with quickshell and Qt).
   scripts/lint-shell.sh
   local qmltest=/usr/lib/qt6/bin/qmltestrunner
@@ -49,7 +66,7 @@ check() {
 }
 
 package() {
-  cd "$(_root)"
+  cd "$srcdir/$pkgname-$_tag"
   install -Dm755 target/release/uqd "$pkgdir/usr/bin/uqd"
   install -Dm755 target/release/uqctl "$pkgdir/usr/bin/uqctl"
   install -Dm644 config/hypr/base.lua "$pkgdir/usr/share/uq/hypr/base.lua"

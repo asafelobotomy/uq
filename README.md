@@ -18,11 +18,24 @@ and, in later phases, a Quickshell shell and integrated apps. See the
 
 ## Install (Arch, Manjaro)
 
+From the AUR (`uq` pulls in `uq-hyprland-pin`):
+
 ```bash
-cd packaging/uq-hyprland-pin && makepkg -si
-cd ../uq && makepkg -si
+yay -S uq            # or: paru -S uq
 uqctl setup          # add --apps to also theme GTK, qt6ct and terminals
 ```
+
+From a checkout (builds HEAD; uncommitted changes are not included):
+
+```bash
+scripts/build-local-pkg.sh --package uq-hyprland-pin -si
+scripts/build-local-pkg.sh -si
+uqctl setup
+```
+
+`build-local-pkg.sh` passes its other arguments to `makepkg` and leaves the packages in
+`target/pkg/`. Releases and the AUR update are described in [docs/releasing.md](docs/releasing.md);
+the changes in each release are in [CHANGELOG.md](CHANGELOG.md).
 
 `uqctl setup` writes `~/.config/hypr/hyprland.lua`. With `--apps` it also writes the GTK, qt6ct,
 kitty, foot and alacritty files that load uQ's theme; those apply in every desktop you use, not
