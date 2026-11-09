@@ -103,7 +103,9 @@ Both shell units have:
 
 - `ExecStart=/usr/bin/qs -p /usr/share/uq/<shell|lock>`
 - `Restart=always`, `RestartSec=1`, `StartLimitIntervalSec=0`
-- `KillMode=process`
+- `KillMode=process` for the shell (apps it launches must survive a restart). The lock starts no
+  apps and uses `KillMode=control-group`, so its log filter (`/usr/lib/uq/uq-lock-run`, which
+  drops Quickshell's PAM relay lines from both output streams) never outlives it.
 - `PartOf=graphical-session.target`
 
 Each Quickshell config sets `Quickshell.watchFiles = false`, so a package upgrade never

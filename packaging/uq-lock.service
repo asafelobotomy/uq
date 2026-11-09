@@ -11,11 +11,13 @@ StartLimitIntervalSec=0
 Slice=session.slice
 ExecCondition=/bin/sh -c 'test -n "$HYPRLAND_INSTANCE_SIGNATURE" && test -S "$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket.sock"'
 # Runs `qs -p /usr/share/uq/lock` (exec'd: qs is the main PID) with the PAM relay lines filtered
-# out of its stderr.
+# out of its stdout and stderr.
 ExecStart=/usr/lib/uq/uq-lock-run
 # A crash or kill -9 brings the lock back (Hyprland keeps the session locked meanwhile); the only
 # clean exit is after a successful unlock, so exit 0 is not restarted.
 Restart=always
 RestartPreventExitStatus=0
 RestartSec=1
-KillMode=process
+# The lock starts no apps, so the whole cgroup goes with it: the wrapper's grep and any PAM
+# subprocess left behind by a crash never outlive the unit.
+KillMode=control-group
