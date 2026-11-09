@@ -22,7 +22,7 @@ use std::process::ExitCode;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
-use tokio::sync::{Semaphore, mpsc};
+use tokio::sync::{Semaphore, mpsc, watch};
 use tokio_util::sync::CancellationToken;
 
 /// Requests in flight at once; the reader waits for a slot, so a flood cannot grow tasks forever.
@@ -122,12 +122,14 @@ where
     run_with_bus(stdin, stdout, None, None, locks).await
 }
 
-/// Relay lock-notify states: each change (and the first report) becomes a `LockState` event and
-/// goes to logind's `SetLockedHint`. `known` is a state already reported before Hello.
+/// Relay lock-notify states: each change (and the first report) becomes a `LockState` event, then
+/// goes to `hints` for logind's `SetLockedHint`. Handing the hint to `Logind::hint_loop` through a
+/// latest-value channel means a logind that stops answering never delays a `LockState`. `known`
+/// is a state already reported before Hello.
 async fn relay_locks(
-    mut locks: mpsc::Receiver<bool>,
+    mut locks: mpsc::UnboundedReceiver<bool>,
     mut known: Option<bool>,
-    logind: Arc<logind::Logind>,
+    hints: watch::Sender<Option<bool>>,
     tx: mpsc::Sender<Outbound>,
 ) {
     let mut sent = None;
@@ -143,7 +145,7 @@ async fn relay_locks(
             if tx.send(ev).await.is_err() {
                 return;
             }
-            logind.set_locked_hint(locked).await;
+            hints.send_replace(Some(locked));
         }
         match locks.recv().await {
             Some(locked) => known = Some(locked),
@@ -160,7 +162,7 @@ pub async fn run_with_bus<R, W>(
     stdout: W,
     addr: Option<&str>,
     system: Option<&str>,
-    mut locks: mpsc::Receiver<bool>,
+    mut locks: mpsc::UnboundedReceiver<bool>,
 ) -> ExitCode
 where
     R: AsyncRead + Unpin + Send + 'static,
@@ -211,12 +213,9 @@ where
             .clone()
             .connect_and_run(system.map(str::to_owned), stop.clone()),
     );
-    let lock_relay = tokio::spawn(relay_locks(
-        locks,
-        known_lock,
-        logind.clone(),
-        out_tx.clone(),
-    ));
+    let (hint_tx, hint_rx) = watch::channel(None);
+    let hint_task = tokio::spawn(logind.clone().hint_loop(hint_rx));
+    let lock_relay = tokio::spawn(relay_locks(locks, known_lock, hint_tx, out_tx.clone()));
 
     let runs = Arc::new(Mutex::new(run::RunState::default()));
     let providers =
@@ -277,6 +276,8 @@ where
     sleep_watch.abort();
     // Dropping the receiver ends the lock-notify thread at its next event; it is never joined.
     lock_relay.abort();
+    // It may be stuck in a SetLockedHint call that logind never answers.
+    hint_task.abort();
     drop(net);
     drop(providers);
     drop(logind);
@@ -297,8 +298,8 @@ mod tests {
     const NO_BUS: &str = "unix:path=/tmp/uq-no-such-bus";
 
     /// A lock source that never reports: tests never reach a Wayland display.
-    fn no_locks() -> mpsc::Receiver<bool> {
-        mpsc::channel(1).1
+    fn no_locks() -> mpsc::UnboundedReceiver<bool> {
+        mpsc::unbounded_channel().1
     }
 
     async fn next(r: &mut (impl AsyncBufReadExt + Unpin)) -> Value {
@@ -354,8 +355,8 @@ mod tests {
     #[tokio::test]
     async fn hello_reports_known_state() {
         // Lock-notify already reported "locked" before Hello: Hello says so, and LockState follows.
-        let (lock_tx, locks) = mpsc::channel(4);
-        lock_tx.send(true).await.unwrap();
+        let (lock_tx, locks) = mpsc::unbounded_channel();
+        lock_tx.send(true).unwrap();
         let (in_w, in_r) = duplex(4096);
         let (out_w, out_r) = duplex(4096);
         let task = tokio::spawn(run_with_bus(in_r, out_w, Some(NO_BUS), Some(NO_BUS), locks));
@@ -368,15 +369,15 @@ mod tests {
         assert_eq!(next(&mut out).await, ev);
 
         // A repeat is not a change; a change is sent.
-        lock_tx.send(true).await.unwrap();
-        lock_tx.send(false).await.unwrap();
+        lock_tx.send(true).unwrap();
+        lock_tx.send(false).unwrap();
         let ev = json!({"v":1,"event":"LockState","data":{"locked":false}});
         assert_eq!(next(&mut out).await, ev);
         drop(in_w);
         task.await.unwrap();
 
         // Nothing reported yet: Hello says unlocked and no LockState is sent.
-        let (lock_tx, locks) = mpsc::channel(4);
+        let (lock_tx, locks) = mpsc::unbounded_channel();
         let (mut in_w, in_r) = duplex(4096);
         let (out_w, out_r) = duplex(4096);
         let task = tokio::spawn(run_with_bus(in_r, out_w, Some(NO_BUS), Some(NO_BUS), locks));
@@ -386,7 +387,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(next(&mut out).await, json!({"v":1,"id":1,"ok":"pong"}));
-        lock_tx.send(true).await.unwrap();
+        lock_tx.send(true).unwrap();
         let ev = json!({"v":1,"event":"LockState","data":{"locked":true}});
         assert_eq!(next(&mut out).await, ev);
         drop(in_w);

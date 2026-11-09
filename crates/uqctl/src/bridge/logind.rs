@@ -6,7 +6,8 @@
 //! until `SLEEP_FALLBACK_MS` passes. On `PrepareForSleep(false)` it takes a fresh one. A failed
 //! `Inhibit` is retried every `INHIBIT_RETRY` while no inhibitor is held and no sleep is pending.
 //!
-//! The lock-state relay in `mod.rs` forwards each `LockState` to `set_locked_hint`.
+//! `hint_loop` forwards the latest lock state from the relay in `mod.rs` to `SetLockedHint`,
+//! off the relay's path, so a logind that stops answering never delays a `LockState` event.
 
 use super::protocol::Outbound;
 use futures_util::StreamExt;
@@ -14,7 +15,7 @@ use serde_json::{Value, json};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, watch};
 use tokio_util::sync::CancellationToken;
 use zbus::message::Type as MsgType;
 use zbus::zvariant::{OwnedFd, OwnedObjectPath};
@@ -62,10 +63,6 @@ struct State {
     sleeping: bool,
     /// Bumped on each new sleep, so a stale fallback timer does nothing.
     epoch: u64,
-    /// Our session object, once found.
-    session: Option<(Connection, OwnedObjectPath)>,
-    /// The last locked hint asked for, sent once the session is found.
-    hint: Option<bool>,
 }
 
 /// A run of failures of one kind: logged when it starts, not again until a success ends it.
@@ -96,6 +93,8 @@ pub struct Logind {
     inhibit_fail: Streak,
     hint_fail: Streak,
     retry: Duration,
+    /// Our session object, once found.
+    session: watch::Sender<Option<(Connection, OwnedObjectPath)>>,
 }
 
 impl Logind {
@@ -112,6 +111,7 @@ impl Logind {
             inhibit_fail: Streak::default(),
             hint_fail: Streak::default(),
             retry,
+            session: watch::Sender::new(None),
         })
     }
 
@@ -134,16 +134,35 @@ impl Logind {
         }
     }
 
-    /// Forward the lock state to logind's `SetLockedHint`. Before the session is found it is
-    /// remembered and sent then; without logind it does nothing.
+    /// One direct `SetLockedHint` call (tests). Without a session this does nothing. The bridge
+    /// goes through `hint_loop` instead, so a stuck call never holds up a caller.
+    #[cfg(test)]
     pub async fn set_locked_hint(&self, locked: bool) {
-        let session = {
-            let mut s = self.state();
-            s.hint = Some(locked);
-            s.session.clone()
-        };
+        let session = self.session.borrow().clone();
         if let Some((conn, path)) = session {
             self.send_hint(&conn, &path, locked).await;
+        }
+    }
+
+    /// Send the latest state in `hints` to `SetLockedHint`: once the session is found, then on
+    /// every change. A slow call only delays this loop; states that arrive meanwhile collapse
+    /// into the latest. Ends when the sender is dropped.
+    pub async fn hint_loop(self: Arc<Self>, mut hints: watch::Receiver<Option<bool>>) {
+        let mut session = self.session.subscribe();
+        let Ok(s) = session.wait_for(Option::is_some).await.map(|s| s.clone()) else {
+            return;
+        };
+        let Some((conn, path)) = s else { return };
+        loop {
+            let Ok(locked) = hints.wait_for(Option::is_some).await.map(|h| *h) else {
+                return;
+            };
+            if let Some(locked) = locked {
+                self.send_hint(&conn, &path, locked).await;
+            }
+            if hints.changed().await.is_err() {
+                return;
+            }
         }
     }
 
@@ -195,14 +214,7 @@ impl Logind {
                 if let Ok(r) = signal_rule(path.as_str(), SESSION, "Lock") {
                     locks = MessageStream::for_match_rule(r, &conn, Some(16)).await.ok();
                 }
-                let hint = {
-                    let mut s = self.state();
-                    s.session = Some((conn.clone(), path.clone()));
-                    s.hint
-                };
-                if let Some(locked) = hint {
-                    self.send_hint(&conn, &path, locked).await;
-                }
+                self.session.send_replace(Some((conn.clone(), path)));
             }
             None => self.warn("no session"),
         }
@@ -427,6 +439,9 @@ mod tests {
         /// Fail this many Inhibit calls before succeeding again.
         inhibit_fails: usize,
         hint_fails: bool,
+        /// SetLockedHint records the hint, then never answers.
+        hint_hangs: bool,
+        hint_calls: usize,
     }
     type Shared = Arc<Mutex<Fake>>;
 
@@ -470,12 +485,19 @@ mod tests {
 
     #[zbus::interface(name = "org.freedesktop.login1.Session")]
     impl FakeSession {
-        fn set_locked_hint(&self, locked: bool) -> zbus::fdo::Result<()> {
-            let mut f = self.0.lock().unwrap();
-            if f.hint_fails {
-                return Err(zbus::fdo::Error::Failed("hint refused".into()));
+        async fn set_locked_hint(&self, locked: bool) -> zbus::fdo::Result<()> {
+            let hang = {
+                let mut f = self.0.lock().unwrap();
+                f.hint_calls += 1;
+                if f.hint_fails {
+                    return Err(zbus::fdo::Error::Failed("hint refused".into()));
+                }
+                f.hints.push(locked);
+                f.hint_hangs
+            };
+            if hang {
+                std::future::pending::<()>().await;
             }
-            f.hints.push(locked);
             Ok(())
         }
     }
@@ -540,6 +562,14 @@ mod tests {
             let t = Instant::now();
             while self.fake.lock().unwrap().ends.len() < n {
                 assert!(t.elapsed() < Duration::from_secs(5), "inhibit {n} in time");
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        }
+
+        async fn wait_hints(&self, n: usize) {
+            let t = Instant::now();
+            while self.fake.lock().unwrap().hint_calls < n {
+                assert!(t.elapsed() < Duration::from_secs(5), "hint {n} in time");
                 tokio::time::sleep(Duration::from_millis(10)).await;
             }
         }
@@ -737,19 +767,64 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn hint_failures_streak_and_hint_waits_for_session() {
+    async fn hint_loop_sends_latest_once_session_found() {
         let (tx, rx) = mpsc::channel(16);
         let logind = Logind::new(tx);
-        // Before the session is known: remembered, then sent once it is found.
-        logind.set_locked_hint(true).await;
+        // Two states before the session is known: only the latest is sent once it is found.
+        let (hint_tx, hint_rx) = tokio::sync::watch::channel(None);
+        hint_tx.send_replace(Some(true));
+        hint_tx.send_replace(Some(false));
+        let hints = tokio::spawn(logind.clone().hint_loop(hint_rx));
         let r = rig_with(logind, rx, Fake::default()).await;
-        let t = Instant::now();
-        while r.fake.lock().unwrap().hints.is_empty() {
-            assert!(t.elapsed() < Duration::from_secs(5));
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-        assert_eq!(r.fake.lock().unwrap().hints, vec![true]);
+        r.wait_hints(1).await;
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert_eq!(r.fake.lock().unwrap().hints, vec![false]);
+        hint_tx.send_replace(Some(true));
+        r.wait_hints(2).await;
+        assert_eq!(r.fake.lock().unwrap().hints, vec![false, true]);
+        hints.abort();
+    }
 
+    #[tokio::test]
+    async fn lock_state_not_blocked_by_hung_hint() {
+        let (tx, rx) = mpsc::channel(16);
+        let logind = Logind::new(tx);
+        let fake = Fake {
+            hint_hangs: true,
+            ..Fake::default()
+        };
+        let r = rig_with(logind.clone(), rx, fake).await;
+        let (hint_tx, hint_rx) = tokio::sync::watch::channel(None);
+        let hints = tokio::spawn(logind.hint_loop(hint_rx));
+        let (out_tx, mut out_rx) = mpsc::channel(16);
+        let (lock_tx, lock_rx) = mpsc::unbounded_channel();
+        let relay = tokio::spawn(super::super::relay_locks(lock_rx, None, hint_tx, out_tx));
+        let mut next = async || match tokio::time::timeout(Duration::from_secs(1), out_rx.recv())
+            .await
+            .expect("LockState promptly")
+            .unwrap()
+        {
+            Outbound::Event { event, data } => (event, data),
+            _ => panic!("expected event"),
+        };
+
+        lock_tx.send(true).unwrap();
+        assert_eq!(next().await, ("LockState".into(), json!({"locked": true})));
+        r.wait_hints(1).await; // SetLockedHint(true) is now stuck in logind
+        lock_tx.send(false).unwrap();
+        assert_eq!(next().await, ("LockState".into(), json!({"locked": false})));
+        assert_eq!(
+            r.fake.lock().unwrap().hint_calls,
+            1,
+            "still stuck on the first"
+        );
+        relay.abort();
+        hints.abort();
+    }
+
+    #[tokio::test]
+    async fn hint_failures_streak() {
+        let r = rig().await;
         r.fake.lock().unwrap().hint_fails = true;
         r.logind.set_locked_hint(false).await;
         r.logind.set_locked_hint(true).await;
@@ -763,7 +838,7 @@ mod tests {
             !r.logind.hint_fail.0.load(Ordering::Relaxed),
             "success ends it"
         );
-        assert_eq!(r.fake.lock().unwrap().hints, vec![true, false]);
+        assert_eq!(r.fake.lock().unwrap().hints, vec![false]);
     }
 
     #[tokio::test]

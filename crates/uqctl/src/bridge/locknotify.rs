@@ -33,8 +33,8 @@ mod proto {
 use proto::hyprland_lock_notification_v1::{Event, HyprlandLockNotificationV1};
 use proto::hyprland_lock_notifier_v1::HyprlandLockNotifierV1;
 
-/// The lock state a protocol event reports, if any (a later protocol version may add events
-/// that report none).
+/// The lock state a protocol event reports. Every v1 event reports one, so this is always `Some`
+/// today; the `Option` keeps callers ready for events that carry no state.
 pub fn lock_event(ev: &Event) -> Option<bool> {
     match ev {
         Event::Locked => Some(true),
@@ -44,8 +44,8 @@ pub fn lock_event(ev: &Event) -> Option<bool> {
 
 /// Start the watcher thread for `display` (a `WAYLAND_DISPLAY` value) and return the receiver of
 /// lock states. The thread is detached: see the module doc.
-pub fn spawn(display: Option<OsString>) -> mpsc::Receiver<bool> {
-    let (tx, rx) = mpsc::channel(16);
+pub fn spawn(display: Option<OsString>) -> mpsc::UnboundedReceiver<bool> {
+    let (tx, rx) = mpsc::unbounded_channel();
     let started = std::thread::Builder::new()
         .name("uq-lock-notify".into())
         .spawn(move || watch(display, tx));
@@ -66,7 +66,9 @@ fn socket_path(display: &OsString) -> Option<PathBuf> {
 }
 
 struct State {
-    tx: mpsc::Sender<bool>,
+    /// Unbounded, so a slow relay never stalls this thread's socket reads, and no state is lost
+    /// (lock changes are human-paced, so the queue stays tiny).
+    tx: mpsc::UnboundedSender<bool>,
     /// The receiver is gone: stop.
     done: bool,
 }
@@ -95,7 +97,7 @@ impl Dispatch<HyprlandLockNotificationV1, ()> for State {
         _: &QueueHandle<Self>,
     ) {
         if let Some(locked) = lock_event(&ev)
-            && st.tx.blocking_send(locked).is_err()
+            && st.tx.send(locked).is_err()
         {
             st.done = true;
         }
@@ -104,7 +106,7 @@ impl Dispatch<HyprlandLockNotificationV1, ()> for State {
 
 /// Connect to `display`, subscribe to lock notifications and send each reported state on `tx`
 /// until the connection or the receiver goes away. Blocking; problems are logged once and end it.
-pub fn watch(display: Option<OsString>, tx: mpsc::Sender<bool>) {
+pub fn watch(display: Option<OsString>, tx: mpsc::UnboundedSender<bool>) {
     let off = |what: &dyn std::fmt::Display| {
         eprintln!("uqctl bridge: lock-notify off ({what}); no LockState events");
     };
@@ -150,7 +152,7 @@ mod tests {
 
     #[tokio::test]
     async fn no_display_is_quiet() {
-        let (tx, mut rx) = mpsc::channel(4);
+        let (tx, mut rx) = mpsc::unbounded_channel();
         // Called directly with no display name: it must not fall back to the environment.
         tokio::task::spawn_blocking(move || watch(None, tx))
             .await
