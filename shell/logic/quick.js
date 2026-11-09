@@ -188,3 +188,9 @@ function osdSettledId(node, settling) {
     var id = node.id;
     return id === null || id === undefined ? null : id;
 }
+
+// Whether an OSD may be drawn while `openSurface` (Surfaces.open) is showing. Quick settings
+// shows the levels itself, so its sliders and the keys stay quiet while it is open.
+function osdAllowed(openSurface) {
+    return openSurface !== "quicksettings";
+}

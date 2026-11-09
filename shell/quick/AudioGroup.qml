@@ -195,7 +195,8 @@ ColumnLayout {
 
     // --- output ---
     UqText {
-        visible: root.sinkAudio === null
+        // The device header below says "Choose output" when sinks exist but none is default.
+        visible: root.sinkAudio === null && root.sinks.length === 0
         Layout.fillWidth: true
         text: "No output"
         color: Theme.textMuted
@@ -254,7 +255,7 @@ ColumnLayout {
             UqText {
                 Layout.fillWidth: true
                 maximumLineCount: 1
-                text: root.sink ? U.nodeLabel(root.sink) : "No output"
+                text: root.sink ? U.nodeLabel(root.sink) : "Choose output"
             }
             UqText {
                 text: root.showDevices ? "▴" : "▾"

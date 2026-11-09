@@ -22,7 +22,11 @@ function volumeSet(prev, next, muted) {
     n = Math.max(0, Math.min(1, n));
     var p = Number(prev);
     var fromZero = !(p > 0);
-    return { volume: n, unmute: !!muted && fromZero && n > 0 };
+    var unmute = !!muted && fromZero && n > 0;
+    // Skip writes that don't change the whole percent: a drag sends a move per frame.
+    if (!unmute && isFinite(p) && Math.round(n * 100) === Math.round(p * 100))
+        return null;
+    return { volume: n, unmute: unmute };
 }
 
 // Hardware audio sinks from Pipewire.nodes.values: isSink, not a stream, and with audio.

@@ -5,6 +5,14 @@ import "../../shell/logic/quick.js" as Q
 TestCase {
     name: "quick"
 
+    // While quick settings is open its sliders show the level, so no OSD is drawn over it.
+    function test_osd_allowed() {
+        compare(Q.osdAllowed("closed"), true);
+        compare(Q.osdAllowed("spotlight"), true);
+        compare(Q.osdAllowed("appmenu"), true);
+        compare(Q.osdAllowed("quicksettings"), false);
+    }
+
     function test_volume_step_clamps() {
         compare(Q.volumeStep(0.98, 1), 1);
         compare(Q.volumeStep(1, 1), 1);

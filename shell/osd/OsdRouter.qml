@@ -1,6 +1,8 @@
 pragma Singleton
 import QtQuick
+import "../core"
 import "../notif"
+import "../logic/quick.js" as Q
 
 // One entry point for every OSD (spec §2.6): noti-fi's OSD when it is available, otherwise the
 // fallback Osd.qml, which binds to the state below. A failed noti-fi request falls back too.
@@ -16,6 +18,8 @@ QtObject {
     property int serial: 0
 
     function show(kind, value, max, muted) {
+        if (!Q.osdAllowed(Surfaces.open))
+            return;
         if (!Notifi.available) {
             fallback(kind, value, max, muted);
             return;

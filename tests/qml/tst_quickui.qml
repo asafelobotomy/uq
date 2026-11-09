@@ -20,7 +20,10 @@ TestCase {
     function test_volume_set() {
         compare(U.volumeSet(0, 0.3, true), { volume: 0.3, unmute: true });
         compare(U.volumeSet(0.2, 0.3, true), { volume: 0.3, unmute: false });
-        compare(U.volumeSet(0, 0, true), { volume: 0, unmute: false });
+        compare(U.volumeSet(0, 0, true), null);
+        // A drag that doesn't change the whole percent writes nothing to Pipewire.
+        compare(U.volumeSet(0.5, 0.504, false), null);
+        compare(U.volumeSet(0.5, 0.51, false), { volume: 0.51, unmute: false });
         compare(U.volumeSet(0, 0.3, false), { volume: 0.3, unmute: false });
         compare(U.volumeSet(0.5, 1.7, false), { volume: 1, unmute: false });
         compare(U.volumeSet(0.5, -1, false), { volume: 0, unmute: false });
