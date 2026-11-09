@@ -73,7 +73,7 @@ restarts the lock surface (`uq-lock.service`, else `hyprlock`) if it ever dies.
 Scripts can drive them through the shell's IPC (ignored while the screen is locked):
 
 ```bash
-qs ipc -p /usr/share/uq/shell call uq open spotlight    # or: close, toggle; spotlight | appmenu | quicksettings
+qs ipc -p /usr/share/uq/shell call uq open spotlight    # or: close, toggle; spotlight | appmenu | quicksettings | powermenu
 ```
 
 `open` only opens and `close` only closes that surface; any other name is ignored. Each call

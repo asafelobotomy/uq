@@ -51,7 +51,7 @@ TestCase {
         Surfaces.toggle("spotlight");
         Bridge.locked = true;
         compare(Surfaces.open, "closed");
-        compare(wipeSpy.count, 4);   // every surface wipes on lock
+        compare(wipeSpy.count, 5);   // every surface wipes on lock
         Surfaces.toggle("spotlight");
         compare(Surfaces.open, "closed");
         Bridge.locked = false;
@@ -160,6 +160,65 @@ TestCase {
         compare(Surfaces.open, "notifcentre");
         compare(Surfaces.ipc("close", "notifcentre"), "ignored");
         compare(Surfaces.open, "notifcentre");
+    }
+
+    // The power menu opens from SUPER+Escape and IPC with no confirm pending, and from the app
+    // menu's restart and shut-down buttons at that action's confirm step (Surfaces.powerConfirm).
+    function test_powermenu_surface_and_confirm() {
+        Surfaces.toggle("appmenu");
+        wipeSpy.clear();
+        Surfaces.toggle("powermenu", null, null, "reboot");
+        compare(Surfaces.open, "powermenu");
+        compare(Surfaces.powerConfirm, "reboot");
+        compare(wipeSpy.count, 1);
+        compare(wipeSpy.signalArguments[0][0], "appmenu");
+        Surfaces.toggle("powermenu");
+        compare(Surfaces.open, "closed");
+        compare(Surfaces.powerConfirm, "");
+        compare(wipeSpy.signalArguments[1][0], "powermenu");
+        // Only reboot and poweroff are confirm steps.
+        Surfaces.toggle("powermenu", null, null, "lock");
+        compare(Surfaces.powerConfirm, "");
+        Surfaces.close();
+        Surfaces.toggle("powermenu", null, null, "poweroff");
+        compare(Surfaces.powerConfirm, "poweroff");
+        // Another surface replaces it and clears the pending confirm.
+        Surfaces.toggle("spotlight");
+        compare(Surfaces.powerConfirm, "");
+        Surfaces.toggle("powermenu", null, null, "poweroff");
+        wipeSpy.clear();
+        Bridge.locked = true;
+        compare(Surfaces.open, "closed");
+        compare(Surfaces.powerConfirm, "");
+        var names = [];
+        for (var i = 0; i < wipeSpy.count; i++)
+            names.push(wipeSpy.signalArguments[i][0]);
+        verify(names.indexOf("powermenu") >= 0, "lock wipes powermenu");
+        Surfaces.toggle("powermenu", null, null, "reboot");
+        compare(Surfaces.open, "closed");
+        compare(Surfaces.powerConfirm, "");
+    }
+
+    function test_ipc_powermenu() {
+        compare(Surfaces.ipc("close", "powermenu"), "ignored");
+        compare(Surfaces.ipc("open", "powermenu"), "ok");
+        compare(Surfaces.open, "powermenu");
+        compare(Surfaces.screen, null);
+        compare(Surfaces.anchor, null);
+        compare(Surfaces.powerConfirm, "");
+        compare(Surfaces.ipc("open", "powermenu"), "ignored");
+        compare(Surfaces.ipc("close", "powermenu"), "ok");
+        compare(Surfaces.open, "closed");
+        compare(Surfaces.ipc("toggle", "powermenu"), "ok");
+        compare(Surfaces.open, "powermenu");
+        compare(Surfaces.ipc("toggle", "powermenu"), "ok");
+        compare(Surfaces.open, "closed");
+        Surfaces.ipc("open", "powermenu");
+        Bridge.locked = true;
+        compare(Surfaces.open, "closed");
+        compare(Surfaces.ipc("toggle", "powermenu"), "ignored");
+        compare(Surfaces.ipc("open", "powermenu"), "ignored");
+        compare(Surfaces.open, "closed");
     }
 
     function test_ipc_ignores_unknown_names_and_verbs() {

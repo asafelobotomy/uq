@@ -93,57 +93,20 @@ TestCase {
         compare(M.category(m[0]), "Multimedia");
     }
 
-    function test_power_confirm_double_click_and_timeout() {
-        compare(M.CONFIRM_MS, 5000);
-        var s = M.initialPower();
-        // Instant actions fire on the first click.
-        var lockR = M.powerConfirm(s, "lock", 1000);
-        verify(lockR.fire);
-        compare(lockR.label, "");
-        verify(M.powerConfirm(s, "logout", 1000).fire);
-        verify(M.powerConfirm(s, "suspend", 1000).fire);
-
-        // Reboot: first click arms, second within 5 s fires.
-        var r1 = M.powerConfirm(s, "reboot", 10000);
-        verify(!r1.fire);
-        compare(r1.label, "Click again to restart");
-        var r2 = M.powerConfirm(r1.state, "reboot", 14999);
-        verify(r2.fire);
-        compare(r2.label, "");
-        // Firing clears the pending state.
-        var r3 = M.powerConfirm(r2.state, "reboot", 15000);
-        verify(!r3.fire);
-
-        // Boundary: exactly 5 s later is too late; it re-arms instead.
-        var p1 = M.powerConfirm(s, "poweroff", 20000);
-        verify(!p1.fire);
-        compare(p1.label, "Click again to shut down");
-        var p2 = M.powerConfirm(p1.state, "poweroff", 25000);
-        verify(!p2.fire);
-        compare(p2.label, "Click again to shut down");
-        var p3 = M.powerConfirm(p2.state, "poweroff", 25001);
-        verify(p3.fire);
-
-        // A different confirm action re-arms rather than firing the first one.
-        var x1 = M.powerConfirm(s, "reboot", 0 + 30000);
-        var x2 = M.powerConfirm(x1.state, "poweroff", 30100);
-        verify(!x2.fire);
-        compare(x2.label, "Click again to shut down");
-        // An instant action in between fires and drops the pending confirm.
-        var y1 = M.powerConfirm(s, "reboot", 40000);
-        var y2 = M.powerConfirm(y1.state, "lock", 40100);
-        verify(y2.fire);
-        verify(!M.powerConfirm(y2.state, "reboot", 40200).fire);
-        // A clock that went backwards doesn't count as a second click.
-        var b1 = M.powerConfirm(s, "reboot", 50000);
-        verify(!M.powerConfirm(b1.state, "reboot", 49000).fire);
-        // Unknown actions never fire and leave nothing pending.
-        var u = M.powerConfirm(s, "rm -rf", 1);
-        verify(!u.fire);
-        compare(u.label, "");
-        verify(!M.powerConfirm(null, "bogus", 1).fire);
-        // Garbage state is treated as nothing pending.
-        verify(!M.powerConfirm({ pending: "reboot", at: "x" }, "reboot", 2).fire);
+    // lock, logout and suspend run straight from the app menu; restart and shut down open the
+    // power menu at that action's confirm step. Anything else does nothing.
+    function test_power_click() {
+        compare(M.powerClick("lock"), "fire");
+        compare(M.powerClick("logout"), "fire");
+        compare(M.powerClick("suspend"), "fire");
+        compare(M.powerClick("reboot"), "powermenu");
+        compare(M.powerClick("poweroff"), "powermenu");
+        compare(M.powerClick("rm -rf"), "");
+        compare(M.powerClick(""), "");
+        compare(M.powerClick(undefined), "");
+        // The 5 s double-click confirm is gone.
+        compare(M.powerConfirm, undefined);
+        compare(M.CONFIRM_MS, undefined);
     }
 
     function test_avatar_sources() {

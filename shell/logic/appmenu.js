@@ -1,7 +1,8 @@
 .pragma library
 .import "launcher.js" as L
+.import "power.js" as P
 
-// App-menu logic: categories, favourites, the power confirm step, and the avatar and hostname
+// App-menu logic: categories, favourites, what a power button does, and the avatar and hostname
 // sources. Pure data in, data out; app names stay untouched for UqText to render, and nothing
 // here runs anything.
 
@@ -111,35 +112,15 @@ function menuEntries(list) {
 }
 
 // --- power ---
-// powerConfirm(state, action, now) -> {state, fire, label}
-//   state: {pending: "reboot"|"poweroff"|"", at: ms of the arming click}; initialPower() is empty.
-//   now:   current time in ms (Date.now() in QML; passed in so tests need no timers).
-//   fire:  true when the caller should send Power [action] now.
-//   label: the confirm prompt to show, or "" when nothing is pending.
-// lock, logout and suspend fire on the first click. reboot and poweroff arm on the first click
-// and fire on a second click of the same action less than CONFIRM_MS later (now - at < 5000;
-// exactly 5000 is too late and re-arms). Unknown actions never fire and clear the state.
-var CONFIRM_MS = 5000;
-var INSTANT = ["lock", "logout", "suspend"];
-var CONFIRM_LABEL = { reboot: "Click again to restart", poweroff: "Click again to shut down" };
-
-function initialPower() {
-    return { pending: "", at: 0 };
-}
-
-function powerConfirm(state, action, now) {
-    var a = String(action === undefined || action === null ? "" : action);
-    if (INSTANT.indexOf(a) >= 0)
-        return { state: initialPower(), fire: true, label: "" };
-    if (!Object.prototype.hasOwnProperty.call(CONFIRM_LABEL, a))
-        return { state: initialPower(), fire: false, label: "" };
-    var t = Number(now);
-    var s = state || {};
-    var at = typeof s.at === "number" ? s.at : NaN;
-    var dt = t - at;
-    if (s.pending === a && dt >= 0 && dt < CONFIRM_MS)
-        return { state: initialPower(), fire: true, label: "" };
-    return { state: { pending: a, at: t }, fire: false, label: CONFIRM_LABEL[a] };
+// powerClick(action) -> "fire" | "powermenu" | ""
+//   "fire":      lock, logout and suspend: send Power [action] now.
+//   "powermenu": reboot and poweroff: close the app menu and open the power menu at that
+//                action's confirm step (its 30 s countdown, power.js).
+//   "":          anything else does nothing.
+function powerClick(action) {
+    if (P.needsConfirm(action))
+        return "powermenu";
+    return P.ACTIONS.indexOf(action) >= 0 ? "fire" : "";
 }
 
 // --- header and footer ---

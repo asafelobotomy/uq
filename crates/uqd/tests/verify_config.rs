@@ -147,7 +147,12 @@ if lock.key ~= "SUPER + L" then error("uq:lock is bound to " .. tostring(lock.ke
 for _, b in ipairs(binds) do
   if b.key == "SUPER + L" and b ~= lock then error("SUPER + L is also bound to " .. b.dsp) end
 end
-for _, b in ipairs({spotlight, appmenu, quick, notif, lock}) do
+local power = bind_for("hl.dsp.global(uq:power-menu)")
+if power.key ~= "SUPER + Escape" then error("uq:power-menu is bound to " .. tostring(power.key)) end
+for _, b in ipairs(binds) do
+  if b.key == "SUPER + Escape" and b ~= power then error("SUPER + Escape is also bound to " .. b.dsp) end
+end
+for _, b in ipairs({spotlight, appmenu, quick, notif, lock, power}) do
   if opt(b, "locked") then error(b.dsp .. " must not be locked") end
 end
 local osd_keys = {
@@ -183,6 +188,7 @@ fn base_lua_launcher_binds_are_not_locked() {
         "uq:quick-settings",
         "uq:notif-centre",
         "uq:lock",
+        "uq:power-menu",
     ] {
         let lines: Vec<&str> = base.lines().filter(|l| l.contains(name)).collect();
         assert!(!lines.is_empty(), "base.lua has no {name} bind");

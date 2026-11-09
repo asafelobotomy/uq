@@ -37,8 +37,6 @@ PanelWindow {
     // --- state (all cleared by wipe()) ---
     property string query: ""
     property string currentCategory: M.FAVOURITES
-    property var powerState: M.initialPower()
-    property string powerLabel: ""
     property int placeX: Theme.gapOut
     property int placeY: barBottom + Theme.gapIn
 
@@ -98,12 +96,9 @@ PanelWindow {
     }
 
     function wipe() {
-        confirmTimer.stop();
         field.text = "";
         query = "";
         currentCategory = favList.length > 0 ? M.FAVOURITES : M.ALL;
-        powerState = M.initialPower();
-        powerLabel = "";
         grid.currentIndex = 0;
         grid.positionViewAtBeginning();
     }
@@ -119,19 +114,19 @@ PanelWindow {
         Surfaces.close();
     }
 
+    // lock, logout and suspend run at once; restart and shut down hand over to the power menu
+    // (on this menu's screen) at their confirm step, which closes the app menu.
     function power(action) {
         if (Bridge.locked)
             return;
-        var r = M.powerConfirm(powerState, action, Date.now());
-        powerState = r.state;
-        powerLabel = r.label;
-        if (r.label !== "")
-            confirmTimer.restart();
-        else
-            confirmTimer.stop();
-        if (r.fire) {
+        switch (M.powerClick(action)) {
+        case "fire":
             Bridge.call("Power", [action]).catch(function () {});
             Surfaces.close();
+            break;
+        case "powermenu":
+            Surfaces.toggle("powermenu", root.screen, null, action);
+            break;
         }
     }
 
@@ -186,16 +181,6 @@ PanelWindow {
         function onWipe(surface) {
             if (surface === "appmenu")
                 root.wipe();
-        }
-    }
-
-    // Clears the "Click again" prompt; powerConfirm also rejects a late second click by itself.
-    Timer {
-        id: confirmTimer
-        interval: M.CONFIRM_MS
-        onTriggered: {
-            root.powerState = M.initialPower();
-            root.powerLabel = "";
         }
     }
 
@@ -424,8 +409,8 @@ PanelWindow {
 
                 UqText {
                     Layout.fillWidth: true
-                    text: root.powerLabel !== "" ? root.powerLabel : root.userName + "@" + root.hostName
-                    color: root.powerLabel !== "" ? Theme.warning : Theme.textMuted
+                    text: root.userName + "@" + root.hostName
+                    color: Theme.textMuted
                 }
 
                 Repeater {
@@ -439,19 +424,17 @@ PanelWindow {
                     delegate: Rectangle {
                         id: pbtn
                         required property var modelData
-                        readonly property bool armed: root.powerState.pending === modelData.action
                         Layout.preferredWidth: 30
                         Layout.preferredHeight: 30
                         radius: Theme.radius - 2
-                        color: armed ? Theme.warning
-                            : (pMouse.containsMouse ? Theme.surfaceAlt : "transparent")
+                        color: pMouse.containsMouse ? Theme.surfaceAlt : "transparent"
                         Accessible.role: Accessible.Button
                         Accessible.name: modelData.name
 
                         UqText {
                             anchors.centerIn: parent
                             text: pbtn.modelData.glyph
-                            color: pbtn.armed ? Theme.accentText : Theme.text
+                            color: Theme.text
                             font.pixelSize: Theme.fontSize + 3
                         }
                         MouseArea {

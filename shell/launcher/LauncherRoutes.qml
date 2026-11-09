@@ -8,19 +8,20 @@ import "../session"
 
 // Everything that opens the launchers from outside the bar, routed to Surfaces: the Hyprland
 // global shortcuts (base.lua binds `uq:spotlight`, `uq:appmenu`, `uq:quick-settings` and
-// `uq:notif-centre`, the last routed to NotifBackend, and `uq:lock`, routed to Session) and the
-// shell IPC target `uq`. No windows in here, so it also loads headless (tests/shell/bar_loads.sh).
+// `uq:notif-centre`, the last routed to NotifBackend, `uq:lock`, routed to Session, and
+// `uq:power-menu`) and the shell IPC target `uq`. No windows in here, so it also loads headless (tests/shell/bar_loads.sh).
 // Shortcuts and IPC pass no screen, so a surface opens on Hyprland.focusedMonitor.
 Scope {
     id: root
 
-    // True once all five shortcuts and the IPC handler exist with the names base.lua and the
+    // True once all six shortcuts and the IPC handler exist with the names base.lua and the
     // README use (tests/shell/bar_loads.sh prints it).
     readonly property bool routed: spotlightKey.appid === "uq" && spotlightKey.name === "spotlight"
         && appMenuKey.appid === "uq" && appMenuKey.name === "appmenu"
         && quickSettingsKey.appid === "uq" && quickSettingsKey.name === "quick-settings"
         && notifCentreKey.appid === "uq" && notifCentreKey.name === "notif-centre"
         && lockKey.appid === "uq" && lockKey.name === "lock"
+        && powerMenuKey.appid === "uq" && powerMenuKey.name === "power-menu"
         && ipc.target === "uq" && typeof ipc.open === "function"
         && typeof ipc.close === "function" && typeof ipc.toggle === "function"
         && typeof ipc.lock === "function" && typeof ipc.lockSecure === "function"
@@ -75,8 +76,17 @@ Scope {
         onPressed: Session.lock()
     }
 
-    // qs ipc -p /usr/share/uq/shell call uq open|close|toggle spotlight|appmenu|quicksettings
-    // Only these three verbs and three names; all ignored while locked. Nothing here unlocks:
+    // SUPER+Escape: the power menu on the focused monitor (ignored while locked).
+    GlobalShortcut {
+        id: powerMenuKey
+        appid: "uq"
+        name: "power-menu"
+        description: "Open or close the power menu"
+        onPressed: Surfaces.ipc("toggle", "powermenu")
+    }
+
+    // qs ipc -p /usr/share/uq/shell call uq open|close|toggle spotlight|appmenu|quicksettings|powermenu
+    // Only these three verbs and four names; all ignored while locked. Nothing here unlocks:
     // `lock` only locks and `lockSecure` (from uq-lock) only marks the lock secure.
     IpcHandler {
         id: ipc

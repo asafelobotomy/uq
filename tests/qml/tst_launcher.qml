@@ -120,6 +120,35 @@ TestCase {
         verify(s.wipe);
     }
 
+    // The power menu is a fifth surface, toggled like the others and wiped on lock.
+    function test_transition_powermenu() {
+        compare(L.SURFACES.indexOf("powermenu") >= 0, true);
+        var s = L.transition(L.initialState(), "togglePowerMenu");
+        compare(s.open, "powermenu");
+        verify(!s.wipe);
+        s = L.transition(s, "togglePowerMenu");
+        compare(s.open, "closed");
+        verify(s.wipe);
+        var others = ["spotlight", "appmenu", "quicksettings", "notifcentre"];
+        for (var i = 0; i < others.length; i++) {
+            s = L.transition({ open: others[i], wipe: false }, "togglePowerMenu");
+            compare(s.open, "powermenu", others[i]);
+            verify(s.wipe, others[i]);
+        }
+        s = L.transition({ open: "powermenu", wipe: false }, "toggleSpotlight");
+        compare(s.open, "spotlight");
+        verify(s.wipe);
+        s = L.transition({ open: "powermenu", wipe: false }, "close");
+        compare(s.open, "closed");
+        verify(s.wipe);
+        s = L.transition({ open: "powermenu", wipe: false }, "lock");
+        compare(s.open, "closed");
+        verify(s.wipe);
+        // An unknown event leaves the power menu open.
+        s = L.transition({ open: "powermenu", wipe: false }, "bogus");
+        compare(s.open, "powermenu");
+    }
+
     // Sections: top hit, then two groups (2 and 3 items).
     function sections() {
         return [
