@@ -34,6 +34,7 @@ pkgbase = uq
 	optdepends = hyprlock: fallback lock for the SUPER+CTRL+L recovery bind
 	optdepends = noti-fi: notification backend
 	optdepends = fprintd: fingerprint unlock
+	optdepends = crum-bs: uninstall apps with their leftovers and clean up storage
 	options = !lto
 	backup = etc/pam.d/uq-lock
 	backup = etc/pam.d/uq-lock-fingerprint

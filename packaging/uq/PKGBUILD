@@ -30,6 +30,7 @@ optdepends=(
   'hyprlock: fallback lock for the SUPER+CTRL+L recovery bind'
   'noti-fi: notification backend'
   'fprintd: fingerprint unlock'
+  'crum-bs: uninstall apps with their leftovers and clean up storage'
 )
 options=(!lto)
 backup=(etc/pam.d/uq-lock etc/pam.d/uq-lock-fingerprint)
