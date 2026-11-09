@@ -146,4 +146,17 @@ TestCase {
         compare(N.replyDnd("subscribe", null), null);
         compare(N.replyDnd("osd", { dnd: true }), null);
     }
+    function test_notifi_expired_ids() {
+        compare(N.REQUEST_TIMEOUT_MS, 1000);
+        var d = { "1": 1000, "2": 2000, "3": 1500 };
+        compare(N.expiredIds(d, 999), []);
+        compare(N.expiredIds(d, 1000), ["1"]);
+        compare(N.expiredIds(d, 1600).sort(), ["1", "3"]);
+        compare(N.expiredIds(d, 5000).sort(), ["1", "2", "3"]);
+        compare(N.expiredIds({}, 5000), []);
+        compare(N.expiredIds(null, 5000), []);
+        // A bad deadline expires at once; a NaN clock expires nothing.
+        compare(N.expiredIds({ "4": NaN }, 5000), ["4"]);
+        compare(N.expiredIds(d, NaN), []);
+    }
 }

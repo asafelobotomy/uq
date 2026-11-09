@@ -55,7 +55,7 @@ TestCase {
     function test_brightness_args() {
         compare(Q.brightnessArgs(1), ["brightnessctl", "-m", "-e4", "-n2", "set", "5%+"]);
         compare(Q.brightnessArgs(-1), ["brightnessctl", "-m", "-e4", "-n2", "set", "5%-"]);
-        compare(Q.BRIGHTNESS_READ, ["brightnessctl", "-m"]);
+        compare(Q.BRIGHTNESS_READ, ["brightnessctl", "-m", "-e4"]);
     }
 
     function test_wifi_rows_and_connectable() {
@@ -138,5 +138,16 @@ TestCase {
         compare(Q.osdPercent(3, 4), 75);
         compare(Q.osdPercent(150, 100), 100);
         compare(Q.osdPercent(NaN, 100), 0);
+    }
+    function test_osd_settled_id() {
+        compare(Q.osdSettledId({id: 7, ready: true}, false), 7);
+        compare(Q.osdSettledId({id: 0, ready: true}, false), 0);
+        compare(Q.osdSettledId({id: 7, ready: true}, true), null);
+        compare(Q.osdSettledId({id: 7, ready: false}, false), null);
+        compare(Q.osdSettledId(null, false), null);
+        compare(Q.osdSettledId(undefined, false), null);
+        compare(Q.osdSettledId({ready: true}, false), null);
+        // With prev null during the settle, a level change never shows.
+        compare(Q.osdShouldShow(0, 10000, Q.osdSettledId({id: 7, ready: true}, true), 7), false);
     }
 }

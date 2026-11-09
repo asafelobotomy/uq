@@ -20,6 +20,8 @@ QtObject {
     readonly property string socketPath: runtimeDir === "" ? "" : runtimeDir + "/notifd.sock"
     property var proto: ({ greeted: false, pending: {} })
     property var handles: ({})
+    // {id: deadlineMs} for each request in flight; requestTimer rejects the overdue ones.
+    property var deadlines: ({})
     property int nextId: 1
     property int attempt: 0
     property int stableMs: 60000
@@ -71,6 +73,11 @@ QtObject {
         var st = proto;
         st.pending[id] = method;
         proto = st;
+        var ds = deadlines;
+        ds[id] = Date.now() + N.REQUEST_TIMEOUT_MS;
+        deadlines = ds;
+        if (!requestTimer.running)
+            requestTimer.start();
         sock.write(N.request(id, method, params) + "\n");
         sock.flush();
         return h;
@@ -91,6 +98,8 @@ QtObject {
     function failPending(msg) {
         var hs = handles;
         handles = ({});
+        deadlines = ({});
+        requestTimer.stop();
         for (var id in hs)
             hs[id]._reject(msg);
     }
@@ -115,6 +124,30 @@ QtObject {
         sock.path = socketPath;
         sock.connected = true;
         helloTimer.restart();
+    }
+
+    // A greeted but silent daemon: reject each request that is overdue and forget it, so its
+    // caller falls back promptly. A late reply then has an unknown id and is ignored.
+    function expireRequests() {
+        var ids = N.expiredIds(deadlines, Date.now());
+        if (ids.length > 0) {
+            var hs = handles, ds = deadlines, st = proto;
+            var expired = [];
+            for (var i = 0; i < ids.length; i++) {
+                var id = ids[i];
+                if (hs[id])
+                    expired.push(hs[id]);
+                delete hs[id];
+                delete ds[id];
+                delete st.pending[id];
+            }
+            handles = hs;
+            deadlines = ds;
+            proto = st;
+            expired.forEach(function (h) { h._reject("timeout"); });
+        }
+        if (Object.keys(deadlines).length === 0)
+            requestTimer.stop();
     }
 
     function scheduleRetry() {
@@ -166,6 +199,9 @@ QtObject {
             var h = hs[e.id];
             delete hs[e.id];
             handles = hs;
+            var ds = deadlines;
+            delete ds[e.id];
+            deadlines = ds;
             if (e.ok) {
                 var d = N.replyDnd(e.method, e.value);
                 if (d !== null)
@@ -208,6 +244,12 @@ QtObject {
     property Timer helloTimer: Timer {
         interval: 5000
         onTriggered: root.drop()
+    }
+    // One shared timer for every request deadline; runs only while requests are in flight.
+    property Timer requestTimer: Timer {
+        interval: 250
+        repeat: true
+        onTriggered: root.expireRequests()
     }
     // Resets the backoff once a connection has stayed up for stableMs.
     property Timer stableTimer: Timer {

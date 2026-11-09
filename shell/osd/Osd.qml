@@ -10,7 +10,8 @@ import "../logic/quick.js" as Q
 
 // Fallback OSD (spec §2.6), used when noti-fi is unavailable or its request fails. Binds to
 // OsdRouter's fallback state and hides 1500 ms after the last show. It never takes keyboard
-// focus or grabs input.
+// focus or grabs input, and its empty input mask lets pointer clicks pass through to whatever
+// is underneath.
 PanelWindow {
     id: root
 
@@ -32,6 +33,8 @@ PanelWindow {
     WlrLayershell.namespace: "uq-osd"
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
     exclusionMode: ExclusionMode.Ignore
+    // An empty region: no input at all, so the OSD never eats clicks while shown.
+    mask: Region {}
     anchors.bottom: true
     margins.bottom: Math.round((screen ? screen.height : 1080) * 0.1)
     implicitWidth: 240

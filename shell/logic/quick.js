@@ -4,7 +4,8 @@
 // maps live objects to the plain shapes documented below.
 
 var LAYOUTS = ["dwindle", "master", "scrolling"];
-var BRIGHTNESS_READ = ["brightnessctl", "-m"];
+// -e4 matches brightnessArgs, so the read and the steps report percent on the same scale.
+var BRIGHTNESS_READ = ["brightnessctl", "-m", "-e4"];
 var OSD_STARTUP_MS = 2000;
 var MAX_WIFI_ROWS = 20;
 
@@ -177,4 +178,13 @@ function osdIcon(kind, value, max, muted) {
     if (p < 67)
         return base + "medium";
     return base + "high";
+}
+
+// The node id to compare level changes against: null while a default-device switch is settling
+// or the node isn't bound yet, so osdShouldShow fails closed until then.
+function osdSettledId(node, settling) {
+    if (settling || !node || !node.ready)
+        return null;
+    var id = node.id;
+    return id === null || id === undefined ? null : id;
 }

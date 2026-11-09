@@ -140,3 +140,21 @@ function replyDnd(method, value) {
         return null;
     return st.dnd;
 }
+
+var REQUEST_TIMEOUT_MS = 1000;
+
+// deadlines: {id: deadlineMs}. Ids whose deadline has passed (a non-finite deadline counts as
+// passed); a non-finite clock expires nothing.
+function expiredIds(deadlines, nowMs) {
+    var out = [];
+    if (!deadlines || !isFinite(nowMs))
+        return out;
+    for (var id in deadlines) {
+        if (!Object.prototype.hasOwnProperty.call(deadlines, id))
+            continue;
+        var d = deadlines[id];
+        if (!(d > nowMs))
+            out.push(id);
+    }
+    return out;
+}
