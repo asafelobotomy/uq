@@ -15,7 +15,7 @@ var EXTERNAL = ["swaync", "mako", "dunst"];
 function cleanText(s, max) {
     if (typeof s !== "string")
         return "";
-    var t = s.replace(/[\u0000-\u001f\u007f‪-‮⁦-⁩]/g, " ").trim();
+    var t = s.replace(/[\u0000-\u001f\u007f\u202A-\u202E\u2066-\u2069]/g, " ").trim();
     if (t.length > max)
         t = t.slice(0, Math.max(0, max - 1)) + "…";
     return t;
@@ -87,8 +87,11 @@ function parseSwaync(line) {
         return null;
     if (typeof o.count === "number" && isFinite(o.count))
         return { count: Math.max(0, Math.floor(o.count)), dnd: o.dnd === true, centre: false };
-    if (typeof o.text === "string" && /^\d+$/.test(o.text.trim()) && typeof o.alt === "string")
-        return { count: parseInt(o.text, 10), dnd: o.alt.indexOf("dnd") === 0, centre: false };
+    if (typeof o.text === "string" && typeof o.alt === "string") {
+        var txt = o.text.trim();
+        if (txt === "" || /^\d+$/.test(txt))
+            return { count: txt === "" ? 0 : parseInt(txt, 10), dnd: o.alt.indexOf("dnd") === 0, centre: false };
+    }
     return null;
 }
 
@@ -161,7 +164,7 @@ function parseDunstCount(out) {
         if (m)
             n += parseInt(m[1], 10);
     }
-    return n;
+    return isFinite(n) ? n : 0;
 }
 
 function parseDunstPaused(out) {

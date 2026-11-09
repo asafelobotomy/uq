@@ -16,7 +16,7 @@ TestCase {
         compare(N.cleanText(42, 10), "");
         compare(N.cleanText(null, 10), "");
         compare(N.cleanText("  hi\u0000there\u007f\n", 20), "hi there");
-        compare(N.cleanText("a‮b⁦c⁩d", 20), "a b c d");
+        compare(N.cleanText("a\u202Eb\u2066c\u2069d", 20), "a b c d");
         compare(N.cleanText("abcdefghij", 5), "abcd…");
         compare(N.cleanText("abcde", 5), "abcde");
     }
@@ -122,6 +122,10 @@ TestCase {
         compare(c.count, 0);
         compare(c.dnd, false);
         compare(N.parseSwaync('{"text":"1","alt":"inhibited-notification"}').dnd, false);
+        var z = N.parseSwaync('{"text":"","alt":"none"}');
+        compare(z.count, 0);
+        compare(z.dnd, false);
+        compare(N.parseSwaync('{"text":"abc","alt":"none"}'), null);
         compare(N.parseSwaync("garbage"), null);
         compare(N.parseSwaync("[1]"), null);
         compare(N.parseSwaync('{"foo":1}'), null);
@@ -139,7 +143,7 @@ TestCase {
         var e = N.parseMakoList("");
         compare(e.count, 0);
         compare(e.latest, null);
-        var s = N.parseMakoList("Notification 1: Hi‮\n");
+        var s = N.parseMakoList("Notification 1: Hi\u202E\n");
         compare(s.count, 1);
         compare(s.latest.summary, "Hi");
         compare(s.latest.appName, "");
@@ -169,6 +173,7 @@ TestCase {
         var out = "              Waiting: 1\n  Currently displayed: 2\n              History: 5\n";
         compare(N.parseDunstCount(out), 3);
         compare(N.parseDunstCount("junk"), 0);
+        compare(N.parseDunstCount("Waiting: " + "9".repeat(400) + "\n"), 0);
         compare(N.parseDunstCount(""), 0);
         compare(N.parseDunstCount(null), 0);
         compare(N.parseDunstCount("Waiting: x\nCurrently displayed: 2\n"), 2);
