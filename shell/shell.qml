@@ -9,6 +9,7 @@ import "osd"
 import "notif"
 import "notif/builtin"
 import "session"
+import "idle"
 
 ShellRoot {
     // NotifBackend is a lazily created singleton: this binding touches it so it picks a backend
@@ -46,4 +47,7 @@ ShellRoot {
     // The built-in notification server's popups and centre (used when NotifBackend picks it).
     Popups {}
     Centre {}
+
+    // Idle stages (dim, lock, screens off, suspend on battery) and the dim overlay windows.
+    Idle {}
 }
