@@ -151,8 +151,11 @@ local osd_keys = {
 for key, name in pairs(osd_keys) do
   local b = bind_for("hl.dsp.global(uq:" .. name .. ")")
   if b.key ~= key then error("uq:" .. name .. " is bound to " .. tostring(b.key)) end
-  if opt(b, "locked") ~= true or opt(b, "repeating") ~= true then
-    error(b.dsp .. " needs locked = true and repeating = true")
+  if opt(b, "locked") ~= true then error(b.dsp .. " needs locked = true") end
+  -- Level keys repeat while held; mute keys must not, or holding one flaps the mute.
+  local toggles = name == "mute" or name == "mic-mute"
+  if (opt(b, "repeating") == true) == toggles then
+    error(b.dsp .. (toggles and " must not repeat" or " needs repeating = true"))
   end
 end
 for _, b in ipairs(binds) do
@@ -179,7 +182,8 @@ fn base_lua_launcher_binds_are_not_locked() {
     }
 }
 
-/// Spec §2.12: the OSD keys go through the shell, locked and repeating, with no exec binds left.
+/// Spec §2.12: the OSD keys go through the shell, locked (level keys repeating, mute toggles not),
+/// with no exec binds left.
 #[test]
 fn base_lua_osd_binds_are_locked() {
     let base = std::fs::read_to_string(repo().join("config/hypr/base.lua")).unwrap();
@@ -196,8 +200,16 @@ fn base_lua_osd_binds_are_locked() {
         let line = lines[0];
         assert!(line.contains(key), "{name} is not on {key}: {line}");
         assert!(
-            line.contains("locked = true") && line.contains("repeating = true"),
-            "{name} bind must be locked and repeating: {line}"
+            line.contains("locked = true"),
+            "{name} bind must be locked: {line}"
+        );
+        // Level keys repeat while held; the mute toggles must not, or holding one flaps it.
+        let toggle = name.ends_with("mute");
+        assert_eq!(
+            line.contains("repeating = true"),
+            !toggle,
+            "{name} bind: repeating must be {}: {line}",
+            !toggle
         );
     }
     for line in base.lines() {

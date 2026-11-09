@@ -83,8 +83,8 @@ prints `ok` or `ignored`.
 
 `XF86AudioRaiseVolume`, `XF86AudioLowerVolume`, `XF86AudioMute`, `XF86AudioMicMute`,
 `XF86MonBrightnessUp` and `XF86MonBrightnessDown` go through the shell (`uq:vol-up`, `uq:vol-down`,
-`uq:mute`, `uq:mic-mute`, `uq:bright-up`, `uq:bright-down`). They work over the lock screen and
-repeat while held. Each press shows an OSD: noti-fi's when it answers, otherwise uQ's own on the
+`uq:mute`, `uq:mic-mute`, `uq:bright-up`, `uq:bright-down`). They work over the lock screen; the
+volume and brightness keys repeat while held, and the mute keys don't. Each press shows an OSD: noti-fi's when it answers, otherwise uQ's own on the
 focused monitor. Audio changes in the first 2 s after login are quiet (no OSD). With no output,
 input or backlight device, the matching key does nothing.
 

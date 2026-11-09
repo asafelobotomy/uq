@@ -180,8 +180,8 @@ hl.bind(mainMod .. " + CTRL + L", hl.dsp.exec_cmd("systemctl --user restart uq-l
 -- Volume, mic and brightness keys go through the shell (OSD included); see shell/osd/OsdRoutes.qml.
 hl.bind("XF86AudioRaiseVolume",  hl.dsp.global("uq:vol-up"),      { locked = true, repeating = true })
 hl.bind("XF86AudioLowerVolume",  hl.dsp.global("uq:vol-down"),    { locked = true, repeating = true })
-hl.bind("XF86AudioMute",         hl.dsp.global("uq:mute"),        { locked = true, repeating = true })
-hl.bind("XF86AudioMicMute",      hl.dsp.global("uq:mic-mute"),    { locked = true, repeating = true })
+hl.bind("XF86AudioMute",         hl.dsp.global("uq:mute"),        { locked = true })
+hl.bind("XF86AudioMicMute",      hl.dsp.global("uq:mic-mute"),    { locked = true })
 hl.bind("XF86MonBrightnessUp",   hl.dsp.global("uq:bright-up"),   { locked = true, repeating = true })
 hl.bind("XF86MonBrightnessDown", hl.dsp.global("uq:bright-down"), { locked = true, repeating = true })
 -- Media keys
