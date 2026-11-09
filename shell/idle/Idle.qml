@@ -12,6 +12,7 @@ import "../logic/idle.js" as I
 // on battery 1200 s once the lock is secure, and screens off 30 s after locking. A null stage is
 // disabled. Screens come back on through Hyprland's *_enables_dpms options. Suspend counts from
 // the last input (the monitor runs on battery alone) and only fires behind a secure lock.
+// Each monitor goes through a Rearm, so a changed timeout is applied (see Rearm.qml).
 Scope {
     id: root
 
@@ -49,38 +50,68 @@ Scope {
         }
     }
 
+    Rearm {
+        id: dimArm
+        want: root.on("dim")
+        timeout: root.stages.dim || 0
+    }
+
+    Rearm {
+        id: lockArm
+        want: root.on("lock")
+        timeout: root.stages.lock || 0
+    }
+
+    Rearm {
+        id: screenOffArm
+        want: root.on("screenOff")
+        timeout: root.stages.screenOff || 0
+    }
+
+    Rearm {
+        id: suspendArm
+        want: root.on("suspend")
+        timeout: root.stages.suspend || 0
+    }
+
+    Rearm {
+        id: lockedOffArm
+        want: root.on("lockedOff")
+        timeout: root.stages.lockedOff || 0
+    }
+
     IdleMonitor {
         id: dimMon
-        enabled: root.on("dim")
-        timeout: root.stages.dim || 0
+        enabled: dimArm.armed
+        timeout: dimArm.timeout
         respectInhibitors: true
     }
 
     IdleMonitor {
-        enabled: root.on("lock")
-        timeout: root.stages.lock || 0
+        enabled: lockArm.armed
+        timeout: lockArm.timeout
         respectInhibitors: true
         onIsIdleChanged: if (isIdle) root.act("lock")
     }
 
     IdleMonitor {
-        enabled: root.on("screenOff")
-        timeout: root.stages.screenOff || 0
+        enabled: screenOffArm.armed
+        timeout: screenOffArm.timeout
         respectInhibitors: true
         onIsIdleChanged: if (isIdle) root.act("screenOff")
     }
 
     IdleMonitor {
-        enabled: root.on("suspend")
-        timeout: root.stages.suspend || 0
+        enabled: suspendArm.armed
+        timeout: suspendArm.timeout
         respectInhibitors: true
         onIsIdleChanged: if (isIdle) root.act("suspend")
     }
 
     // Enabled when the lock begins, so its timeout counts from the moment of locking.
     IdleMonitor {
-        enabled: root.on("lockedOff")
-        timeout: root.stages.lockedOff || 0
+        enabled: lockedOffArm.armed
+        timeout: lockedOffArm.timeout
         respectInhibitors: true
         onIsIdleChanged: if (isIdle) root.act("lockedOff")
     }

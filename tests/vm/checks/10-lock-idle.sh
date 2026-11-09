@@ -163,8 +163,7 @@ c_L5() {
     shows_lock "$RUN_DIR/L5-locked-after-shell-kill.png" || bad "the lock screen is not showing after the shell restart"
     unlock_pw || { bad "could not unlock after the shell restart"; return; }
     wait_layer 10 uq-bar || bad "no bar after unlocking"
-    # A new timing needs a re-arm to apply (L9), so set it and cycle the lock before measuring.
-    idle_set dim 30 >/dev/null; rearm; poke
+    idle_set dim 30 >/dev/null; poke
     if wait_for 36 has_layer uq-dim; then
         note "idle still works after the restart: uq-dim mapped after dim 30"
         poke
@@ -280,11 +279,8 @@ c_L8() {
 start_idle() { poke; hnow; }
 # idle_wait SECS PRED...: input now; print the seconds until PRED holds (nothing if not in SECS).
 idle_wait() { local t0; t0=$(start_idle); wait_for "$1" "${@:2}" && since "$t0"; }
-# A lock/unlock cycle disables and re-enables the dim, lock and screen-off monitors, so they pick
-# up the current timeouts (a changed timeout alone is not applied: see L9).
-rearm() { lock_key && unlock_pw; }
-# stage_timing NAME SECS MAX LO HI PRED...: the checklist's measurement, then (if nothing
-# happened) the same after re-arming, so the rest of the row can still be checked.
+# stage_timing NAME SECS MAX LO HI PRED...: the checklist's measurement, straight after
+# 'uqctl idle set' (no lock/unlock in between: a new timing must apply on its own).
 stage_timing() {
     local name=$1 secs=$2 max=$3 lo=$4 hi=$5 dt; shift 5
     is_unlocked || unlock_pw || { bad "the session is locked before measuring $name"; return 1; }
@@ -294,11 +290,8 @@ stage_timing() {
         { lt "$lo" "$dt" && lt "$dt" "$hi"; } || bad "expected $name at about $secs s; observed $dt s"
         return 0
     fi
-    bad "expected $name $secs s after 'uqctl idle set'; observed nothing in $max s (the new timeout is not applied until the monitor is re-enabled)"
-    rearm || return 1
-    dt=$(idle_wait "$max" "$@")
-    note "after a lock/unlock cycle (re-arms the idle monitors): $name at ${dt:-never} s"
-    [ -n "$dt" ]
+    bad "expected $name $secs s after 'uqctl idle set'; observed nothing in $max s"
+    return 1
 }
 
 c_L9() {
@@ -307,7 +300,7 @@ c_L9() {
     wait_for 10 window_titled uqvm-dim || { bad "could not open a foot window to receive input"; return; }
     vgh hyprctl dispatch 'hl.dsp.focus({window="title:uqvm-dim"})' >/dev/null 2>&1
     idle_set dim 30 >/dev/null || { bad "uqctl idle set dim 30 failed"; return; }
-    stage_timing "the dim" 30 40 27 36 has_layer uq-dim || { bad "no dim even after re-arming"; return; }
+    stage_timing "the dim" 30 40 27 36 has_layer uq-dim || return
     sleep 1
     snap dimmed
     if have_magick; then
@@ -385,7 +378,6 @@ c_L13() {
     note "UPower OnBattery: $ob"
     idle_set suspend 60 >/dev/null || { bad "uqctl idle set suspend 60 failed"; return; }
     idle_set lock 40 >/dev/null
-    rearm
     local t0; t0=$(start_idle)
     wait_for 75 vm_is_suspended && bad "on AC: the VM suspended $(since "$t0") s after the last input (expected never)"
     note "on AC: not suspended 75 s after the last input (lock 40, suspend 60); LockedHint=$(locked_hint)"
@@ -407,8 +399,6 @@ c_L15() {
     mpv_play || { bad "could not start a playing MPRIS player (mpv + mpv-mpris)"; mpv_stop; return; }
     note "playerctl: $(vgh playerctl -l 2>&1 | tr '\n' ' ') status $(vgh playerctl status 2>&1)"
     idle_set dim 30 >/dev/null; idle_set lock 40 >/dev/null; idle_set screen-off 50 >/dev/null
-    rearm
-    note "(idle monitors re-armed with a lock/unlock cycle after setting the timings; see L9)"
     local t0 dt dimmed=0 off=0
     t0=$(start_idle)
     while lt "$(since "$t0")" 56; do
@@ -429,7 +419,6 @@ c_L15() {
     is_locked && unlock_pw
     # idle.media_blocks_lock on: no lock either.
     if uqd_set idle.media_blocks_lock true >/dev/null 2>&1; then
-        rearm
         t0=$(start_idle)
         wait_for 55 is_locked && bad "idle.media_blocks_lock on: locked $(since "$t0") s after the last input while playing"
         note "idle.media_blocks_lock on: LockedHint=$(locked_hint) after 55 s of playing"
@@ -448,8 +437,6 @@ c_L16() {
     snap stay-awake-on
     qmp key esc
     idle_set dim 30 >/dev/null; idle_set lock 40 >/dev/null; idle_set screen-off 50 >/dev/null
-    rearm
-    note "(idle monitors re-armed with a lock/unlock cycle after setting the timings; see L9)"
     local t0 any=""
     t0=$(start_idle)
     while lt "$(since "$t0")" 60; do
