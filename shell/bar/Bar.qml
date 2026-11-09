@@ -19,6 +19,13 @@ PanelWindow {
     exclusiveZone: islandHeight + Theme.gapOut
     color: "transparent"
 
+    // Stay awake (quick settings): blocks every idle stage while on. One per bar; any one held
+    // inhibits idle for the session.
+    IdleInhibitor {
+        window: bar
+        enabled: StayAwake.enabled
+    }
+
     RowLayout {
         anchors.fill: parent
         spacing: Theme.gapIn
@@ -35,6 +42,9 @@ PanelWindow {
         Item { Layout.fillWidth: true }
         TimeIsland { Layout.fillHeight: true }
         NotifIsland { Layout.fillHeight: true }
-        StatusIsland { Layout.fillHeight: true }
+        StatusIsland {
+            Layout.fillHeight: true
+            screen: bar.modelData
+        }
     }
 }

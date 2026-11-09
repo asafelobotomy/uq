@@ -12,10 +12,11 @@ import Quickshell.Services.UPower
 import "../core"
 import "../logic/net.js" as Net
 
-// Tray, media, network/VPN, audio, battery and an inert quick-settings button (slice 3).
+// Tray, media, network/VPN, audio, battery and the quick-settings button.
 // Tray tooltips, track titles, SSIDs and VPN names are untrusted: they only reach UqText.
 Island {
     id: root
+    property var screen: null
     readonly property int iconSize: 18
     readonly property int cell: 26
     readonly property int retryMs: 300000
@@ -393,16 +394,29 @@ Island {
             }
         }
 
-        // quick settings: inert until slice 3
+        // Quick settings: opens QuickSettings under this button, on this island's screen.
         Rectangle {
+            id: quickButton
+            // Read by QuickSettings: its focus grab includes this bar so a second click toggles it shut.
+            readonly property var barWindow: root.QsWindow.window
+            readonly property bool open: Surfaces.open === "quicksettings" && Surfaces.anchor === quickButton
             Layout.preferredWidth: root.cell
             Layout.preferredHeight: root.cell
             radius: Theme.radius - 2
-            color: Theme.surfaceAlt
+            color: open ? Theme.accent : (quickMouse.containsMouse ? Theme.overlay : Theme.surfaceAlt)
+            Accessible.role: Accessible.Button
+            Accessible.name: "Quick settings"
+            Accessible.onPressAction: Surfaces.toggle("quicksettings", root.screen, quickButton)
             UqText {
                 anchors.centerIn: parent
                 text: "⚙"
-                color: Theme.textMuted
+                color: quickButton.open ? Theme.accentText : Theme.textMuted
+            }
+            MouseArea {
+                id: quickMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                onClicked: Surfaces.toggle("quicksettings", root.screen, quickButton)
             }
         }
     }

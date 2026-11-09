@@ -2,6 +2,7 @@ pragma Singleton
 import QtQuick
 import Quickshell.Io
 import "../logic/quick.js" as Q
+import "../logic/quickui.js" as U
 
 // Backlight via `brightnessctl` with a fixed argv (spec §2.2); never a shell. One Process at a
 // time: a step while one is running, or with no backlight device, is a no-op, so key-repeat
@@ -29,6 +30,16 @@ QtObject {
         if (!available || busy)
             return;
         run("step", Q.brightnessArgs(dir));
+    }
+
+    // Absolute percent (the quick-settings slider). Same guard as step(): returns false, and
+    // runs nothing, while a command is in flight or with no backlight device.
+    function set(percent) {
+        var argv = U.brightnessSetArgs(percent);
+        if (!available || busy || argv === null)
+            return false;
+        run("set", argv);
+        return true;
     }
 
     function run(m, argv) {
