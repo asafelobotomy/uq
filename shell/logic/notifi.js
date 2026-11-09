@@ -144,10 +144,14 @@ function statusFields(o) {
                   && Math.floor(o.unread) === o.unread) ? o.unread : 0;
     var latest = null;
     var l = o.latest;
-    if (l && typeof l === "object" && !Array.isArray(l))
+    if (l && typeof l === "object" && !Array.isArray(l)) {
         latest = { appName: Notif.cleanText(l.appName, Notif.MAX_APP),
                    appIcon: Notif.cleanText(l.appIcon, MAX_ICON),
                    summary: Notif.cleanText(l.summary, Notif.MAX_SUMMARY) };
+        // Nothing left to show: no latest.
+        if (latest.appName === "" && latest.appIcon === "" && latest.summary === "")
+            latest = null;
+    }
     return { unread: unread, dnd: o.dnd === true, centre: o.center === true,
              sharing: o.sharing === true, latest: latest,
              holding: (typeof o.holding === "string" && HOLDING.indexOf(o.holding) >= 0) ? o.holding : "" };

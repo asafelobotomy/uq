@@ -126,10 +126,12 @@ function hrefChar(c) {
     return c;
 }
 
-// Control characters (other than \n and \t) and bidi overrides become spaces, as in cleanText.
+// Control characters (C0 other than \n and \t, DEL, C1), line/paragraph separators and bidi
+// overrides become spaces, as in cleanText.
 function isControl(c) {
     var n = c.charCodeAt(0);
-    return (n < 0x20 && c !== "\n" && c !== "\t") || n === 0x7f
+    return (n < 0x20 && c !== "\n" && c !== "\t") || (n >= 0x7f && n <= 0x9f)
+        || n === 0x2028 || n === 0x2029
         || (n >= 0x202a && n <= 0x202e) || (n >= 0x2066 && n <= 0x2069);
 }
 

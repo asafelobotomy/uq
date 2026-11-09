@@ -151,8 +151,12 @@ TestCase {
                                    latest: "x" });
         compare(bad, { unread: 0, dnd: false, centre: false, sharing: false, holding: "", latest: null });
         compare(N.statusFields({ latest: [1] }).latest, null);
-        compare(N.statusFields({ latest: { appName: 1, appIcon: null, summary: {} } }).latest,
-                { appName: "", appIcon: "", summary: "" });
+        // A latest with nothing left to show after cleaning is no latest.
+        compare(N.statusFields({ latest: { appName: 1, appIcon: null, summary: {} } }).latest, null);
+        compare(N.statusFields({ latest: { appName: " \u0000 ", appIcon: "", summary: "\u202E" } }).latest,
+                null);
+        compare(N.statusFields({ latest: { appName: "", appIcon: "", summary: "S" } }).latest,
+                { appName: "", appIcon: "", summary: "S" });
         // Unread: non-negative integer, else 0.
         compare(N.statusFields({ unread: -2 }).unread, 0);
         compare(N.statusFields({ unread: 2.5 }).unread, 0);

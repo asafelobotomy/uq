@@ -8,7 +8,8 @@ import "../logic/notif.js" as N
 // §2.5). `notif.backend` picks one (logic/notif.js chooseBackend); a missing daemon falls back to
 // built-in with a warning; `auto` waits NOTIFI_GRACE_MS for noti-fi before settling on built-in,
 // at startup and again whenever noti-fi drops.
-// While the choice is "pending" nothing is available and the controls do nothing.
+// While the choice is "pending", or nothing is available, or built-in has yielded the name to
+// another daemon, the controls do nothing.
 QtObject {
     id: root
 
@@ -59,6 +60,8 @@ QtObject {
     }
 
     function toggleCentre() {
+        if (!available || yieldedTo !== "")
+            return;
         switch (backend) {
         case "notifi":
             Notifi.toggleCentre().catch(function () {});
@@ -75,6 +78,8 @@ QtObject {
     }
 
     function setDnd(on) {
+        if (!available || yieldedTo !== "")
+            return;
         switch (backend) {
         case "notifi":
             Notifi.setDnd(on).catch(function () {});

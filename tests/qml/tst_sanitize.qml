@@ -110,6 +110,9 @@ TestCase {
         compare(S.sanitize("a <b"), "a &lt;b");
         compare(S.sanitize("x > y \"q\""), "x &gt; y &quot;q&quot;");
         compare(S.sanitize("&#10;"), "<br>");
+        compare(S.sanitize("a\u0080b\u009fc\u2028d\u2029e&#x85;f"), "a b c d e f");
+        compare(S.plainBody("a\u2028b\u0090c"), "a b c");
+        compare(S.sanitize('<a href="x\u2028y\u0085z">l</a>'), '<a href="x y z">l</a>');
         compare(S.sanitize("a‮b"), "a b");
     }
 

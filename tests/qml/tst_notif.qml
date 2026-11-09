@@ -17,6 +17,8 @@ TestCase {
         compare(N.cleanText(null, 10), "");
         compare(N.cleanText("  hi\u0000there\u007f\n", 20), "hi there");
         compare(N.cleanText("a\u202Eb\u2066c\u2069d", 20), "a b c d");
+        compare(N.cleanText("a\u0080b\u009fc\u2028d\u2029e\u0085f", 20), "a b c d e f");
+        compare(N.cleanText("\u00a0x\u00a0", 20), "x");
         compare(N.cleanText("abcdefghij", 5), "abcd…");
         compare(N.cleanText("abcde", 5), "abcde");
     }

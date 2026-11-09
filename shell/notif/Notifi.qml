@@ -109,9 +109,10 @@ QtObject {
             return;
         dnd = st.dnd;
         count = st.unread;
+        // sharing before latest, so nothing bound to latest sees it with a stale sharing.
+        sharing = st.sharing;
         latest = st.latest;
         centreOpen = st.centre;
-        sharing = st.sharing;
         holding = st.holding;
     }
 

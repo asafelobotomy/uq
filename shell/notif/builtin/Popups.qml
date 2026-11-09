@@ -27,7 +27,9 @@ PanelWindow {
         return null;
     }
 
-    visible: !Bridge.locked && Builtin.popups.length > 0 && Surfaces.open !== "notifcentre"
+    readonly property bool shown: !Bridge.locked && Builtin.popups.length > 0 && Surfaces.open !== "notifcentre"
+
+    visible: shown
     screen: screenFor(Hyprland.focusedMonitor)
     color: "transparent"
     WlrLayershell.layer: WlrLayer.Top
@@ -47,8 +49,9 @@ PanelWindow {
         width: root.panelWidth
         spacing: Theme.gapIn * 2
 
+        // Empty while hidden, so store changes don't rebuild cards nobody sees.
         Repeater {
-            model: Builtin.popups
+            model: root.shown ? Builtin.popups : []
             delegate: NotifCard {
                 required property var modelData
                 notification: modelData

@@ -152,8 +152,9 @@ notifications there are, and a mark while Do Not Disturb is on.
 `uqctl notif backend <name>` picks who shows them:
 
 - `auto` (the default) uses noti-fi when its socket answers, otherwise uQ's built-in server.
-- `notifi`, `builtin`, `swaync`, `mako` or `dunst` uses that one. If it isn't installed or
-  running, uQ uses the built-in server and logs a warning.
+- `notifi`, `builtin`, `swaync`, `mako` or `dunst` uses that one. If noti-fi isn't running, or
+  the chosen daemon isn't installed, uQ uses the built-in server and logs a warning. For swaync
+  and mako uQ only checks that they're installed, not that they're running.
 - mako has no centre, so `SUPER+N` and the click do nothing with it. dunst's centre brings back
   the last notification from its history.
 

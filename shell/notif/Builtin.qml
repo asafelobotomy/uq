@@ -18,7 +18,7 @@ QtObject {
     property bool wanted: false                     // set by NotifBackend
     readonly property bool registered: loader.item !== null
     property bool dnd: false                        // in memory only
-    property int count: 0                           // arrivals since the centre was last opened
+    property int count: 0                           // arrivals since the centre opened, ≤ notifications
     property var latest: null                       // {appIcon, appName, summary} or null
     property var notifications: []                  // Notification objects, newest first, ≤ MAX_KEEP
     property var popups: []                         // newest first, ≤ MAX_POPUPS
@@ -52,9 +52,12 @@ QtObject {
         deadlines = ds;
     }
 
-    // `latest` first, so a handler of notificationsChanged already sees it.
+    // `latest` and `count` first, so a handler of notificationsChanged already sees them. Unread
+    // can't outnumber what is kept, so a dismissal or the store cap lowers count too.
     function setStore(list) {
         latest = viewOf(list.length > 0 ? list[0] : null);
+        if (count > list.length)
+            count = list.length;
         notifications = list;
     }
 

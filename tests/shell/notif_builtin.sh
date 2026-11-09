@@ -2,7 +2,8 @@
 # Headless check of the built-in notification server (shell/notif/Builtin.qml) on a private
 # dbus-daemon (never the session bus): it takes org.freedesktop.Notifications when wanted, the
 # body reaches the shell and sanitises to the allowed subset, a replacement updates `latest`, a
-# transient held back by DnD is not kept, and the store keeps at most 50.
+# transient held back by DnD is not kept, a dismissal lowers the count, and the store keeps at most
+# 50 (count clamped to it).
 set -u
 root=$(cd "$(dirname "$0")/../.." && pwd)
 for tool in notify-send dbus-daemon dbus-send qs; do
@@ -59,6 +60,9 @@ ShellRoot {
             } else if (n.summary === "end") {
                 var held = Builtin.notifications.some(function (x) { return x.summary === "tr"; });
                 console.log("END", Builtin.notifications.length, Builtin.count, held);
+                // Dismissing one drops count with the store (count never exceeds it).
+                Builtin.dismiss(n);
+                console.log("DISMISSED", Builtin.notifications.length, Builtin.count);
                 Builtin.dnd = false;
             }
         }
@@ -105,12 +109,13 @@ timeout 5 notify-send --transient -a Test "tr" "held"
 timeout 5 notify-send -a Test "end" "kept"
 wait_for 'END ' || { echo "FAIL: no notification under DnD reached the shell"; cat "$tmp/out"; exit 1; }
 grep -q 'END 3 3 false$' "$tmp/out" || { echo "FAIL: a transient held back by DnD was kept"; cat "$tmp/out"; exit 1; }
+grep -q 'DISMISSED 2 2$' "$tmp/out" || { echo "FAIL: count did not follow a dismissal"; cat "$tmp/out"; exit 1; }
 wait_for 'DND false' || { echo "FAIL: DnD not cleared"; cat "$tmp/out"; exit 1; }
 
 for i in $(seq 60); do timeout 5 notify-send -a Test "n$i" "body $i"; done
 timeout 5 notify-send -a Test "done" "last"
 wait_for 'STORE ' || { echo "FAIL: the last notification never arrived"; cat "$tmp/out"; exit 1; }
-grep -q 'STORE 50 3 64 done$' "$tmp/out" || { echo "FAIL: store not capped at 50 (or popups at 3)"; cat "$tmp/out"; exit 1; }
+grep -q 'STORE 50 3 50 done$' "$tmp/out" || { echo "FAIL: store not capped at 50 (popups at 3, count at the store)"; cat "$tmp/out"; exit 1; }
 
 if grep -E 'TypeError|ReferenceError|is not a type|Cannot assign|Unable to assign|is not a function|Cannot read property|Syntax[Ee]rror|[A-Za-z]+\.qml:[0-9]+:[0-9]*:? ' "$tmp/out"; then
     echo "FAIL: QML errors"; cat "$tmp/out"; exit 1

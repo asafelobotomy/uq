@@ -102,6 +102,14 @@ PanelWindow {
             Surfaces.close();
         }
     }
+    // The centre belongs to the built-in backend; it closes if the backend changes under it.
+    Connections {
+        target: NotifBackend
+        function onBackendChanged() {
+            if (NotifBackend.backend !== "builtin" && Surfaces.open === "notifcentre")
+                Surfaces.close();
+        }
+    }
     Connections {
         target: Surfaces
         function onWipe(surface) {
@@ -250,8 +258,9 @@ PanelWindow {
                     width: flick.width
                     spacing: Theme.gapIn * 2
 
+                    // Empty while hidden, so store changes don't rebuild cards nobody sees.
                     Repeater {
-                        model: Builtin.notifications
+                        model: root.shown ? Builtin.notifications : []
                         delegate: NotifCard {
                             required property var modelData
                             notification: modelData

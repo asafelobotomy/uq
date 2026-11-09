@@ -11,11 +11,12 @@ var MAX_SUMMARY = 200;
 
 var EXTERNAL = ["swaync", "mako", "dunst"];
 
-// Control characters and bidi overrides become spaces; trimmed; capped at `max` with an ellipsis.
+// Control characters (C0, DEL, C1), line/paragraph separators and bidi overrides become spaces;
+// trimmed; capped at `max` with an ellipsis.
 function cleanText(s, max) {
     if (typeof s !== "string")
         return "";
-    var t = s.replace(/[\u0000-\u001f\u007f\u202A-\u202E\u2066-\u2069]/g, " ").trim();
+    var t = s.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202A-\u202E\u2066-\u2069]/g, " ").trim();
     if (t.length > max)
         t = t.slice(0, Math.max(0, max - 1)) + "…";
     return t;
