@@ -310,6 +310,7 @@ enum Request {
     ListThemes,
     GetLayouts,
     SetLayout(String, String),
+    GetSchedule,
     SetSchedule(String),
     Reload,
     GetSettings,
@@ -339,6 +340,7 @@ impl Request {
             "GetTheme" => (0, Request::GetTheme),
             "ListThemes" => (0, Request::ListThemes),
             "GetLayouts" => (0, Request::GetLayouts),
+            "GetSchedule" => (0, Request::GetSchedule),
             "Reload" => (0, Request::Reload),
             "GetSettings" => (0, Request::GetSettings),
             "GetLaunchCounts" => (0, Request::GetLaunchCounts),
@@ -409,6 +411,10 @@ impl Request {
                 let m: HashMap<String, String> =
                     proxy.call("GetLayouts", &()).await.map_err(describe)?;
                 Ok(json!(m))
+            }
+            Request::GetSchedule => {
+                let s: String = proxy.call("GetSchedule", &()).await.map_err(describe)?;
+                serde_json::from_str(&s).map_err(|e| format!("bad schedule: {e}"))
             }
             Request::GetSettings => {
                 let s: String = proxy.call("GetSettings", &()).await.map_err(describe)?;

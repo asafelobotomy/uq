@@ -70,6 +70,12 @@ impl DesktopIface {
         Ok(self.desktop.lock().await.set_schedule(s).await?)
     }
 
+    /// The stored schedule as JSON, in the format `SetSchedule` accepts.
+    async fn get_schedule(&self) -> Result<String, UqError> {
+        let d = self.desktop.lock().await;
+        serde_json::to_string(d.schedule()).map_err(|e| UqError::InvalidSchedule(e.to_string()))
+    }
+
     async fn set_layout(&self, workspace: &str, layout: &str) -> Result<(), UqError> {
         Ok(self
             .desktop

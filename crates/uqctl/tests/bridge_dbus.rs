@@ -69,6 +69,20 @@ async fn bridge_forwards_set_theme() {
 }
 
 #[tokio::test]
+async fn bridge_get_schedule() {
+    let bus = private_bus();
+    let dir = tempfile::tempdir().unwrap();
+    let _uqd = serve_uqd(&bus, dir.path()).await;
+    let mut b = Bridge::start(&bus);
+    b.next().await;
+
+    let got = b.call(1, "GetSchedule", json!([])).await;
+    assert_eq!(got["ok"]["mode"], "off", "{got}");
+    let bad = b.call(2, "GetSchedule", json!(["x"])).await;
+    assert!(bad["err"].is_string(), "{bad}");
+}
+
+#[tokio::test]
 async fn bridge_settings_round_trip() {
     let bus = private_bus();
     let dir = tempfile::tempdir().unwrap();

@@ -158,3 +158,48 @@ async fn dbus_round_trip() {
         "{err:?}"
     );
 }
+
+#[tokio::test]
+async fn get_schedule_round_trips() {
+    let dir = tempfile::tempdir().unwrap();
+    let bus = private_bus(dir.path());
+    let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut paths = uq_core::paths::Paths::under(&dir.path().join("root"));
+    paths.themes_dir = repo.join("themes");
+    paths.templates_dir = repo.join("templates");
+    let desktop = Desktop::new(
+        paths,
+        Arc::new(FakeCompositor::running()),
+        Arc::new(FakeSystem::default()),
+    )
+    .unwrap();
+    let _server = serve(
+        zbus::connection::Builder::address(bus.address.as_str()).unwrap(),
+        desktop,
+    )
+    .await
+    .unwrap();
+    let client = zbus::connection::Builder::address(bus.address.as_str())
+        .unwrap()
+        .build()
+        .await
+        .unwrap();
+    let proxy = zbus::Proxy::new(&client, NAME, PATH, IFACE).await.unwrap();
+
+    let fresh: String = proxy.call("GetSchedule", &()).await.unwrap();
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&fresh).unwrap(),
+        serde_json::json!({"mode":"off"})
+    );
+    let () = proxy
+        .call(
+            "SetSchedule",
+            &(r#"{"mode":"sun","lat":51.5,"lon":-0.13}"#,),
+        )
+        .await
+        .unwrap();
+    let got: String = proxy.call("GetSchedule", &()).await.unwrap();
+    let got: serde_json::Value = serde_json::from_str(&got).unwrap();
+    assert_eq!(got["mode"], "sun");
+    assert_eq!(got["lat"], 51.5);
+}

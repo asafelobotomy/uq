@@ -189,6 +189,10 @@ impl Desktop {
         self.state.layouts.clone()
     }
 
+    pub fn schedule(&self) -> &Schedule {
+        &self.state.schedule
+    }
+
     pub fn settings(&self) -> &Settings {
         &self.state.settings
     }
