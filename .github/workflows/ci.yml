@@ -14,7 +14,7 @@ jobs:
     steps:
       - name: Install toolchain, dbus, lua, Hyprland and Quickshell
         # foot, ttf-dejavu and grim give the smoke test a real window and a screenshot; jq reads hyprctl.
-        run: pacman -Syu --noconfirm --needed rust dbus lua hyprland git quickshell qt6-declarative jq foot ttf-dejavu grim
+        run: pacman -Syu --noconfirm --needed rust dbus lua hyprland git quickshell qt6-declarative jq foot ttf-dejavu grim libnotify
       - uses: actions/checkout@v4
       - name: Check Arch's Hyprland is inside the pinned series
         run: |
