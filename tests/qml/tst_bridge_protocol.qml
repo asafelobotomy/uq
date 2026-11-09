@@ -86,6 +86,32 @@ TestCase {
         compare(themeSpy.count, 0);
     }
 
+    function test_notif_owner_event() {
+        compare(Bridge.notifOwner.known, false);
+        compare(Bridge.notifOwner.owner, null);
+        compare(Bridge.notifOwner.name, "");
+        compare(Bridge.notifOwner.self, false);
+        Bridge.feed('{"v":1,"event":"NotifOwner","data":{"owner":":1.7","pid":42,"name":"mako","self":false}}');
+        compare(Bridge.notifOwner.known, true);
+        compare(Bridge.notifOwner.owner, ":1.7");
+        compare(Bridge.notifOwner.name, "mako");
+        compare(Bridge.notifOwner.self, false);
+        Bridge.feed('{"v":1,"event":"NotifOwner","data":{"owner":":1.2","pid":9,"name":"quickshell","self":true}}');
+        compare(Bridge.notifOwner.self, true);
+        Bridge.feed('{"v":1,"event":"NotifOwner","data":{"owner":null,"pid":null,"name":null,"self":false}}');
+        compare(Bridge.notifOwner.known, true);
+        compare(Bridge.notifOwner.owner, null);
+        compare(Bridge.notifOwner.name, "");
+        compare(Bridge.notifOwner.self, false);
+        Bridge.reset();
+        compare(Bridge.notifOwner.known, false);
+        compare(Bridge.notifOwner.owner, null);
+        Bridge.feed('{"v":1,"event":"NotifOwner","data":"junk"}');
+        compare(Bridge.notifOwner.known, false);
+        Bridge.feed('{"v":1,"event":"NotifOwner","data":null}');
+        compare(Bridge.notifOwner.known, false);
+    }
+
     function test_sharing_from_screencast() {
         verify(!Bridge.sharing);
         Bridge.handleRawEvent("screencast", "1,0");

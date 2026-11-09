@@ -14,13 +14,14 @@ QtObject {
     property bool sharing: false        // screen sharing (Hyprland screencast), spec §2.10
     property var weather: null          // last Weather event data; null until one arrives / cleared
     property var publicIp: null
+    // Owner of org.freedesktop.Notifications (spec 2.3); known stays false until a NotifOwner event.
+    property var notifOwner: ({ known: false, owner: null, name: "", self: false })
     property string configError: ""
 
     signal event(string name, var data)
     signal themeChanged()
     signal settingsChanged(var settings)
     signal layoutChanged(int ws, string layout)
-    signal notifOwner(string owner)
     // Spotlight results: {generation, provider, provider_name, source_dir, items}.
     signal searchResults(var data)
 
@@ -47,6 +48,7 @@ QtObject {
         sharing = false;
         weather = null;
         publicIp = null;
+        notifOwner = ({ known: false, owner: null, name: "", self: false });
         failPending("reset");
     }
 
@@ -156,7 +158,15 @@ QtObject {
             break;
         case "Weather": weather = data; break;
         case "PublicIp": publicIp = data; break;
-        case "NotifOwner": notifOwner(data ? String(data.owner) : ""); break;
+        case "NotifOwner":
+            if (data && typeof data === "object")
+                notifOwner = {
+                    known: true,
+                    owner: data.owner === null || data.owner === undefined ? null : String(data.owner),
+                    name: data.name ? String(data.name) : "",
+                    self: data.self === true
+                };
+            break;
         case "SearchResults":
             if (data && typeof data === "object") searchResults(data);
             break;
