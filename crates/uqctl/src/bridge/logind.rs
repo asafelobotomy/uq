@@ -3,7 +3,9 @@
 //!
 //! The bridge holds a delay inhibitor at all times. On `PrepareForSleep(true)` it reports the
 //! event and keeps the inhibitor until the shell says the lock is secure (`SleepLockReady`), or
-//! until `SLEEP_FALLBACK_MS` passes. On `PrepareForSleep(false)` it takes a fresh one. A failed
+//! until the fallback passes: logind's own `InhibitDelayMaxUSec` less `FALLBACK_MARGIN_MS`
+//! (`fallback_ms`), so a slow lock still beats the sleep. On `PrepareForSleep(false)` it takes a
+//! fresh one. A failed
 //! `Inhibit` is retried every `INHIBIT_RETRY` while no inhibitor is held and no sleep is pending.
 //!
 //! `hint_loop` forwards the latest lock state from the relay in `mod.rs` to `SetLockedHint`,
@@ -27,8 +29,23 @@ const MANAGER: &str = "org.freedesktop.login1.Manager";
 const SESSION: &str = "org.freedesktop.login1.Session";
 const USER: &str = "org.freedesktop.login1.User";
 
-/// How long a pending sleep may wait for `SleepLockReady` before the inhibitor is dropped anyway.
-pub const SLEEP_FALLBACK_MS: u64 = 2000;
+/// The shortest wait for `SleepLockReady` before the inhibitor is dropped anyway.
+pub const MIN_FALLBACK_MS: u64 = 2000;
+/// The wait when logind's `InhibitDelayMaxUSec` can't be read (its default is 5 s).
+pub const DEFAULT_FALLBACK_MS: u64 = 4500;
+/// Released this long before logind would stop waiting on its own.
+pub const FALLBACK_MARGIN_MS: u64 = 500;
+
+/// How long a pending sleep waits for `SleepLockReady`, from logind's `InhibitDelayMaxUSec`
+/// (`None`: unreadable): that limit less `FALLBACK_MARGIN_MS`, never below `MIN_FALLBACK_MS`.
+pub fn fallback_ms(inhibit_delay_max_usec: Option<u64>) -> u64 {
+    match inhibit_delay_max_usec {
+        Some(us) => (us / 1000)
+            .saturating_sub(FALLBACK_MARGIN_MS)
+            .max(MIN_FALLBACK_MS),
+        None => DEFAULT_FALLBACK_MS,
+    }
+}
 /// How often a failed `Inhibit` is tried again while awake.
 pub const INHIBIT_RETRY: Duration = Duration::from_secs(30);
 
@@ -101,6 +118,8 @@ pub struct Logind {
     inhibit_fail: Streak,
     hint_fail: Streak,
     retry: Duration,
+    /// The sleep fallback in ms (`fallback_ms`), read from logind when the watch starts.
+    fallback: std::sync::atomic::AtomicU64,
     /// Our session object, once found.
     session: watch::Sender<Option<(Connection, OwnedObjectPath)>>,
 }
@@ -119,6 +138,7 @@ impl Logind {
             inhibit_fail: Streak::default(),
             hint_fail: Streak::default(),
             retry,
+            fallback: std::sync::atomic::AtomicU64::new(DEFAULT_FALLBACK_MS),
             session: watch::Sender::new(None),
         })
     }
@@ -226,6 +246,8 @@ impl Logind {
             }
             None => self.warn("no session"),
         }
+        let delay = inhibit_delay_max(&conn).await;
+        self.fallback.store(fallback_ms(delay), Ordering::Relaxed);
         // Take the inhibitor last, so the subscriptions above are live once logind sees it.
         self.inhibit(&conn, "at start").await;
 
@@ -293,8 +315,9 @@ impl Logind {
             if let Some(epoch) = epoch {
                 // Weak: a pending timer must not keep the event sender (and so stdout) open.
                 let me = Arc::downgrade(self);
+                let wait = Duration::from_millis(self.fallback.load(Ordering::Relaxed));
                 tokio::spawn(async move {
-                    tokio::time::sleep(Duration::from_millis(SLEEP_FALLBACK_MS)).await;
+                    tokio::time::sleep(wait).await;
                     let Some(me) = me.upgrade() else { return };
                     let mut s = me.state();
                     if s.sleeping && s.epoch == epoch {
@@ -418,6 +441,21 @@ async fn display_session(conn: &Connection, uid: u32) -> Option<OwnedObjectPath>
     (path.as_str() != "/").then_some(path)
 }
 
+/// logind's `InhibitDelayMaxUSec`: how long it waits for delay inhibitors before sleeping.
+async fn inhibit_delay_max(conn: &Connection) -> Option<u64> {
+    let props = zbus::fdo::PropertiesProxy::builder(conn)
+        .destination(DEST)
+        .ok()?
+        .path(PATH)
+        .ok()?
+        .build()
+        .await
+        .ok()?;
+    let iface = zbus::names::InterfaceName::from_static_str(MANAGER).ok()?;
+    let value = props.get(iface, "InhibitDelayMaxUSec").await.ok()?;
+    u64::try_from(value).ok()
+}
+
 /// Our uid: the owner of `/proc/self`.
 fn own_uid() -> Option<u32> {
     use std::os::unix::fs::MetadataExt;
@@ -476,7 +514,6 @@ mod tests {
             .unwrap()
     }
 
-    #[derive(Default)]
     struct Fake {
         /// Our end of each inhibitor handed out; it reads EOF once the bridge drops its fd.
         ends: Vec<UnixStream>,
@@ -496,7 +533,35 @@ mod tests {
         /// SetLockedHint records the hint, then never answers.
         hint_hangs: bool,
         hint_calls: usize,
+        /// logind's InhibitDelayMaxUSec; `None` makes reading it fail.
+        delay_usec: Option<u64>,
     }
+
+    impl Default for Fake {
+        fn default() -> Fake {
+            Fake {
+                ends: Vec::new(),
+                inhibit_args: Vec::new(),
+                hints: Vec::new(),
+                by_pid_fails: false,
+                get_session_ids: Vec::new(),
+                get_user_uids: Vec::new(),
+                no_user: false,
+                display: None,
+                inhibit_fails: 0,
+                hint_fails: false,
+                hint_hangs: false,
+                hint_calls: 0,
+                // 2.5 s: a 2 s fallback, so the timing tests stay short.
+                delay_usec: Some(TEST_DELAY_USEC),
+            }
+        }
+    }
+
+    const TEST_DELAY_USEC: u64 = 2_500_000;
+    /// The fallback with the default fake.
+    const TEST_FALLBACK_MS: u64 = 2000;
+
     type Shared = Arc<Mutex<Fake>>;
 
     struct FakeManager(Shared);
@@ -541,6 +606,15 @@ mod tests {
                 return Err(zbus::fdo::Error::Failed("no such user".into()));
             }
             Ok(OwnedObjectPath::try_from(USER_PATH).unwrap())
+        }
+
+        #[zbus(property, name = "InhibitDelayMaxUSec")]
+        fn inhibit_delay_max_usec(&self) -> zbus::fdo::Result<u64> {
+            self.0
+                .lock()
+                .unwrap()
+                .delay_usec
+                .ok_or_else(|| zbus::fdo::Error::Failed("no property".into()))
         }
     }
 
@@ -753,16 +827,59 @@ mod tests {
         assert!(r.wait_closed(0, Duration::from_millis(500)).await);
     }
 
+    #[test]
+    fn fallback_follows_logind_delay() {
+        // logind's default 5 s: released half a second before logind gives up.
+        assert_eq!(fallback_ms(Some(5_000_000)), 4500);
+        assert_eq!(fallback_ms(Some(30_000_000)), 29_500);
+        // Never below 2 s, however short logind's limit.
+        assert_eq!(fallback_ms(Some(2_200_000)), MIN_FALLBACK_MS);
+        assert_eq!(fallback_ms(Some(0)), MIN_FALLBACK_MS);
+        // Unreadable: logind's default less the margin.
+        assert_eq!(fallback_ms(None), DEFAULT_FALLBACK_MS);
+        assert_eq!(DEFAULT_FALLBACK_MS, 4500);
+    }
+
     #[tokio::test]
     async fn sleep_fallback_releases() {
-        let mut r = rig().await;
+        // logind waits 4 s: the inhibitor is held for 3.5 s, well past the old 2 s.
+        let (tx, rx) = mpsc::channel(16);
+        let fake = Fake {
+            delay_usec: Some(4_000_000),
+            ..Fake::default()
+        };
+        let mut r = rig_with(Logind::new(tx), rx, fake).await;
         let t = Instant::now();
         r.prepare(true).await;
         assert_eq!(r.next().await, sleeping(true));
-        tokio::time::sleep(Duration::from_millis(1500)).await;
-        assert!(!r.closed(0), "held before the fallback");
+        tokio::time::sleep(Duration::from_millis(3200)).await;
+        assert!(!r.closed(0), "held until logind's limit less the margin");
         assert!(r.wait_closed(0, Duration::from_millis(1500)).await);
-        assert!(t.elapsed() < Duration::from_millis(3000));
+        assert!(
+            t.elapsed() < Duration::from_millis(4000),
+            "released before logind's own limit"
+        );
+    }
+
+    #[tokio::test]
+    async fn sleep_fallback_default_without_delay() {
+        let (tx, rx) = mpsc::channel(16);
+        let fake = Fake {
+            delay_usec: None,
+            ..Fake::default()
+        };
+        let mut r = rig_with(Logind::new(tx), rx, fake).await;
+        assert_eq!(
+            r.logind.fallback.load(Ordering::Relaxed),
+            DEFAULT_FALLBACK_MS
+        );
+        let t = Instant::now();
+        r.prepare(true).await;
+        assert_eq!(r.next().await, sleeping(true));
+        tokio::time::sleep(Duration::from_millis(4200)).await;
+        assert!(!r.closed(0), "held for the 4.5 s default");
+        assert!(r.wait_closed(0, Duration::from_millis(1500)).await);
+        assert!(t.elapsed() < Duration::from_millis(5000));
     }
 
     #[tokio::test]
@@ -777,7 +894,7 @@ mod tests {
         assert_eq!(r.inhibits(), 2, "a fresh inhibitor before the event");
         assert!(!r.closed(1));
         // The old fallback timer does not drop the fresh inhibitor.
-        tokio::time::sleep(Duration::from_millis(SLEEP_FALLBACK_MS + 300)).await;
+        tokio::time::sleep(Duration::from_millis(TEST_FALLBACK_MS + 300)).await;
         assert!(!r.closed(1));
     }
 
@@ -797,7 +914,7 @@ mod tests {
         let t2 = Instant::now();
         r.prepare(true).await;
         assert_eq!(r.next().await, sleeping(true));
-        let fallback = Duration::from_millis(SLEEP_FALLBACK_MS);
+        let fallback = Duration::from_millis(TEST_FALLBACK_MS);
         assert!(t2 - t1 < fallback, "sleep 2 starts inside sleep 1's window");
 
         // Past sleep 1's deadline (and before sleep 2's), the fresh inhibitor is still held.

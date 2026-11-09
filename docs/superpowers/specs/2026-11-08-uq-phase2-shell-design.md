@@ -414,9 +414,10 @@ If a file is missing, Arch's `/etc/pam.d/other` denies, so authentication fails 
   at all times.
 - On `PrepareForSleep(true)`, the shell locks. When `WlSessionLock.secure` is true, the lock
   process tells the shell, which calls `SleepLockReady`, and the bridge releases the inhibitor.
-- A 2 s fallback releases it anyway, below logind's `InhibitDelayMaxSec` default of 5 s. In that
-  case Hyprland still renders the lock first on resume, because the lock request is already in
-  place.
+- A fallback releases it anyway just before logind would: logind's `InhibitDelayMaxUSec` less
+  0.5 s (4.5 s with logind's default of 5 s; 4.5 s if it can't be read; never below 2 s). A fresh
+  `qs` lock instance can take several seconds to load on a busy machine. If the fallback fires,
+  Hyprland still renders the lock first on resume, because the lock request is already in place.
 - A fresh inhibitor is taken on `PrepareForSleep(false)`.
 
 **Idle stages** use one `IdleMonitor` each, with `respectInhibitors: true`:
