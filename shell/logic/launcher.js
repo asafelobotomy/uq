@@ -138,6 +138,15 @@ function sections(merged) {
     return out;
 }
 
+// Whether the shown rows are out of date for what's in the field: a debounced search is still
+// pending, or the trimmed text differs from the query the rows came from. Activating a stale row
+// would launch the previous query's app or run the previous `>` command.
+function resultsStale(searchPending, query, searched) {
+    var q = String(query === undefined || query === null ? "" : query).trim();
+    var s = String(searched === undefined || searched === null ? "" : searched);
+    return searchPending === true || q !== s;
+}
+
 // What Enter does with a row: { kind: "launch"|"copy"|"activate", call, args, close }.
 // Only bridge calls; provider data is never executed. null when the row can't be activated.
 function activation(provider, item) {

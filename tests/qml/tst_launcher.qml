@@ -5,6 +5,19 @@ import "../../shell/logic/launcher.js" as L
 TestCase {
     name: "launcher"
 
+    // Enter inside the 70 ms debounce must not act on the previous query's rows: a `>` row would
+    // run the old command. Stale when a search is pending or the field no longer matches what
+    // the shown rows were searched for.
+    function test_results_stale() {
+        compare(L.resultsStale(false, "fire", "fire"), false);
+        compare(L.resultsStale(false, "  fire ", "fire"), false);
+        compare(L.resultsStale(true, "fire", "fire"), true);
+        compare(L.resultsStale(false, "> rm -rf ~/build", "> rm -rf ~/"), true);
+        compare(L.resultsStale(false, "firefox", "fi"), true);
+        compare(L.resultsStale(false, "", ""), false);
+        compare(L.resultsStale(false, undefined, ""), false);
+    }
+
     function test_classify() {
         compare(L.classify("=1+1"), "calc");
         compare(L.classify("  =1"), "calc");

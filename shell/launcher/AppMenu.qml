@@ -19,7 +19,11 @@ PanelWindow {
     id: root
 
     readonly property bool shown: Surfaces.open === "appmenu" && !Bridge.locked
-    readonly property var target: Surfaces.screen ? Surfaces.screen : screenFor(Hyprland.focusedMonitor)
+    // The focused monitor at the moment the surface opened, so an open surface stays put when
+    // the cursor (and Hyprland's focus) crosses to another output. Followed live only while hidden.
+    property var openedOn: null
+    readonly property var target: Surfaces.screen ? Surfaces.screen
+        : (openedOn ? openedOn : screenFor(Hyprland.focusedMonitor))
     readonly property real dpr: screen ? screen.devicePixelRatio : 1
     readonly property int menuWidth: 440
     readonly property int menuHeight: 420
@@ -146,6 +150,7 @@ PanelWindow {
     }
 
     onShownChanged: {
+        openedOn = shown ? screenFor(Hyprland.focusedMonitor) : null;
         wipe();
         if (shown) {
             place();

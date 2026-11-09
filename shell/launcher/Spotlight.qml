@@ -16,7 +16,11 @@ PanelWindow {
     id: root
 
     readonly property bool shown: Surfaces.open === "spotlight" && !Bridge.locked
-    readonly property var target: Surfaces.screen ? Surfaces.screen : screenFor(Hyprland.focusedMonitor)
+    // The focused monitor at the moment the surface opened, so an open surface stays put when
+    // the cursor (and Hyprland's focus) crosses to another output. Followed live only while hidden.
+    property var openedOn: null
+    readonly property var target: Surfaces.screen ? Surfaces.screen
+        : (openedOn ? openedOn : screenFor(Hyprland.focusedMonitor))
     readonly property real dpr: screen ? screen.devicePixelRatio : 1
     readonly property int iconSize: 24
     readonly property int rowHeight: 40
@@ -93,11 +97,13 @@ PanelWindow {
             ? Rank.searchApps(q, appList, Settings.launchCounts) : [];
         rebuild(true);
         // Always sent, even when empty, so the bridge drops a stale run command.
-        Bridge.call("Search", [q, generation]).catch(function () {});
+        var reply = Bridge.call("Search", [q, generation]);
+        reply.catch(function () {});
         if (q !== "")
             deadline.restart();
         else
             deadline.stop();
+        return reply;
     }
 
     function rebuild(reset) {
@@ -120,7 +126,41 @@ PanelWindow {
         return selection.group >= 0 ? sections[selection.group] : null;
     }
 
+    // Enter. If the rows are stale (typed within the debounce), search now and act on the fresh
+    // top hit once the bridge replies: it emits the built-in calc/run rows before the reply, so
+    // they're in place by then, and the bridge's run state is this generation's.
     function activate() {
+        if (Bridge.locked)
+            return;
+        if (L.resultsStale(debounce.running, query, searched)) {
+            debounce.stop();
+            var gen;
+            var reply = runSearch();
+            gen = generation;
+            reply.then(function () {
+                if (root.shown && generation === gen && !L.resultsStale(debounce.running, query, searched))
+                    root.activateSelected();
+            }).catch(function () {});
+            return;
+        }
+        activateSelected();
+    }
+
+    // A click acts on the row the user clicked, so it's only honoured when the rows are current;
+    // otherwise it just brings the rows up to date.
+    function activateClicked(group, index) {
+        if (Bridge.locked)
+            return;
+        if (L.resultsStale(debounce.running, query, searched)) {
+            debounce.stop();
+            runSearch();
+            return;
+        }
+        selection = { group: group, index: index };
+        activateSelected();
+    }
+
+    function activateSelected() {
         var sec = selectedSection();
         if (!sec || Bridge.locked)
             return;
@@ -155,6 +195,7 @@ PanelWindow {
     }
 
     onShownChanged: {
+        openedOn = shown ? screenFor(Hyprland.focusedMonitor) : null;
         wipe();
         if (shown)
             Qt.callLater(field.forceActiveFocus);
@@ -349,10 +390,7 @@ PanelWindow {
                                         id: rowMouse
                                         anchors.fill: parent
                                         hoverEnabled: true
-                                        onClicked: {
-                                            root.selection = { group: sec.index, index: row.index };
-                                            root.activate();
-                                        }
+                                        onClicked: root.activateClicked(sec.index, row.index)
                                     }
                                 }
                             }
