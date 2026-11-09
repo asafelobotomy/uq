@@ -49,5 +49,15 @@ printf 'function f() { return Qt.createQmlObject("x", p); }\n' > "$tmp/shell/x.j
 if run >/dev/null; then echo "FAIL (accepted): createQmlObject in .js"; fail=1; fi
 rm -f "$tmp/shell/x.js"
 
+# The notification body is the one StyledText outside UqText; only that exact path is allowed.
+mkdir -p "$tmp/shell/notif/builtin"
+printf 'Item {\n    Text {\n    }\n}\n' > "$tmp/shell/notif/builtin/NotifBody.qml"
+if ! out=$(run); then echo "FAIL (rejected): Text in NotifBody.qml: $out"; fail=1; fi
+printf 'Item {\n    Text {\n    }\n}\n' > "$tmp/shell/notif/builtin/Other.qml"
+if out=$(run); then echo "FAIL (accepted): Text in notif/builtin/Other.qml"; fail=1
+else case "$out" in *"shell/notif/builtin/Other.qml:2"*) ;; *) echo "FAIL (Other.qml): no file:line in: $out"; fail=1;; esac; fi
+case "$out" in *"shell/notif/builtin/NotifBody.qml:"*) echo "FAIL: NotifBody.qml reported: $out"; fail=1;; esac
+rm -rf "$tmp/shell/notif"
+
 [ $fail = 0 ] && echo "lint_test ok"
 exit $fail
