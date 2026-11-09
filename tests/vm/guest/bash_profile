@@ -1,0 +1,9 @@
+# uqtest's ~/.bash_profile in the VM: on the tty1 autologin, start Hyprland (uQ's hyprland.lua).
+[ -f ~/.bashrc ] && . ~/.bashrc
+if [ "$(tty)" = /dev/tty1 ] && [ -z "$WAYLAND_DISPLAY" ] && [ -f ~/.config/hypr/hyprland.lua ]; then
+    if command -v start-hyprland >/dev/null 2>&1; then
+        exec start-hyprland >~/.hyprland-tty1.log 2>&1
+    else
+        exec Hyprland >~/.hyprland-tty1.log 2>&1
+    fi
+fi

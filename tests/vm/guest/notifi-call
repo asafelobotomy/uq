@@ -1,0 +1,26 @@
+#!/usr/bin/python3 -I
+"""Installed in the guest as /usr/local/bin/notifi-call: one request on noti-fi's control socket
+($XDG_RUNTIME_DIR/notifd.sock), printed as the result JSON. Defaults to `status`.
+
+    notifi-call [METHOD [PARAMS_JSON]]
+"""
+import json
+import os
+import socket
+import sys
+
+method = sys.argv[1] if len(sys.argv) > 1 else "status"
+params = json.loads(sys.argv[2]) if len(sys.argv) > 2 else {}
+s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+s.settimeout(5)
+s.connect(os.path.join(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"), "notifd.sock"))
+f = s.makefile("rwb", buffering=0)
+hello = json.loads(f.readline())
+if hello.get("name") != "notifd":
+    sys.exit("not noti-fi: %r" % hello)
+f.write((json.dumps({"id": 1, "method": method, "params": params}) + "\n").encode())
+while True:
+    m = json.loads(f.readline())
+    if m.get("id") == 1:
+        print(json.dumps(m.get("result", m)))
+        break

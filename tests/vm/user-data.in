@@ -1,0 +1,18 @@
+#cloud-config
+# NoCloud seed for the uQ test VM (tests/vm/run.sh fills in @PASSWORD@ and @SSH_KEY@).
+users:
+  - name: uqtest
+    gecos: uQ test user
+    groups: [wheel, video, input, audio]
+    shell: /bin/bash
+    lock_passwd: false
+    sudo: "ALL=(ALL) NOPASSWD:ALL"
+    ssh_authorized_keys:
+      - @SSH_KEY@
+chpasswd:
+  expire: false
+  users:
+    - {name: uqtest, password: "@PASSWORD@", type: text}
+ssh_pwauth: false
+growpart: {mode: auto, devices: ["/"]}
+resize_rootfs: true

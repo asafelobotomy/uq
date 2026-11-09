@@ -1,0 +1,12 @@
+#!/bin/bash
+# Installed in the guest as /usr/local/bin/uqvm-env: runs "$@" with the env of uqtest's
+# Hyprland session (the tty1 autologin), so ssh commands reach hyprctl, Wayland and the user bus.
+export XDG_RUNTIME_DIR=/run/user/$(id -u)
+export DBUS_SESSION_BUS_ADDRESS=unix:path=$XDG_RUNTIME_DIR/bus
+sig=$(ls -t "$XDG_RUNTIME_DIR/hypr" 2>/dev/null | while read -r s; do
+    [ -S "$XDG_RUNTIME_DIR/hypr/$s/.socket.sock" ] && { echo "$s"; break; }; done)
+[ -n "$sig" ] && export HYPRLAND_INSTANCE_SIGNATURE=$sig
+wl=$(cd "$XDG_RUNTIME_DIR" && ls -t wayland-* 2>/dev/null | grep -v '\.lock$' | head -n1)
+[ -n "$wl" ] && export WAYLAND_DISPLAY=$wl
+export XDG_SESSION_TYPE=wayland XDG_CURRENT_DESKTOP=Hyprland LC_ALL=C.UTF-8
+exec "$@"

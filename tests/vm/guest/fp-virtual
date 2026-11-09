@@ -1,0 +1,50 @@
+#!/usr/bin/python3 -I
+"""Installed in the guest as /usr/local/bin/fp-virtual: drives libfprint's virtual_device driver
+(fprintd runs with FP_VIRTUAL_DEVICE=/run/fp-virtual.sock, set by the harness). One command per
+connection, as libfprint's own tests do:
+
+    fp-virtual SCAN finger-1     present that finger once
+    fp-virtual enroll ID         run `fprintd-enroll uqtest` and SCAN ID until it completes (root)
+"""
+import socket
+import subprocess
+import sys
+import time
+
+SOCK = "/run/fp-virtual.sock"
+
+
+def send(cmd):
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    s.connect(SOCK)
+    s.sendall(cmd.encode())
+    try:
+        s.settimeout(2)
+        s.recv(1024)
+    except OSError:
+        pass
+    s.close()
+
+
+def enroll(ident):
+    p = subprocess.Popen(["fprintd-enroll", "-f", "right-index-finger", "uqtest"],
+                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    deadline = time.time() + 60
+    time.sleep(1.5)
+    while p.poll() is None and time.time() < deadline:
+        try:
+            send("SCAN " + ident)
+        except OSError as e:
+            print("send:", e)
+        time.sleep(1)
+    if p.poll() is None:
+        p.kill()
+    out = p.communicate()[0]
+    print(out)
+    return 0 if "enroll-completed" in out else 1
+
+
+if __name__ == "__main__":
+    if sys.argv[1] == "enroll":
+        sys.exit(enroll(sys.argv[2]))
+    send(" ".join(sys.argv[1:]))
