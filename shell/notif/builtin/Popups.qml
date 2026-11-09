@@ -8,7 +8,8 @@ import ".."
 
 // The built-in server's popups (Builtin.popups, newest first) in a column at the top right of
 // the focused monitor, under the bar. Never takes keyboard focus, and the window's input mask
-// covers only the cards, so clicks beside them reach the windows below. Hidden while locked.
+// covers only the cards, so clicks beside them reach the windows below. Hidden while locked and
+// while the centre is open.
 PanelWindow {
     id: root
 
@@ -26,7 +27,7 @@ PanelWindow {
         return null;
     }
 
-    visible: !Bridge.locked && Builtin.popups.length > 0
+    visible: !Bridge.locked && Builtin.popups.length > 0 && Surfaces.open !== "notifcentre"
     screen: screenFor(Hyprland.focusedMonitor)
     color: "transparent"
     WlrLayershell.layer: WlrLayer.Top

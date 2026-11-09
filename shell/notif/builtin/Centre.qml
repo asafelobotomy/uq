@@ -7,8 +7,9 @@ import Quickshell.Hyprland
 import "../../core"
 import ".."
 
-// The built-in server's notification centre: a 400 px panel at the top right of the focused
-// monitor, at most ~70% of the screen tall, with "Clear all", a Do Not Disturb toggle and
+// The built-in server's notification centre: a 400 px panel hung under the Notifications island
+// when opened from it (on that island's screen), else at the top right of the focused monitor
+// (SUPER+N), at most ~70% of the screen tall, with "Clear all", a Do Not Disturb toggle and
 // Builtin.notifications (newest first). It is the "notifcentre" surface in Surfaces, opened by
 // NotifBackend.toggleCentre() when the built-in backend is in use; it closes on a click outside
 // (HyprlandFocusGrab), Esc, lock, or its monitor going. Opening it marks everything read.
@@ -27,6 +28,9 @@ PanelWindow {
     readonly property int barBottom: Theme.gapOut + 36
     readonly property real dpr: screen ? screen.devicePixelRatio : 1
 
+    property int placeX: Theme.gapOut
+    property int placeY: barBottom + Theme.gapIn
+
     visible: shown
     screen: target
     color: "transparent"
@@ -35,9 +39,9 @@ PanelWindow {
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
     exclusionMode: ExclusionMode.Ignore
     anchors.top: true
-    anchors.right: true
-    margins.top: barBottom + Theme.gapIn
-    margins.right: Theme.gapOut
+    anchors.left: true
+    margins.top: placeY
+    margins.left: placeX
     implicitWidth: panelWidth
     implicitHeight: Math.min(maxHeight, layout.implicitHeight + Theme.gapOut * 2)
 
@@ -51,6 +55,22 @@ PanelWindow {
         return null;
     }
 
+    // Right edge under the anchor (the Notifications island), kept on screen; with no anchor,
+    // top-right of the screen. The anchor's scene position is in its bar window, which sits at
+    // Bar.qml's margins. (QuickSettings.place does the same.)
+    function place() {
+        var a = Surfaces.anchor;
+        var sw = screen ? screen.width : 1280;
+        var x = sw - panelWidth - Theme.gapOut, y = barBottom;
+        if (a && typeof a.mapToItem === "function") {
+            var p = a.mapToItem(null, a.width, a.height);
+            x = Theme.gapOut + Math.round(p.x) + Theme.gapIn - panelWidth;
+            y = Theme.gapOut + Math.round(p.y);
+        }
+        placeX = Math.max(0, Math.min(x, sw - panelWidth));
+        placeY = y + Theme.gapIn;
+    }
+
     function wipe() {
         flick.contentY = 0;
     }
@@ -59,10 +79,12 @@ PanelWindow {
         openedOn = shown ? screenFor(Hyprland.focusedMonitor) : null;
         wipe();
         if (shown) {
+            place();
             Builtin.markRead();
             Qt.callLater(content.forceActiveFocus);
         }
     }
+    onScreenChanged: if (shown) place()
 
     Connections {
         target: Quickshell
@@ -89,7 +111,9 @@ PanelWindow {
     }
 
     HyprlandFocusGrab {
-        windows: [root]
+        // The bar window is included so a click on the Notifications island toggles the centre
+        // closed instead of clearing the grab and reopening it.
+        windows: Surfaces.anchor && Surfaces.anchor.barWindow ? [root, Surfaces.anchor.barWindow] : [root]
         active: root.visible
         onCleared: Surfaces.close()
     }

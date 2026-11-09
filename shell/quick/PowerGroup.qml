@@ -183,13 +183,13 @@ ColumnLayout {
         }
     }
 
-    // --- Do Not Disturb (noti-fi only in this slice) ---
+    // --- Do Not Disturb (whichever notification backend is in use) ---
     ToggleRow {
-        visible: Notifi.available
+        visible: NotifBackend.available
         glyph: "🔕"
         label: "Do Not Disturb"
-        on: Notifi.dnd
-        onToggled: Notifi.setDnd(!Notifi.dnd).catch(function () {})
+        on: NotifBackend.dnd
+        onToggled: NotifBackend.setDnd(!NotifBackend.dnd)
     }
 
     // --- Stay awake ---

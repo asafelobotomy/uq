@@ -3,19 +3,21 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Hyprland
 import "../core"
+import "../notif"
 
 // Everything that opens the launchers from outside the bar, routed to Surfaces: the Hyprland
-// global shortcuts (base.lua binds `uq:spotlight`, `uq:appmenu` and `uq:quick-settings`) and the
-// shell IPC target `uq`. No windows in here, so it also loads headless (tests/shell/bar_loads.sh). Shortcuts and
+// global shortcuts (base.lua binds `uq:spotlight`, `uq:appmenu`, `uq:quick-settings` and
+// `uq:notif-centre`, the last routed to NotifBackend) and the shell IPC target `uq`. No windows in here, so it also loads headless (tests/shell/bar_loads.sh). Shortcuts and
 // IPC pass no screen, so a surface opens on Hyprland.focusedMonitor.
 Scope {
     id: root
 
-    // True once all three shortcuts and the IPC handler exist with the names base.lua and the
+    // True once all four shortcuts and the IPC handler exist with the names base.lua and the
     // README use (tests/shell/bar_loads.sh prints it).
     readonly property bool routed: spotlightKey.appid === "uq" && spotlightKey.name === "spotlight"
         && appMenuKey.appid === "uq" && appMenuKey.name === "appmenu"
         && quickSettingsKey.appid === "uq" && quickSettingsKey.name === "quick-settings"
+        && notifCentreKey.appid === "uq" && notifCentreKey.name === "notif-centre"
         && ipc.target === "uq" && typeof ipc.open === "function"
         && typeof ipc.close === "function" && typeof ipc.toggle === "function"
 
@@ -45,6 +47,19 @@ Scope {
         name: "quick-settings"
         description: "Open or close quick settings"
         onPressed: Surfaces.ipc("toggle", "quicksettings")
+    }
+
+    // SUPER+N: the chosen backend's notification centre (noti-fi's, the built-in one, swaync's
+    // panel, dunst's history), on the focused monitor. Ignored while locked.
+    GlobalShortcut {
+        id: notifCentreKey
+        appid: "uq"
+        name: "notif-centre"
+        description: "Open or close the notification centre"
+        onPressed: {
+            if (!Bridge.locked)
+                NotifBackend.toggleCentre();
+        }
     }
 
     // qs ipc -p /usr/share/uq/shell call uq open|close|toggle spotlight|appmenu|quicksettings

@@ -140,7 +140,9 @@ if appmenu.key ~= "SUPER + SUPER_L" then error("uq:appmenu is bound to " .. tost
 if opt(appmenu, "release") ~= true then error("the uq:appmenu bind needs release = true (tap SUPER)") end
 local quick = bind_for("hl.dsp.global(uq:quick-settings)")
 if quick.key ~= "SUPER + A" then error("uq:quick-settings is bound to " .. tostring(quick.key)) end
-for _, b in ipairs({spotlight, appmenu, quick}) do
+local notif = bind_for("hl.dsp.global(uq:notif-centre)")
+if notif.key ~= "SUPER + N" then error("uq:notif-centre is bound to " .. tostring(notif.key)) end
+for _, b in ipairs({spotlight, appmenu, quick, notif}) do
   if opt(b, "locked") then error(b.dsp .. " must not be locked") end
 end
 local osd_keys = {
@@ -170,7 +172,12 @@ print("ok " .. #calls)
 #[test]
 fn base_lua_launcher_binds_are_not_locked() {
     let base = std::fs::read_to_string(repo().join("config/hypr/base.lua")).unwrap();
-    for name in ["uq:spotlight", "uq:appmenu", "uq:quick-settings"] {
+    for name in [
+        "uq:spotlight",
+        "uq:appmenu",
+        "uq:quick-settings",
+        "uq:notif-centre",
+    ] {
         let lines: Vec<&str> = base.lines().filter(|l| l.contains(name)).collect();
         assert!(!lines.is_empty(), "base.lua has no {name} bind");
         for line in lines {

@@ -49,7 +49,7 @@ Shell settings (all go through `uqd`; values are validated there):
 uqctl pin add org.mozilla.firefox      # also: pin rm <id>, pin list
 uqctl weather set "Paris" [--pick 2]   # geocodes, prints the top 5, stores one; weather off
 uqctl idle set lock 300                # dim | lock | screen-off | suspend | locked-screen-off; secs or off
-uqctl notif backend shell
+uqctl notif backend builtin            # auto | notifi | builtin | swaync | mako | dunst
 uqctl privacy public-ip on             # or: privacy launches off
 uqctl mouse speed -0.3                 # -1..1; also: accel default|adaptive|flat,
                                        # natural-scroll on|off, left-handed on|off,
@@ -136,6 +136,42 @@ What the bridge does with the rows:
 
 Rows are shown as plain text, labelled with the provider's `Name`. uQ never runs anything a
 provider sends; picking a row only calls back its `Activate`.
+
+### Notifications
+
+The Notifications island in the bar shows the latest app's icon (or a bell), how many
+notifications there are, and a mark while Do Not Disturb is on.
+
+- Left click, or `SUPER+N`, opens or closes the notification centre. `SUPER+N` doesn't work over
+  the lock screen.
+- Right click turns Do Not Disturb on or off. Quick settings has the same toggle.
+- The latest summary shows only while you hover the island, or always with the
+  `notif.show_summary` setting. It never shows while the screen is shared, and screen readers
+  only hear the count and the Do Not Disturb state.
+
+`uqctl notif backend <name>` picks who shows them:
+
+- `auto` (the default) uses noti-fi when its socket answers, otherwise uQ's built-in server.
+- `notifi`, `builtin`, `swaync`, `mako` or `dunst` uses that one. If it isn't installed or
+  running, uQ uses the built-in server and logs a warning.
+- mako has no centre, so `SUPER+N` and the click do nothing with it. dunst's centre brings back
+  the last notification from its history.
+
+The built-in server only takes the notification name when nothing else owns it. If another
+daemon got there first, the island says "Notifications handled by <name>" and uQ leaves it
+alone. uQ never starts, stops or masks another daemon. To stop one auto-starting, mask it or
+remove its D-Bus activation file:
+
+```bash
+systemctl --user mask swaync.service
+# or remove the file in /usr/share/dbus-1/services/ whose Name= is org.freedesktop.Notifications
+```
+
+The built-in server's Do Not Disturb isn't kept across shell restarts.
+
+With noti-fi, its popups and list stay on its own monitor choice. To have them follow the focused
+monitor, as uQ's OSD does, add `"screen": "focused"` to noti-fi's `rules.json`. uQ doesn't write
+that file.
 
 Your own Hyprland settings go in `~/.config/hypr/uq/user.lua`, which uQ loads last and never
 rewrites.

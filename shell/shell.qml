@@ -10,12 +10,11 @@ import "notif"
 import "notif/builtin"
 
 ShellRoot {
-    Component.onCompleted: {
-        Quickshell.watchFiles = false;
-        // NotifBackend is a lazily created singleton: touch it so it picks a backend (and the
-        // built-in server registers) at startup, not when something first reads it.
-        console.info("uq: notifications: backend " + NotifBackend.backend);
-    }
+    // NotifBackend is a lazily created singleton: this binding touches it so it picks a backend
+    // (and the built-in server registers) at startup, not when something first reads it.
+    readonly property var notifBackend: NotifBackend
+
+    Component.onCompleted: Quickshell.watchFiles = false
 
     BridgeIo {}
     ThemeIo {}

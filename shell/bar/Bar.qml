@@ -41,7 +41,10 @@ PanelWindow {
         }
         Item { Layout.fillWidth: true }
         TimeIsland { Layout.fillHeight: true }
-        NotifIsland { Layout.fillHeight: true }
+        NotifIsland {
+            Layout.fillHeight: true
+            screen: bar.modelData
+        }
         StatusIsland {
             Layout.fillHeight: true
             screen: bar.modelData
