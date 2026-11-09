@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Headless check of the built-in notification server (shell/notif/Builtin.qml) on a private
 # dbus-daemon (never the session bus): it takes org.freedesktop.Notifications when wanted, the
-# body reaches the shell and sanitises to the allowed subset, and the store keeps at most 50.
+# body reaches the shell and sanitises to the allowed subset, a replacement updates `latest`, a
+# transient held back by DnD is not kept, and the store keeps at most 50.
 set -u
 root=$(cd "$(dirname "$0")/../.." && pwd)
 for tool in notify-send dbus-daemon dbus-send qs; do
@@ -50,14 +51,29 @@ ShellRoot {
             var n = Builtin.notifications[0];
             if (!n)
                 return;
-            if (n.summary === "done")
+            if (n.summary === "done") {
                 console.log("STORE", Builtin.notifications.length, Builtin.popups.length, Builtin.count, Builtin.latest.summary);
-            else if (n.summary === "Hi")
+                Qt.quit();
+            } else if (n.summary === "Hi") {
                 console.log("NOTIF", Builtin.count, S.sanitize(n.body), Builtin.latest.appName);
+            } else if (n.summary === "end") {
+                var held = Builtin.notifications.some(function (x) { return x.summary === "tr"; });
+                console.log("END", Builtin.notifications.length, Builtin.count, held);
+                Builtin.dnd = false;
+            }
         }
+        // A replacement updates the notification in place: latest follows, the store doesn't grow.
+        function onLatestChanged() {
+            if (Builtin.latest && Builtin.latest.summary === "replaced" && !Builtin.dnd) {
+                console.log("LATEST", Builtin.latest.summary, Builtin.notifications.length, Builtin.count);
+                Builtin.dnd = true;
+            }
+        }
+        function onDndChanged() { console.log("DND", Builtin.dnd) }
     }
     Component.onCompleted: Builtin.wanted = true
-    Timer { interval: 25000; running: true; onTriggered: Qt.quit() }
+    // Backstop only: the shell quits once it has logged STORE.
+    Timer { interval: 90000; running: true; onTriggered: Qt.quit() }
 }
 QML
 env -u HYPRLAND_INSTANCE_SIGNATURE -u WAYLAND_DISPLAY QT_QPA_PLATFORM=offscreen \
@@ -80,10 +96,21 @@ timeout 5 notify-send -a Test "Hi" "<b>x</b><img src='http://e/x.png'>"
 wait_for 'NOTIF ' || { echo "FAIL: no notification reached the shell"; cat "$tmp/out"; exit 1; }
 grep -q 'NOTIF 1 <b>x</b> Test$' "$tmp/out" || { echo "FAIL: wrong count or body"; cat "$tmp/out"; exit 1; }
 
+id=$(timeout 5 notify-send -p -a Test "orig" "first")
+timeout 5 notify-send -r "$id" -a Test "replaced" "second"
+wait_for 'DND true' || { echo "FAIL: a replacement did not update latest"; cat "$tmp/out"; exit 1; }
+grep -q 'LATEST replaced 2 2$' "$tmp/out" || { echo "FAIL: replacement grew the store or count"; cat "$tmp/out"; exit 1; }
+
+timeout 5 notify-send --transient -a Test "tr" "held"
+timeout 5 notify-send -a Test "end" "kept"
+wait_for 'END ' || { echo "FAIL: no notification under DnD reached the shell"; cat "$tmp/out"; exit 1; }
+grep -q 'END 3 3 false$' "$tmp/out" || { echo "FAIL: a transient held back by DnD was kept"; cat "$tmp/out"; exit 1; }
+wait_for 'DND false' || { echo "FAIL: DnD not cleared"; cat "$tmp/out"; exit 1; }
+
 for i in $(seq 60); do timeout 5 notify-send -a Test "n$i" "body $i"; done
 timeout 5 notify-send -a Test "done" "last"
 wait_for 'STORE ' || { echo "FAIL: the last notification never arrived"; cat "$tmp/out"; exit 1; }
-grep -q 'STORE 50 3 62 done$' "$tmp/out" || { echo "FAIL: store not capped at 50 (or popups at 3)"; cat "$tmp/out"; exit 1; }
+grep -q 'STORE 50 3 64 done$' "$tmp/out" || { echo "FAIL: store not capped at 50 (or popups at 3)"; cat "$tmp/out"; exit 1; }
 
 if grep -E 'TypeError|ReferenceError|is not a type|Cannot assign|Unable to assign|is not a function|Cannot read property|Syntax[Ee]rror|[A-Za-z]+\.qml:[0-9]+:[0-9]*:? ' "$tmp/out"; then
     echo "FAIL: QML errors"; cat "$tmp/out"; exit 1

@@ -26,6 +26,9 @@ QtObject {
     // --- internals ---
     // {notification id: deadlineMs} for each popup that times out; popupTimer expires the overdue.
     property var deadlines: ({})
+    // Notifications updated in place by a replacement (Notify with replaces_id), refreshed once
+    // on the next turn however many of their properties changed.
+    property var replaced: []
 
     function viewOf(n) {
         if (!n)
@@ -66,13 +69,26 @@ QtObject {
 
     function add(n) {
         n.tracked = true;
+        var popup = S.popupAllowed(dnd, n.urgency);
+        // A transient notification held back by DnD would never get the popup that removes it.
+        if (!popup && n.transient) {
+            n.expire();
+            return;
+        }
         n.closed.connect(function () { root.forget(n); });
+        // Quickshell updates a replaced notification in place and does not emit notification()
+        // again, so its changes are picked up here.
+        var onChange = function () { root.markReplaced(n); };
+        n.summaryChanged.connect(onChange);
+        n.bodyChanged.connect(onChange);
+        n.appNameChanged.connect(onChange);
+        n.appIconChanged.connect(onChange);
         var store = [n].concat(notifications);
         var extra = S.trimKept(store.length);
         var gone = extra > 0 ? store.splice(store.length - extra, extra) : [];
         count++;
         setStore(store);
-        if (S.popupAllowed(dnd, n.urgency))
+        if (popup)
             showPopup(n);
         gone.forEach(function (g) {
             root.forget(g);
@@ -80,8 +96,30 @@ QtObject {
         });
     }
 
+    function markReplaced(n) {
+        if (replaced.indexOf(n) >= 0)
+            return;
+        replaced = replaced.concat([n]);
+        Qt.callLater(root.refreshReplaced);
+    }
+
+    // A replacement is shown like a new arrival (front of the store, popup and deadline again),
+    // but it is the same notification, so `count` is unchanged.
+    function refreshReplaced() {
+        var list = replaced;
+        replaced = [];
+        list.forEach(function (n) {
+            if (root.notifications.indexOf(n) < 0)
+                return;
+            root.setStore([n].concat(root.without(root.notifications, n)));
+            if (S.popupAllowed(root.dnd, n.urgency))
+                root.showPopup(n);
+        });
+    }
+
     function showPopup(n) {
-        var ps = [n].concat(popups);
+        dropDeadline(n);
+        var ps = [n].concat(without(popups, n));
         var pushed = ps.length > S.MAX_POPUPS ? ps.splice(S.MAX_POPUPS) : [];
         popups = ps;
         var ms = S.timeoutMs(n.expireTimeout, n.urgency);
@@ -158,6 +196,8 @@ QtObject {
         setStore([]);
         popups = [];
         deadlines = ({});
+        replaced = [];
+        count = 0;
         popupTimer.stop();
     }
 
