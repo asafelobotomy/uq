@@ -109,4 +109,34 @@ TestCase {
         compare(Q.profileLabel(2), "Performance");
         compare(Q.profileLabel(9), "Balanced");
     }
+    function test_osd_icon() {
+        compare(Q.osdIcon("volume", 0, 100, false), "audio-volume-muted");
+        compare(Q.osdIcon("volume", 50, 100, true), "audio-volume-muted");
+        compare(Q.osdIcon("volume", 20, 100, false), "audio-volume-low");
+        compare(Q.osdIcon("volume", 50, 100, false), "audio-volume-medium");
+        compare(Q.osdIcon("volume", 90, 100, false), "audio-volume-high");
+        compare(Q.osdIcon("volume", 150, 100, false), "audio-volume-high");
+        compare(Q.osdIcon("mic", 0, 100, false), "microphone-sensitivity-muted");
+        compare(Q.osdIcon("mic", 60, 100, true), "microphone-sensitivity-muted");
+        compare(Q.osdIcon("mic", 10, 100, false), "microphone-sensitivity-low");
+        compare(Q.osdIcon("mic", 50, 100, false), "microphone-sensitivity-medium");
+        compare(Q.osdIcon("mic", 100, 100, false), "microphone-sensitivity-high");
+        compare(Q.osdIcon("brightness", 0, 100, false), "display-brightness");
+        compare(Q.osdIcon("brightness", 80, 100, true), "display-brightness");
+        compare(Q.osdIcon("bogus", 50, 100, false), "");
+        compare(Q.osdIcon("volume", NaN, 100, false), "audio-volume-muted");
+        compare(Q.osdIcon("volume", 50, 0, false), "audio-volume-muted");
+    }
+
+    function test_osd_fraction() {
+        compare(Q.osdFraction(50, 100), 0.5);
+        compare(Q.osdFraction(150, 100), 1);
+        compare(Q.osdFraction(-5, 100), 0);
+        compare(Q.osdFraction(5, 0), 0);
+        compare(Q.osdFraction(NaN, 100), 0);
+        compare(Q.osdFraction(3, 4), 0.75);
+        compare(Q.osdPercent(3, 4), 75);
+        compare(Q.osdPercent(150, 100), 100);
+        compare(Q.osdPercent(NaN, 100), 0);
+    }
 }

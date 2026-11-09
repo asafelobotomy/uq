@@ -1,0 +1,4 @@
+module osd
+singleton OsdRouter 1.0 OsdRouter.qml
+Osd 1.0 Osd.qml
+OsdWatch 1.0 OsdWatch.qml

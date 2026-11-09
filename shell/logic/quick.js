@@ -145,3 +145,36 @@ function profileLabel(p) {
         return "Performance";
     return "Balanced";
 }
+
+// OSD bar fill in [0, 1]. A non-positive max or non-finite value -> 0.
+function osdFraction(value, max) {
+    var v = Number(value), m = Number(max);
+    if (!isFinite(v) || !isFinite(m) || !(m > 0))
+        return 0;
+    return Math.max(0, Math.min(1, v / m));
+}
+
+function osdPercent(value, max) {
+    return Math.round(osdFraction(value, max) * 100);
+}
+
+// Fixed icon-theme names only; an unknown kind -> "" (no icon).
+function osdIcon(kind, value, max, muted) {
+    var base;
+    if (kind === "volume")
+        base = "audio-volume-";
+    else if (kind === "mic")
+        base = "microphone-sensitivity-";
+    else if (kind === "brightness")
+        return "display-brightness";
+    else
+        return "";
+    var p = osdPercent(value, max);
+    if (muted || p === 0)
+        return base + "muted";
+    if (p < 34)
+        return base + "low";
+    if (p < 67)
+        return base + "medium";
+    return base + "high";
+}
