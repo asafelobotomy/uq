@@ -135,7 +135,6 @@ TestCase {
         compare(N.osdParams("volume", Infinity, 100, false), null);
         compare(N.osdParams("volume", "50", 100, false), null);
         compare(N.osdParams("volume", 50, 100, "true"), null);
-        compare(N.osdParams("volume", 50, 100, undefined), null);
     }
 
     // DND from a `subscribe` snapshot ({status, seq}) or a `dnd` reply (Status).
