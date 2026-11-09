@@ -10,7 +10,7 @@ Hyprland with at least two monitors connected.
 
 | # | Check | How | Expected | Result | On failure |
 |---|-------|-----|----------|--------|------------|
-| 1 | Takeover | `notify takeover --plain` | It installs and starts noti-fi's plain user service; `busctl --user status org.freedesktop.Notifications` names notifd. | | Report to noti-fi |
+| 1 | Takeover | `notify takeover --plain`, then `systemctl --user start --no-block notifd` and `systemctl --user restart uq-shell` (or log out and in again instead of both) | `takeover` installs noti-fi's plain user service but doesn't start it (noti-fi 0.18 says "notifd takes over at next login"). The start queues notifd for the name uQ's built-in server holds (`--no-block`, or the start job waits); the shell restart hands it over. Then `systemctl --user is-active notifd` says active and `busctl --user status org.freedesktop.Notifications` names notifd. | | Report to noti-fi |
 | 2 | Hello and subscribe | Restart the shell (`systemctl --user restart uq-shell.service`) | Within 5 s the island shows noti-fi's count, and quick settings shows Do Not Disturb; `journalctl --user -u uq-shell` has no "noti-fi is not running" warning. | | Report to noti-fi |
 | 3 | Popups on the focused monitor | Add `"screen": "focused"` to noti-fi's `rules.json`, focus the second monitor, run `notify-send test hello` | The popup appears on the focused monitor. | | Report to noti-fi |
 | 4 | OSD on the focused monitor | Focus each monitor in turn and press a volume key | noti-fi's OSD appears on the focused monitor each time. | | Report to noti-fi |

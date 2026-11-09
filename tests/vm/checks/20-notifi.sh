@@ -30,19 +30,23 @@ c_N1() {
     # shellcheck disable=SC2088 # expanded by the guest's shell
     out=$(vgh bash -c '~/.local/bin/notify takeover --plain 2>&1'; echo "exit=$?")
     printf '%s\n' "$out" | tail -n 6 | sed 's/^/    /' >>"$EVID/$CUR.txt"
-    sleep 3
+    vg systemctl --user cat notifd.service >/dev/null 2>&1 || { bad "'notify takeover --plain' did not install notifd.service"; return; }
+    note "takeover installed notifd.service ($(vg systemctl --user is-active notifd.service) after takeover, as noti-fi 0.18 documents)"
+    # The checklist's step: start it without waiting (it queues for the name uQ's built-in server
+    # holds), then restart the shell, which hands the name over.
+    vg systemctl --user start --no-block notifd.service
+    wait_for 15 notifi_socket_up || bad "notifd did not answer on notifd.sock within 15 s of starting it"
+    vg systemctl --user restart uq-shell.service
+    wait_layer 15 uq-bar || bad "the bar did not come back after restarting the shell"
     local act owner
+    wait_for 10 notifd_owns
     act=$(vg systemctl --user is-active notifd.service)
     owner=$(notif_owner)
     note "notifd.service: $act; org.freedesktop.Notifications owner unit: ${owner:-none}"
-    [ "$act" = active ] || bad "expected 'notify takeover --plain' to install and start noti-fi's user service; observed notifd.service $act (takeover prints 'no --now: nothing running changes; notifd takes over at next login')"
+    [ "$act" = active ] || bad "expected notifd.service active after the start and the shell restart; observed $act"
     [ "$owner" = notifd.service ] || bad "expected busctl to name notifd as the owner of org.freedesktop.Notifications; observed ${owner:-none}"
-    if [ "$act" != active ]; then
-        # Carry on as a fresh login would: start it (it queues for the name uQ's built-in holds).
-        vg systemctl --user start --no-block notifd.service
-        wait_for 15 notifi_socket_up && note "harness: started notifd.service by hand to continue (it answers on notifd.sock)"
-    fi
 }
+notifd_owns() { [ "$(notif_owner)" = notifd.service ]; }
 notifi_socket_up() { vgh notifi-call status >/dev/null 2>&1; }
 
 c_N2() {
