@@ -26,7 +26,7 @@ optdepends=(
   'tailscale: exit-node and VPN status in the shell'
   'bluez: Bluetooth status in the shell'
   'power-profiles-daemon: power profile switching'
-  'hyprlock: screen lock (and the SUPER+CTRL+L recovery bind)'
+  'hyprlock: fallback lock for the SUPER+CTRL+L recovery bind'
   'noti-fi: notification backend'
   'fprintd: fingerprint unlock'
 )
