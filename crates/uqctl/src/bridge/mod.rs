@@ -6,6 +6,7 @@
 mod calc;
 mod dispatch;
 mod launch;
+mod logind;
 pub(crate) mod net;
 mod notifowner;
 mod power;
@@ -35,6 +36,7 @@ async fn handle(
     net: &Arc<net::Net>,
     runs: &Mutex<run::RunState>,
     providers: &Arc<providers::Providers>,
+    logind: &Arc<logind::Logind>,
     call: &str,
     args: &[Value],
 ) -> Result<Value, String> {
@@ -48,6 +50,12 @@ async fn handle(
         "Activate" => providers.activate(link, runs, args).await,
         "Dispatch" => dispatch::dispatch(args).await,
         "Power" => power::power(args).await,
+        "Lock" => logind::lock(args).await,
+        "SleepLockReady" if args.is_empty() => {
+            logind.sleep_lock_ready();
+            Ok(Value::Null)
+        }
+        "SleepLockReady" => Err("SleepLockReady takes no arguments".into()),
         "GeocodeCity" => match args {
             [Value::String(name)] => net.geocode(name).await,
             _ => Err("GeocodeCity takes one string argument (the city name)".into()),
@@ -109,11 +117,17 @@ where
     R: AsyncRead + Unpin + Send + 'static,
     W: AsyncWrite + Unpin + Send + 'static,
 {
-    run_with_bus(stdin, stdout, None).await
+    run_with_bus(stdin, stdout, None, None).await
 }
 
-/// As `run`, against the bus at `addr` (None: the session bus). Tests pass a private bus.
-pub async fn run_with_bus<R, W>(stdin: R, stdout: W, addr: Option<&str>) -> ExitCode
+/// As `run`, against the session bus at `addr` and the system bus at `system` (None: the real
+/// ones). Tests pass private buses for both.
+pub async fn run_with_bus<R, W>(
+    stdin: R,
+    stdout: W,
+    addr: Option<&str>,
+    system: Option<&str>,
+) -> ExitCode
 where
     R: AsyncRead + Unpin + Send + 'static,
     W: AsyncWrite + Unpin + Send + 'static,
@@ -152,6 +166,12 @@ where
         out_tx.clone(),
         stop.clone(),
     ));
+    let logind = logind::Logind::new(out_tx.clone());
+    let sleep_watch = tokio::spawn(
+        logind
+            .clone()
+            .connect_and_run(system.map(str::to_owned), stop.clone()),
+    );
 
     let runs = Arc::new(Mutex::new(run::RunState::default()));
     let providers =
@@ -164,18 +184,20 @@ where
                 let Ok(permit) = slots.clone().acquire_owned().await else {
                     break;
                 };
-                let (link, net, runs, providers, tx) = (
+                let (link, net, runs, providers, logind, tx) = (
                     link.clone(),
                     net.clone(),
                     runs.clone(),
                     providers.clone(),
+                    logind.clone(),
                     out_tx.clone(),
                 );
                 requests.spawn(async move {
-                    let reply = match handle(&link, &net, &runs, &providers, &call, &args).await {
-                        Ok(ok) => Outbound::Ok { id, ok },
-                        Err(err) => Outbound::Err { id, err },
-                    };
+                    let reply =
+                        match handle(&link, &net, &runs, &providers, &logind, &call, &args).await {
+                            Ok(ok) => Outbound::Ok { id, ok },
+                            Err(err) => Outbound::Err { id, err },
+                        };
                     let _ = tx.send(reply).await;
                     drop(permit);
                 });
@@ -207,8 +229,10 @@ where
     weather.abort();
     privacy.abort();
     notif.abort();
+    sleep_watch.abort();
     drop(net);
     drop(providers);
+    drop(logind);
     reader.abort();
     drop(out_tx);
     if tokio::time::timeout(DRAIN, writer).await.is_err() {
@@ -235,7 +259,7 @@ mod tests {
     async fn run_hello_ping_eof() {
         let (mut in_w, in_r) = duplex(4096);
         let (out_w, out_r) = duplex(4096);
-        let task = tokio::spawn(run_with_bus(in_r, out_w, Some(NO_BUS)));
+        let task = tokio::spawn(run_with_bus(in_r, out_w, Some(NO_BUS), Some(NO_BUS)));
         let mut out = BufReader::new(out_r);
 
         let hello = next(&mut out).await;
@@ -273,7 +297,7 @@ mod tests {
     async fn unknown_call_errs() {
         let (mut in_w, in_r) = duplex(4096);
         let (out_w, out_r) = duplex(4096);
-        let task = tokio::spawn(run_with_bus(in_r, out_w, Some(NO_BUS)));
+        let task = tokio::spawn(run_with_bus(in_r, out_w, Some(NO_BUS), Some(NO_BUS)));
         let mut out = BufReader::new(out_r);
         let _hello = next(&mut out).await;
         in_w.write_all(b"{\"v\":1,\"id\":4,\"call\":\"Nope\",\"args\":[]}\n")
@@ -288,10 +312,32 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn sleep_lock_ready_answers_without_logind() {
+        let (mut in_w, in_r) = duplex(4096);
+        let (out_w, out_r) = duplex(4096);
+        let task = tokio::spawn(run_with_bus(in_r, out_w, Some(NO_BUS), Some(NO_BUS)));
+        let mut out = BufReader::new(out_r);
+        let _hello = next(&mut out).await;
+        in_w.write_all(b"{\"v\":1,\"id\":1,\"call\":\"SleepLockReady\",\"args\":[]}\n")
+            .await
+            .unwrap();
+        assert_eq!(next(&mut out).await, json!({"v":1,"id":1,"ok":null}));
+        in_w.write_all(b"{\"v\":1,\"id\":2,\"call\":\"SleepLockReady\",\"args\":[1]}\n")
+            .await
+            .unwrap();
+        assert_eq!(
+            next(&mut out).await,
+            json!({"v":1,"id":2,"err":"SleepLockReady takes no arguments"})
+        );
+        drop(in_w);
+        task.await.unwrap();
+    }
+
+    #[tokio::test]
     async fn calls_while_uqd_down_and_oversize_reply() {
         let (mut in_w, in_r) = duplex(4096);
         let (out_w, out_r) = duplex(4096);
-        let task = tokio::spawn(run_with_bus(in_r, out_w, Some(NO_BUS)));
+        let task = tokio::spawn(run_with_bus(in_r, out_w, Some(NO_BUS), Some(NO_BUS)));
         let mut out = BufReader::new(out_r);
         let _hello = next(&mut out).await;
         in_w.write_all(b"{\"v\":1,\"id\":1,\"call\":\"GetTheme\"}\n")
@@ -328,7 +374,7 @@ mod tests {
         let (in_w, in_r) = duplex(4096);
         // Tiny pipe that nobody reads: the writer blocks on Hello.
         let (out_w, _out_r) = duplex(8);
-        let task = tokio::spawn(run_with_bus(in_r, out_w, Some(NO_BUS)));
+        let task = tokio::spawn(run_with_bus(in_r, out_w, Some(NO_BUS), Some(NO_BUS)));
         tokio::time::sleep(Duration::from_millis(100)).await;
         drop(in_w);
         let code = tokio::time::timeout(Duration::from_millis(3500), task)

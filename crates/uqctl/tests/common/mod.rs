@@ -96,6 +96,8 @@ impl Bridge {
             .arg("bridge")
             .envs(env.iter().copied())
             .env("DBUS_SESSION_BUS_ADDRESS", &bus.address)
+            // The private bus has no logind: the bridge never touches the real system bus.
+            .env("DBUS_SYSTEM_BUS_ADDRESS", &bus.address)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .kill_on_drop(true)
