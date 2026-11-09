@@ -69,6 +69,7 @@ PanelWindow {
 
     function wipe() {
         audio.wipe();
+        network.wipe();
         flick.contentY = 0;
     }
 
@@ -155,9 +156,20 @@ PanelWindow {
                     active: root.shown
                 }
 
-                // Task 8: NetworkGroup (Wi-Fi, wired, Bluetooth) goes here.
+                NetworkGroup {
+                    id: network
+                    Layout.fillWidth: true
+                    active: root.shown
+                }
 
-                // Task 8: ThemeGroup (theme, dark/light, schedule, workspace layout) goes here.
+                BluetoothGroup {
+                    Layout.fillWidth: true
+                }
+
+                ThemeGroup {
+                    Layout.fillWidth: true
+                    active: root.shown
+                }
 
                 PowerGroup {
                     Layout.fillWidth: true

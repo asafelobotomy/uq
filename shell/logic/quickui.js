@@ -1,6 +1,7 @@
 .pragma library
+.import "quick.js" as Q
 
-// Pure helpers for the quick-settings window's controls (QuickSettings, AudioGroup, PowerGroup).
+// Pure helpers for the quick-settings window's controls (QuickSettings and its groups).
 // No Quickshell imports; live Pipewire/UPower objects are only read through the plain fields
 // named below, so tests can pass plain objects.
 
@@ -64,4 +65,145 @@ function profileOptions(hasPerformance) {
 // The battery row shows only for a present laptop battery.
 function batteryShown(device) {
     return !!device && !!device.isLaptopBattery && !!device.isPresent;
+}
+
+// --- network ---
+
+// WifiNetwork-shaped objects ({name, signalStrength, connected, known, security}) -> quick.js
+// wifiRows rows, each with `index` into `networks` so a tap reaches the live object. Only
+// `openSecurity` (WifiSecurityType.Open) counts as unsecured; Unknown and the rest are secured,
+// so they are never connectable unless known. Names are untrusted and passed through untouched.
+function wifiList(networks, openSecurity) {
+    if (!networks)
+        return [];
+    var inputs = [];
+    for (var i = 0; i < networks.length; i++) {
+        var n = networks[i];
+        if (!n)
+            continue;
+        inputs.push({
+            name: n.name,
+            signal: n.signalStrength,
+            connected: !!n.connected,
+            known: !!n.known,
+            secure: n.security !== openSecurity,
+            index: i
+        });
+    }
+    var rows = Q.wifiRows(inputs);
+    var used = {};
+    function same(a, r) {
+        return a.name === r.name && a.connected === r.connected && a.known === r.known
+            && a.secure === r.secure;
+    }
+    function pct(v) {
+        var x = Number(v);
+        return isFinite(x) ? Math.round(Math.max(0, Math.min(1, x)) * 100) : 0;
+    }
+    rows.forEach(function (r) {
+        var pick = -1;
+        for (var j = 0; j < inputs.length && pick < 0; j++)
+            if (!used[j] && same(inputs[j], r) && pct(inputs[j].signal) === r.signal)
+                pick = j;
+        for (var k = 0; k < inputs.length && pick < 0; k++)
+            if (!used[k] && same(inputs[k], r))
+                pick = k;
+        used[pick] = true;
+        r.index = pick < 0 ? -1 : inputs[pick].index;
+    });
+    return rows;
+}
+
+// What a tap on a Wi-Fi row does: "disconnect", "connect", or "setup" for a secured network
+// that isn't known (the shell has no password prompt; it only says "Set up in Settings").
+function wifiAction(row) {
+    if (!row)
+        return "";
+    if (row.connected)
+        return "disconnect";
+    return row.connectable ? "connect" : "setup";
+}
+
+// One line for a WiredDevice ({connected, hasLink, linkSpeed in Mb/s}).
+function wiredLabel(dev) {
+    if (!dev)
+        return "";
+    if (dev.connected) {
+        var s = Number(dev.linkSpeed);
+        return "Wired · Connected" + (s > 0 ? " · " + Math.round(s) + " Mb/s" : "");
+    }
+    return dev.hasLink ? "Wired · Cable plugged in, not connected" : "Wired · Cable unplugged";
+}
+
+// --- Bluetooth ---
+
+// Paired devices, connected first, otherwise in the order given.
+function btDevices(devices) {
+    var on = [], off = [];
+    if (!devices)
+        return on;
+    for (var i = 0; i < devices.length; i++) {
+        var d = devices[i];
+        if (d && d.paired)
+            (d.connected ? on : off).push(d);
+    }
+    return on.concat(off);
+}
+
+// A device's label: name, then deviceName, then address. Untrusted text, returned unchanged
+// for UqText (plain text, elided).
+function btLabel(dev) {
+    if (!dev)
+        return "Unknown device";
+    var keys = ["name", "deviceName", "address"];
+    for (var i = 0; i < keys.length; i++) {
+        var v = dev[keys[i]];
+        if (v !== null && v !== undefined && String(v) !== "")
+            return String(v);
+    }
+    return "Unknown device";
+}
+
+// "80%" when the device reports a battery (0..1), else "".
+function btBattery(dev) {
+    if (!dev || !dev.batteryAvailable)
+        return "";
+    var b = Number(dev.battery);
+    if (!isFinite(b))
+        return "";
+    return Math.round(Math.max(0, Math.min(1, b)) * 100) + "%";
+}
+
+// --- theme ---
+
+// GetTheme's reply [name, variant] -> {name, variant}, or null if malformed.
+function themeReply(v) {
+    if (!Array.isArray(v) || v.length !== 2)
+        return null;
+    var name = v[0], variant = v[1];
+    if (typeof name !== "string" || name === "")
+        return null;
+    if (variant !== "dark" && variant !== "light")
+        return null;
+    return { name: name, variant: variant };
+}
+
+function otherVariant(variant) {
+    return variant === "dark" ? "light" : "dark";
+}
+
+// ListThemes' reply [ids] -> the non-empty string ids.
+function themeList(v) {
+    if (!Array.isArray(v))
+        return [];
+    return v.filter(function (id) { return typeof id === "string" && id !== ""; });
+}
+
+// GetLayouts' map ("<id>" or "name:<name>" -> layout) for a workspace {id, name}; dwindle when
+// unset (Hyprland's default). No workspace -> "".
+function workspaceLayout(layouts, ws) {
+    if (!ws)
+        return "";
+    var m = layouts && typeof layouts === "object" ? layouts : {};
+    return m[String(ws.id)] || m["name:" + ws.name] || "dwindle";
 }

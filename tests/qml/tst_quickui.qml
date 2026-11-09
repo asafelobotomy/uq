@@ -65,4 +65,123 @@ TestCase {
         verify(!U.batteryShown({ isLaptopBattery: false, isPresent: true }));
         verify(!U.batteryShown(null));
     }
+
+    // WifiNetwork-shaped objects -> wifiRows rows, each carrying `index` back into the input so
+    // a tap reaches the right live object. Open security is the only unsecured kind passed in;
+    // anything else (including Unknown) counts as secured.
+    function test_wifi_list() {
+        var OPEN = 10, PSK = 3, UNKNOWN = 11;
+        var nets = [
+            { name: "cafe", signalStrength: 0.4, connected: false, known: false, security: OPEN },
+            { name: "home", signalStrength: 0.7, connected: true, known: true, security: PSK },
+            { name: "neighbour", signalStrength: 0.9, connected: false, known: false, security: PSK },
+            { name: "", signalStrength: 1, connected: false, known: false, security: OPEN },
+            null,
+            { name: "odd", signalStrength: 0.2, connected: false, known: false, security: UNKNOWN }
+        ];
+        var rows = U.wifiList(nets, OPEN);
+        compare(rows.map(function (r) { return r.name; }), ["home", "neighbour", "cafe", "odd"]);
+        compare(rows.map(function (r) { return r.index; }), [1, 2, 0, 5]);
+        compare(rows.map(function (r) { return r.connectable; }), [false, false, true, false]);
+        verify(rows[3].secure);
+        compare(rows[1].signal, 90);
+        compare(U.wifiList(null, OPEN), []);
+        compare(U.wifiList([], OPEN), []);
+    }
+
+    // Duplicate SSIDs (two Wi-Fi devices) each map back to their own object.
+    function test_wifi_list_duplicates() {
+        var nets = [
+            { name: "dup", signalStrength: 0.3, connected: false, known: true, security: 3 },
+            { name: "dup", signalStrength: 0.3, connected: false, known: true, security: 3 }
+        ];
+        var idx = U.wifiList(nets, 10).map(function (r) { return r.index; }).sort();
+        compare(idx, [0, 1]);
+    }
+
+    // Untrusted SSIDs pass through untouched (UqText renders them as plain text).
+    function test_wifi_list_untrusted_name() {
+        var name = "<b>x</b>\u0007" + new Array(300).join("A");
+        var rows = U.wifiList([{ name: name, signalStrength: 0.5, connected: false, known: false, security: 10 }], 10);
+        compare(rows[0].name, name);
+    }
+
+    // A tap: disconnect when connected, connect when connectable, else (secured and unknown)
+    // only point at Settings: the shell has no password prompt.
+    function test_wifi_action() {
+        compare(U.wifiAction({ connected: true, connectable: false }), "disconnect");
+        compare(U.wifiAction({ connected: false, connectable: true }), "connect");
+        compare(U.wifiAction({ connected: false, connectable: false }), "setup");
+        compare(U.wifiAction(null), "");
+    }
+
+    function test_wired_label() {
+        compare(U.wiredLabel({ connected: true, hasLink: true, linkSpeed: 1000 }), "Wired · Connected · 1000 Mb/s");
+        compare(U.wiredLabel({ connected: true, hasLink: true, linkSpeed: 0 }), "Wired · Connected");
+        compare(U.wiredLabel({ connected: false, hasLink: true, linkSpeed: 1000 }), "Wired · Cable plugged in, not connected");
+        compare(U.wiredLabel({ connected: false, hasLink: false, linkSpeed: 0 }), "Wired · Cable unplugged");
+        compare(U.wiredLabel(null), "");
+    }
+
+    // Paired devices only, connected first, otherwise in the order given.
+    function test_bt_devices() {
+        var a = { paired: true, connected: false };
+        var b = { paired: false, connected: true };
+        var c = { paired: true, connected: true };
+        var d = { paired: true, connected: false };
+        compare(U.btDevices([a, b, null, c, d]), [c, a, d]);
+        compare(U.btDevices(null), []);
+    }
+
+    // Untrusted labels: name, then deviceName, then address; returned unchanged.
+    function test_bt_label() {
+        compare(U.btLabel({ name: "Buds", deviceName: "WH-1000", address: "AA:BB" }), "Buds");
+        compare(U.btLabel({ name: "", deviceName: "WH-1000", address: "AA:BB" }), "WH-1000");
+        compare(U.btLabel({ name: "", deviceName: "", address: "AA:BB" }), "AA:BB");
+        compare(U.btLabel({}), "Unknown device");
+        compare(U.btLabel(null), "Unknown device");
+        compare(U.btLabel({ name: "<i>x</i>\n" }), "<i>x</i>\n");
+    }
+
+    function test_bt_battery() {
+        compare(U.btBattery({ batteryAvailable: true, battery: 0.804 }), "80%");
+        compare(U.btBattery({ batteryAvailable: true, battery: 1.5 }), "100%");
+        compare(U.btBattery({ batteryAvailable: false, battery: 0.5 }), "");
+        compare(U.btBattery({ batteryAvailable: true, battery: NaN }), "");
+        compare(U.btBattery(null), "");
+    }
+
+    // GetTheme replies [name, variant]; anything else -> null.
+    function test_theme_reply() {
+        compare(U.themeReply(["nord", "dark"]), { name: "nord", variant: "dark" });
+        compare(U.themeReply(["nord", "light"]), { name: "nord", variant: "light" });
+        compare(U.themeReply(["nord", "sepia"]), null);
+        compare(U.themeReply(["", "dark"]), null);
+        compare(U.themeReply(["nord"]), null);
+        compare(U.themeReply({ name: "nord" }), null);
+        compare(U.themeReply(null), null);
+    }
+
+    function test_other_variant() {
+        compare(U.otherVariant("dark"), "light");
+        compare(U.otherVariant("light"), "dark");
+        compare(U.otherVariant(""), "dark");
+    }
+
+    // ListThemes replies [ids]; non-strings and empties dropped.
+    function test_theme_list() {
+        compare(U.themeList(["a", "", 3, null, "b"]), ["a", "b"]);
+        compare(U.themeList("a"), []);
+        compare(U.themeList(null), []);
+    }
+
+    // GetLayouts keys are "<id>" or "name:<name>" (SystemIsland's lookup); dwindle by default.
+    function test_workspace_layout() {
+        var m = { "3": "master", "name:web": "scrolling" };
+        compare(U.workspaceLayout(m, { id: 3, name: "3" }), "master");
+        compare(U.workspaceLayout(m, { id: 7, name: "web" }), "scrolling");
+        compare(U.workspaceLayout(m, { id: 9, name: "9" }), "dwindle");
+        compare(U.workspaceLayout(null, { id: 3, name: "3" }), "dwindle");
+        compare(U.workspaceLayout(m, null), "");
+    }
 }
