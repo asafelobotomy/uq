@@ -46,7 +46,11 @@ pid=$!
 wait "$pid"
 sleep 0.5
 grep -qx "PID $pid" "$tmp/out" || { echo "FAIL: qs is not the wrapper's PID ($pid): $(cat "$tmp/out")"; fail=1; }
-left=$(pgrep -s "$pid" 2>/dev/null)
+# Zombies don't count: the grep has exited, but in a container whose PID 1 doesn't reap (CI) it
+# stays <defunct> after being reparented.
+left=$(for p in $(pgrep -s "$pid" 2>/dev/null); do
+    case "$(ps -o stat= -p "$p" 2>/dev/null)" in Z*|"") ;; *) echo "$p" ;; esac
+done)
 [ -z "$left" ] || { echo "FAIL: processes left after qs exited: $(ps -o pid,args -p "${left//$'\n'/,}")"; fail=1; }
 
 [ "$fail" = 0 ] && echo "lock_wrapper ok"
