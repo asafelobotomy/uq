@@ -11,6 +11,9 @@ Phase 2: the uQ shell, a Quickshell desktop shell that runs as `uq-shell.service
 
 ### Added
 
+- **Unattended setup.** `uqctl setup` reports its outcome in the exit code (0 uQ config in place,
+  1 error, 2 refused as root, 3 your own `hyprland.lua` kept) and with `--json`, so installers
+  such as bindle can run it for the user.
 - **Bar and islands.** A floating, themed bar on every monitor with five islands:
   - System: workspaces with their layout icon, and a dock of pinned and running apps
     (`uqctl pin add|rm|list`).

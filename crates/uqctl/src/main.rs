@@ -2,6 +2,7 @@
 
 mod bridge;
 mod settings_cmd;
+mod setup;
 
 use clap::{Parser, Subcommand};
 use serde_json::Value;
@@ -10,9 +11,7 @@ use settings_cmd::{
 };
 use std::collections::HashMap;
 use std::process::ExitCode;
-use uq_core::paths::Paths;
 use uq_core::schedule::Schedule;
-use uq_core::stub::{StubOutcome, consumer_files, install_consumers, install_stub, stub_contents};
 
 const NAME: &str = "org.uq.Desktop1";
 const PATH: &str = "/org/uq/Desktop1";
@@ -77,12 +76,17 @@ enum Cmd {
     Reload,
     /// Run the shell's JSON-lines bridge on stdin/stdout (started by the shell, not by hand).
     Bridge,
-    /// Install uQ's ~/.config/hypr/hyprland.lua (never overwrites an existing one).
+    /// Install uQ's ~/.config/hypr/hyprland.lua (never overwrites an existing one). Safe to run
+    /// unattended and repeatedly. Exit 0: uQ's config is in place; 1: error (e.g. uq not
+    /// installed); 2: refused as root; 3: your own hyprland.lua was kept.
     Setup {
         /// Also point GTK, qt6ct, kitty, foot and alacritty at uQ's theme. These files apply in
         /// every desktop you log in to, not only Hyprland.
         #[arg(long)]
         apps: bool,
+        /// Print the outcome as one JSON object on stdout (for installers such as bindle).
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -177,44 +181,6 @@ fn current_workspace() -> Result<String, String> {
     active_workspace_selector(&String::from_utf8_lossy(&out.stdout))
 }
 
-fn setup(apps: bool) -> Result<(), String> {
-    let paths = Paths::from_env();
-    match install_stub(&paths).map_err(|e| format!("{}: {e}", paths.main_lua.display()))? {
-        StubOutcome::Installed => {
-            println!("uQ config installed at {}", paths.main_lua.display());
-            println!("Log out and choose Hyprland, or run `hyprctl reload` in a running session.");
-        }
-        StubOutcome::AlreadyPresent => {
-            println!(
-                "{} already exists and was left alone.",
-                paths.main_lua.display()
-            );
-            println!("To use uQ, put these lines at the top of it:\n");
-            print!("{}", stub_contents(&paths));
-        }
-    }
-    if !apps {
-        println!(
-            "App theming (GTK, qt6ct, terminals) not changed. Run `uqctl setup --apps` to opt in; \
-             those files also apply in other desktops."
-        );
-        return Ok(());
-    }
-    let consumers = install_consumers(&paths).map_err(|e| format!("app theme files: {e}"))?;
-    let lines: HashMap<_, _> = consumer_files(&paths).into_iter().collect();
-    for (path, outcome) in consumers {
-        match outcome {
-            StubOutcome::Installed => println!("themed: {}", path.display()),
-            StubOutcome::AlreadyPresent => println!(
-                "left alone: {} (add this to use uQ's theme):\n  {}",
-                path.display(),
-                lines[&path].trim_end().replace('\n', "\n  ")
-            ),
-        }
-    }
-    Ok(())
-}
-
 fn describe(err: zbus::Error) -> String {
     match err {
         zbus::Error::MethodError(_, Some(msg), _) => msg,
@@ -224,9 +190,6 @@ fn describe(err: zbus::Error) -> String {
 }
 
 async fn run(cmd: Cmd) -> Result<(), String> {
-    if let Cmd::Setup { apps } = cmd {
-        return setup(apps);
-    }
     if matches!(cmd, Cmd::Bridge) {
         unreachable!("handled in main");
     }
@@ -367,6 +330,10 @@ async fn pin(proxy: &zbus::Proxy<'_>, cmd: PinCmd) -> Result<(), String> {
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> ExitCode {
     let cli = Cli::parse();
+    if let Cmd::Setup { apps, json } = cli.cmd {
+        // Local files only: no uqd, no timeout.
+        return setup::main(apps, json);
+    }
     if matches!(cli.cmd, Cmd::Bridge) {
         // Long-lived: no timeout; ends on stdin EOF.
         return bridge::run(tokio::io::stdin(), tokio::io::stdout()).await;
@@ -437,13 +404,19 @@ mod tests {
     fn cli_parses_setup() {
         assert!(matches!(
             Cli::try_parse_from(["uqctl", "setup"]).unwrap().cmd,
-            Cmd::Setup { apps: false }
+            Cmd::Setup {
+                apps: false,
+                json: false
+            }
         ));
         assert!(matches!(
             Cli::try_parse_from(["uqctl", "setup", "--apps"])
                 .unwrap()
                 .cmd,
-            Cmd::Setup { apps: true }
+            Cmd::Setup {
+                apps: true,
+                json: false
+            }
         ));
     }
 

@@ -43,6 +43,19 @@ only Hyprland, so they are opt-in. It never overwrites a file you already have; 
 to add instead. Then log in to Hyprland. uqd starts with the Hyprland session and stops when it
 ends.
 
+Installers (bindle offers uQ as its desktop) can run `uqctl setup` unattended, as the user who
+will log in (for example `runuser -l <user> -c 'uqctl setup --json'`). Running it again changes
+nothing. The result is in the exit code, and `--json` prints it as one object on stdout:
+
+| Exit | Meaning |
+|---|---|
+| 0 | uQ's `hyprland.lua` is in place (written now, or already there) |
+| 1 | error: uQ's `base.lua` is missing (the package isn't installed), or a file couldn't be written |
+| 2 | refused: run as root, which would set up root's account instead of the user's |
+| 3 | the user's own `hyprland.lua` was kept; the session isn't uQ until they add the stub lines |
+
+Theme files kept by `--apps` are reported but never change the exit code.
+
 Hyprland is pinned to **0.56.2–0.57.x** (`uq-hyprland-pin`): Manjaro ships 0.56.2 and Arch
 0.57.1 as of 2026-11-08. The Lua API uQ uses is identical in the 0.56.2 and 0.57 sources; CI runs
 `Hyprland --verify-config` on every theme against Arch's current release.
