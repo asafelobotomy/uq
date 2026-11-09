@@ -67,16 +67,26 @@ restarts the lock surface (`uq-lock.service`, else `hyprlock`) if it ever dies.
 - Tapping `SUPER` (left SUPER, pressed and released alone) opens or closes the app menu. It
   doesn't open when you press and release another key or mouse button while SUPER is held. On
   Hyprland 0.56 it can still open if you release SUPER while that other key is still down.
-- Neither works over the lock screen. Both open on the focused monitor.
+- `SUPER+A` opens or closes quick settings (volume, mic, brightness, Wi-Fi, Bluetooth and more).
+- None of them works over the lock screen. All open on the focused monitor.
 
 Scripts can drive them through the shell's IPC (ignored while the screen is locked):
 
 ```bash
-qs ipc -p /usr/share/uq/shell call uq open spotlight    # or: close, toggle; spotlight | appmenu
+qs ipc -p /usr/share/uq/shell call uq open spotlight    # or: close, toggle; spotlight | appmenu | quicksettings
 ```
 
 `open` only opens and `close` only closes that surface; any other name is ignored. Each call
 prints `ok` or `ignored`.
+
+#### Volume, mic and brightness keys
+
+`XF86AudioRaiseVolume`, `XF86AudioLowerVolume`, `XF86AudioMute`, `XF86AudioMicMute`,
+`XF86MonBrightnessUp` and `XF86MonBrightnessDown` go through the shell (`uq:vol-up`, `uq:vol-down`,
+`uq:mute`, `uq:mic-mute`, `uq:bright-up`, `uq:bright-down`). They work over the lock screen and
+repeat while held. Each press shows an OSD: noti-fi's when it answers, otherwise uQ's own on the
+focused monitor. Audio changes in the first 2 s after login are quiet (no OSD). With no output,
+input or backlight device, the matching key does nothing.
 
 #### Search providers
 

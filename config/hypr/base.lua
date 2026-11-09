@@ -177,13 +177,14 @@ hl.bind(mainMod .. " + mouse:273", hl.dsp.window.resize(), { mouse = true })
 -- lock screen). uq-lock.service arrives in a later slice; until then hyprlock takes over.
 hl.bind(mainMod .. " + CTRL + L", hl.dsp.exec_cmd("systemctl --user restart uq-lock.service || hyprlock"), { locked = true })
 
--- Media and brightness keys
-hl.bind("XF86AudioRaiseVolume",  hl.dsp.exec_cmd("wpctl set-volume -l 1 @DEFAULT_AUDIO_SINK@ 5%+"), { locked = true, repeating = true })
-hl.bind("XF86AudioLowerVolume",  hl.dsp.exec_cmd("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-"),      { locked = true, repeating = true })
-hl.bind("XF86AudioMute",         hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"),     { locked = true, repeating = true })
-hl.bind("XF86AudioMicMute",      hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle"),   { locked = true, repeating = true })
-hl.bind("XF86MonBrightnessUp",   hl.dsp.exec_cmd("brightnessctl -e4 -n2 set 5%+"),                  { locked = true, repeating = true })
-hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd("brightnessctl -e4 -n2 set 5%-"),                  { locked = true, repeating = true })
+-- Volume, mic and brightness keys go through the shell (OSD included); see shell/osd/OsdRoutes.qml.
+hl.bind("XF86AudioRaiseVolume",  hl.dsp.global("uq:vol-up"),      { locked = true, repeating = true })
+hl.bind("XF86AudioLowerVolume",  hl.dsp.global("uq:vol-down"),    { locked = true, repeating = true })
+hl.bind("XF86AudioMute",         hl.dsp.global("uq:mute"),        { locked = true, repeating = true })
+hl.bind("XF86AudioMicMute",      hl.dsp.global("uq:mic-mute"),    { locked = true, repeating = true })
+hl.bind("XF86MonBrightnessUp",   hl.dsp.global("uq:bright-up"),   { locked = true, repeating = true })
+hl.bind("XF86MonBrightnessDown", hl.dsp.global("uq:bright-down"), { locked = true, repeating = true })
+-- Media keys
 hl.bind("XF86AudioNext",  hl.dsp.exec_cmd("playerctl next"),       { locked = true })
 hl.bind("XF86AudioPause", hl.dsp.exec_cmd("playerctl play-pause"), { locked = true })
 hl.bind("XF86AudioPlay",  hl.dsp.exec_cmd("playerctl play-pause"), { locked = true })

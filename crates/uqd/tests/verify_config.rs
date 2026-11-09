@@ -143,6 +143,23 @@ if quick.key ~= "SUPER + A" then error("uq:quick-settings is bound to " .. tostr
 for _, b in ipairs({spotlight, appmenu, quick}) do
   if opt(b, "locked") then error(b.dsp .. " must not be locked") end
 end
+local osd_keys = {
+  XF86AudioRaiseVolume = "vol-up", XF86AudioLowerVolume = "vol-down",
+  XF86AudioMute = "mute", XF86AudioMicMute = "mic-mute",
+  XF86MonBrightnessUp = "bright-up", XF86MonBrightnessDown = "bright-down",
+}
+for key, name in pairs(osd_keys) do
+  local b = bind_for("hl.dsp.global(uq:" .. name .. ")")
+  if b.key ~= key then error("uq:" .. name .. " is bound to " .. tostring(b.key)) end
+  if opt(b, "locked") ~= true or opt(b, "repeating") ~= true then
+    error(b.dsp .. " needs locked = true and repeating = true")
+  end
+end
+for _, b in ipairs(binds) do
+  if b.dsp:find("wpctl", 1, true) or b.dsp:find("brightnessctl", 1, true) then
+    error("a wpctl/brightnessctl exec bind is left: " .. b.dsp)
+  end
+end
 print("ok " .. #calls)
 "#;
 
@@ -159,6 +176,35 @@ fn base_lua_launcher_binds_are_not_locked() {
                 "{name} bind must not be locked: {line}"
             );
         }
+    }
+}
+
+/// Spec §2.12: the OSD keys go through the shell, locked and repeating, with no exec binds left.
+#[test]
+fn base_lua_osd_binds_are_locked() {
+    let base = std::fs::read_to_string(repo().join("config/hypr/base.lua")).unwrap();
+    for (key, name) in [
+        ("XF86AudioRaiseVolume", "uq:vol-up"),
+        ("XF86AudioLowerVolume", "uq:vol-down"),
+        ("XF86AudioMute", "uq:mute"),
+        ("XF86AudioMicMute", "uq:mic-mute"),
+        ("XF86MonBrightnessUp", "uq:bright-up"),
+        ("XF86MonBrightnessDown", "uq:bright-down"),
+    ] {
+        let lines: Vec<&str> = base.lines().filter(|l| l.contains(name)).collect();
+        assert_eq!(lines.len(), 1, "expected exactly one {name} bind");
+        let line = lines[0];
+        assert!(line.contains(key), "{name} is not on {key}: {line}");
+        assert!(
+            line.contains("locked = true") && line.contains("repeating = true"),
+            "{name} bind must be locked and repeating: {line}"
+        );
+    }
+    for line in base.lines() {
+        assert!(
+            !(line.contains("wpctl") || line.contains("brightnessctl")),
+            "exec bind left in base.lua: {line}"
+        );
     }
 }
 

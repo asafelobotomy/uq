@@ -5,6 +5,7 @@ import Quickshell.Hyprland
 import "core"
 import "bar"
 import "launcher"
+import "osd"
 
 ShellRoot {
     Component.onCompleted: Quickshell.watchFiles = false
@@ -24,4 +25,9 @@ ShellRoot {
 
     // One Spotlight and one app menu (not per screen): they move to the focused monitor.
     Launchers {}
+
+    // The volume, mic and brightness keys, their OSD source, and the fallback OSD window.
+    OsdRoutes {}
+    OsdWatch {}
+    Osd {}
 }
