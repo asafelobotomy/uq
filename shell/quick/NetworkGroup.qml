@@ -94,7 +94,7 @@ ColumnLayout {
         font.bold: true
     }
 
-    PowerGroup.ToggleRow {
+    ToggleRow {
         visible: root.wifiShown
         glyph: "📶"
         label: "Wi-Fi"

@@ -23,7 +23,7 @@ ColumnLayout {
         font.bold: true
     }
 
-    PowerGroup.ToggleRow {
+    ToggleRow {
         glyph: "ᛒ"
         label: "Bluetooth"
         on: root.enabledNow

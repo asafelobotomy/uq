@@ -142,7 +142,7 @@ ColumnLayout {
     }
 
     // --- dark / light ---
-    PowerGroup.ToggleRow {
+    ToggleRow {
         visible: root.themeName !== ""
         glyph: "🌙"
         label: "Dark mode"
@@ -151,7 +151,7 @@ ColumnLayout {
     }
 
     // --- schedule ---
-    PowerGroup.ToggleRow {
+    ToggleRow {
         visible: root.schedule !== null
         enabled: root.nextSchedule !== null
         opacity: enabled ? 1 : 0.5
