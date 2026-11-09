@@ -27,7 +27,9 @@ cat > "$tmp/bin/swaync-client" <<SH
 echo "swaync-client \$*" >> "$log"
 case "\$1" in
     --version) echo "swaync-client 0.10.1" ;;
-    -swb) echo '{"text":"3","alt":"notification","tooltip":"","class":"notification"}'; exec -a "$tmp/bin/swaync-sub" "$sleep_bin" 20 ;;
+    -swb) echo '{"text":"3","alt":"notification","tooltip":"","class":"notification"}'
+          printf '{"count":99,"pad":"%05000d"}\n' 0
+          exec -a "$tmp/bin/swaync-sub" "$sleep_bin" 20 ;;
 esac
 exit 0
 SH
@@ -47,13 +49,15 @@ echo "dunstctl \$*" >> "$log"
 case "\$*" in
     is-paused) echo "false" ;;
     count) printf '              Waiting: 1\n  Currently displayed: 2\n              History: 5\n' ;;
+    history-pop) [ -e "$tmp/wedge" ] && { trap '' TERM; exec -a "$tmp/bin/wedged" "$sleep_bin" 30; } ;;
 esac
 exit 0
 SH
 chmod +x "$tmp/bin/"*
 
-# run <backend> <bin dir>: one shell whose stubbed settings pick <backend>; logs STATE after 1 s,
-# then setDnd(true) and toggleCentre(), then AFTER once the writes have been re-polled.
+# run <backend> <bin dir> [after ms] [extra QML]: one shell whose stubbed settings pick <backend>;
+# logs STATE after 1 s, then setDnd(true) and toggleCentre(), then AFTER (default 2.5 s) once the
+# writes have been re-polled.
 run() {
     cat > "$tmp/cfg/shell.qml" <<QML
 import QtQuick
@@ -75,7 +79,8 @@ ShellRoot {
         interval: 1000; running: true
         onTriggered: { show("STATE"); NotifBackend.setDnd(true); NotifBackend.toggleCentre(); }
     }
-    Timer { interval: 2500; running: true; onTriggered: { show("AFTER"); Qt.quit(); } }
+    Timer { interval: ${3:-2500}; running: true; onTriggered: { show("AFTER"); Qt.quit(); } }
+    ${4:-}
 }
 QML
     : > "$log"
@@ -114,6 +119,26 @@ expect "dunst DnD on" '^dunstctl set-paused true$' "$log"
 expect "dunst centre with history-pop" '^dunstctl history-pop$' "$log"
 n=$(grep -c '^dunstctl count$' "$log")
 [ "$n" -ge 2 ] || { echo "FAIL: dunst not re-polled after a write"; cat "$log"; exit 1; }
+
+# A dunstctl that ignores SIGTERM: terminated at 5 s, killed and abandoned at 6 s, and the queue
+# goes on to the re-poll behind it.
+touch "$tmp/wedge"
+run dunst "$tmp/bin" 8000
+rm -f "$tmp/wedge"
+expect "re-poll after a wedged history-pop" '^dunstctl history-pop$' "$log"
+tail -n 1 "$log" | grep -qE '^dunstctl (count|is-paused)$' || { echo "FAIL: queue stalled behind a wedged command"; cat "$log"; exit 1; }
+pgrep -f "$tmp/bin/wedged" >/dev/null && { echo "FAIL: wedged command not killed"; exit 1; }
+
+# Ruling E: noti-fi drops under auto → pending for a fresh grace window, then built-in. The
+# startup grace ends at 5 s; the drop at 4 s restarts it, so MID (6 s) is still pending.
+run auto "$tmp/bin" 9500 '
+    Timer { interval: 1200; running: true; onTriggered: { Notifi.available = true; show("UP"); } }
+    Timer { interval: 4000; running: true; onTriggered: { Notifi.available = false; show("DROP"); } }
+    Timer { interval: 6000; running: true; onTriggered: show("MID") }'
+expect "notifi while up" '^.*UP notifi ' "$tmp/out"
+expect "pending right after the drop" 'DROP pending false' "$tmp/out"
+expect "still pending after the startup grace" 'MID pending false' "$tmp/out"
+expect "built-in after the new grace" 'AFTER builtin ' "$tmp/out"
 
 # The chosen daemon is missing: built-in, with the warning logged once.
 mkdir -p "$tmp/empty"

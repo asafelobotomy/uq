@@ -33,8 +33,12 @@ QtObject {
     // --- internals ---
     property int attempt: 0
     property int stableMs: 60000
+    readonly property int maxLine: 4096
 
+    // One -swb status line; anything over maxLine is not swaync's and is ignored.
     function apply(line) {
+        if (line.length > maxLine)
+            return;
         var r = N.parseSwaync(line);
         if (r === null)
             return;

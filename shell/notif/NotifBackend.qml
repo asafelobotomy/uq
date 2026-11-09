@@ -6,7 +6,8 @@ import "../logic/notif.js" as N
 
 // One notification interface over noti-fi, the built-in server, swaync, mako and dunst (spec
 // §2.5). `notif.backend` picks one (logic/notif.js chooseBackend); a missing daemon falls back to
-// built-in with a warning; `auto` waits NOTIFI_GRACE_MS for noti-fi before settling on built-in.
+// built-in with a warning; `auto` waits NOTIFI_GRACE_MS for noti-fi before settling on built-in,
+// at startup and again whenever noti-fi drops.
 // While the choice is "pending" nothing is available and the controls do nothing.
 QtObject {
     id: root
@@ -111,6 +112,18 @@ QtObject {
         target: Builtin
         property: "wanted"
         value: N.builtinShouldRegister(root.backend, Bridge.notifOwner)
+    }
+
+    // Ruling E: when noti-fi drops (crash or restart), wait a fresh grace window before falling
+    // back to built-in, so built-in does not take the name the restarted daemon needs.
+    property Connections notifiConn: Connections {
+        target: Notifi
+        function onAvailableChanged() {
+            if (!Notifi.available) {
+                root.graceOver = false;
+                root.graceTimer.restart();
+            }
+        }
     }
 
     property Timer graceTimer: Timer {
