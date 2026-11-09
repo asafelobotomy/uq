@@ -124,6 +124,9 @@ TestCase {
         compare(N.osdParams("brightness", 300, 937, false),
                 { kind: "brightness", value: 300, max: 937, muted: false });
         compare(N.osdParams("mic", 0, 100, true).muted, true);
+        // muted is optional in noti-fi's protocol: undefined means false; a non-bool is invalid.
+        compare(N.osdParams("brightness", 40, 100).muted, false);
+        compare(N.osdParams("volume", 40, 100, "yes"), null);
         compare(N.osdParams("speaker", 10, 100, false), null);
         compare(N.osdParams("mic", 1, 0, true), null);
         compare(N.osdParams("mic", 1, 1.5, true), null);

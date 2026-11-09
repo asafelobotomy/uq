@@ -114,6 +114,7 @@ QtObject {
         live = true;
         sock.path = socketPath;
         sock.connected = true;
+        helloTimer.restart();
     }
 
     function scheduleRetry() {
@@ -127,6 +128,7 @@ QtObject {
         if (!live)
             return;
         live = false;
+        helloTimer.stop();
         stableTimer.stop();
         available = false;
         proto = ({ greeted: false, pending: {} });
@@ -147,6 +149,7 @@ QtObject {
         var e = r.effect;
         switch (e.kind) {
         case "hello":
+            helloTimer.stop();
             available = true;
             stableTimer.interval = stableMs;
             stableTimer.restart();
@@ -199,6 +202,12 @@ QtObject {
 
     property Timer retryTimer: Timer {
         onTriggered: root.attemptConnect()
+    }
+    // A peer that accepts but never greets is dropped and retried, so a wedged daemon can't leave
+    // the client stuck unavailable.
+    property Timer helloTimer: Timer {
+        interval: 5000
+        onTriggered: root.drop()
     }
     // Resets the backoff once a connection has stayed up for stableMs.
     property Timer stableTimer: Timer {

@@ -122,6 +122,8 @@ function osdParams(kind, value, max, muted) {
         return null;
     if (typeof value !== "number" || !isFinite(value))
         return null;
+    if (muted === undefined)
+        muted = false;
     if (typeof muted !== "boolean")
         return null;
     var v = Math.round(value);
