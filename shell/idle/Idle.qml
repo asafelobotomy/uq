@@ -10,7 +10,8 @@ import "../logic/idle.js" as I
 // Idle stages (spec §2.7): one IdleMonitor per stage. Each respects inhibitors, so Stay awake
 // (the bar's IdleInhibitor) blocks them all. Dim 240 s, lock 300 s, screens off 360 s, suspend
 // on battery 1200 s once the lock is secure, and screens off 30 s after locking. A null stage is
-// disabled. Screens come back on through Hyprland's *_enables_dpms options.
+// disabled. Screens come back on through Hyprland's *_enables_dpms options. Suspend counts from
+// the last input (the monitor runs on battery alone) and only fires behind a secure lock.
 Scope {
     id: root
 
@@ -39,6 +40,8 @@ Scope {
             });
             break;
         case "suspend":
+            if (!I.suspendAllowed(ctx))
+                break;
             Bridge.call("Power", ["suspend"]).catch(function (e) {
                 console.log("uq: suspend failed: " + e);
             });

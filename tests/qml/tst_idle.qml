@@ -54,20 +54,28 @@ TestCase {
 
     function test_idle_suspend_gate() {
         var s = I.stages({});
-        // On AC: never, even locked and secure.
+        // The suspend monitor runs on battery alone, so it counts from the last input.
+        compare(I.enabled("suspend", ctx({}), s), false);
         compare(I.enabled("suspend", ctx({ locked: true, secure: true }), s), false);
-        // On battery but the lock is not secure (or not locked): never.
-        compare(I.enabled("suspend", ctx({ onBattery: true, locked: true }), s), false);
-        compare(I.enabled("suspend", ctx({ onBattery: true }), s), false);
-        compare(I.enabled("suspend", ctx({ onBattery: true, secure: true }), s), false);
-        // On battery with a secure lock.
+        compare(I.enabled("suspend", ctx({ onBattery: true }), s), true);
+        compare(I.enabled("suspend", ctx({ onBattery: true, locked: true }), s), true);
         compare(I.enabled("suspend", ctx({ onBattery: true, locked: true, secure: true }), s), true);
-        // Media doesn't matter once locked.
-        compare(I.enabled("suspend", ctx({ onBattery: true, locked: true, secure: true, media: true,
-                                           mediaBlocksLock: true }), s), true);
+        // Media doesn't block it.
+        compare(I.enabled("suspend", ctx({ onBattery: true, media: true, mediaBlocksLock: true }), s), true);
         // A null stage is never enabled.
         compare(I.enabled("suspend", ctx({ onBattery: true, locked: true, secure: true }),
                           I.stages({ suspend_battery: null })), false);
+    }
+
+    function test_suspend_allowed() {
+        // Checked when the suspend monitor fires: only behind a secure lock.
+        compare(I.suspendAllowed(ctx({})), false);
+        compare(I.suspendAllowed(ctx({ onBattery: true })), false);
+        compare(I.suspendAllowed(ctx({ onBattery: true, locked: true })), false);
+        compare(I.suspendAllowed(ctx({ onBattery: true, secure: true })), false);
+        compare(I.suspendAllowed(ctx({ onBattery: true, locked: true, secure: true })), true);
+        compare(I.suspendAllowed(ctx({ locked: true, secure: true })), true);
+        compare(I.suspendAllowed(null), false);
     }
 
     function test_idle_locked_off() {

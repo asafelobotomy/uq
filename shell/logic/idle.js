@@ -11,6 +11,8 @@ var DEFAULTS = { dim: 240, lock: 300, screenOff: 360, suspend: 1200, lockedOff: 
 var KEYS = { dim: "dim", lock: "lock", screenOff: "screen_off", suspend: "suspend_battery",
              lockedOff: "locked_screen_off" };
 
+// "dim" is listed for completeness: the dim overlay follows the dim monitor's isIdle through a
+// binding in Idle.qml, not through act().
 var ACTIONS = { dim: "dim", lock: "lock", screenOff: "dpms-off", lockedOff: "dpms-off",
                 suspend: "suspend" };
 
@@ -51,11 +53,19 @@ function enabled(stage, ctx, st) {
     case "lock":
         return !c.locked && (!c.media || !c.mediaBlocksLock);
     case "suspend":
-        return !!(c.onBattery && c.locked && c.secure);
+        // Battery alone, so the timeout counts from the last input; suspendAllowed() guards
+        // the moment it fires.
+        return !!c.onBattery;
     case "lockedOff":
         return !!c.locked;
     }
     return false;
+}
+
+// Checked when the suspend monitor goes idle: suspend only behind a secure lock. If the lock
+// isn't secure at that moment, that idle period doesn't suspend.
+function suspendAllowed(ctx) {
+    return !!(ctx && ctx.locked && ctx.secure);
 }
 
 function action(stage) {

@@ -4,7 +4,8 @@ import Quickshell
 import Quickshell.Wayland
 
 // The idle dim (spec §2.7): a 60% black overlay layer on every screen while the dim stage is
-// idle. Any input ends idle in the compositor, which clears `shown`; no input handling here.
+// idle. It takes no input (an empty mask), so clicks and keys reach whatever is underneath; that
+// input ends idle in the compositor, which clears `shown`.
 Scope {
     id: root
 
@@ -28,6 +29,8 @@ Scope {
             WlrLayershell.namespace: "uq-dim"
             WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
             exclusionMode: ExclusionMode.Ignore
+            // An empty region: no input at all, so the first click while dimmed isn't swallowed.
+            mask: Region {}
             anchors { top: true; bottom: true; left: true; right: true }
 
             Rectangle {
