@@ -190,7 +190,9 @@ fn valid_icon(icon: &str) -> bool {
         && !icon
             .split('/')
             .skip(1)
-            .any(|seg| seg.is_empty() || seg == "..");
+            .any(|seg| seg.is_empty() || seg == "..")
+        // Device and kernel files (`/dev/zero`, a FIFO under /proc) could stall the image loader.
+        && !["dev", "proc", "sys"].contains(&icon.split('/').nth(1).unwrap_or(""));
     theme || path
 }
 
@@ -600,6 +602,10 @@ mod tests {
             ".",
             "..",
             "...",
+            "/dev/zero",
+            "/proc/self/fd/0",
+            "/sys/kernel/x.png",
+            "/dev",
         ] {
             assert_eq!(
                 clamp(raw("a", "t", bad, 0.5)).icon,

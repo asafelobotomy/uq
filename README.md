@@ -117,7 +117,10 @@ What the bridge does with the rows:
 - Titles are truncated to 200 bytes and subtitles to 300 bytes.
 - Each action is truncated to 256 bytes. Whole actions are kept up to 2 KiB in all, and
   `actions_json` that isn't a JSON list of strings means no actions.
-- An icon that isn't an icon-theme name or an absolute path becomes `system-search`.
+- An icon must be an icon-theme name (`[A-Za-z0-9._-]`, at most 128 bytes) or an absolute local
+  path (at most 512 bytes, characters `[A-Za-z0-9._-/+ @,~]`, no `//`, empty or `..` segments,
+  nothing under `/dev`, `/proc` or `/sys`). Anything else becomes `system-search`. Icons are
+  never treated as URLs.
 - Scores are clamped to 0-1 and scaled by 0.9, so a provider never outranks an exact or prefix
   app-name match.
 
