@@ -8,7 +8,7 @@ import "../logic/launcher.js" as L
 QtObject {
     id: root
 
-    property string open: "closed"      // "closed" | "spotlight" | "appmenu"
+    property string open: "closed"      // "closed" | "spotlight" | "appmenu" | "quicksettings"
     property var screen: null           // ShellScreen, or null for the focused monitor
     property var anchor: null           // Item the app menu hangs from, or null
 
@@ -32,6 +32,7 @@ QtObject {
             if (event === "lock") {
                 root.wipe("spotlight");
                 root.wipe("appmenu");
+                root.wipe("quicksettings");
             } else if (prev !== "closed") {
                 root.wipe(prev);
             }
@@ -39,12 +40,13 @@ QtObject {
         return next;
     }
 
-    // name: "spotlight" | "appmenu". Ignored while locked.
+    // name: "spotlight" | "appmenu" | "quicksettings". Ignored while locked.
     function toggle(name, screen, anchor) {
         if (Bridge.locked)
             return;
         var event = name === "spotlight" ? "toggleSpotlight"
-            : (name === "appmenu" ? "toggleAppMenu" : "");
+            : (name === "appmenu" ? "toggleAppMenu"
+            : (name === "quicksettings" ? "toggleQuickSettings" : ""));
         if (event === "")
             return;
         if (root.open !== name) {
@@ -59,12 +61,12 @@ QtObject {
         root._apply("close");
     }
 
-    // Shell IPC (`qs ipc ... call uq open|close|toggle spotlight|appmenu`) and the keybinds land
+    // Shell IPC (`qs ipc ... call uq open|close|toggle spotlight|appmenu|quicksettings`) and the keybinds land
     // here. open only opens, close only closes that surface; unknown verbs or names, and every
     // call while locked, are ignored. Always the focused monitor, no anchor. Returns "ok" or
     // "ignored" (what `qs ipc call` prints).
     function ipc(verb, name) {
-        if (Bridge.locked || (name !== "spotlight" && name !== "appmenu"))
+        if (Bridge.locked || (name !== "spotlight" && name !== "appmenu" && name !== "quicksettings"))
             return "ignored";
         switch (verb) {
         case "open":

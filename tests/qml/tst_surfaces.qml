@@ -51,7 +51,7 @@ TestCase {
         Surfaces.toggle("spotlight");
         Bridge.locked = true;
         compare(Surfaces.open, "closed");
-        compare(wipeSpy.count, 2);   // both surfaces wipe on lock
+        compare(wipeSpy.count, 3);   // every surface wipes on lock
         Surfaces.toggle("spotlight");
         compare(Surfaces.open, "closed");
         Bridge.locked = false;
@@ -82,6 +82,46 @@ TestCase {
         compare(Surfaces.open, "appmenu");
         compare(Surfaces.ipc("toggle", "appmenu"), "ok");
         compare(Surfaces.open, "closed");
+    }
+
+    function test_quicksettings_surface() {
+        Surfaces.toggle("spotlight");
+        wipeSpy.clear();
+        Surfaces.toggle("quicksettings", { name: "DP-1" }, { id: "button" });
+        compare(Surfaces.open, "quicksettings");
+        compare(wipeSpy.count, 1);
+        compare(wipeSpy.signalArguments[0][0], "spotlight");
+        Surfaces.toggle("quicksettings");
+        compare(Surfaces.open, "closed");
+        compare(wipeSpy.signalArguments[1][0], "quicksettings");
+        Surfaces.toggle("quicksettings");
+        wipeSpy.clear();
+        Bridge.locked = true;
+        compare(Surfaces.open, "closed");
+        var names = [];
+        for (var i = 0; i < wipeSpy.count; i++)
+            names.push(wipeSpy.signalArguments[i][0]);
+        verify(names.indexOf("quicksettings") >= 0, "lock wipes quicksettings");
+    }
+
+    function test_ipc_quicksettings() {
+        compare(Surfaces.ipc("close", "quicksettings"), "ignored");
+        compare(Surfaces.ipc("open", "quicksettings"), "ok");
+        compare(Surfaces.open, "quicksettings");
+        compare(Surfaces.screen, null);
+        compare(Surfaces.anchor, null);
+        compare(Surfaces.ipc("open", "quicksettings"), "ignored");
+        compare(Surfaces.ipc("close", "spotlight"), "ignored");
+        compare(Surfaces.open, "quicksettings");
+        compare(Surfaces.ipc("close", "quicksettings"), "ok");
+        compare(Surfaces.open, "closed");
+        compare(Surfaces.ipc("toggle", "quicksettings"), "ok");
+        compare(Surfaces.open, "quicksettings");
+        compare(Surfaces.ipc("toggle", "quicksettings"), "ok");
+        compare(Surfaces.open, "closed");
+        Surfaces.ipc("open", "quicksettings");
+        Bridge.locked = true;
+        compare(Surfaces.ipc("toggle", "quicksettings"), "ignored");
     }
 
     function test_ipc_ignores_unknown_names_and_verbs() {

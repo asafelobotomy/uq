@@ -60,6 +60,24 @@ TestCase {
         s = L.transition(s, "close");
         compare(s.open, "closed");
         verify(s.wipe);
+        // Quick settings is a third surface: opening it closes Spotlight and reports the wipe.
+        s = L.transition({ open: "spotlight", wipe: false }, "toggleQuickSettings");
+        compare(s.open, "quicksettings");
+        verify(s.wipe);
+        s = L.transition(s, "toggleAppMenu");
+        compare(s.open, "appmenu");
+        verify(s.wipe);
+        s = L.transition(s, "toggleQuickSettings");
+        compare(s.open, "quicksettings");
+        s = L.transition(s, "toggleQuickSettings");
+        compare(s.open, "closed");
+        verify(s.wipe);
+        s = L.transition(L.initialState(), "toggleQuickSettings");
+        compare(s.open, "quicksettings");
+        verify(!s.wipe);
+        s = L.transition(s, "close");
+        compare(s.open, "closed");
+        verify(s.wipe);
         // Unknown events and a bad state leave things closed or unchanged.
         compare(L.transition(L.transition(L.initialState(), "toggleSpotlight"), "bogus").open,
                 "spotlight");
@@ -68,7 +86,7 @@ TestCase {
     }
 
     function test_close_and_wipe_on_lock() {
-        var states = ["closed", "spotlight", "appmenu"];
+        var states = ["closed", "spotlight", "appmenu", "quicksettings"];
         for (var i = 0; i < states.length; i++) {
             var s = L.transition({ open: states[i], wipe: false }, "lock");
             compare(s.open, "closed", states[i]);
