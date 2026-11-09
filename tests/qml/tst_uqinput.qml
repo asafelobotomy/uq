@@ -1,6 +1,7 @@
 import QtQuick
 import QtTest
 import "../../shell/core"
+import "../../shell/logic/keys.js" as K
 
 TestCase {
     name: "uqinput"
@@ -45,6 +46,45 @@ TestCase {
         compare(spy.count, 1);
         f.clear();
         compare(f.text, "");
+    }
+
+    // Shortcuts pressed over the lock (SUPER+Space, SUPER+N) must not type into its password field.
+    function test_secret_ignores_shortcuts() {
+        var f = createTemporaryObject(c, this, { secret: true });
+        f.forceActiveFocus();
+        keyClick(Qt.Key_A);
+        keyClick(Qt.Key_Space, Qt.MetaModifier);
+        keyClick(Qt.Key_N, Qt.MetaModifier);
+        keyClick(Qt.Key_N, Qt.MetaModifier | Qt.ShiftModifier);
+        keyClick(Qt.Key_B);
+        compare(f.text, "ab");
+        // Editing combos still work: ctrl+a then Backspace clears the field.
+        keyClick(Qt.Key_A, Qt.ControlModifier);
+        keyClick(Qt.Key_Backspace);
+        compare(f.text, "");
+        keyClick(Qt.Key_C);
+        compare(f.text, "c");
+    }
+
+    function test_block_key() {
+        compare(K.blocks(Qt.MetaModifier, Qt.Key_Space), true);
+        compare(K.blocks(Qt.MetaModifier, Qt.Key_N), true);
+        compare(K.blocks(Qt.MetaModifier | Qt.ShiftModifier, Qt.Key_N), true);
+        compare(K.blocks(Qt.MetaModifier, Qt.Key_Backspace), true);
+        compare(K.blocks(Qt.NoModifier, Qt.Key_N), false);
+        compare(K.blocks(Qt.ShiftModifier, Qt.Key_N), false);
+        compare(K.blocks(Qt.KeypadModifier, Qt.Key_5), false);
+        // Ctrl: only the editing combos get through.
+        for (var k of [Qt.Key_A, Qt.Key_Backspace, Qt.Key_Delete, Qt.Key_Left, Qt.Key_Right,
+                       Qt.Key_Home, Qt.Key_End, Qt.Key_Z, Qt.Key_Y, Qt.Key_X, Qt.Key_C, Qt.Key_V,
+                       Qt.Key_Return, Qt.Key_Enter])
+            compare(K.blocks(Qt.ControlModifier, k), false, "ctrl+" + k);
+        compare(K.blocks(Qt.ControlModifier | Qt.ShiftModifier, Qt.Key_Left), false);
+        compare(K.blocks(Qt.ControlModifier, Qt.Key_N), true);
+        compare(K.blocks(Qt.ControlModifier, Qt.Key_Space), true);
+        // Ctrl+Alt is AltGr on some layouts: it types.
+        compare(K.blocks(Qt.ControlModifier | Qt.AltModifier, Qt.Key_Q), false);
+        compare(K.blocks(Qt.AltModifier, Qt.Key_Q), false);
     }
 
     Component { id: spyC; SignalSpy {} }

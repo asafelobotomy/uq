@@ -1,7 +1,9 @@
 import QtQuick
+import "../logic/keys.js" as KeyRules
 
 // The only TextInput in the shell: plain single-line text, no predictive text, length-capped.
-// `secret` makes it a password field (echo off, sensitive-data hints, room for long passwords).
+// `secret` makes it a password field (echo off, sensitive-data hints, room for long passwords,
+// and shortcuts such as SUPER+N are not typed into it: logic/keys.js).
 // scripts/lint-shell.sh forbids a bare TextInput outside this file.
 Item {
     id: root
@@ -38,6 +40,10 @@ Item {
         selectByMouse: !root.secret
         onTextEdited: root.edited(text)
         onAccepted: root.accepted()
+        Keys.onPressed: event => {
+            if (root.secret && KeyRules.blocks(event.modifiers, event.key))
+                event.accepted = true;
+        }
         // Screen readers see the focused TextInput: it carries the name set on this item.
         Accessible.role: Accessible.EditableText
         Accessible.name: root.Accessible.name
