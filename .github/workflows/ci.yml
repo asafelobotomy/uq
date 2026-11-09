@@ -72,14 +72,9 @@ jobs:
           [ -n "$card" ] || { echo "::error::vkms loaded but no vkms card found"; ls -l /sys/class/drm; exit 1; }
           echo "vkms card: $card"
           echo "SMOKE_CARD=$card" >> "$GITHUB_ENV"
-      # Exit 77 means the environment cannot host the shell: skipped, not failed.
+      # vkms gives Hyprland a card, so the shell must run here: a skip (exit 77) would hide a
+      # regression, and fails the job like any other error.
       - name: Shell smoke test on Hyprland
         run: |
-          rc=0
           docker run --rm --device "$SMOKE_CARD" -e SMOKE_CARD -e SMOKE_UID="$(id -u)" \
-            -v "$GITHUB_WORKSPACE:/src" archlinux:latest bash /src/scripts/smoke-in-container.sh || rc=$?
-          if [ "$rc" -eq 77 ]; then
-            echo "::notice::Shell smoke test skipped (exit 77): Hyprland could not host the shell here. Check it by hand."
-          elif [ "$rc" -ne 0 ]; then
-            exit "$rc"
-          fi
+            -v "$GITHUB_WORKSPACE:/src" archlinux:latest bash /src/scripts/smoke-in-container.sh
