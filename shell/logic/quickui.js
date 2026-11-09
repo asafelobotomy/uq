@@ -201,9 +201,25 @@ function themeList(v) {
 
 // GetLayouts' map ("<id>" or "name:<name>" -> layout) for a workspace {id, name}; dwindle when
 // unset (Hyprland's default). No workspace -> "".
+// The workspace selector uqd stores layouts under, exactly as uqctl's active_workspace_selector
+// (crates/uqctl/src/main.rs) builds it: the id when > 0 (named and special workspaces have
+// negative ids), a special workspace's own name, otherwise "name:<name>". "" when unknown.
+function workspaceSelector(ws) {
+    if (!ws)
+        return "";
+    var id = Number(ws.id);
+    if (isFinite(id) && id > 0 && Math.floor(id) === id)
+        return String(id);
+    var name = typeof ws.name === "string" ? ws.name : "";
+    if (name === "")
+        return "";
+    return name.indexOf("special") === 0 ? name : "name:" + name;
+}
+
 function workspaceLayout(layouts, ws) {
     if (!ws)
         return "";
     var m = layouts && typeof layouts === "object" ? layouts : {};
-    return m[String(ws.id)] || m["name:" + ws.name] || "dwindle";
+    var sel = workspaceSelector(ws);
+    return (sel !== "" && m[sel]) || m["name:" + ws.name] || "dwindle";
 }

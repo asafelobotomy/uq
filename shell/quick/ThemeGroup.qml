@@ -68,9 +68,10 @@ ColumnLayout {
         Bridge.call("SetSchedule", [JSON.stringify(next)]).then(root.refreshTheme).catch(function () {});
     }
     function setLayout(l) {
-        if (!workspace || l === layout)
+        var sel = U.workspaceSelector(workspace);
+        if (sel === "" || l === layout)
             return;
-        Bridge.call("SetLayout", [String(workspace.id), l]).then(root.refreshLayouts).catch(function () {});
+        Bridge.call("SetLayout", [sel, l]).then(root.refreshLayouts).catch(function () {});
     }
 
     onActiveChanged: if (active) refresh()

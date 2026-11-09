@@ -33,8 +33,14 @@ Scope {
         const a = sink ? sink.audio : null;
         if (!a)
             return;
-        a.volume = Q.volumeStep(a.volume, dir);
-        if (dir > 0 && a.muted)
+        const next = Q.volumeStep(a.volume, dir);
+        const unmute = dir > 0 && a.muted;
+        // At 0% or 100% nothing changes, so OsdWatch sees no signal; show the level directly so
+        // each key-repeat step still gets an OSD.
+        if (next === Math.round(a.volume * 100) / 100 && !unmute)
+            OsdRouter.show("volume", Math.round(next * 100), 100, a.muted);
+        a.volume = next;
+        if (unmute)
             a.muted = false;
     }
 

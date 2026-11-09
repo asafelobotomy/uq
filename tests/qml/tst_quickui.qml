@@ -183,5 +183,21 @@ TestCase {
         compare(U.workspaceLayout(m, { id: 9, name: "9" }), "dwindle");
         compare(U.workspaceLayout(null, { id: 3, name: "3" }), "dwindle");
         compare(U.workspaceLayout(m, null), "");
+        // Named and special workspaces have negative ids: their key is the selector, not the id.
+        var n = { "name:web": "master", "special:term": "scrolling", "-1337": "master" };
+        compare(U.workspaceLayout(n, { id: -1337, name: "web" }), "master");
+        compare(U.workspaceLayout(n, { id: -98, name: "special:term" }), "scrolling");
+        compare(U.workspaceLayout({ "-1337": "master" }, { id: -1337, name: "web" }), "dwindle");
+    }
+
+    // Mirrors uqctl's active_workspace_selector (crates/uqctl/src/main.rs): the id when > 0,
+    // a special workspace's own name, otherwise "name:<name>".
+    function test_workspace_selector() {
+        compare(U.workspaceSelector({ id: 3, name: "3" }), "3");
+        compare(U.workspaceSelector({ id: -1337, name: "web" }), "name:web");
+        compare(U.workspaceSelector({ id: -98, name: "special:term" }), "special:term");
+        compare(U.workspaceSelector({ id: -99, name: "special" }), "special");
+        compare(U.workspaceSelector({ id: 0, name: "" }), "");
+        compare(U.workspaceSelector(null), "");
     }
 }

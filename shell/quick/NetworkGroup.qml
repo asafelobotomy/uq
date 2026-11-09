@@ -23,13 +23,26 @@ ColumnLayout {
                 out.push(ds[i]);
         return out;
     }
+    // With several wired devices (a dock and a built-in port), the connected one, then one with a
+    // link, then the first.
     readonly property var wiredDevice: {
-        var ds = devices;
-        for (var i = 0; i < ds.length; i++)
-            if (ds[i] && ds[i].type === DeviceType.Wired)
-                return ds[i];
-        return null;
+        var ds = devices, first = null, linked = null;
+        for (var i = 0; i < ds.length; i++) {
+            var d = ds[i];
+            if (!d || d.type !== DeviceType.Wired)
+                continue;
+            if (d.connected)
+                return d;
+            if (!linked && d.hasLink)
+                linked = d;
+            if (!first)
+                first = d;
+        }
+        return linked || first;
     }
+    // NetworkManager reports Wi-Fi hardware as enabled when there's no rfkill switch, even with no
+    // Wi-Fi device, so the toggle also needs a device.
+    readonly property bool wifiShown: Networking.wifiHardwareEnabled && wifiDevices.length > 0
     // Every WifiNetwork across the Wi-Fi devices; rows index into this.
     readonly property var wifiNets: {
         var out = [];
@@ -43,7 +56,7 @@ ColumnLayout {
     readonly property var rows: Networking.wifiEnabled ? U.wifiList(wifiNets, WifiSecurityType.Open) : []
 
     spacing: Theme.gapIn * 2
-    visible: Networking.wifiHardwareEnabled || wiredDevice !== null
+    visible: wifiShown || wiredDevice !== null
 
     function setScanner(on) {
         wifiDevices.forEach(function (d) {
@@ -82,7 +95,7 @@ ColumnLayout {
     }
 
     PowerGroup.ToggleRow {
-        visible: Networking.wifiHardwareEnabled
+        visible: root.wifiShown
         glyph: "📶"
         label: "Wi-Fi"
         on: Networking.wifiEnabled
@@ -90,14 +103,14 @@ ColumnLayout {
     }
 
     UqText {
-        visible: Networking.wifiHardwareEnabled && Networking.wifiEnabled && root.rows.length === 0
+        visible: root.wifiShown && Networking.wifiEnabled && root.rows.length === 0
         Layout.fillWidth: true
         text: root.wifiDevices.length === 0 ? "No Wi-Fi device" : "Searching for networks…"
         color: Theme.textMuted
     }
 
     Repeater {
-        model: Networking.wifiHardwareEnabled ? root.rows : []
+        model: root.wifiShown ? root.rows : []
         delegate: Rectangle {
             id: net
             required property var modelData

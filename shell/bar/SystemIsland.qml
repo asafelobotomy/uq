@@ -6,6 +6,7 @@ import Quickshell.Widgets
 import "../core"
 import "../logic/dock.js" as Dock
 import "../logic/minimise.js" as Min
+import "../logic/quickui.js" as U
 
 // App-menu button, workspaces, and the merged pinned/running dock.
 Island {
@@ -30,7 +31,7 @@ Island {
         return s.indexOf("0x") === 0 ? s : "0x" + s;
     }
     function layoutFor(ws) {
-        return layouts[String(ws.id)] || layouts["name:" + ws.name] || "dwindle";
+        return U.workspaceLayout(layouts, ws);
     }
     function layoutGlyph(l) {
         switch (l) {
