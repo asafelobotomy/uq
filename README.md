@@ -187,3 +187,10 @@ for t in tests/shell/*.sh; do bash "$t"; done
 QT_QPA_PLATFORM=offscreen qmltestrunner -import shell -input tests/qml
 scripts/smoke-shell.sh                     # needs Hyprland, quickshell, jq; exit 77 = skipped
 ```
+
+## Credits
+
+- `crates/uqctl/protocols/hyprland-lock-notify-v1.xml` is vendored unchanged from
+  [hyprwm/hyprland-protocols](https://github.com/hyprwm/hyprland-protocols),
+  Copyright © 2025 Maximilian Seidler, under the BSD 3-Clause License (its full text is in the file).
+- Theme credits are in [`themes/CREDITS.md`](themes/CREDITS.md).

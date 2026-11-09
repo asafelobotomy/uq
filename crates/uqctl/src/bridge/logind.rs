@@ -3,10 +3,10 @@
 //!
 //! The bridge holds a delay inhibitor at all times. On `PrepareForSleep(true)` it reports the
 //! event and keeps the inhibitor until the shell says the lock is secure (`SleepLockReady`), or
-//! until `SLEEP_FALLBACK_MS` passes. On `PrepareForSleep(false)` it takes a fresh one.
+//! until `SLEEP_FALLBACK_MS` passes. On `PrepareForSleep(false)` it takes a fresh one. A failed
+//! `Inhibit` is retried every `INHIBIT_RETRY` while no inhibitor is held and no sleep is pending.
 //!
-//! Task 2 reaches `set_locked_hint` through the `Arc<Logind>` handle that `mod.rs` builds and
-//! passes to `handle`.
+//! The lock-state relay in `mod.rs` forwards each `LockState` to `set_locked_hint`.
 
 use super::protocol::Outbound;
 use futures_util::StreamExt;
@@ -27,6 +27,8 @@ const SESSION: &str = "org.freedesktop.login1.Session";
 
 /// How long a pending sleep may wait for `SleepLockReady` before the inhibitor is dropped anyway.
 pub const SLEEP_FALLBACK_MS: u64 = 2000;
+/// How often a failed `Inhibit` is tried again while awake.
+pub const INHIBIT_RETRY: Duration = Duration::from_secs(30);
 
 /// The `Lock` call's command: a fixed argv, run directly, never through a shell.
 pub fn lock_argv() -> [&'static str; 4] {
@@ -62,6 +64,28 @@ struct State {
     epoch: u64,
     /// Our session object, once found.
     session: Option<(Connection, OwnedObjectPath)>,
+    /// The last locked hint asked for, sent once the session is found.
+    hint: Option<bool>,
+}
+
+/// A run of failures of one kind: logged when it starts, not again until a success ends it.
+#[derive(Default)]
+struct Streak(AtomicBool);
+
+impl Streak {
+    /// Record a failure; log `msg` if it starts a streak. Returns whether it logged.
+    fn fail(&self, msg: impl std::fmt::Display) -> bool {
+        let first = !self.0.swap(true, Ordering::Relaxed);
+        if first {
+            eprintln!("uqctl bridge: {msg}");
+        }
+        first
+    }
+
+    /// Record a success. Returns whether it ended a streak.
+    fn ok(&self) -> bool {
+        self.0.swap(false, Ordering::Relaxed)
+    }
 }
 
 /// The bridge's handle on logind. Calls on it answer whether or not logind is reachable.
@@ -69,14 +93,25 @@ pub struct Logind {
     state: Mutex<State>,
     tx: mpsc::Sender<Outbound>,
     warned: AtomicBool,
+    inhibit_fail: Streak,
+    hint_fail: Streak,
+    retry: Duration,
 }
 
 impl Logind {
     pub fn new(tx: mpsc::Sender<Outbound>) -> Arc<Logind> {
+        Logind::with_retry(tx, INHIBIT_RETRY)
+    }
+
+    /// As `new`, retrying a failed `Inhibit` every `retry` (tests use a short one).
+    fn with_retry(tx: mpsc::Sender<Outbound>, retry: Duration) -> Arc<Logind> {
         Arc::new(Logind {
             state: Mutex::default(),
             tx,
             warned: AtomicBool::new(false),
+            inhibit_fail: Streak::default(),
+            hint_fail: Streak::default(),
+            retry,
         })
     }
 
@@ -99,24 +134,32 @@ impl Logind {
         }
     }
 
-    /// Forward the lock state to logind's `SetLockedHint`. Without a session this does nothing.
-    // Called by the lock-state watcher (slice 5, Task 2).
-    #[cfg_attr(not(test), allow(dead_code))]
+    /// Forward the lock state to logind's `SetLockedHint`. Before the session is found it is
+    /// remembered and sent then; without logind it does nothing.
     pub async fn set_locked_hint(&self, locked: bool) {
-        let Some((conn, path)) = self.state().session.clone() else {
-            return;
+        let session = {
+            let mut s = self.state();
+            s.hint = Some(locked);
+            s.session.clone()
         };
-        if let Err(e) = conn
-            .call_method(
-                Some(DEST),
-                &path,
-                Some(SESSION),
-                "SetLockedHint",
-                &(locked,),
-            )
-            .await
-        {
-            eprintln!("uqctl bridge: SetLockedHint failed: {e}");
+        if let Some((conn, path)) = session {
+            self.send_hint(&conn, &path, locked).await;
+        }
+    }
+
+    async fn send_hint(&self, conn: &Connection, path: &OwnedObjectPath, locked: bool) {
+        let r = conn
+            .call_method(Some(DEST), path, Some(SESSION), "SetLockedHint", &(locked,))
+            .await;
+        match r {
+            Ok(_) => {
+                self.hint_fail.ok();
+            }
+            Err(e) => {
+                self.hint_fail.fail(format_args!(
+                    "SetLockedHint failed ({e}); will try on the next change"
+                ));
+            }
         }
     }
 
@@ -152,13 +195,23 @@ impl Logind {
                 if let Ok(r) = signal_rule(path.as_str(), SESSION, "Lock") {
                     locks = MessageStream::for_match_rule(r, &conn, Some(16)).await.ok();
                 }
-                self.state().session = Some((conn.clone(), path));
+                let hint = {
+                    let mut s = self.state();
+                    s.session = Some((conn.clone(), path.clone()));
+                    s.hint
+                };
+                if let Some(locked) = hint {
+                    self.send_hint(&conn, &path, locked).await;
+                }
             }
             None => self.warn("no session"),
         }
         // Take the inhibitor last, so the subscriptions above are live once logind sees it.
-        self.inhibit(&conn).await;
+        self.inhibit(&conn, "at start").await;
 
+        let mut retry =
+            tokio::time::interval_at(tokio::time::Instant::now() + self.retry, self.retry);
+        retry.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         loop {
             let lock_next = async {
                 match locks.as_mut() {
@@ -184,6 +237,15 @@ impl Logind {
                     }
                     if !self.emit("LockRequested", json!({}), &stop).await {
                         return;
+                    }
+                }
+                _ = retry.tick() => {
+                    let need = {
+                        let s = self.state();
+                        s.fd.is_none() && !s.sleeping
+                    };
+                    if need {
+                        self.inhibit(&conn, "on retry").await;
                     }
                 }
             }
@@ -227,15 +289,15 @@ impl Logind {
                 s.fd.is_none()
             };
             if need {
-                self.inhibit(conn).await;
+                self.inhibit(conn, "after resume").await;
             }
         }
         self.emit("PrepareForSleep", json!({"sleeping": start}), stop)
             .await
     }
 
-    /// Take the delay inhibitor and hold its fd.
-    async fn inhibit(&self, conn: &Connection) {
+    /// Take the delay inhibitor and hold its fd. `when` says which attempt this is, for the log.
+    async fn inhibit(&self, conn: &Connection, when: &str) {
         let reply = conn
             .call_method(
                 Some(DEST),
@@ -246,8 +308,19 @@ impl Logind {
             )
             .await;
         match reply.and_then(|m| m.body().deserialize::<OwnedFd>()) {
-            Ok(fd) => self.state().fd = Some(fd),
-            Err(e) => self.warn(format!("Inhibit: {e}")),
+            Ok(fd) => {
+                self.state().fd = Some(fd);
+                if self.inhibit_fail.ok() {
+                    eprintln!("uqctl bridge: sleep inhibitor taken {when}");
+                }
+            }
+            Err(e) => {
+                let secs = self.retry.as_secs_f32();
+                self.inhibit_fail.fail(format_args!(
+                    "logind Inhibit failed {when} ({e}); sleep will not wait for the lock \
+                     screen; retrying every {secs} s"
+                ));
+            }
         }
     }
 
@@ -351,6 +424,9 @@ mod tests {
         hints: Vec<bool>,
         by_pid_fails: bool,
         get_session_ids: Vec<String>,
+        /// Fail this many Inhibit calls before succeeding again.
+        inhibit_fails: usize,
+        hint_fails: bool,
     }
     type Shared = Arc<Mutex<Fake>>;
 
@@ -358,12 +434,22 @@ mod tests {
 
     #[zbus::interface(name = "org.freedesktop.login1.Manager")]
     impl FakeManager {
-        fn inhibit(&self, what: String, who: String, why: String, mode: String) -> OwnedFd {
-            let (ours, theirs) = UnixStream::pair().unwrap();
+        fn inhibit(
+            &self,
+            what: String,
+            who: String,
+            why: String,
+            mode: String,
+        ) -> zbus::fdo::Result<OwnedFd> {
             let mut f = self.0.lock().unwrap();
             f.inhibit_args.push((what, who, why, mode));
+            if f.inhibit_fails > 0 {
+                f.inhibit_fails -= 1;
+                return Err(zbus::fdo::Error::Failed("inhibit refused".into()));
+            }
+            let (ours, theirs) = UnixStream::pair().unwrap();
             f.ends.push(ours);
-            OwnedFd::from(std::os::fd::OwnedFd::from(theirs))
+            Ok(OwnedFd::from(std::os::fd::OwnedFd::from(theirs)))
         }
 
         #[zbus(name = "GetSessionByPID")]
@@ -384,8 +470,13 @@ mod tests {
 
     #[zbus::interface(name = "org.freedesktop.login1.Session")]
     impl FakeSession {
-        fn set_locked_hint(&self, locked: bool) {
-            self.0.lock().unwrap().hints.push(locked);
+        fn set_locked_hint(&self, locked: bool) -> zbus::fdo::Result<()> {
+            let mut f = self.0.lock().unwrap();
+            if f.hint_fails {
+                return Err(zbus::fdo::Error::Failed("hint refused".into()));
+            }
+            f.hints.push(locked);
+            Ok(())
         }
     }
 
@@ -422,10 +513,14 @@ mod tests {
 
     /// A bus with a fake logind and a running watch that has taken its first inhibitor.
     async fn rig() -> Rig {
-        let bus = private_bus();
-        let (fake_conn, fake) = serve_fake(&bus, Fake::default()).await;
         let (tx, rx) = mpsc::channel(16);
-        let logind = Logind::new(tx);
+        rig_with(Logind::new(tx), rx, Fake::default()).await
+    }
+
+    /// As `rig`, with a given handle (and its event receiver) and fake.
+    async fn rig_with(logind: Arc<Logind>, rx: mpsc::Receiver<Outbound>, fake: Fake) -> Rig {
+        let bus = private_bus();
+        let (fake_conn, fake) = serve_fake(&bus, fake).await;
         let stop = CancellationToken::new();
         tokio::spawn(logind.clone().run(conn(&bus.1).await, stop.clone()));
         let r = Rig {
@@ -447,6 +542,10 @@ mod tests {
                 assert!(t.elapsed() < Duration::from_secs(5), "inhibit {n} in time");
                 tokio::time::sleep(Duration::from_millis(10)).await;
             }
+        }
+
+        fn attempts(&self) -> usize {
+            self.fake.lock().unwrap().inhibit_args.len()
         }
 
         fn inhibits(&self) -> usize {
@@ -560,6 +659,111 @@ mod tests {
         // The old fallback timer does not drop the fresh inhibitor.
         tokio::time::sleep(Duration::from_millis(SLEEP_FALLBACK_MS + 300)).await;
         assert!(!r.closed(1));
+    }
+
+    #[tokio::test]
+    async fn stale_fallback_spares_next_sleeps_inhibitor() {
+        let mut r = rig().await;
+        let t1 = Instant::now();
+        r.prepare(true).await;
+        assert_eq!(r.next().await, sleeping(true));
+        r.logind.sleep_lock_ready();
+        assert!(r.wait_closed(0, Duration::from_millis(500)).await);
+        r.prepare(false).await;
+        assert_eq!(r.next().await, sleeping(false));
+        assert_eq!(r.inhibits(), 2);
+        // Sleep again within sleep 1's fallback window.
+        tokio::time::sleep(Duration::from_millis(600)).await;
+        let t2 = Instant::now();
+        r.prepare(true).await;
+        assert_eq!(r.next().await, sleeping(true));
+        let fallback = Duration::from_millis(SLEEP_FALLBACK_MS);
+        assert!(t2 - t1 < fallback, "sleep 2 starts inside sleep 1's window");
+
+        // Past sleep 1's deadline (and before sleep 2's), the fresh inhibitor is still held.
+        tokio::time::sleep_until((t1 + fallback + Duration::from_millis(200)).into()).await;
+        assert!(t2.elapsed() < fallback);
+        assert!(
+            !r.closed(1),
+            "sleep 1's timer must not release sleep 2's inhibitor"
+        );
+        // Sleep 2's own fallback releases it.
+        assert!(r.wait_closed(1, Duration::from_millis(1500)).await);
+        assert!(t2.elapsed() >= fallback - Duration::from_millis(50));
+    }
+
+    #[test]
+    fn streak_logs_once_until_ok() {
+        let s = Streak::default();
+        assert!(s.fail("one"));
+        assert!(!s.fail("two"));
+        assert!(s.ok(), "ok ends a streak");
+        assert!(!s.ok());
+        assert!(s.fail("three"));
+    }
+
+    #[tokio::test]
+    async fn failed_inhibit_is_retried_while_awake() {
+        let (tx, rx) = mpsc::channel(16);
+        let logind = Logind::with_retry(tx, Duration::from_millis(200));
+        let fake = Fake {
+            inhibit_fails: 2,
+            ..Fake::default()
+        };
+        let mut r = rig_with(logind, rx, fake).await;
+        assert_eq!(r.attempts(), 3, "two failures, then held");
+        assert!(
+            !r.logind.inhibit_fail.0.load(Ordering::Relaxed),
+            "success ended the streak"
+        );
+        tokio::time::sleep(Duration::from_millis(600)).await;
+        assert_eq!(r.attempts(), 3, "no retry while held");
+
+        // No retry while a sleep is pending, even though no inhibitor is held.
+        r.prepare(true).await;
+        assert_eq!(r.next().await, sleeping(true));
+        r.logind.sleep_lock_ready();
+        assert!(r.wait_closed(0, Duration::from_millis(500)).await);
+        tokio::time::sleep(Duration::from_millis(600)).await;
+        assert_eq!(r.attempts(), 3, "no retry while sleeping");
+
+        // A failed re-take on resume is retried too.
+        r.fake.lock().unwrap().inhibit_fails = 1;
+        r.prepare(false).await;
+        assert_eq!(r.next().await, sleeping(false));
+        r.wait_inhibits(2).await;
+        assert_eq!(r.attempts(), 5);
+        assert!(!r.closed(1));
+    }
+
+    #[tokio::test]
+    async fn hint_failures_streak_and_hint_waits_for_session() {
+        let (tx, rx) = mpsc::channel(16);
+        let logind = Logind::new(tx);
+        // Before the session is known: remembered, then sent once it is found.
+        logind.set_locked_hint(true).await;
+        let r = rig_with(logind, rx, Fake::default()).await;
+        let t = Instant::now();
+        while r.fake.lock().unwrap().hints.is_empty() {
+            assert!(t.elapsed() < Duration::from_secs(5));
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert_eq!(r.fake.lock().unwrap().hints, vec![true]);
+
+        r.fake.lock().unwrap().hint_fails = true;
+        r.logind.set_locked_hint(false).await;
+        r.logind.set_locked_hint(true).await;
+        assert!(
+            r.logind.hint_fail.0.load(Ordering::Relaxed),
+            "in a failure streak"
+        );
+        r.fake.lock().unwrap().hint_fails = false;
+        r.logind.set_locked_hint(false).await;
+        assert!(
+            !r.logind.hint_fail.0.load(Ordering::Relaxed),
+            "success ends it"
+        );
+        assert_eq!(r.fake.lock().unwrap().hints, vec![true, false]);
     }
 
     #[tokio::test]

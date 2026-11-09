@@ -22,3 +22,6 @@ SOFTWARE.
 
 config/hypr/base.lua is adapted from Hyprland's example configuration,
 Copyright (c) 2022-2026, vaxerski, under the BSD 3-Clause License.
+
+crates/uqctl/protocols/hyprland-lock-notify-v1.xml is from hyprwm/hyprland-protocols,
+Copyright (c) 2025, Maximilian Seidler, under the BSD 3-Clause License.

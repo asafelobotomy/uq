@@ -98,8 +98,13 @@ impl Bridge {
             .env("DBUS_SESSION_BUS_ADDRESS", &bus.address)
             // The private bus has no logind: the bridge never touches the real system bus.
             .env("DBUS_SYSTEM_BUS_ADDRESS", &bus.address)
+            // No Wayland display: the bridge never reaches the user's compositor.
+            .env_remove("WAYLAND_DISPLAY")
+            .env_remove("WAYLAND_SOCKET")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
+            // Its expected "logind unavailable" and "lock-notify off" lines would clutter test output.
+            .stderr(Stdio::null())
             .kill_on_drop(true)
             .spawn()
             .unwrap();

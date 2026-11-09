@@ -6,6 +6,7 @@
 mod calc;
 mod dispatch;
 mod launch;
+mod locknotify;
 mod logind;
 pub(crate) mod net;
 mod notifowner;
@@ -117,16 +118,49 @@ where
     R: AsyncRead + Unpin + Send + 'static,
     W: AsyncWrite + Unpin + Send + 'static,
 {
-    run_with_bus(stdin, stdout, None, None).await
+    let locks = locknotify::spawn(std::env::var_os("WAYLAND_DISPLAY"));
+    run_with_bus(stdin, stdout, None, None, locks).await
+}
+
+/// Relay lock-notify states: each change (and the first report) becomes a `LockState` event and
+/// goes to logind's `SetLockedHint`. `known` is a state already reported before Hello.
+async fn relay_locks(
+    mut locks: mpsc::Receiver<bool>,
+    mut known: Option<bool>,
+    logind: Arc<logind::Logind>,
+    tx: mpsc::Sender<Outbound>,
+) {
+    let mut sent = None;
+    loop {
+        if let Some(locked) = known.take()
+            && sent != Some(locked)
+        {
+            sent = Some(locked);
+            let ev = Outbound::Event {
+                event: "LockState".into(),
+                data: json!({"locked": locked}),
+            };
+            if tx.send(ev).await.is_err() {
+                return;
+            }
+            logind.set_locked_hint(locked).await;
+        }
+        match locks.recv().await {
+            Some(locked) => known = Some(locked),
+            None => return,
+        }
+    }
 }
 
 /// As `run`, against the session bus at `addr` and the system bus at `system` (None: the real
-/// ones). Tests pass private buses for both.
+/// ones), with lock states from `locks`. Tests pass private buses and their own lock source, so
+/// they never reach a Wayland display.
 pub async fn run_with_bus<R, W>(
     stdin: R,
     stdout: W,
     addr: Option<&str>,
     system: Option<&str>,
+    mut locks: mpsc::Receiver<bool>,
 ) -> ExitCode
 where
     R: AsyncRead + Unpin + Send + 'static,
@@ -139,9 +173,14 @@ where
 
     // Learn uqd's state first so Hello (always the first line out) is truthful.
     let link = Arc::new(uqd::Link::open(addr).await);
+    // The latest lock state lock-notify has reported by now, if any.
+    let mut known_lock = None;
+    while let Ok(locked) = locks.try_recv() {
+        known_lock = Some(locked);
+    }
     let hello = Outbound::Event {
         event: "Hello".into(),
-        data: json!({"v": 1, "uqd_up": link.is_up(), "locked": false}),
+        data: json!({"v": 1, "uqd_up": link.is_up(), "locked": known_lock.unwrap_or(false)}),
     };
     let _ = out_tx.send(hello).await;
 
@@ -172,6 +211,12 @@ where
             .clone()
             .connect_and_run(system.map(str::to_owned), stop.clone()),
     );
+    let lock_relay = tokio::spawn(relay_locks(
+        locks,
+        known_lock,
+        logind.clone(),
+        out_tx.clone(),
+    ));
 
     let runs = Arc::new(Mutex::new(run::RunState::default()));
     let providers =
@@ -230,6 +275,8 @@ where
     privacy.abort();
     notif.abort();
     sleep_watch.abort();
+    // Dropping the receiver ends the lock-notify thread at its next event; it is never joined.
+    lock_relay.abort();
     drop(net);
     drop(providers);
     drop(logind);
@@ -249,6 +296,11 @@ mod tests {
     /// Nothing listens here, so the bridge starts with uqd down and never touches a real bus.
     const NO_BUS: &str = "unix:path=/tmp/uq-no-such-bus";
 
+    /// A lock source that never reports: tests never reach a Wayland display.
+    fn no_locks() -> mpsc::Receiver<bool> {
+        mpsc::channel(1).1
+    }
+
     async fn next(r: &mut (impl AsyncBufReadExt + Unpin)) -> Value {
         let mut l = String::new();
         r.read_line(&mut l).await.unwrap();
@@ -259,7 +311,13 @@ mod tests {
     async fn run_hello_ping_eof() {
         let (mut in_w, in_r) = duplex(4096);
         let (out_w, out_r) = duplex(4096);
-        let task = tokio::spawn(run_with_bus(in_r, out_w, Some(NO_BUS), Some(NO_BUS)));
+        let task = tokio::spawn(run_with_bus(
+            in_r,
+            out_w,
+            Some(NO_BUS),
+            Some(NO_BUS),
+            no_locks(),
+        ));
         let mut out = BufReader::new(out_r);
 
         let hello = next(&mut out).await;
@@ -294,10 +352,58 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn hello_reports_known_state() {
+        // Lock-notify already reported "locked" before Hello: Hello says so, and LockState follows.
+        let (lock_tx, locks) = mpsc::channel(4);
+        lock_tx.send(true).await.unwrap();
+        let (in_w, in_r) = duplex(4096);
+        let (out_w, out_r) = duplex(4096);
+        let task = tokio::spawn(run_with_bus(in_r, out_w, Some(NO_BUS), Some(NO_BUS), locks));
+        let mut out = BufReader::new(out_r);
+        assert_eq!(
+            next(&mut out).await,
+            json!({"v":1,"event":"Hello","data":{"v":1,"uqd_up":false,"locked":true}})
+        );
+        let ev = json!({"v":1,"event":"LockState","data":{"locked":true}});
+        assert_eq!(next(&mut out).await, ev);
+
+        // A repeat is not a change; a change is sent.
+        lock_tx.send(true).await.unwrap();
+        lock_tx.send(false).await.unwrap();
+        let ev = json!({"v":1,"event":"LockState","data":{"locked":false}});
+        assert_eq!(next(&mut out).await, ev);
+        drop(in_w);
+        task.await.unwrap();
+
+        // Nothing reported yet: Hello says unlocked and no LockState is sent.
+        let (lock_tx, locks) = mpsc::channel(4);
+        let (mut in_w, in_r) = duplex(4096);
+        let (out_w, out_r) = duplex(4096);
+        let task = tokio::spawn(run_with_bus(in_r, out_w, Some(NO_BUS), Some(NO_BUS), locks));
+        let mut out = BufReader::new(out_r);
+        assert_eq!(next(&mut out).await["data"]["locked"], false);
+        in_w.write_all(b"{\"v\":1,\"id\":1,\"call\":\"Ping\"}\n")
+            .await
+            .unwrap();
+        assert_eq!(next(&mut out).await, json!({"v":1,"id":1,"ok":"pong"}));
+        lock_tx.send(true).await.unwrap();
+        let ev = json!({"v":1,"event":"LockState","data":{"locked":true}});
+        assert_eq!(next(&mut out).await, ev);
+        drop(in_w);
+        task.await.unwrap();
+    }
+
+    #[tokio::test]
     async fn unknown_call_errs() {
         let (mut in_w, in_r) = duplex(4096);
         let (out_w, out_r) = duplex(4096);
-        let task = tokio::spawn(run_with_bus(in_r, out_w, Some(NO_BUS), Some(NO_BUS)));
+        let task = tokio::spawn(run_with_bus(
+            in_r,
+            out_w,
+            Some(NO_BUS),
+            Some(NO_BUS),
+            no_locks(),
+        ));
         let mut out = BufReader::new(out_r);
         let _hello = next(&mut out).await;
         in_w.write_all(b"{\"v\":1,\"id\":4,\"call\":\"Nope\",\"args\":[]}\n")
@@ -315,7 +421,13 @@ mod tests {
     async fn sleep_lock_ready_answers_without_logind() {
         let (mut in_w, in_r) = duplex(4096);
         let (out_w, out_r) = duplex(4096);
-        let task = tokio::spawn(run_with_bus(in_r, out_w, Some(NO_BUS), Some(NO_BUS)));
+        let task = tokio::spawn(run_with_bus(
+            in_r,
+            out_w,
+            Some(NO_BUS),
+            Some(NO_BUS),
+            no_locks(),
+        ));
         let mut out = BufReader::new(out_r);
         let _hello = next(&mut out).await;
         in_w.write_all(b"{\"v\":1,\"id\":1,\"call\":\"SleepLockReady\",\"args\":[]}\n")
@@ -337,7 +449,13 @@ mod tests {
     async fn calls_while_uqd_down_and_oversize_reply() {
         let (mut in_w, in_r) = duplex(4096);
         let (out_w, out_r) = duplex(4096);
-        let task = tokio::spawn(run_with_bus(in_r, out_w, Some(NO_BUS), Some(NO_BUS)));
+        let task = tokio::spawn(run_with_bus(
+            in_r,
+            out_w,
+            Some(NO_BUS),
+            Some(NO_BUS),
+            no_locks(),
+        ));
         let mut out = BufReader::new(out_r);
         let _hello = next(&mut out).await;
         in_w.write_all(b"{\"v\":1,\"id\":1,\"call\":\"GetTheme\"}\n")
@@ -374,7 +492,13 @@ mod tests {
         let (in_w, in_r) = duplex(4096);
         // Tiny pipe that nobody reads: the writer blocks on Hello.
         let (out_w, _out_r) = duplex(8);
-        let task = tokio::spawn(run_with_bus(in_r, out_w, Some(NO_BUS), Some(NO_BUS)));
+        let task = tokio::spawn(run_with_bus(
+            in_r,
+            out_w,
+            Some(NO_BUS),
+            Some(NO_BUS),
+            no_locks(),
+        ));
         tokio::time::sleep(Duration::from_millis(100)).await;
         drop(in_w);
         let code = tokio::time::timeout(Duration::from_millis(3500), task)
