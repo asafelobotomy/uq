@@ -7,6 +7,8 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-09
+
 Phase 2: the uQ shell, a Quickshell desktop shell that runs as `uq-shell.service`.
 
 ### Added

@@ -18,14 +18,10 @@ and, in later phases, a Quickshell shell and integrated apps. See the
 
 ## Install (Arch, Manjaro)
 
-From the AUR (`uq` pulls in `uq-hyprland-pin`):
+uQ is not on the AUR yet: `uq` and `uq-hyprland-pin` go up with the first release, v0.2.0.
+After that, `yay -S uq` (or `paru -S uq`) installs both, since `uq` pulls in `uq-hyprland-pin`.
 
-```bash
-yay -S uq            # or: paru -S uq
-uqctl setup          # add --apps to also theme GTK, qt6ct and terminals
-```
-
-From a checkout (builds HEAD; uncommitted changes are not included):
+Until then, install from a checkout (builds HEAD; uncommitted changes are not included):
 
 ```bash
 scripts/build-local-pkg.sh --package uq-hyprland-pin -si
