@@ -174,6 +174,60 @@ With noti-fi, its popups and list stay on its own monitor choice. To have them f
 monitor, as uQ's OSD does, add `"screen": "focused"` to noti-fi's `rules.json`. uQ doesn't write
 that file.
 
+### Lock, idle and power
+
+- `SUPER+L` locks the screen. Scripts can lock too (ignored when already locked):
+  `qs ipc -p /usr/share/uq/shell call uq lock`.
+- `SUPER+Escape` opens the power menu on the focused monitor: Lock, Log out, Suspend, Restart and
+  Shut down. Restart and Shut down count down 30 s and then run; Esc, Cancel, a click outside the
+  menu or locking the screen aborts the countdown. The app menu's restart and shut-down buttons
+  open the power menu at that countdown.
+- `SUPER+CTRL+L` is the recovery bind: it restarts `uq-lock.service`, or runs `hyprlock` if that
+  fails.
+
+The lock screen is a separate Quickshell instance, `uq-lock.service`, run through
+`/usr/lib/uq/uq-lock-run` (which keeps Quickshell's PAM relay lines out of the journal). If it or
+the shell is killed, the session stays locked and the lock comes back on its own.
+
+It takes your password or, once you've enrolled a finger, your fingerprint:
+
+```bash
+fprintd-enroll
+```
+
+Whichever succeeds first unlocks. The PAM stacks are `/etc/pam.d/uq-lock` (password, via
+`system-local-login`) and `/etc/pam.d/uq-lock-fingerprint` (fingerprint only). Both are marked
+`backup` in the package, so your edits are kept on upgrade.
+
+The screen locks before the machine sleeps: uQ holds a logind delay inhibitor and releases it
+once the lock is secure (or after 2 s at the latest).
+
+Idle stages and their defaults:
+
+| Stage | Default | Setting |
+|-------|---------|---------|
+| Dim the screens | 4 min | `dim` |
+| Lock | 5 min | `lock` |
+| Screens off | 6 min | `screen-off` |
+| Suspend, on battery only and only behind a secure lock | 20 min | `suspend` |
+| Screens off after locking | 30 s | `locked-screen-off` |
+
+```bash
+uqctl idle set dim 120        # seconds, or off
+uqctl idle set suspend off
+```
+
+Any input removes the dim. While media is playing, dim and screens off wait, but lock still
+happens (unless the `idle.media_blocks_lock` setting is on). Stay awake in quick settings blocks
+every stage.
+
+uQ is also a polkit authentication agent: when an app asks for admin rights (`pkexec`, a
+settings app), a dialog opens on the focused monitor. The first agent to register for the session
+wins, so if another one is running (KDE's, GNOME's, lxpolkit) it handles the prompts instead. The
+dialog hides while the screen is locked and comes back after you unlock.
+
+The lock uses Hyprland's `hyprland-lock-notify-v1` protocol (see Credits).
+
 Your own Hyprland settings go in `~/.config/hypr/uq/user.lua`, which uQ loads last and never
 rewrites.
 

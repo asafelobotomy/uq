@@ -10,6 +10,7 @@ import "notif"
 import "notif/builtin"
 import "session"
 import "idle"
+import "power"
 
 ShellRoot {
     // NotifBackend is a lazily created singleton: this binding touches it so it picks a backend
@@ -50,4 +51,7 @@ ShellRoot {
 
     // Idle stages (dim, lock, screens off, suspend on battery) and the dim overlay windows.
     Idle {}
+
+    // The polkit authentication agent and its dialog (on the focused monitor).
+    PolkitAgent {}
 }
