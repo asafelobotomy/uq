@@ -93,10 +93,11 @@ TestCase {
         // State events: dnd taken strictly as a bool.
         r = N.handleLine(s, '{"event":"state","seq":4,"t":1,"dnd":true,"unread":2}');
         compare(r.effect.kind, "state");
-        compare(r.effect.dnd, true);
-        compare(N.handleLine(s, '{"event":"state","dnd":false}').effect.dnd, false);
-        compare(N.handleLine(s, '{"event":"state","dnd":"yes"}').effect.dnd, false);
-        compare(N.handleLine(s, '{"event":"state"}').effect.dnd, false);
+        compare(r.effect.status.dnd, true);
+        compare(r.effect.status.unread, 2);
+        compare(N.handleLine(s, '{"event":"state","dnd":false}').effect.status.dnd, false);
+        compare(N.handleLine(s, '{"event":"state","dnd":"yes"}').effect.status.dnd, false);
+        compare(N.handleLine(s, '{"event":"state"}').effect.status.dnd, false);
 
         // Bad state input.
         compare(N.handleLine(null, hello).effect.kind, "hello");
@@ -137,14 +138,69 @@ TestCase {
         compare(N.osdParams("volume", 50, 100, "true"), null);
     }
 
-    // DND from a `subscribe` snapshot ({status, seq}) or a `dnd` reply (Status).
-    function test_reply_dnd() {
-        compare(N.replyDnd("subscribe", { status: { dnd: true }, seq: 3 }), true);
-        compare(N.replyDnd("subscribe", { status: { dnd: false }, seq: 3 }), false);
-        compare(N.replyDnd("dnd", { dnd: true }), true);
-        compare(N.replyDnd("dnd", { dnd: "on" }), null);
-        compare(N.replyDnd("subscribe", null), null);
-        compare(N.replyDnd("osd", { dnd: true }), null);
+    function test_status_fields() {
+        var full = N.statusFields({ dnd: true, unread: 3, center: true, sharing: true, holding: "dnd",
+            latest: { id: 9, t: 1, appName: "Mail", appIcon: "mail-unread", summary: "Hi", read: false } });
+        compare(full, { unread: 3, dnd: true, centre: true, sharing: true, holding: "dnd",
+                        latest: { appName: "Mail", appIcon: "mail-unread", summary: "Hi" } });
+        // Missing fields.
+        compare(N.statusFields({}), { unread: 0, dnd: false, centre: false, sharing: false,
+                                      holding: "", latest: null });
+        // Wrong types.
+        var bad = N.statusFields({ dnd: "yes", unread: "5", center: 1, sharing: "true", holding: 4,
+                                   latest: "x" });
+        compare(bad, { unread: 0, dnd: false, centre: false, sharing: false, holding: "", latest: null });
+        compare(N.statusFields({ latest: [1] }).latest, null);
+        compare(N.statusFields({ latest: { appName: 1, appIcon: null, summary: {} } }).latest,
+                { appName: "", appIcon: "", summary: "" });
+        // Unread: non-negative integer, else 0.
+        compare(N.statusFields({ unread: -2 }).unread, 0);
+        compare(N.statusFields({ unread: 2.5 }).unread, 0);
+        compare(N.statusFields({ unread: NaN }).unread, 0);
+        compare(N.statusFields({ unread: 0 }).unread, 0);
+        // Text caps.
+        var l = N.statusFields({ latest: { appName: "a".repeat(500), appIcon: "i".repeat(2000),
+                                           summary: "s".repeat(10240) } }).latest;
+        compare(l.appName.length, 64);
+        compare(l.appIcon.length, 512);
+        compare(l.summary.length, 200);
+        // Holding: the six values only.
+        var hs = ["", "dnd", "inhibited", "screen sharing", "fullscreen", "focus"];
+        for (var i = 0; i < hs.length; i++)
+            compare(N.statusFields({ holding: hs[i] }).holding, hs[i]);
+        compare(N.statusFields({ holding: "party" }).holding, "");
+        compare(N.statusFields({ holding: "toString" }).holding, "");
+        // Not an object.
+        compare(N.statusFields(null), null);
+        compare(N.statusFields("x"), null);
+        compare(N.statusFields([1]), null);
+        compare(N.statusFields(undefined), null);
+    }
+
+    function test_state_effect_carries_status() {
+        var s = greeted();
+        var r = N.handleLine(s, '{"event":"state","seq":2,"dnd":true,"unread":4,"center":true,'
+            + '"holding":"focus","latest":{"appName":"A","appIcon":"i","summary":"S"}}');
+        compare(r.effect.kind, "state");
+        compare(r.effect.status.unread, 4);
+        compare(r.effect.status.centre, true);
+        compare(r.effect.status.holding, "focus");
+        compare(r.effect.status.latest.summary, "S");
+        verify(!r.effect.hasOwnProperty("dnd"));
+    }
+
+    // Status from a `subscribe` snapshot ({status, seq}), a `dnd` or a `center` reply (Status).
+    function test_reply_status() {
+        compare(N.replyStatus("subscribe", { status: { dnd: true, unread: 2 }, seq: 3 }).unread, 2);
+        compare(N.replyStatus("subscribe", { status: { dnd: true }, seq: 3 }).dnd, true);
+        compare(N.replyStatus("dnd", { dnd: true }).dnd, true);
+        compare(N.replyStatus("center", { center: true }).centre, true);
+        compare(N.replyStatus("subscribe", null), null);
+        compare(N.replyStatus("subscribe", { seq: 1 }), null);
+        compare(N.replyStatus("subscribe", { status: 5 }), null);
+        compare(N.replyStatus("dnd", "x"), null);
+        compare(N.replyStatus("osd", { dnd: true }), null);
+        compare(N.replyStatus("status", { dnd: true }), null);
     }
     function test_notifi_expired_ids() {
         compare(N.REQUEST_TIMEOUT_MS, 1000);

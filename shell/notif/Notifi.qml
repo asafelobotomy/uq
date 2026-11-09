@@ -14,6 +14,11 @@ QtObject {
     // --- public state ---
     property bool available: false      // true after a valid hello
     property bool dnd: false
+    property int count: 0               // unread notifications
+    property var latest: null           // {appName, appIcon, summary} or null
+    property bool centreOpen: false
+    property bool sharing: false
+    property string holding: ""
 
     // --- internals ---
     readonly property string runtimeDir: String(Quickshell.env("XDG_RUNTIME_DIR") || "")
@@ -95,6 +100,21 @@ QtObject {
         return send("dnd", { mode: on ? "on" : "off" });
     }
 
+    function toggleCentre() {
+        return send("center", { action: "toggle" });
+    }
+
+    function applyStatus(st) {
+        if (!st)
+            return;
+        dnd = st.dnd;
+        count = st.unread;
+        latest = st.latest;
+        centreOpen = st.centre;
+        sharing = st.sharing;
+        holding = st.holding;
+    }
+
     function failPending(msg) {
         var hs = handles;
         handles = ({});
@@ -164,6 +184,12 @@ QtObject {
         helloTimer.stop();
         stableTimer.stop();
         available = false;
+        dnd = false;
+        count = 0;
+        latest = null;
+        centreOpen = false;
+        sharing = false;
+        holding = "";
         proto = ({ greeted: false, pending: {} });
         failPending("noti-fi disconnected");
         // Close on the next turn: drop() can run inside the Socket's own signal handlers.
@@ -192,7 +218,7 @@ QtObject {
             drop();
             break;
         case "state":
-            dnd = e.dnd;
+            applyStatus(e.status);
             break;
         case "reply":
             var hs = handles;
@@ -203,9 +229,7 @@ QtObject {
             delete ds[e.id];
             deadlines = ds;
             if (e.ok) {
-                var d = N.replyDnd(e.method, e.value);
-                if (d !== null)
-                    dnd = d;
+                applyStatus(N.replyStatus(e.method, e.value));
             }
             if (h) {
                 if (e.ok) h._resolve(e.value); else h._reject(e.error);

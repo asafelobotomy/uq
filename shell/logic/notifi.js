@@ -1,4 +1,5 @@
 .pragma library
+.import "notif.js" as Notif
 
 // noti-fi control-socket protocol (spec §2.6; noti-fi docs/protocol.md). Pure: Notifi.qml owns
 // the Socket and feeds lines in here.
@@ -90,7 +91,7 @@ function handleLine(state, line) {
 
     if (has(m, "event")) {
         if (m.event === "state")
-            return { state: next, effect: { kind: "state", dnd: m.dnd === true } };
+            return { state: next, effect: { kind: "state", status: statusFields(m) } };
         return { state: next, effect: { kind: "ignore" } };
     }
 
@@ -131,14 +132,36 @@ function osdParams(kind, value, max, muted) {
     return { kind: kind, value: v, max: max, muted: muted };
 }
 
-// DND carried by a reply: `subscribe` → {status, seq}; `dnd` → Status. null when absent.
-function replyDnd(method, value) {
+var HOLDING = ["", "dnd", "inhibited", "screen sharing", "fullscreen", "focus"];
+var MAX_ICON = 512;
+
+// The Status fields uQ uses, validated and capped; null when `o` is not an object. noti-fi's
+// `center` is the notification centre being open.
+function statusFields(o) {
+    if (!o || typeof o !== "object" || Array.isArray(o))
+        return null;
+    var unread = (typeof o.unread === "number" && isFinite(o.unread) && o.unread >= 0
+                  && Math.floor(o.unread) === o.unread) ? o.unread : 0;
+    var latest = null;
+    var l = o.latest;
+    if (l && typeof l === "object" && !Array.isArray(l))
+        latest = { appName: Notif.cleanText(l.appName, Notif.MAX_APP),
+                   appIcon: Notif.cleanText(l.appIcon, MAX_ICON),
+                   summary: Notif.cleanText(l.summary, Notif.MAX_SUMMARY) };
+    return { unread: unread, dnd: o.dnd === true, centre: o.center === true,
+             sharing: o.sharing === true, latest: latest,
+             holding: (typeof o.holding === "string" && HOLDING.indexOf(o.holding) >= 0) ? o.holding : "" };
+}
+
+// Status carried by a reply: `subscribe` -> {status, seq}; `dnd` and `center` -> Status. null otherwise.
+function replyStatus(method, value) {
     if (!value || typeof value !== "object")
         return null;
-    var st = method === "subscribe" ? value.status : (method === "dnd" ? value : null);
-    if (!st || typeof st !== "object" || typeof st.dnd !== "boolean")
-        return null;
-    return st.dnd;
+    if (method === "subscribe")
+        return statusFields(value.status);
+    if (method === "dnd" || method === "center")
+        return statusFields(value);
+    return null;
 }
 
 var REQUEST_TIMEOUT_MS = 1000;
