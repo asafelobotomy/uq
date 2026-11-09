@@ -20,6 +20,22 @@ TestCase {
         compare(Q.osdShouldShow(0, 2000, 5, 5), true);
         compare(Q.osdShouldShow(0, 9000, 5, 6), false);
         compare(Q.osdShouldShow(0, 9000, 5, 5), true);
+        // Fail closed: a missing clock never shows an OSD, and neither does a missing node.
+        compare(Q.osdShouldShow(undefined, 9000, 5, 5), false);
+        compare(Q.osdShouldShow(0, NaN, 5, 5), false);
+        compare(Q.osdShouldShow(0, 9000, null, null), false);
+        compare(Q.osdShouldShow(0, 9000, undefined, undefined), false);
+    }
+
+    // signalStrength from Quickshell is 0..1; it is scaled to 0..100 and clamped.
+    function test_wifi_signal_scale() {
+        function sig(v) { return Q.wifiRows([{name: "x", signal: v}])[0].signal; }
+        compare(sig(1), 100);
+        compare(sig(0.01), 1);
+        compare(sig(0.555), 56);
+        compare(sig(50), 100);
+        compare(sig(-1), 0);
+        compare(sig("bad"), 0);
     }
 
     function test_brightness_parse() {
@@ -47,9 +63,9 @@ TestCase {
             {name: "far", signal: 0.2, connected: false, known: false, secure: false},
             {name: "known", signal: 0.4, connected: false, known: true, secure: true},
             {name: "", signal: 1, connected: false, known: true, secure: false},
-            {name: "home", signal: 50, connected: true, known: true, secure: true},
-            {name: "locked", signal: 90, connected: false, known: false, secure: true},
-            {name: "knownstrong", signal: 80, connected: false, known: true, secure: true}
+            {name: "home", signal: 0.5, connected: true, known: true, secure: true},
+            {name: "locked", signal: 0.9, connected: false, known: false, secure: true},
+            {name: "knownstrong", signal: 0.8, connected: false, known: true, secure: true}
         ]);
         compare(rows.length, 5);
         compare(rows.map(function (r) { return r.name; }),
@@ -62,7 +78,7 @@ TestCase {
         compare(rows[1].signal, 80);
         var many = [];
         for (var i = 0; i < 25; i++)
-            many.push({name: "n" + i, signal: i, connected: false, known: false, secure: false});
+            many.push({name: "n" + i, signal: i / 100, connected: false, known: false, secure: false});
         compare(Q.wifiRows(many).length, 20);
         compare(Q.wifiRows(null).length, 0);
     }

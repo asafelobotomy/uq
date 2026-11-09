@@ -21,7 +21,10 @@ function volumeStep(volume, dir) {
 // Show an OSD only after the startup grace period and only for level changes on the same node
 // (a node switch, e.g. unplugged headphones, is not a level change).
 function osdShouldShow(startedAtMs, nowMs, prevNodeId, nodeId) {
-    if (nowMs - startedAtMs < OSD_STARTUP_MS)
+    // Fails closed: a NaN clock or a missing node never shows an OSD.
+    if (!(nowMs - startedAtMs >= OSD_STARTUP_MS))
+        return false;
+    if (nodeId === null || nodeId === undefined)
         return false;
     return prevNodeId === nodeId;
 }
@@ -58,12 +61,10 @@ function _signal(s) {
     var n = Number(s);
     if (!isFinite(n))
         return 0;
-    if (n <= 1)
-        n *= 100;
-    return Math.max(0, Math.min(100, Math.round(n)));
+    return Math.round(Math.max(0, Math.min(1, n)) * 100);
 }
 
-// Input: [{name: string, signal: 0..1 or 0..100, connected: bool, known: bool, secure: bool}].
+// Input: [{name: string, signal: 0..1 (Quickshell's signalStrength), connected: bool, known: bool, secure: bool}].
 // Names are untrusted text; they are passed through untouched for the UI to render as plain
 // text. Output rows add `connectable` (a secured unknown network needs a password the shell
 // cannot ask for).
