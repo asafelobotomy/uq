@@ -51,7 +51,7 @@ TestCase {
         Surfaces.toggle("spotlight");
         Bridge.locked = true;
         compare(Surfaces.open, "closed");
-        compare(wipeSpy.count, 3);   // every surface wipes on lock
+        compare(wipeSpy.count, 4);   // every surface wipes on lock
         Surfaces.toggle("spotlight");
         compare(Surfaces.open, "closed");
         Bridge.locked = false;
@@ -122,6 +122,44 @@ TestCase {
         Surfaces.ipc("open", "quicksettings");
         Bridge.locked = true;
         compare(Surfaces.ipc("toggle", "quicksettings"), "ignored");
+    }
+
+    // The built-in centre opens through toggle() (NotifBackend, SUPER+N) and wipes on lock, but
+    // the shell IPC verbs don't take it: its keybind goes through NotifBackend.
+    function test_notifcentre_surface() {
+        Surfaces.toggle("spotlight");
+        wipeSpy.clear();
+        Surfaces.toggle("notifcentre", null, null);
+        compare(Surfaces.open, "notifcentre");
+        compare(wipeSpy.count, 1);
+        compare(wipeSpy.signalArguments[0][0], "spotlight");
+        Surfaces.toggle("notifcentre");
+        compare(Surfaces.open, "closed");
+        compare(wipeSpy.signalArguments[1][0], "notifcentre");
+        Surfaces.toggle("notifcentre");
+        wipeSpy.clear();
+        Bridge.locked = true;
+        compare(Surfaces.open, "closed");
+        var names = [];
+        for (var i = 0; i < wipeSpy.count; i++)
+            names.push(wipeSpy.signalArguments[i][0]);
+        verify(names.indexOf("notifcentre") >= 0, "lock wipes notifcentre");
+        Bridge.locked = false;
+        Surfaces.toggle("notifcentre");
+        compare(Surfaces.open, "notifcentre");
+        Bridge.locked = true;
+        Surfaces.toggle("notifcentre");
+        compare(Surfaces.open, "closed");
+    }
+
+    function test_ipc_rejects_notifcentre() {
+        compare(Surfaces.ipc("open", "notifcentre"), "ignored");
+        compare(Surfaces.ipc("toggle", "notifcentre"), "ignored");
+        compare(Surfaces.open, "closed");
+        Surfaces.toggle("notifcentre");
+        compare(Surfaces.open, "notifcentre");
+        compare(Surfaces.ipc("close", "notifcentre"), "ignored");
+        compare(Surfaces.open, "notifcentre");
     }
 
     function test_ipc_ignores_unknown_names_and_verbs() {

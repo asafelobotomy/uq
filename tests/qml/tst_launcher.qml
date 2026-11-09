@@ -94,6 +94,32 @@ TestCase {
         }
     }
 
+    // The built-in notification centre is a fourth surface: it toggles, opening it closes (and
+    // wipes) whatever else is open, opening another surface closes it, and lock wipes it.
+    function test_transition_notifcentre() {
+        var s = L.transition(L.initialState(), "toggleNotifCentre");
+        compare(s.open, "notifcentre");
+        verify(!s.wipe);
+        s = L.transition(s, "toggleNotifCentre");
+        compare(s.open, "closed");
+        verify(s.wipe);
+        var others = ["spotlight", "appmenu", "quicksettings"];
+        for (var i = 0; i < others.length; i++) {
+            s = L.transition({ open: others[i], wipe: false }, "toggleNotifCentre");
+            compare(s.open, "notifcentre", others[i]);
+            verify(s.wipe, others[i]);
+        }
+        s = L.transition({ open: "notifcentre", wipe: false }, "toggleQuickSettings");
+        compare(s.open, "quicksettings");
+        verify(s.wipe);
+        s = L.transition({ open: "notifcentre", wipe: false }, "close");
+        compare(s.open, "closed");
+        verify(s.wipe);
+        s = L.transition({ open: "notifcentre", wipe: false }, "lock");
+        compare(s.open, "closed");
+        verify(s.wipe);
+    }
+
     // Sections: top hit, then two groups (2 and 3 items).
     function sections() {
         return [

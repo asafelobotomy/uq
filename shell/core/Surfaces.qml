@@ -8,7 +8,7 @@ import "../logic/launcher.js" as L
 QtObject {
     id: root
 
-    property string open: "closed"      // "closed" | "spotlight" | "appmenu" | "quicksettings"
+    property string open: "closed"      // "closed" | "spotlight" | "appmenu" | "quicksettings" | "notifcentre"
     property var screen: null           // ShellScreen, or null for the focused monitor
     property var anchor: null           // Item the app menu hangs from, or null
 
@@ -33,6 +33,7 @@ QtObject {
                 root.wipe("spotlight");
                 root.wipe("appmenu");
                 root.wipe("quicksettings");
+                root.wipe("notifcentre");
             } else if (prev !== "closed") {
                 root.wipe(prev);
             }
@@ -40,13 +41,15 @@ QtObject {
         return next;
     }
 
-    // name: "spotlight" | "appmenu" | "quicksettings". Ignored while locked.
+    // name: "spotlight" | "appmenu" | "quicksettings" | "notifcentre" (the built-in notification
+    // centre, toggled by NotifBackend). Ignored while locked.
     function toggle(name, screen, anchor) {
         if (Bridge.locked)
             return;
         var event = name === "spotlight" ? "toggleSpotlight"
             : (name === "appmenu" ? "toggleAppMenu"
-            : (name === "quicksettings" ? "toggleQuickSettings" : ""));
+            : (name === "quicksettings" ? "toggleQuickSettings"
+            : (name === "notifcentre" ? "toggleNotifCentre" : "")));
         if (event === "")
             return;
         if (root.open !== name) {
@@ -63,7 +66,8 @@ QtObject {
 
     // Shell IPC (`qs ipc ... call uq open|close|toggle spotlight|appmenu|quicksettings`) and the keybinds land
     // here. open only opens, close only closes that surface; unknown verbs or names, and every
-    // call while locked, are ignored. Always the focused monitor, no anchor. Returns "ok" or
+    // call while locked, are ignored. "notifcentre" is not an IPC name: its keybind goes through
+    // NotifBackend, which picks the backend's own centre. Always the focused monitor, no anchor. Returns "ok" or
     // "ignored" (what `qs ipc call` prints).
     function ipc(verb, name) {
         if (Bridge.locked || (name !== "spotlight" && name !== "appmenu" && name !== "quicksettings"))

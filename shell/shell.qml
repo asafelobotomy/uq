@@ -6,9 +6,16 @@ import "core"
 import "bar"
 import "launcher"
 import "osd"
+import "notif"
+import "notif/builtin"
 
 ShellRoot {
-    Component.onCompleted: Quickshell.watchFiles = false
+    Component.onCompleted: {
+        Quickshell.watchFiles = false;
+        // NotifBackend is a lazily created singleton: touch it so it picks a backend (and the
+        // built-in server registers) at startup, not when something first reads it.
+        console.info("uq: notifications: backend " + NotifBackend.backend);
+    }
 
     BridgeIo {}
     ThemeIo {}
@@ -30,4 +37,8 @@ ShellRoot {
     OsdRoutes {}
     OsdWatch {}
     Osd {}
+
+    // The built-in notification server's popups and centre (used when NotifBackend picks it).
+    Popups {}
+    Centre {}
 }
