@@ -21,7 +21,8 @@ done
 f="$root/packaging/uq-lock.service"
 if [ -f "$f" ]; then
     for want in '^Restart=always$' '^RestartPreventExitStatus=0$' '^RestartSec=1$' '^StartLimitIntervalSec=0$' \
-        '^KillMode=process$' '^PartOf=graphical-session.target$' '^ExecStart=/usr/bin/qs -p /usr/share/uq/lock$'; do
+        '^KillMode=process$' '^PartOf=graphical-session.target$' \
+        '^LogFilterPatterns=~quickshell\\\.service\\\.pam$' '^ExecStart=/usr/bin/qs -p /usr/share/uq/lock$'; do
         grep -q "$want" "$f" || { echo "FAIL: uq-lock.service lacks $want"; fail=1; }
     done
 fi

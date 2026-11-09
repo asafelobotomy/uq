@@ -38,6 +38,10 @@ Item {
         selectByMouse: !root.secret
         onTextEdited: root.edited(text)
         onAccepted: root.accepted()
+        // Screen readers see the focused TextInput: it carries the name set on this item.
+        Accessible.role: Accessible.EditableText
+        Accessible.name: root.Accessible.name
+        Accessible.passwordEdit: root.secret
     }
     UqText {
         anchors.verticalCenter: parent.verticalCenter

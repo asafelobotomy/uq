@@ -111,11 +111,11 @@ WlSessionLockSurface {
             implicitHeight: 36
             secret: true
             placeholder: surface.auth.busy ? "Checking…" : "Password"
-            Accessible.role: Accessible.EditableText
             Accessible.name: "Password"
+            // Cleared after each attempt; kept while an earlier attempt is still being checked.
             onAccepted: {
-                surface.auth.submit(field.text);
-                field.clear();
+                if (surface.auth.submit(field.text))
+                    field.clear();
             }
         }
 

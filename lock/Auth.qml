@@ -11,6 +11,9 @@ Item {
     id: auth
 
     readonly property string user: Quickshell.env("USER") || ""
+    // The PAM config directory; empty means /etc/pam.d (tests point it at temp stacks).
+    property string pamDir: ""
+    readonly property string configDirectory: pamDir !== "" ? pamDir : "/etc/pam.d"
     // {text, error} from lock.js messageView: the latest password-side PAM message.
     property var message: ({ text: "", error: false })
     // The fingerprint conversation's own latest message (shown with its hint).
@@ -43,16 +46,20 @@ Item {
         unlocked();
     }
 
-    // Enter in the field. The caller clears the field right after.
+    // Enter in the field. Returns true when the text was taken (the caller then clears the
+    // field); false when refused, e.g. while an attempt is still being checked.
     function submit(typed) {
         if (done || typeof typed !== "string" || typed === "")
-            return;
+            return false;
         if (pw.active) {
-            // A context waiting on its echo-off prompt takes this answer; anything else, none.
+            // A context waiting on its echo-off prompt takes this answer; anything else waits.
             var r = L.passwordReply(pw.responseRequired, pw.responseVisible, typed);
-            if (r !== null)
+            if (r !== null) {
                 pw.respond(r);
-            return;
+                return true;
+            }
+            message = { text: "Checking…", error: false };
+            return false;
         }
         message = { text: "", error: false };
         pending = typed;
@@ -60,11 +67,13 @@ Item {
             pending = null;
             message = { text: "Could not start authentication", error: true };
         }
+        return true;
     }
 
     PamContext {
         id: pw
         config: "uq-lock"
+        configDirectory: auth.configDirectory
         user: auth.user
         onPamMessage: {
             if (pw.responseRequired) {
@@ -96,11 +105,13 @@ Item {
     }
 
     // --- fingerprint ---
-    property double fprintStartedMs: -L.FPRINT_RETRY_MS
+    // When fprintd-list was last run or the context last started: both are throttled by it.
+    property double fprintAttemptMs: -L.FPRINT_RETRY_MS
 
     PamContext {
         id: fp
         config: "uq-lock-fingerprint"
+        configDirectory: auth.configDirectory
         user: auth.user
         onPamMessage: {
             if (L.fprintAbortOnPrompt(fp.responseRequired)) {
@@ -126,18 +137,20 @@ Item {
     function startFprint() {
         if (done || fp.active)
             return;
-        fprintStartedMs = Date.now();
+        fprintAttemptMs = Date.now();
         fprintMessage = { text: "", error: false };
         if (!fp.start())
             fprintEnded();
     }
 
-    // Failure, error, max tries, timeout or an aborted prompt: try again (after fprintd-list
-    // re-confirms a finger), at most once every FPRINT_RETRY_MS. This also covers resume.
+    // The context ended (failure, error, max tries, timeout, an aborted prompt), or fprintd-list
+    // failed to start, exited non-zero or listed no finger: poll fprintd-list again, at most once
+    // every FPRINT_RETRY_MS, for as long as the lock lasts. This also covers resume (fprintd
+    // often isn't back yet on the first try).
     function fprintEnded() {
-        if (done)
+        if (done || fp.active)
             return;
-        var wait = L.FPRINT_RETRY_MS - (Date.now() - fprintStartedMs);
+        var wait = L.FPRINT_RETRY_MS - (Date.now() - fprintAttemptMs);
         fpRetry.interval = Math.max(0, wait);
         fpRetry.restart();
     }
@@ -145,18 +158,25 @@ Item {
     Timer {
         id: fpRetry
         onTriggered: {
-            if (auth.done || fp.active)
+            if (auth.done || fp.active || fprintList.running)
                 return;
-            if (!L.fprintCanRestart(auth.fprintStartedMs, Date.now())) {
+            if (!L.fprintCanRestart(auth.fprintAttemptMs, Date.now())) {
                 auth.fprintEnded();
                 return;
             }
-            fprintList.running = true;
+            auth.listFingers();
         }
+    }
+
+    function listFingers() {
+        fprintAttemptMs = Date.now();
+        fprintList.didStart = false;
+        fprintList.running = true;
     }
 
     Process {
         id: fprintList
+        property bool didStart: false
         property bool gotExit: false
         property bool gotOut: false
         property int exitCode: -1
@@ -169,6 +189,8 @@ Item {
             gotOut = false;
             if (L.fprintListed(outText, exitCode))
                 auth.startFprint();
+            else
+                auth.fprintEnded();
         }
         command: ["fprintd-list", auth.user]
         stdout: StdioCollector {
@@ -178,16 +200,21 @@ Item {
                 fprintList.conclude();
             }
         }
-        onStarted: { gotExit = false; gotOut = false; }
+        onStarted: { didStart = true; gotExit = false; gotOut = false; }
         onExited: function (code) {
             exitCode = code;
             gotExit = true;
             conclude();
         }
+        // A failed start (fprintd not installed) reports only runningChanged: poll again later.
+        onRunningChanged: {
+            if (!running && !didStart)
+                auth.fprintEnded();
+        }
     }
 
     Component.onCompleted: {
         if (user !== "")
-            fprintList.running = true;
+            listFingers();
     }
 }

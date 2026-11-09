@@ -8,6 +8,8 @@
 #   - Neither ever reports success.
 # Both run as `nobody` (PamContext refuses unknown users), never as $USER: a wrong password must
 # never count towards the tester's pam_faillock tally (/run/faillock/$USER is writable by its owner).
+# As `nobody`, unix_chkpwd rejects any password (nobody has none), so the wrong-password case proves
+# the stack asks an echo-off question and fails closed, not that it validates a correct password.
 set -u
 root=$(cd "$(dirname "$0")/../.." && pwd)
 command -v qs >/dev/null 2>&1 || { echo "pam_stacks skipped: qs not found"; exit 0; }

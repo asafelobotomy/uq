@@ -12,8 +12,11 @@ cd "$(dirname "$0")/.." || exit 2
 
 types='(Text|Label|TextEdit|TextInput)'
 qual='([A-Za-z_][A-Za-z0-9_]*\.)*'
-files=$(find shell lock -type f \( -name '*.qml' -o -name '*.js' \) ! -path 'shell/core/UqText.qml' ! -path 'shell/core/UqInput.qml' \
-    ! -path 'shell/notif/builtin/NotifBody.qml' 2>/dev/null | sort)
+dirs=()
+for d in shell lock; do [ -d "$d" ] && dirs+=("$d"); done
+[ ${#dirs[@]} = 0 ] && exit 0
+files=$(find "${dirs[@]}" -type f \( -name '*.qml' -o -name '*.js' \) ! -path 'shell/core/UqText.qml' ! -path 'shell/core/UqInput.qml' \
+    ! -path 'shell/notif/builtin/NotifBody.qml' | sort)
 [ -z "$files" ] && exit 0
 
 hits=$(
