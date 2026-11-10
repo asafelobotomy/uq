@@ -31,7 +31,9 @@ pub fn message(e: &zbus::Error) -> String {
 
 /// Parse JSON uqd sent.
 pub fn parse_json(text: &str) -> zbus::Result<Value> {
-    serde_json::from_str(text).map_err(|e| zbus::Error::Failure(format!("uqd sent bad JSON: {e}")))
+    serde_json::from_str(text).map_err(|e| {
+        zbus::Error::Failure(format!("uQ's settings service sent unreadable data: {e}"))
+    })
 }
 
 /// One page's talk with uqd: what it can be asked to do, and the state it shows.
@@ -279,6 +281,9 @@ mod tests {
     #[test]
     fn bad_json_is_named() {
         let e = parse_json("{").unwrap_err();
-        assert!(message(&e).starts_with("uqd sent bad JSON: "), "{e}");
+        assert!(
+            message(&e).starts_with("uQ's settings service sent unreadable data: "),
+            "{e}"
+        );
     }
 }

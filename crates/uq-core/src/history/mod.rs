@@ -24,7 +24,8 @@ pub enum Origin {
 }
 
 impl Origin {
-    /// Empty or unrecognised text is `Unknown`; `profile:<id>` is `Profile(id)`.
+    /// Empty or unrecognised text is `Unknown`; `profile:<id>` is `Profile(id)`. `schedule` is
+    /// `Unknown` too: only uqd's own timer makes `Schedule` changes, which skip the journal.
     pub fn parse(s: &str) -> Origin {
         match s {
             "settings" => Origin::Settings,
@@ -32,7 +33,6 @@ impl Origin {
             "shell" => Origin::Shell,
             "restore" => Origin::Restore,
             "import" => Origin::Import,
-            "schedule" => Origin::Schedule,
             _ => match s.strip_prefix("profile:") {
                 Some(id) if !id.is_empty() => Origin::Profile(id.to_string()),
                 _ => Origin::Unknown,
@@ -67,11 +67,12 @@ mod tests {
             Origin::Profile("gaming".into()),
             Origin::Restore,
             Origin::Import,
-            Origin::Schedule,
             Origin::Unknown,
         ] {
             assert_eq!(Origin::parse(&o.as_str()), o);
         }
+        // Schedule flips are uqd's own; a caller can't claim one to skip the journal.
+        assert_eq!(Origin::parse("schedule"), Origin::Unknown);
         assert_eq!(Origin::parse("profile:gaming").as_str(), "profile:gaming");
         assert_eq!(Origin::parse(""), Origin::Unknown);
         assert_eq!(Origin::parse("bogus"), Origin::Unknown);

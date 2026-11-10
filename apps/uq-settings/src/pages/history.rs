@@ -214,14 +214,20 @@ impl HistoryState {
 
     async fn entries(proxy: &DesktopProxy<'_>) -> zbus::Result<Vec<Entry>> {
         let text = proxy.list_history(MAX_ENTRIES as u32).await?;
-        serde_json::from_str(&text)
-            .map_err(|e| zbus::Error::Failure(format!("uqd sent bad history: {e}")))
+        serde_json::from_str(&text).map_err(|e| {
+            zbus::Error::Failure(format!(
+                "uQ's settings service sent unreadable history: {e}"
+            ))
+        })
     }
 
     async fn points(proxy: &DesktopProxy<'_>) -> zbus::Result<Vec<RestorePoint>> {
         let text = proxy.list_restore_points().await?;
-        serde_json::from_str(&text)
-            .map_err(|e| zbus::Error::Failure(format!("uqd sent bad restore points: {e}")))
+        serde_json::from_str(&text).map_err(|e| {
+            zbus::Error::Failure(format!(
+                "uQ's settings service sent unreadable restore points: {e}"
+            ))
+        })
     }
 
     async fn point(proxy: &DesktopProxy<'_>, id: &str) -> zbus::Result<RestorePoint> {
