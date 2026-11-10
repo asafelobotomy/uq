@@ -493,7 +493,7 @@ These come from KDE and COSMIC complaints, and a lint or test checks each one wh
 |---|---|---|
 | A. Trust | §2 sources, §3 undo/history/restore, §9 quality rules and lint, window state | Phase 3 slice 2 merged |
 | B. Profiles | §4 profiles, quick-settings tile, `uqctl profile` | A |
-| C. Rules | §5 rules domain, editor, pick mode, "why does this window…" | A |
+| C. Rules | §5 rules domain, editor, pick mode, "why does this window…", §4 `rules` key (on/off by rule id) | A, B |
 | D. Startup and apps | §7.3 autostart and env, §6 Apps and scaling | A |
 | E. Companion pages | §8, Phase 3 slice 6 SDK and Phase 4 `command` helper pulled forward, then one sub-slice per repo | A; lands in each companion repo too |
 | F. Monitors and input extras | §4 monitor profiles, §7.1, §7.2 | Phase 3 slice 3, B |

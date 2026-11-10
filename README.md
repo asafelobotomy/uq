@@ -126,6 +126,11 @@ Profiles use `ListProfiles` (JSON), `GetProfile(id)` (the TOML text), `SetProfil
 (returns the id; `Conflict` if it exists and `replace` is false), `DeleteProfile(id)`,
 `ApplyProfile(id)` and `ProfileOff()` (both return a JSON report), and a `ProfileChanged(id)`
 signal, sent when the profile that's on or the list of profiles changes (`""` for none).
+Window rules use `GetSection("rules")` / `SetSection("rules", json, origin)`, like any section.
+`PickWindow()` asks the shell to let you click a window and returns only that window's details
+(JSON with a `status`), `PickDone(token, outcome)` is what the shell calls back with, `ListWindows()`
+returns the open windows' details (no addresses or process ids), and `PickRequested(token)` is the
+signal that tells the shell to start.
 
 #### Profiles page
 
@@ -133,7 +138,8 @@ A profile is a named set of settings you turn on together, such as Gaming or Pre
 holds only the settings you put in it, and only those change when it's on. It can hold settings
 from Look and layouts, Appearance (including the theme, light or dark, and fonts), Shell and
 Wallpaper, and one power mode (Power saver, Balanced or Performance). Only one profile is on at a
-time. Keybinds and window rules aren't part of profiles yet.
+time. A profile can turn window rules and panel rules on and off (see the Window rules page
+below). Keybinds aren't part of profiles yet.
 
 **New profile** starts from the settings you changed lately, or from the current settings of the
 pages you tick; **Add settings** adds more later, each with the value it has now. The app can't
@@ -155,6 +161,15 @@ light/dark schedule doesn't switch it; the schedule carries on after Back to nor
 restore point ends the profile that's on and, like Back to normal, puts its power mode back. A
 profile that's on stays on after uqd restarts.
 
+A profile can also turn window and panel rules on or off, and nothing more: it can't add, change
+or delete a rule. It names each rule by the id uQ gave it (`[rules]` then `"r-7f2c" = false`),
+and those ids are different on every computer. A profile you bring from another computer usually
+finds none of its rules, so it skips them and says "1 rule in this profile isn't on this computer,
+so it was left out." (the lines stay in the file). **Back to normal** switches a rule back only if
+it still has the value the profile gave it, so a switch you flipped by hand is kept and named.
+Workspace rules have no on/off switch and can't be in a profile, and keyboard shortcuts still
+can't be either.
+
 Switch from the quick-settings **Profile** row (it shows only when you have profiles; **Normal**
 is Back to normal), from the page, or with `uqctl profile`. To switch with a key, add this to
 `user.lua` (the keybinds page will bring a setting for it later):
@@ -166,9 +181,53 @@ hl.bind("SUPER + ALT + P", hl.dsp.exec_cmd("uqctl profile next"))
 **Export** and `uqctl profile export` write a TOML file with a header comment and `format = 1`
 (`id`, `name`, optional `icon`, then the settings as tables). **Import** checks every setting
 and refuses a file that is over 64 KiB, isn't text, has an unknown setting or a value out of
-range, or has `[keybinds]` or `[rules]`, with a plain
+range, or has `[keybinds]`, with a plain
 message and nothing saved. Turning on a profile whose theme has since been uninstalled is refused and changes nothing; if the theme you used before a profile has been uninstalled since, Back to normal uses uQ's default theme and says so. Importing saves no restore point, since no setting changes. Manual
 checks are in [docs/notes/settings-slice-b-live-check.md](docs/notes/settings-slice-b-live-check.md).
+
+#### Window rules page
+
+A window rule says "when a window looks like this, do that". A rule can match a window by App ID,
+window title, the App ID or title it had when it opened, its tag, whether it is an older X11 app,
+floating, fullscreen or pinned, whether it is a dialog, and the workspace it is on. It can then
+make it float or tile, go fullscreen or maximized, open on a workspace (quietly, if you like) or a
+monitor, take a size or position, be centered or pinned, or not take focus when it opens; and set
+opacity, blur, shadow, animation, rounding, border size, whether it keeps the screen awake, a
+keep-aspect-ratio hint, and a tag. Effects that decide where or how a window opens only apply to
+windows opened afterwards, so after saving the page says "Close and reopen Pavucontrol to apply."
+and names the matching windows that are open. The rest apply at once.
+
+**Pick a window** hides the app and lets you click any window; the editor then fills in its App ID
+(Esc cancels, and the app comes back whatever happens). **Matches now** lists the open windows a
+rule would catch, as you type; it is a close guide, not a promise, because Hyprland's matching can
+differ a little for non-English text. **Why does this window…?** lets you pick a window and lists
+the uQ rules that match it, in order. Five templates start a rule for you: float an app's
+dialogs, open an app on a workspace, no blur for an app, picture-in-picture floats and stays on
+top, and keep the screen awake while an app is fullscreen. **Panel rules** do the same for the
+bar, notifications and launchers (blur, transparency cut-off, animation), and **Workspace rules**
+set a monitor, gaps, border size, whether a workspace stays when empty, and whether it is the
+default. They join each workspace's layout from the Look and layouts page, so each workspace still
+becomes one rule for Hyprland, and changing a layout never touches these fields or the reverse.
+
+Limits: 200 window rules, 50 panel rules, 64 workspace rules, names up to 100 characters and
+patterns up to 256. Later rules win, as in Hyprland, so order matters. Patterns must match the
+whole text; ones Hyprland can't use are refused with a plain message before anything is saved.
+Every change goes through History, so **Undo** and **Restore** work. Undo puts back the whole list
+the change was in (window rules, panel rules or workspace rules) as it was before, so undoing an
+old change also undoes later changes to other rules in the same list, and the app asks first.
+A profile can turn a window or panel rule on and off (see Profiles above).
+
+uQ never writes `user.lua`. Each uQ rule is given the name `uq:<id>`, so a line in `user.lua`
+can change or turn off one of them (the id is shown under "Advanced details" in the editor):
+
+```lua
+hl.window_rule({ name = "uq:r-7f2c", enabled = false })
+```
+
+The page then shows that rule as overridden in `user.lua`, with a button that opens the file. A
+line that is only a `--` comment doesn't count. Rules written in `user.lua` itself aren't listed
+on the page. Manual checks are in
+[docs/notes/settings-slice-c-live-check.md](docs/notes/settings-slice-c-live-check.md).
 
 #### History page
 

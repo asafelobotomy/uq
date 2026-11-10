@@ -70,9 +70,18 @@ All notable changes to uQ are listed here. The format follows
   shows in History as "from the ... profile". A power mode goes through the system's power
   service; if it can't be set, the rest still applies with a notice. While a profile that sets
   light or dark is on, the light/dark schedule doesn't switch it. Export and import use TOML
-  (`format = 1`); keybinds and rules can't be in a profile yet. `uqd` gains `ListProfiles`,
+  (`format = 1`); keybinds can't be in a profile yet. `uqd` gains `ListProfiles`,
   `GetProfile`, `SetProfile`, `DeleteProfile`, `ApplyProfile`, `ProfileOff` and a
   `ProfileChanged` signal.
+- **Window rules.** A Window rules page in uq-settings: rules that match a window by App ID, title,
+  state or workspace and make it float, open on a workspace, blur less, and more, with a live
+  "Matches now" preview and **Pick a window** (click a window to fill in its App ID). **Why does
+  this window…?** lists the rules that apply to a window in order and flags any that `user.lua`
+  overrides. Five templates, panel rules (bars, notifications, launchers) and workspace rules that
+  join the per-workspace layouts are included. Rules have history, undo and restore points, and a
+  profile can turn them on and off. `uqd` gains the `rules` section, `PickWindow`, `PickDone`,
+  `ListWindows` and a `PickRequested` signal. uQ never writes `user.lua`; name a rule
+  `uq:<id>` there to override it.
 
 ### Changed
 
