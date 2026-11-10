@@ -99,6 +99,8 @@ pub struct ProviderPref {
 impl ProviderPref {
     pub const FIELDS: [&str; 2] = ["id", "enabled"];
 
+    /// `apps` (the built-in group, always first and always on) must never become a valid
+    /// provider id; it has no dot, so the well-known-name check rejects it.
     pub fn valid_id(id: &str) -> bool {
         BUILTIN_PROVIDERS.contains(&id)
             || (!id.starts_with(':') && WellKnownName::try_from(id).is_ok())
@@ -135,8 +137,13 @@ impl Default for ShellSettings {
     }
 }
 
+/// A desktop id for launching: `valid_pinned_id`, ending in `.desktop`, a non-empty stem that
+/// starts alphanumeric (never `-x`, so it can't be read as an option) and has no `..`.
 fn valid_terminal(t: &str) -> bool {
-    valid_pinned_id(t) && t.ends_with(".desktop")
+    valid_pinned_id(t)
+        && t.strip_suffix(".desktop")
+            .is_some_and(|stem| stem.starts_with(|c: char| c.is_ascii_alphanumeric()))
+        && !t.contains("..")
 }
 
 fn expect_bool(key: &str, v: &Value) -> Result<bool, SettingError> {
@@ -358,9 +365,32 @@ mod tests {
     }
 
     #[test]
+    fn apps_is_not_a_provider() {
+        let mut set = Settings::default();
+        assert!(
+            set.set_section("shell", json!({"providers": [{"id": "apps"}]}))
+                .is_err()
+        );
+        let s: ShellSettings =
+            serde_json::from_value(json!({"providers": [{"id": "apps"}, {"id": "run"}]})).unwrap();
+        assert_eq!(s.sanitised().providers, [pref("run", true)]);
+    }
+
+    #[test]
     fn terminal_must_be_desktop_id() {
         let mut set = Settings::default();
-        for bad in ["kitty", "a b.desktop", "../x.desktop", "", ".desktop.x"] {
+        for bad in [
+            "kitty",
+            "a b.desktop",
+            "../x.desktop",
+            "",
+            ".desktop.x",
+            "-h.desktop",
+            "--version.desktop",
+            "..x.desktop",
+            ".desktop",
+            "a..b.desktop",
+        ] {
             assert!(
                 set.set_section("shell", json!({"terminal": bad})).is_err(),
                 "{bad}"
