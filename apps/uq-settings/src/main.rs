@@ -24,6 +24,7 @@ mod session;
 mod system_lists;
 #[cfg(test)]
 mod test_bus;
+mod wallpaper_model;
 mod window;
 
 use app::Event;

@@ -2076,6 +2076,7 @@ dependencies = [
  "cxx-qt-build",
  "cxx-qt-lib",
  "futures-util",
+ "percent-encoding",
  "serde",
  "serde_json",
  "tempfile",

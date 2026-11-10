@@ -125,6 +125,34 @@ static APPEARANCE_SETTINGS: [SearchEntry; 10] = [
     ),
 ];
 
+static WALLPAPER_SETTINGS: [SearchEntry; 5] = [
+    entry(
+        "wallpaper-image",
+        "Wallpaper image",
+        &["background", "picture", "desktop background", "photo"],
+    ),
+    entry(
+        "wallpaper-fit",
+        "Wallpaper fit",
+        &["fill", "stretch", "center", "tile", "scale"],
+    ),
+    entry(
+        "wallpaper-slideshow",
+        "Wallpaper slideshow folder",
+        &["folder", "rotate", "cycle", "slideshow", "background"],
+    ),
+    entry(
+        "wallpaper-interval",
+        "Slideshow interval",
+        &["change every", "minutes", "rotate", "time"],
+    ),
+    entry(
+        "wallpaper-color",
+        "Background colour",
+        &["color", "solid", "fallback", "backdrop"],
+    ),
+];
+
 static CORE_PAGES: [PageInfo; 2] = [
     PageInfo {
         id: "appearance",
@@ -140,7 +168,7 @@ static CORE_PAGES: [PageInfo; 2] = [
         icon: "preferences-desktop-wallpaper",
         category: Category::Personal,
         qml: "pages/WallpaperPage.qml",
-        settings: &[],
+        settings: &WALLPAPER_SETTINGS,
     },
 ];
 

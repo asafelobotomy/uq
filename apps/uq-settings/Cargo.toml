@@ -16,6 +16,7 @@ cxx = "1.0"
 cxx-qt = "0.10"
 cxx-qt-lib = { version = "0.10", features = ["qt_gui", "qt_qml", "qt_quickcontrols"] }
 futures-util = "0.3.34"
+percent-encoding = "2"
 serde.workspace = true
 serde_json.workspace = true
 tokio = { workspace = true }

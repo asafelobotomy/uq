@@ -12,6 +12,7 @@ fn main() {
         QmlFile::from("qml/components/OverrideCombo.qml"),
         QmlFile::from("qml/components/OverrideSpin.qml"),
         QmlFile::from("qml/components/ScheduleEditor.qml"),
+        QmlFile::from("qml/components/WallpaperEntryEditor.qml"),
         QmlFile::from("qml/pages/AppearancePage.qml"),
         QmlFile::from("qml/pages/WallpaperPage.qml"),
     ]))
@@ -19,7 +20,12 @@ fn main() {
     .qt_module("Quick")
     .qt_module("QuickControls2")
     .qt_module("Widgets")
-    .files(["src/app.rs", "src/window.rs", "src/appearance_model.rs"])
+    .files([
+        "src/app.rs",
+        "src/window.rs",
+        "src/appearance_model.rs",
+        "src/wallpaper_model.rs",
+    ])
     .cpp_file("cpp/window.cpp");
     // SAFETY: only adds a warning flag; GCC 16 warns about Qt's own headers.
     let builder = unsafe {
