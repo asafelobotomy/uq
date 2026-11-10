@@ -1000,3 +1000,6 @@ the plan:
   change is waiting to be kept.
 - Kirigami-based QML tests and Hyprland's `--verify-config` run only in CI (Arch); locally the
   revert dialog, arrangement and keyboard layout list tests ran against stubs.
+- **`tap_to_click`:** Hyprland's Lua config turns `-` into `_` in option names
+  (`luaConfigValueName`), so the touchpad key is `tap_to_click`, not `["tap-to-click"]`. CI's
+  `--verify-config` caught it.

@@ -71,7 +71,7 @@ fn emit_touchpad(out: &mut String, t: &TouchpadSettings) {
         f.push(format!("natural_scroll = {b}"));
     }
     if let Some(b) = t.tap_to_click {
-        f.push(format!("[\"tap-to-click\"] = {b}"));
+        f.push(format!("tap_to_click = {b}"));
     }
     if let Some(b) = t.disable_while_typing {
         f.push(format!("disable_while_typing = {b}"));
@@ -166,7 +166,7 @@ mod tests {
             "        kb_options = \"grp:alt_shift_toggle\",",
             "        repeat_rate = 40,",
             "        repeat_delay = 300,",
-            "        touchpad = { [\"tap-to-click\"] = false },",
+            "        touchpad = { tap_to_click = false },",
         ] {
             assert!(out.contains(want), "{want}\n{out}");
         }

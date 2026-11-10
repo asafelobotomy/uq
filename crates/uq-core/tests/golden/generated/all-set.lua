@@ -30,7 +30,7 @@ hl.config({
         kb_options = "grp:alt_shift_toggle",
         repeat_rate = 35,
         repeat_delay = 250,
-        touchpad = { natural_scroll = true, ["tap-to-click"] = false, disable_while_typing = true, scroll_factor = 0.8 },
+        touchpad = { natural_scroll = true, tap_to_click = false, disable_while_typing = true, scroll_factor = 0.8 },
     },
 })
 
