@@ -684,3 +684,76 @@ async fn schedule_holds_the_variant_a_profile_sets() {
     );
     assert_eq!(r.desktop.get_theme().1, Variant::Light);
 }
+
+/// A window rule "Pavucontrol floats", on; returns its id.
+async fn add_rule(r: &mut Rig) -> String {
+    r.desktop
+        .set_section(
+            "rules",
+            r#"{"window":[{"name":"Pavucontrol floats","enabled":true,
+                "match":{"class":"^pavucontrol$"},"effects":{"float":true}}]}"#,
+            Origin::Settings,
+        )
+        .await
+        .unwrap();
+    r.desktop.state().rules.window[0].id.clone()
+}
+
+fn rules_profile(body: &str) -> String {
+    format!("format = 1\nid = \"quiet\"\nname = \"Quiet\"\n[rules]\n{body}")
+}
+
+#[tokio::test]
+async fn profile_turns_a_rule_off_and_back() {
+    let mut r = rig().await;
+    let id = add_rule(&mut r).await;
+    add(&mut r, &rules_profile(&format!("\"{id}\" = false\n"))).await;
+    let before = journal_len(&r);
+    let report = r.desktop.apply_profile("quiet").await.unwrap();
+    assert!(report.notices.is_empty(), "{report:?}");
+    assert!(!r.desktop.state().rules.window[0].enabled);
+    let entries = r.desktop.history(1000);
+    let new = &entries[..entries.len() - before];
+    assert_eq!(new.len(), 1, "{new:?}");
+    assert_eq!(new[0].domain, "rules");
+    assert_eq!(new[0].origin, "profile:quiet");
+    assert_eq!(
+        new[0].summary,
+        "Window rule “Pavucontrol floats” turned off"
+    );
+    let g = std::fs::read_to_string(&r.desktop.paths().generated_lua).unwrap();
+    assert!(
+        g.contains(&format!("name = \"uq:{id}\", enabled = false")),
+        "{g}"
+    );
+    assert!(r.comp.calls().iter().any(|c| c.starts_with("verify")));
+    let report = r.desktop.profile_off().await.unwrap();
+    assert!(report.kept.is_empty(), "{report:?}");
+    assert!(r.desktop.state().rules.window[0].enabled);
+    let g = std::fs::read_to_string(&r.desktop.paths().generated_lua).unwrap();
+    assert!(
+        g.contains(&format!("name = \"uq:{id}\", enabled = true")),
+        "{g}"
+    );
+}
+
+#[tokio::test]
+async fn unknown_rule_id_is_a_notice() {
+    let mut r = rig().await;
+    let id = add_rule(&mut r).await;
+    let other = if id == "r-ffff" { "r-fffe" } else { "r-ffff" };
+    add(
+        &mut r,
+        &rules_profile(&format!("\"{id}\" = false\n\"{other}\" = true\n")),
+    )
+    .await;
+    let report = r.desktop.apply_profile("quiet").await.unwrap();
+    assert_eq!(report.active, "quiet");
+    assert_eq!(
+        report.notices,
+        ["1 rule in this profile isn't on this computer, so it was left out."]
+    );
+    assert!(!r.desktop.state().rules.window[0].enabled);
+    // The file keeps the id.
+    assert!(r.desktop.get_profile("quiet").unwrap().contains(other));
+}

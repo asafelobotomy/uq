@@ -3,10 +3,12 @@
 
 use crate::compositor::Compositor;
 use crate::service::{Desktop, DesktopError};
+use uq_core::profile;
 use uq_core::rules::{self, WindowInfo};
 
 impl Desktop {
-    /// `Explain("rules")`: one row per rule, from the pure core function. Reads `user.lua` once.
+    /// `Explain("rules")`: one row per rule, from the pure core function, with the rules whose
+    /// switch the active profile still holds marked as the profile's. Reads `user.lua` once.
     pub(crate) fn explain_rules(&self) -> serde_json::Value {
         let text = self.read_user_lua();
         let rejected = self
@@ -14,12 +16,16 @@ impl Desktop {
             .as_ref()
             .filter(|(d, _)| d == "rules")
             .map(|(_, m)| m.as_str());
-        rules::explain(
+        let mut rows = rules::explain(
             &self.state.rules,
             text.as_deref(),
             rejected,
             &self.paths.user_lua.to_string_lossy(),
-        )
+        );
+        if let Some(a) = &self.active {
+            profile::mark_rules(&mut rows, &self.state.rules, a);
+        }
+        rows
     }
 
     /// The open windows from `clients -j`; empty when Hyprland is down or answers badly. Takes

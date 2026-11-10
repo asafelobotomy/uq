@@ -272,3 +272,29 @@ async fn list_windows_empty_when_hyprland_down() {
     *r.comp.running.lock().unwrap() = false;
     assert!(r.desktop.list_windows().await.unwrap().is_empty());
 }
+
+#[tokio::test]
+async fn explain_says_from_the_profile() {
+    let mut r = rig();
+    write(&mut r, PAVU).await.unwrap();
+    let id = first_id(&r);
+    let toml = format!("format = 1\nid = \"quiet\"\nname = \"Quiet\"\n[rules]\n\"{id}\" = false\n");
+    r.desktop.set_profile(&toml, false).unwrap();
+    r.desktop.apply_profile("quiet").await.unwrap();
+    let key = format!("window.{id}");
+    let v = r.desktop.explain("rules").await.unwrap();
+    assert_eq!(v[&key]["source"], "profile", "{v}");
+    assert_eq!(v[&key]["detail"], json!({"name": "Quiet"}));
+    // user.lua wins over the profile.
+    let p = r.desktop.paths().user_lua.clone();
+    std::fs::write(&p, format!("hl.window_rule({{ name = \"uq:{id}\" }})\n")).unwrap();
+    let v = r.desktop.explain("rules").await.unwrap();
+    assert_eq!(v[&key]["source"], "user_lua", "{v}");
+    std::fs::remove_file(&p).unwrap();
+    // Switched on by hand: uQ's again.
+    let mut s = section(&r);
+    s["window"][0]["enabled"] = json!(true);
+    write(&mut r, &s.to_string()).await.unwrap();
+    let v = r.desktop.explain("rules").await.unwrap();
+    assert_eq!(v[&key]["source"], "uq", "{v}");
+}

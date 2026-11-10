@@ -7,7 +7,8 @@ use std::sync::{Arc, Mutex};
 
 use serde_json::json;
 use uq_core::profile::{
-    self, ActiveProfile, MAX_PROFILES, Profile, ProfileError, power_notice, turn_off,
+    self, ActiveProfile, MAX_PROFILES, Profile, ProfileError, missing_rules, missing_rules_notice,
+    power_notice, turn_off,
 };
 
 use super::{FakeError, FakeUqd, now};
@@ -124,16 +125,18 @@ impl FakeProfiles {
                 Some(a) => turn_off(s, a).map_err(refused)?,
                 None => (s.clone(), Vec::new()),
             };
+            // Like uqd: counted against the settings the profile goes over.
+            let missing = missing_rules(&base, &p);
             let (next, memo) = profile::apply(&base, &p, now()).map_err(refused)?;
             *s = next;
-            done = Some((kept, memo));
+            done = Some((kept, memo, missing));
             Ok(())
         })?;
-        let (kept, memo) = done.expect("a write that succeeded ran its edit");
-        let notices: Vec<String> = p
-            .power()
-            .map(|_| power_notice(NO_POWER))
+        let (kept, memo, missing) = done.expect("a write that succeeded ran its edit");
+        let notices: Vec<String> = (missing > 0)
+            .then(|| missing_rules_notice(missing))
             .into_iter()
+            .chain(p.power().map(|_| power_notice(NO_POWER)))
             .collect();
         *self.active.lock().unwrap() = Some(memo);
         Ok(json!({"active": id, "kept": kept, "notices": notices}).to_string())

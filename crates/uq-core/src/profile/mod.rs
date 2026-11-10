@@ -6,12 +6,17 @@
 
 mod active;
 mod overlay;
+mod rules;
 mod store;
 
 pub use active::{clear_active, load_active, save_active};
 pub use overlay::{
     ActiveProfile, Kept, KeyMemo, PowerMemo, apply, changed_since, from_journal, holds, next_after,
     turn_off,
+};
+pub use rules::{
+    check_tree, enabled_of, mark_rules, missing_rules, missing_rules_notice, rule_keys, rule_label,
+    rule_toggles, set_enabled,
 };
 pub use store::ProfileStore;
 
@@ -41,6 +46,8 @@ pub enum DomainKind {
     Appearance,
     /// `power.profile`, set through the system's power service.
     Power,
+    /// The on/off switch of existing window and panel rules, by id (`rules.rs`).
+    Rules,
     /// In the format, refused until a later version of uQ can apply it.
     Reserved,
 }
@@ -53,7 +60,7 @@ pub const PROFILE_DOMAINS: [(&str, DomainKind); 8] = [
     ("appearance", DomainKind::Appearance),
     ("power", DomainKind::Power),
     ("keybinds", DomainKind::Reserved),
-    ("rules", DomainKind::Reserved),
+    ("rules", DomainKind::Rules),
 ];
 
 fn kind_of(domain: &str) -> Option<DomainKind> {
@@ -96,7 +103,9 @@ pub enum ProfileError {
     BadIcon,
     #[error("This profile has settings uQ doesn't know: {}.", plain(.0))]
     UnknownDomain(String),
-    #[error("{}", needs_newer(.0))]
+    #[error(
+        "This profile turns keyboard shortcuts on or off, which this version of uQ can't do yet."
+    )]
     NeedsNewer(String),
     #[error("{}: {}", plain(&invalid_label(.key)), plain(.reason))]
     Invalid { key: String, reason: String },
@@ -104,15 +113,6 @@ pub enum ProfileError {
     Empty,
     #[error("A profile can hold up to 500 settings.")]
     TooManyKeys,
-}
-
-fn needs_newer(domain: &str) -> String {
-    let what = if domain == "rules" {
-        "window rules"
-    } else {
-        "keyboard shortcuts"
-    };
-    format!("This profile turns {what} on or off, which this version of uQ can't do yet.")
 }
 
 /// Text from an imported file with its control characters left out, so an error can't carry a
@@ -251,6 +251,10 @@ impl Profile {
         }
         if count > MAX_KEYS {
             return Err(ProfileError::TooManyKeys);
+        }
+        if let Some(tree) = self.values.get("rules") {
+            // Not written to a default `State`, which has no rules to switch.
+            check_tree(tree)?;
         }
         for (domain, kind) in PROFILE_DOMAINS {
             if !matches!(kind, DomainKind::Section | DomainKind::Appearance) {
@@ -414,6 +418,7 @@ pub fn read_leaf(state: &State, domain: &str, path: &[String]) -> Option<Value> 
         (DomainKind::Section | DomainKind::Appearance, _) => {
             history::get_path(&state.section(domain).ok()?, path)?.clone()
         }
+        (DomainKind::Rules, [id]) => Value::Bool(enabled_of(state, id)?),
         _ => return None,
     };
     (!v.is_null() && !v.is_object()).then_some(v)
@@ -427,6 +432,9 @@ pub fn write_leaves(
     leaves: &[(Vec<String>, Option<Value>)],
 ) -> Result<(), SettingError> {
     let kind = kind_of(domain).ok_or_else(|| SettingError::UnknownKey(domain.to_string()))?;
+    if kind == DomainKind::Rules {
+        return write_rule_leaves(state, leaves);
+    }
     let (mut theme, mut variant) = (None, None);
     let mut section_leaves = Vec::new();
     for (path, value) in leaves {
@@ -484,10 +492,36 @@ pub fn write_leaves(
     Ok(())
 }
 
-/// `("look", ["gaps_in"])` → "Gaps between windows".
+/// Set rule switches. A non-bool, a removal, or an id with no rule is refused (callers leave
+/// out ids that aren't here); on an error `state` is unchanged.
+fn write_rule_leaves(
+    state: &mut State,
+    leaves: &[(Vec<String>, Option<Value>)],
+) -> Result<(), SettingError> {
+    let mut next = state.clone();
+    for (path, value) in leaves {
+        let key = format!("rules.{}", plain(&path.join(".")));
+        let refuse = |reason: &str| SettingError::Invalid {
+            key: key.clone(),
+            reason: reason.into(),
+        };
+        let ([id], Some(Value::Bool(on))) = (path.as_slice(), value) else {
+            return Err(refuse(rules::ONLY_ON_OFF));
+        };
+        if !set_enabled(&mut next, id, *on) {
+            return Err(refuse("isn't a rule on this computer"));
+        }
+    }
+    *state = next;
+    Ok(())
+}
+
+/// `("look", ["gaps_in"])` → "Gaps between windows". A rule switch is "A rule" here: naming it
+/// needs the rules ([`rule_label`]).
 pub fn key_label(domain: &str, path: &[String]) -> String {
     let dotted = path.join(".");
     match (domain, dotted.as_str()) {
+        ("rules", _) if path.len() == 1 => Some("A rule".to_string()),
         ("appearance", "theme" | "variant") => history::label("theme", &dotted),
         ("power", "profile") => Some("Power mode".to_string()),
         _ => history::label(domain, &dotted),
@@ -663,9 +697,6 @@ profile = "performance"
             err(&with("[keybinds]\n\"uq.spotlight\" = false\n")),
             ProfileError::NeedsNewer("keybinds".into())
         );
-        let e = err(&with("[rules]\n\"float-pavucontrol\" = true\n"));
-        assert_eq!(e, ProfileError::NeedsNewer("rules".into()));
-        assert!(e.to_string().contains("window rules"));
         assert!(
             ProfileError::NeedsNewer("keybinds".into())
                 .to_string()

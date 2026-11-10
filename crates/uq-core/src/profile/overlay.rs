@@ -5,7 +5,8 @@
 //! "Back to normal" only puts back keys that still hold what the profile set.
 
 use super::{
-    DomainKind, Profile, ProfileError, key_label, kind_of, leaves, read_leaf, write_leaves,
+    DomainKind, Profile, ProfileError, enabled_of, key_label, kind_of, leaves, read_leaf,
+    rule_label, rule_toggles, write_leaves,
 };
 use crate::history::{self, Entry};
 use crate::settings::SettingError;
@@ -80,10 +81,17 @@ pub fn apply(
     profile: &Profile,
     now: i64,
 ) -> Result<(State, ActiveProfile), ProfileError> {
+    // A rule switch whose rule isn't here is left out: no write and no memo.
     let keys: Vec<_> = profile
         .keys()
         .into_iter()
-        .filter(|k| kind_of(&k.domain) != Some(DomainKind::Power))
+        .filter(|k| match kind_of(&k.domain) {
+            Some(DomainKind::Power) => false,
+            Some(DomainKind::Rules) => {
+                matches!(k.path.as_slice(), [id] if enabled_of(current, id).is_some())
+            }
+            _ => true,
+        })
         .collect();
     let mut next = current.clone();
     write_by_domain(
@@ -125,6 +133,10 @@ fn created_leaves(current: &State, next: &State, keys: &[super::Key]) -> Vec<Key
     }
     let mut out = Vec::new();
     for domain in domains {
+        // A rule switch creates nothing.
+        if kind_of(domain) == Some(DomainKind::Rules) {
+            continue;
+        }
         let (Ok(before), Ok(after)) = (current.section(domain), next.section(domain)) else {
             continue;
         };
@@ -153,13 +165,21 @@ pub fn turn_off(
     let mut kept = Vec::new();
     for m in &active.keys {
         let cur = read_leaf(current, &m.domain, &m.path);
+        let rule = kind_of(&m.domain) == Some(DomainKind::Rules);
+        // A rule deleted while the profile was on: nothing to put back, nothing kept.
+        if rule && cur.is_none() {
+            continue;
+        }
         // A created leaf can be null, which `read_leaf` reads as unset.
         let still_set = cur.as_ref() == Some(&m.set) || (m.set.is_null() && cur.is_none());
         if still_set {
             writes.push((m.domain.clone(), (m.path.clone(), m.before.clone())));
         } else if cur != m.before {
             kept.push(Kept {
-                label: key_label(&m.domain, &m.path),
+                label: match (rule, m.path.as_slice()) {
+                    (true, [id]) => rule_label(&current.rules, id),
+                    _ => key_label(&m.domain, &m.path),
+                },
                 domain: m.domain.clone(),
                 path: m.path.clone(),
             });
@@ -198,6 +218,18 @@ pub fn changed_since(newest_first: &[Entry], since: i64) -> (Vec<(String, Vec<St
     let mut found: Vec<(String, Vec<String>)> = Vec::new();
     let mut skipped: HashSet<(String, Vec<String>)> = HashSet::new();
     for entry in newest_first.iter().filter(|e| e.time >= since) {
+        if entry.domain == "rules" {
+            // Journal leaves for rules are whole lists: only a rule's switch can be a key.
+            let (toggles, other) = rule_toggles(&entry.before, &entry.after);
+            for id in toggles {
+                let key = ("rules".to_string(), vec![id]);
+                if !found.contains(&key) {
+                    found.push(key);
+                }
+            }
+            skipped.extend(other.into_iter().map(|t| ("rules".to_string(), vec![t])));
+            continue;
+        }
         let (before, after) = (leaves(&entry.before), leaves(&entry.after));
         let value_in = |all: &[(Vec<String>, Value)], p: &Vec<String>| {
             all.iter().find(|(q, _)| q == p).map(|(_, v)| v.clone())
@@ -498,6 +530,103 @@ mod tests {
         for d in ["schedule", "settings", "monitors", "input"] {
             assert_eq!(from_journal(d, &s(&["x"])), None, "{d}");
         }
+        // Journal leaves for rules are whole lists; `rule_toggles` maps them.
+        assert_eq!(from_journal("rules", &s(&["window"])), None);
+    }
+
+    fn rule(id: &str, name: &str, on: bool) -> Value {
+        json!({"id": id, "name": name, "enabled": on, "match": {"class": "a"},
+            "effects": {"float": true}})
+    }
+
+    fn rules_state(rules: Vec<Value>) -> State {
+        let mut st = State::default();
+        st.set_section("rules", json!({ "window": rules })).unwrap();
+        st
+    }
+
+    fn enabled(st: &State, id: &str) -> Option<bool> {
+        super::super::enabled_of(st, id)
+    }
+
+    #[test]
+    fn apply_skips_unknown_rule_ids() {
+        let cur = rules_state(vec![rule("r-000a", "A", true)]);
+        let p = profile("rules", "[rules]\n\"r-000a\" = false\n\"r-ffff\" = true\n");
+        let text = p.to_toml();
+        let (next, active) = apply(&cur, &p, 0).unwrap();
+        assert_eq!(enabled(&next, "r-000a"), Some(false));
+        assert_eq!(enabled(&next, "r-ffff"), None);
+        assert_eq!(
+            active.keys,
+            vec![KeyMemo {
+                domain: "rules".into(),
+                path: s(&["r-000a"]),
+                before: Some(json!(true)),
+                set: json!(false),
+            }]
+        );
+        assert_eq!(super::super::missing_rules(&cur, &p), 1);
+        assert_eq!(p.to_toml(), text);
+        assert!(p.values["rules"].get("r-ffff").is_some());
+    }
+
+    #[test]
+    fn turn_off_rules_k3() {
+        let cur = rules_state(vec![
+            rule("r-000a", "A", true),
+            rule("r-000b", "B", true),
+            rule("r-000c", "C", true),
+        ]);
+        let p = profile(
+            "rules",
+            "[rules]\n\"r-000a\" = false\n\"r-000b\" = true\n\"r-000c\" = false\n",
+        );
+        let (on, active) = apply(&cur, &p, 0).unwrap();
+        assert_eq!(enabled(&on, "r-000a"), Some(false));
+        assert_eq!(enabled(&on, "r-000c"), Some(false));
+        // By hand: B switched off, C deleted, A renamed.
+        let mut hand = on.section("rules").unwrap();
+        hand["window"][1]["enabled"] = json!(false);
+        hand["window"][0]["name"] = json!("A renamed");
+        hand["window"].as_array_mut().unwrap().remove(2);
+        let mut on = on;
+        on.set_section("rules", hand).unwrap();
+        let (off, kept) = turn_off(&on, &active).unwrap();
+        assert_eq!(enabled(&off, "r-000a"), Some(true));
+        assert_eq!(off.rules.window[0].name, "A renamed");
+        assert_eq!(enabled(&off, "r-000b"), Some(false));
+        assert_eq!(enabled(&off, "r-000c"), None);
+        assert_eq!(
+            kept,
+            vec![Kept {
+                domain: "rules".into(),
+                path: s(&["r-000b"]),
+                label: "Window rule \u{201c}B\u{201d}".into(),
+            }]
+        );
+    }
+
+    #[test]
+    fn changed_since_offers_rule_toggles() {
+        let sect = |rules: Vec<Value>| json!({"window": rules, "layer": [], "workspace": []});
+        let entries = vec![
+            entry(
+                30,
+                "rules",
+                sect(vec![rule("r-000a", "A", true)]),
+                sect(vec![rule("r-000a", "A", false)]),
+            ),
+            entry(
+                20,
+                "rules",
+                sect(vec![]),
+                sect(vec![rule("r-000a", "A", true)]),
+            ),
+        ];
+        let (keys, skipped) = changed_since(&entries, 10);
+        assert_eq!(keys, vec![("rules".to_string(), s(&["r-000a"]))]);
+        assert_eq!(skipped, 1);
     }
 
     #[test]

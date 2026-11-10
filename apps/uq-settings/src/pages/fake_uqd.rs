@@ -413,6 +413,9 @@ impl FakeUqd {
             let rules = self.state.lock().unwrap().rules.clone();
             let rejected = self.explain.rules_rejected.lock().unwrap().clone();
             let mut out = uq_core::rules::explain(&rules, None, rejected.as_deref(), "user.lua");
+            if let Some(a) = &*self.profiles.active.lock().unwrap() {
+                uq_core::profile::mark_rules(&mut out, &rules, a);
+            }
             for (key, row) in out.as_object_mut().into_iter().flatten() {
                 if let Some(Value::Object(o)) = overrides.get(&format!("rules.{key}")) {
                     for (k, v) in o {

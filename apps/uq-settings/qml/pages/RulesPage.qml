@@ -331,6 +331,9 @@ QQC2.ScrollView {
         readonly property bool idle: !!pg && pg.idle
         readonly property string key: kind === "workspace" ? String(modelData.workspace) : String(modelData.id)
         readonly property string title: kind === "workspace" ? "Workspace " + String(modelData.workspace).replace(/^name:/, "") : String(modelData.name)
+        /// "From the <name> profile" while a profile's switch holds, worded as SettingRow does.
+        /// The name is a profile's, so it's shown only through UqLabel.
+        readonly property string profileText: kind !== "workspace" && modelData.profile ? "From the " + String(modelData.profile) + " profile" : ""
         readonly property var lines: {
             const m = ruleRow.modelData;
             if (ruleRow.kind === "window") {
@@ -349,19 +352,32 @@ QQC2.ScrollView {
 
         SettingRow {
             label: ruleRow.title
-            source: ({ source: ruleRow.modelData.source, detail: { line: ruleRow.modelData.line, path: ruleRow.modelData.path } })
+            // A profile's switch is said under the switch (ruleProfile), so not here as well.
+            source: ({ source: ruleRow.modelData.source === "profile" ? "uq" : ruleRow.modelData.source, detail: { line: ruleRow.modelData.line, path: ruleRow.modelData.path } })
             Layout.fillWidth: true
 
-            QQC2.Switch {
-                id: onSwitch
+            ColumnLayout {
                 visible: ruleRow.kind !== "workspace"
-                checked: ruleRow.modelData.enabled === true
-                enabled: ruleRow.idle
-                Accessible.name: "Rule on"
-                Accessible.description: ruleRow.title
-                onToggled: {
-                    ruleRow.pg.turnRule(ruleRow.kind, ruleRow.key, onSwitch.checked);
-                    onSwitch.checked = Qt.binding(() => ruleRow.modelData.enabled === true);
+                spacing: 0
+
+                QQC2.Switch {
+                    id: onSwitch
+                    checked: ruleRow.modelData.enabled === true
+                    enabled: ruleRow.idle
+                    Layout.alignment: Qt.AlignRight
+                    Accessible.name: "Rule on"
+                    Accessible.description: ruleRow.profileText !== "" ? ruleRow.title + ". " + ruleRow.profileText : ruleRow.title
+                    onToggled: {
+                        ruleRow.pg.turnRule(ruleRow.kind, ruleRow.key, onSwitch.checked);
+                        onSwitch.checked = Qt.binding(() => ruleRow.modelData.enabled === true);
+                    }
+                }
+                UqLabel {
+                    objectName: "ruleProfile"
+                    visible: ruleRow.profileText !== ""
+                    text: ruleRow.profileText
+                    opacity: 0.7
+                    Layout.alignment: Qt.AlignRight
                 }
             }
             QQC2.ToolButton {

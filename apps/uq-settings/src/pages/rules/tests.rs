@@ -534,3 +534,33 @@ async fn reopen_lists_at_most_three_and_counts_the_rest() {
         assert_eq!(out.state["reopen"]["more"], json!(more), "{n}");
     }
 }
+
+#[tokio::test]
+async fn row_says_from_the_profile() {
+    let st = state_with(
+        json!({"window": [rule("Float A", "a", json!({"float": true}))],
+        "layer": [{"name": "Blur", "match": {"namespace": "n"}, "effects": {"blur": true}}]}),
+    );
+    let (r, page) = rig_with(st).await;
+    let (wid, lid) = {
+        let st = r.state.lock().unwrap();
+        (st.rules.window[0].id.clone(), st.rules.layer[0].id.clone())
+    };
+    let out = run(&page, Op::Refresh).await;
+    assert_eq!(out.state["window"][0]["source"], "uq");
+    assert_eq!(out.state["window"][0]["profile"], "");
+    let toml = format!(
+        "format = 1\nid = \"gaming\"\nname = \"Gaming\"\n[rules]\n\"{wid}\" = false\n\"{lid}\" = false\n"
+    );
+    let proxy = DesktopProxy::new(&r.client).await.unwrap();
+    proxy.set_profile(&toml, false).await.unwrap();
+    proxy.apply_profile("gaming").await.unwrap();
+    let out = run(&page, Op::Refresh).await;
+    assert_eq!(out.error, None);
+    for list in ["window", "layer"] {
+        let row = &out.state[list][0];
+        assert_eq!(row["enabled"], false, "{list}");
+        assert_eq!(row["source"], "profile", "{list}");
+        assert_eq!(row["profile"], "Gaming", "{list}");
+    }
+}

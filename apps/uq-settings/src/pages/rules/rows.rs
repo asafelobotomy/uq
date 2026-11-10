@@ -18,6 +18,15 @@ pub(super) fn source_of(explained: &Value, key: &str) -> (String, Value, Value) 
     (source, detail("line"), detail("path"))
 }
 
+/// The name of the profile whose switch the row's rule holds, or `""`.
+fn profile_of(explained: &Value, key: &str) -> String {
+    let row = &explained[key];
+    match row["source"].as_str() {
+        Some("profile") => row["detail"]["name"].as_str().unwrap_or("").to_string(),
+        _ => String::new(),
+    }
+}
+
 impl RulesState {
     pub(super) fn rows(
         rules: &Rules,
@@ -29,7 +38,9 @@ impl RulesState {
             .window
             .iter()
             .map(|r| {
-                let (source, line, path) = source_of(explained, &format!("window.{}", r.id));
+                let key = format!("window.{}", r.id);
+                let (source, line, path) = source_of(explained, &key);
+                let profile = profile_of(explained, &key);
                 let now = Compiled::new(&r.matches)
                     .map(|c| windows.iter().filter(|w| c.test(w) != Verdict::No).count())
                     .unwrap_or(0);
@@ -37,18 +48,21 @@ impl RulesState {
                     "match_text": match_text(&r.matches),
                     "effects_text": effects_text(&r.effects),
                     "static": has_static(&r.effects),
-                    "source": source, "line": line, "path": path, "matches_now": now})
+                    "source": source, "line": line, "path": path, "profile": profile,
+                    "matches_now": now})
             })
             .collect();
         let layer: Vec<Value> = rules
             .layer
             .iter()
             .map(|r| {
-                let (source, line, path) = source_of(explained, &format!("layer.{}", r.id));
+                let key = format!("layer.{}", r.id);
+                let (source, line, path) = source_of(explained, &key);
+                let profile = profile_of(explained, &key);
                 json!({"raw": r, "id": r.id, "name": r.name, "enabled": r.enabled,
                     "namespace": r.matches.namespace,
                     "effects_text": layer_effects_text(&r.effects),
-                    "source": source, "line": line, "path": path})
+                    "source": source, "line": line, "path": path, "profile": profile})
             })
             .collect();
         let workspace: Vec<Value> = rules

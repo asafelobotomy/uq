@@ -125,7 +125,14 @@ impl PageModel for ProfilesModel {
     // `available` holds the current values of these domains; `ProfileChanged` covers the list
     // and which profile is on.
     const FOLLOW: Follow = Follow {
-        sections: &["look", "layouts", "appearance", "shell", "wallpaper"],
+        sections: &[
+            "look",
+            "layouts",
+            "appearance",
+            "shell",
+            "wallpaper",
+            "rules",
+        ],
         theme: true,
         settings: false,
         history: true,

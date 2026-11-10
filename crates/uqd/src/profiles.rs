@@ -11,7 +11,7 @@ use std::io::ErrorKind;
 use uq_core::history::{AutoReason, Origin, PointKind};
 use uq_core::profile::{
     self, ActiveProfile, Kept, MAX_PROFILES, PowerMemo, Profile, ProfileError, clear_active,
-    key_label, power_notice, save_active, turn_off,
+    key_label, missing_rules, missing_rules_notice, power_notice, save_active, turn_off,
 };
 use uq_core::state::State;
 
@@ -144,6 +144,12 @@ impl Desktop {
             Some(a) => turn_off(&self.state, a).map_err(refused)?,
             None => (self.state.clone(), Vec::new()),
         };
+        // Rules are counted against the settings the profile goes over: after the old one's off.
+        let mut notices = Vec::new();
+        let missing = missing_rules(&base, &p);
+        if missing > 0 {
+            notices.push(missing_rules_notice(missing));
+        }
         let now = Utc::now().timestamp();
         let (next, mut memo) = profile::apply(&base, &p, now).map_err(refused)?;
         if self.themes.get(&next.theme, next.variant).is_none() {
@@ -186,7 +192,6 @@ impl Desktop {
         }
         self.announce_all();
 
-        let mut notices = Vec::new();
         memo.power = self
             .switch_power(p.power(), old_power.as_ref(), &mut kept, &mut notices)
             .await;
