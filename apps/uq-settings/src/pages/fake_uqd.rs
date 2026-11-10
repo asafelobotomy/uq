@@ -21,8 +21,10 @@ use zbus::object_server::SignalEmitter;
 
 mod devices;
 mod profiles;
+mod windows;
 pub use devices::Displays;
 pub use profiles::FakeProfiles;
+pub use windows::FakeWindows;
 
 #[derive(Debug, zbus::DBusError)]
 #[zbus(prefix = "org.uq.Desktop1.Error")]
@@ -50,6 +52,7 @@ pub struct FakeUqd {
     pub history: History,
     pub displays: Displays,
     pub profiles: FakeProfiles,
+    pub windows: FakeWindows,
 }
 
 /// The fake's journal and restore points.
@@ -135,6 +138,9 @@ pub struct Explain {
     pub fails: Arc<AtomicBool>,
     /// The domains `Reapply` was called with, in order.
     pub reapplied: Arc<Mutex<Vec<String>>>,
+    /// The message of the last `rules` write refused with `ConfigInvalid`; a good `rules`
+    /// write clears it. `Explain("rules")` reports it as uqd does.
+    pub rules_rejected: Arc<Mutex<Option<String>>>,
 }
 
 impl Explain {
@@ -215,7 +221,7 @@ impl FakeUqd {
         }
         let value =
             serde_json::from_str(json).map_err(|e| invalid(format!("value is not JSON: {e}")))?;
-        self.write(origin, |next| {
+        let done = self.write(origin, |next| {
             next.set_section(domain, value).map_err(invalid)?;
             if renders_section(domain)
                 && let Some(message) = self.verify_error.lock().unwrap().take()
@@ -225,7 +231,17 @@ impl FakeUqd {
                 )));
             }
             Ok(())
-        })?;
+        });
+        if domain == "rules" {
+            match &done {
+                Ok(_) => *self.explain.rules_rejected.lock().unwrap() = None,
+                Err(FakeError::ConfigInvalid(m)) => {
+                    *self.explain.rules_rejected.lock().unwrap() = Some(m.clone());
+                }
+                Err(_) => {}
+            }
+        }
+        done?;
         Ok(())
     }
 
@@ -267,6 +283,14 @@ impl FakeUqd {
         self.displays.take(token)?;
         let _ = Self::monitors_changed(&e).await;
         Ok(())
+    }
+
+    fn list_windows(&self) -> String {
+        self.windows.list()
+    }
+
+    fn pick_window(&self) -> Result<String, FakeError> {
+        self.windows.pick()
     }
 
     fn list_input_devices(&self) -> String {
@@ -383,6 +407,20 @@ impl FakeUqd {
             .section(domain)
             .map_err(invalid)?;
         let overrides = self.explain.overrides.lock().unwrap();
+        if domain == "rules" {
+            // uqd's pure function; overrides are keyed `rules.<row key>`.
+            let rules = self.state.lock().unwrap().rules.clone();
+            let rejected = self.explain.rules_rejected.lock().unwrap().clone();
+            let mut out = uq_core::rules::explain(&rules, None, rejected.as_deref(), "user.lua");
+            for (key, row) in out.as_object_mut().into_iter().flatten() {
+                if let Some(Value::Object(o)) = overrides.get(&format!("rules.{key}")) {
+                    for (k, v) in o {
+                        row[k] = v.clone();
+                    }
+                }
+            }
+            return Ok(out.to_string());
+        }
         let mut out = Map::new();
         for row in provenance::options_for(domain) {
             let stored = row.stored(&section);
@@ -512,6 +550,8 @@ pub struct Rig {
     pub displays: Displays,
     /// The stored profiles and the active one.
     pub profiles: FakeProfiles,
+    /// The open windows and the scripted picks.
+    pub windows: FakeWindows,
 }
 
 /// uqd's revert timer firing: the pending display change is dropped and `MonitorsChanged` sent.
@@ -537,6 +577,7 @@ pub async fn rig(state: State) -> Rig {
     let history = History::default();
     let displays = Displays::default();
     let profiles = FakeProfiles::default();
+    let windows = FakeWindows::default();
     let uqd = connect(&bus).await;
     uqd.object_server()
         .at(
@@ -548,6 +589,7 @@ pub async fn rig(state: State) -> Rig {
                 history: history.clone(),
                 displays: displays.clone(),
                 profiles: profiles.clone(),
+                windows: windows.clone(),
             },
         )
         .await
@@ -564,5 +606,6 @@ pub async fn rig(state: State) -> Rig {
         history,
         displays,
         profiles,
+        windows,
     }
 }
