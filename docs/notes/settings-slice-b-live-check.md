@@ -44,6 +44,6 @@ Have `power-profiles-daemon` running and a laptop or machine that offers a Perfo
   from **History** (or `uqctl restore <id>`). The settings come back and no profile shows as on.
 - [ ] **8. Light or dark hold.** Make a profile that holds "Light or dark" (add it with **Add
   settings**) and set a schedule whose next change falls within a few minutes
-  (`uqctl schedule fixed ...`, see `uqctl schedule --help`). While the profile is on,
+  (for example `uqctl schedule fixed 07:00 HH:MM`, with HH:MM a few minutes from now). While the profile is on,
   the schedule doesn't switch light or dark. After **Back to normal**, the schedule works again and
   moves to the right variant at its next change.
