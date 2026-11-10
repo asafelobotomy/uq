@@ -31,7 +31,7 @@ Island {
         return s.indexOf("0x") === 0 ? s : "0x" + s;
     }
     function layoutFor(ws) {
-        return U.workspaceLayout(layouts, ws);
+        return U.workspaceLayout(layouts, ws, U.defaultLayout(Settings.values));
     }
     function layoutGlyph(l) {
         switch (l) {

@@ -200,6 +200,23 @@ TestCase {
         compare(U.workspaceLayout({ "-1337": "master" }, { id: -1337, name: "web" }), "dwindle");
     }
 
+    // Without a rule the workspace has the default layout ([layout_options] default), not dwindle.
+    function test_workspace_layout_uses_default_layout() {
+        var m = { "3": "master" };
+        compare(U.workspaceLayout(m, { id: 9, name: "9" }, "scrolling"), "scrolling");
+        compare(U.workspaceLayout(m, { id: 3, name: "3" }, "scrolling"), "master");
+        compare(U.workspaceLayout(null, { id: 3, name: "3" }, "master"), "master");
+        compare(U.workspaceLayout(m, null, "master"), "");
+        // Unset or junk: Hyprland's own default.
+        compare(U.workspaceLayout(m, { id: 9, name: "9" }, undefined), "dwindle");
+        compare(U.workspaceLayout(m, { id: 9, name: "9" }, ""), "dwindle");
+        compare(U.workspaceLayout(m, { id: 9, name: "9" }, 3), "dwindle");
+        compare(U.defaultLayout({ layout_options: { default: "master" } }), "master");
+        compare(U.defaultLayout({ layout_options: {} }), "");
+        compare(U.defaultLayout({}), "");
+        compare(U.defaultLayout(null), "");
+    }
+
     // Mirrors uqctl's active_workspace_selector (crates/uqctl/src/main.rs): the id when > 0,
     // a special workspace's own name, otherwise "name:<name>".
     function test_workspace_selector() {
