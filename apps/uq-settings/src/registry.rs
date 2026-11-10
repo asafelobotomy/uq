@@ -396,7 +396,82 @@ static DISPLAYS_SETTINGS: [SearchEntry; 8] = [
     ),
 ];
 
-static CORE_PAGES: [PageInfo; 6] = [
+static INPUT_SETTINGS: [SearchEntry; 14] = [
+    entry(
+        "keyboard-layouts",
+        "Keyboard layouts",
+        &[
+            "keyboard", "language", "layout", "qwerty", "azerty", "dvorak",
+        ],
+    ),
+    entry(
+        "layout-switch",
+        "Switch layouts with",
+        &["keyboard", "language", "shortcut", "alt shift", "toggle"],
+    ),
+    entry(
+        "repeat-delay",
+        "Delay before keys repeat",
+        &["keyboard", "repeat", "hold", "delay"],
+    ),
+    entry(
+        "repeat-rate",
+        "Key repeat speed",
+        &["keyboard", "repeat", "rate", "typing"],
+    ),
+    entry(
+        "mouse-speed",
+        "Pointer speed",
+        &["mouse", "sensitivity", "cursor", "faster", "slower"],
+    ),
+    entry(
+        "mouse-accel",
+        "Pointer acceleration",
+        &["mouse", "acceleration", "flat", "adaptive", "precision"],
+    ),
+    entry(
+        "mouse-natural-scroll",
+        "Natural scrolling",
+        &["mouse", "scroll direction", "reverse", "wheel"],
+    ),
+    entry(
+        "mouse-left-handed",
+        "Left-handed buttons",
+        &["mouse", "swap buttons", "left hand"],
+    ),
+    entry(
+        "mouse-scroll-speed",
+        "Scroll speed",
+        &["mouse", "wheel", "scrolling", "faster"],
+    ),
+    entry(
+        "touchpad-natural-scroll",
+        "Natural scrolling on the touchpad",
+        &["touchpad", "trackpad", "scroll direction", "reverse"],
+    ),
+    entry(
+        "tap-to-click",
+        "Tap to click",
+        &["touchpad", "trackpad", "tap", "click"],
+    ),
+    entry(
+        "disable-while-typing",
+        "Turn the touchpad off while typing",
+        &["touchpad", "trackpad", "palm", "typing"],
+    ),
+    entry(
+        "touchpad-scroll-speed",
+        "Touchpad scroll speed",
+        &["touchpad", "trackpad", "scrolling", "two finger"],
+    ),
+    entry(
+        "device-overrides",
+        "Settings for one pointing device",
+        &["mouse", "touchpad", "trackball", "per device", "device"],
+    ),
+];
+
+static CORE_PAGES: [PageInfo; 7] = [
     PageInfo {
         id: "appearance",
         name: "Appearance",
@@ -432,6 +507,15 @@ static CORE_PAGES: [PageInfo; 6] = [
         qml: "pages/DisplaysPage.qml",
         settings: &DISPLAYS_SETTINGS,
         domains: &["monitors"],
+    },
+    PageInfo {
+        id: "input",
+        name: "Input",
+        icon: "preferences-desktop-peripherals",
+        category: Category::Devices,
+        qml: "pages/InputPage.qml",
+        settings: &INPUT_SETTINGS,
+        domains: &["input"],
     },
     PageInfo {
         id: "shell",
@@ -668,6 +752,7 @@ mod tests {
                 "look",
                 "wallpaper",
                 "displays",
+                "input",
                 "shell",
                 "history"
             ]
@@ -679,8 +764,10 @@ mod tests {
         assert_eq!(v[2]["plugin"], false);
         assert_eq!(v[3]["qml"], "pages/DisplaysPage.qml");
         assert_eq!(v[3]["categoryName"], "Devices");
-        assert_eq!(v[4]["qml"], "pages/ShellPage.qml");
-        assert_eq!(v[4]["categoryName"], "uQ");
+        assert_eq!(v[4]["qml"], "pages/InputPage.qml");
+        assert_eq!(v[4]["categoryName"], "Devices");
+        assert_eq!(v[5]["qml"], "pages/ShellPage.qml");
+        assert_eq!(v[5]["categoryName"], "uQ");
     }
 
     #[test]

@@ -172,8 +172,8 @@ mod tests {
     fn snaps_to_right_edge() {
         let a = rect("A", 0, 0, 1920, 1080);
         let b = rect("B", 0, 0, 1280, 1024);
-        assert_eq!(place(&[a.clone()], &b, 1940, 20), (1920, 0));
-        assert_eq!(place(&[a.clone()], &b, 1900, 500), (1920, 500));
+        assert_eq!(place(std::slice::from_ref(&a), &b, 1940, 20), (1920, 0));
+        assert_eq!(place(std::slice::from_ref(&a), &b, 1900, 500), (1920, 500));
         // Below, with its right edge lined up with A's.
         assert_eq!(place(&[a], &b, 650, 1100), (640, 1080));
     }
@@ -182,13 +182,13 @@ mod tests {
     fn overlap_pushed_out() {
         let a = rect("A", 0, 0, 1920, 1080);
         let b = rect("B", 0, 0, 1280, 1024);
-        let (x, y) = place(&[a.clone()], &b, 900, 300);
+        let (x, y) = place(std::slice::from_ref(&a), &b, 900, 300);
         let placed = b.at(x, y);
         assert!(!placed.overlaps(&a), "{placed:?}");
         assert!(placed.touches(&a));
         assert_eq!((x, y), (1920, 300));
         // Far away comes back to touch.
-        let (x, y) = place(&[a.clone()], &b, 5000, 4000);
+        let (x, y) = place(std::slice::from_ref(&a), &b, 5000, 4000);
         assert!(b.at(x, y).touches(&a), "{x},{y}");
         assert!(!b.at(x, y).overlaps(&a));
     }

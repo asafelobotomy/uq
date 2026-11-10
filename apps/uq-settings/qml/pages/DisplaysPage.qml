@@ -123,20 +123,21 @@ QQC2.ScrollView {
 
         SettingRow {
             settingId: "display-arrangement"
-            label: "Arrangement"
+            label: "Arrangement: drag a display to move it"
             highlight: App.highlight
             visible: page.view.length > 1
             Layout.fillWidth: true
-
-            DisplayArrangement {
-                outputs: page.view
-                selected: page.current ? page.current.name : ""
-                enabled: page.ready && !dm.busy
-                onPicked: name => page.selected = name
-                onMoved: (name, x, y) => dm.moveOutput(name, x, y)
-                Layout.fillWidth: true
-                Layout.preferredHeight: Kirigami.Units.gridUnit * 12
-            }
+        }
+        DisplayArrangement {
+            objectName: "arrangement"
+            visible: page.view.length > 1
+            outputs: page.view
+            selected: page.current ? page.current.name : ""
+            enabled: page.ready && !dm.busy
+            onPicked: name => page.selected = name
+            onMoved: (name, x, y) => dm.moveOutput(name, x, y)
+            Layout.fillWidth: true
+            Layout.preferredHeight: Kirigami.Units.gridUnit * 12
         }
 
         RowLayout {

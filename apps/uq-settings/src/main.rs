@@ -18,6 +18,7 @@ mod appearance_model;
 mod desktop_entries;
 mod displays_model;
 mod history_model;
+mod input_model;
 mod instance;
 mod look_model;
 mod model_core;
@@ -30,6 +31,7 @@ mod shell_model;
 mod system_lists;
 mod wallpaper_model;
 mod window;
+mod xkb_lists;
 
 use app::Event;
 use session::StartError;

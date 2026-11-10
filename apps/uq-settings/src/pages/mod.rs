@@ -5,6 +5,7 @@ pub mod displays;
 #[cfg(test)]
 pub mod fake_uqd;
 pub mod history;
+pub mod input;
 pub mod look;
 pub mod runner;
 pub mod shell;
