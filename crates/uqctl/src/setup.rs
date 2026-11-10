@@ -19,7 +19,10 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use uq_core::paths::Paths;
-use uq_core::stub::{StubOutcome, consumer_files, install_consumers, install_stub, stub_contents};
+use uq_core::render::kvantum_base;
+use uq_core::stub::{
+    StubOutcome, consumer_files, install_consumers, install_stub, kvantum_link, stub_contents,
+};
 
 pub const EXIT_OK: u8 = 0;
 pub const EXIT_ERROR: u8 = 1;
@@ -59,7 +62,12 @@ pub fn current_uid() -> Option<u32> {
     std::fs::metadata("/proc/self").ok().map(|m| m.uid())
 }
 
-pub fn run_setup(paths: &Paths, apps: bool, uid: Option<u32>) -> Result<Report, SetupError> {
+pub fn run_setup(
+    paths: &Paths,
+    apps: bool,
+    kvantum: bool,
+    uid: Option<u32>,
+) -> Result<Report, SetupError> {
     if uid == Some(0) {
         return Err(SetupError::Root);
     }
@@ -70,7 +78,7 @@ pub fn run_setup(paths: &Paths, apps: bool, uid: Option<u32>) -> Result<Report, 
         .map_err(|e| SetupError::Io(format!("{}: {e}", paths.main_lua.display())))?;
     let apps = if apps {
         Some(
-            install_consumers(paths)
+            install_consumers(paths, kvantum)
                 .map_err(|e| SetupError::Io(format!("app theme files: {e}")))?,
         )
     } else {
@@ -126,7 +134,7 @@ fn describe(e: &SetupError) -> (u8, &'static str, String) {
     }
 }
 
-fn print_human(paths: &Paths, r: &Report) {
+fn print_human(paths: &Paths, r: &Report, kvantum: bool) {
     match r.hypr {
         StubOutcome::Installed => {
             println!("uQ config in place at {}", r.main_lua.display());
@@ -148,10 +156,13 @@ fn print_human(paths: &Paths, r: &Report) {
         );
         return;
     };
-    let lines: HashMap<PathBuf, String> = consumer_files(paths).into_iter().collect();
+    let lines: HashMap<PathBuf, String> = consumer_files(paths, kvantum).into_iter().collect();
     for (path, outcome) in apps {
         match outcome {
             StubOutcome::Installed => println!("themed: {}", path.display()),
+            StubOutcome::AlreadyPresent if *path == kvantum_link(paths) => {
+                println!("left alone: {} (already exists)", path.display())
+            }
             StubOutcome::AlreadyPresent => println!(
                 "left alone: {} (add this to use uQ's theme):\n  {}",
                 path.display(),
@@ -167,12 +178,13 @@ fn print_human(paths: &Paths, r: &Report) {
 /// `uqctl setup [--apps] [--json]`.
 pub fn main(apps: bool, as_json: bool) -> ExitCode {
     let paths = Paths::from_env();
-    match run_setup(&paths, apps, current_uid()) {
+    let kvantum = kvantum_base(Path::new("/usr/share/Kvantum")).is_some();
+    match run_setup(&paths, apps, kvantum, current_uid()) {
         Ok(r) => {
             if as_json {
                 println!("{}", report_json(&r));
             } else {
-                print_human(&paths, &r);
+                print_human(&paths, &r, kvantum);
             }
             ExitCode::from(r.exit_code())
         }
@@ -203,7 +215,7 @@ mod tests {
     fn fresh_user_gets_the_stub_and_exit_0() {
         let dir = tempfile::tempdir().unwrap();
         let p = with_base(dir.path());
-        let r = run_setup(&p, false, Some(1000)).unwrap();
+        let r = run_setup(&p, false, false, Some(1000)).unwrap();
         assert_eq!(r.hypr, StubOutcome::Installed);
         assert_eq!(r.exit_code(), EXIT_OK);
         assert_eq!(fs::read_to_string(&p.main_lua).unwrap(), stub_contents(&p));
@@ -214,12 +226,12 @@ mod tests {
     fn second_run_changes_nothing_and_still_exits_0() {
         let dir = tempfile::tempdir().unwrap();
         let p = with_base(dir.path());
-        run_setup(&p, true, Some(1000)).unwrap();
-        let before: Vec<_> = consumer_files(&p)
+        run_setup(&p, true, false, Some(1000)).unwrap();
+        let before: Vec<_> = consumer_files(&p, false)
             .into_iter()
             .map(|(f, _)| fs::read_to_string(f).unwrap())
             .collect();
-        let r = run_setup(&p, true, Some(1000)).unwrap();
+        let r = run_setup(&p, true, false, Some(1000)).unwrap();
         assert_eq!(r.exit_code(), EXIT_OK);
         assert!(
             r.apps
@@ -227,7 +239,7 @@ mod tests {
                 .iter()
                 .all(|(_, o)| *o == StubOutcome::Installed)
         );
-        let after: Vec<_> = consumer_files(&p)
+        let after: Vec<_> = consumer_files(&p, false)
             .into_iter()
             .map(|(f, _)| fs::read_to_string(f).unwrap())
             .collect();
@@ -240,7 +252,7 @@ mod tests {
         let p = with_base(dir.path());
         fs::create_dir_all(&p.hypr_dir).unwrap();
         fs::write(&p.main_lua, "-- mine\n").unwrap();
-        let r = run_setup(&p, false, Some(1000)).unwrap();
+        let r = run_setup(&p, false, false, Some(1000)).unwrap();
         assert_eq!(r.exit_code(), EXIT_KEPT_USER_CONFIG);
         assert_eq!(fs::read_to_string(&p.main_lua).unwrap(), "-- mine\n");
         assert_eq!(report_json(&r)["hyprland_lua"]["outcome"], "kept_user_file");
@@ -250,13 +262,13 @@ mod tests {
     fn kept_app_files_do_not_change_the_exit_code() {
         let dir = tempfile::tempdir().unwrap();
         let p = with_base(dir.path());
-        let (kitty, _) = consumer_files(&p)
+        let (kitty, _) = consumer_files(&p, false)
             .into_iter()
             .find(|(f, _)| f.ends_with("kitty/kitty.conf"))
             .unwrap();
         fs::create_dir_all(kitty.parent().unwrap()).unwrap();
         fs::write(&kitty, "font_size 12\n").unwrap();
-        let r = run_setup(&p, true, Some(1000)).unwrap();
+        let r = run_setup(&p, true, false, Some(1000)).unwrap();
         assert_eq!(r.exit_code(), EXIT_OK);
         assert_eq!(fs::read_to_string(&kitty).unwrap(), "font_size 12\n");
     }
@@ -265,7 +277,7 @@ mod tests {
     fn root_is_refused_with_exit_2_and_writes_nothing() {
         let dir = tempfile::tempdir().unwrap();
         let p = with_base(dir.path());
-        assert_eq!(run_setup(&p, true, Some(0)), Err(SetupError::Root));
+        assert_eq!(run_setup(&p, true, false, Some(0)), Err(SetupError::Root));
         assert!(!p.main_lua.exists());
         assert_eq!(error_json(&SetupError::Root)["exit"], EXIT_ROOT);
     }
@@ -275,7 +287,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let p = Paths::under(dir.path());
         assert_eq!(
-            run_setup(&p, false, Some(1000)),
+            run_setup(&p, false, false, Some(1000)),
             Err(SetupError::MissingBase(p.base_lua.clone()))
         );
         assert!(!p.main_lua.exists());
@@ -289,14 +301,14 @@ mod tests {
     fn json_report_shape() {
         let dir = tempfile::tempdir().unwrap();
         let p = with_base(dir.path());
-        let v = report_json(&run_setup(&p, true, Some(1000)).unwrap());
+        let v = report_json(&run_setup(&p, true, false, Some(1000)).unwrap());
         assert_eq!(v["exit"], 0);
         assert_eq!(v["hyprland_lua"]["outcome"], "installed");
         assert_eq!(
             v["apps"].as_array().unwrap().len(),
-            consumer_files(&p).len()
+            consumer_files(&p, false).len()
         );
-        let v = report_json(&run_setup(&p, false, Some(1000)).unwrap());
+        let v = report_json(&run_setup(&p, false, false, Some(1000)).unwrap());
         assert!(v["apps"].is_null());
     }
 }
