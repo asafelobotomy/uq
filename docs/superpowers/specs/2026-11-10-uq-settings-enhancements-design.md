@@ -1,7 +1,7 @@
 # uQ Settings enhancements design
 
-Date: 2026-11-10 · Status: draft for review. The user chose all ten suggestions from a research
-pass. The choices marked **Decision** in §11 still need confirming.
+Date: 2026-11-10 · Status: approved. The user chose all ten suggestions from a research pass and
+confirmed every decision in §11 on 2026-11-10.
 Parent spec: `2026-11-08-uq-phase3-settings-design.md` (the app, domains, plugin pages, slices).
 Related: `2026-11-10-uq-phase4-integrations-design.md` (draft, uq#5), which already plans the
 companion-app pages that §8 moves earlier.
@@ -354,7 +354,7 @@ env vars, and extra arguments.
   exited, failed, with the last journal lines on failure), and an optional start delay.
 - **Turning off a system entry** writes a user copy with `Hidden=true`, which is the XDG way.
   Users can add an app (by desktop id) or a command.
-- **Decision (§11)** covers whether to rely on systemd's `xdg-autostart-generator` instead.
+- uqd runs them itself rather than systemd's `xdg-autostart-generator` (§11, decision 3).
 
 **Environment variables** (new domain `env`):
 
@@ -471,7 +471,7 @@ These come from KDE and COSMIC complaints, and a lint or test checks each one wh
   preview, and the gesture conflict warning.
 - **Live checklist per slice:** the success criteria in §1.
 
-## 11. Decisions to confirm
+## 11. Decisions (confirmed by the user, 2026-11-10)
 
 1. **Slices go between Phase 3 slices,** as in §12, not after Phase 3 finishes. A and B are
    foundations that every later page uses, so they come straight after slice 2.
