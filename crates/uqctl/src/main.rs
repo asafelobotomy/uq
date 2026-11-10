@@ -8,7 +8,7 @@ mod setup;
 use clap::{Parser, Subcommand};
 use serde_json::Value;
 use settings_cmd::{
-    IdleCmd, LaunchesCmd, MouseCmd, NotifCmd, OnOff, PinCmd, PrivacyKey, WeatherCmd,
+    IdleCmd, LaunchesCmd, MouseCmd, NotifCmd, OnOff, PinCmd, PrivacyKey, RestoreCmd, WeatherCmd,
 };
 use std::collections::HashMap;
 use std::process::ExitCode;
@@ -16,6 +16,8 @@ use uq_core::schedule::Schedule;
 
 const NAME: &str = "org.uq.Desktop1";
 const PATH: &str = "/org/uq/Desktop1";
+/// The origin uqd's history records for uqctl's writes.
+const ORIGIN: &str = "uqctl";
 
 #[derive(Parser)]
 #[command(name = "uqctl", about = "Control the uQ desktop", version)]
@@ -77,6 +79,23 @@ enum Cmd {
     Settings {
         page: Option<String>,
         setting: Option<String>,
+    },
+    /// Print recent setting changes: id, time, origin and summary, newest first.
+    History {
+        #[arg(long, default_value_t = 20)]
+        limit: u32,
+    },
+    /// Undo a change from `uqctl history` (the newest one if no id is given).
+    Undo {
+        id: Option<String>,
+        /// Undo even if the same settings were changed again since.
+        #[arg(long)]
+        force: bool,
+    },
+    /// Restore points: `list`, `save <name>`, `delete <id>`, or `<id>` to restore one.
+    Restore {
+        #[command(subcommand)]
+        cmd: RestoreCmd,
     },
     /// Re-render every config file from uqd's state.
     Reload,
@@ -219,7 +238,7 @@ async fn run(cmd: Cmd) -> Result<(), String> {
             cmd: ThemeCmd::Set { id, variant },
         } => {
             proxy
-                .call::<_, _, ()>("SetTheme", &(id, variant))
+                .call::<_, _, ()>("SetTheme", &(id, variant, ORIGIN))
                 .await
                 .map_err(describe)?;
         }
@@ -241,16 +260,53 @@ async fn run(cmd: Cmd) -> Result<(), String> {
                 workspace
             };
             proxy
-                .call::<_, _, ()>("SetLayout", &(workspace, layout))
+                .call::<_, _, ()>("SetLayout", &(workspace, layout, ORIGIN))
                 .await
                 .map_err(describe)?;
         }
         Cmd::Schedule { cmd } => {
             proxy
-                .call::<_, _, ()>("SetSchedule", &(schedule_json(&cmd)?,))
+                .call::<_, _, ()>("SetSchedule", &(schedule_json(&cmd)?, ORIGIN))
                 .await
                 .map_err(describe)?;
         }
+        Cmd::History { limit } => {
+            let json: String = proxy
+                .call("ListHistory", &(limit,))
+                .await
+                .map_err(describe)?;
+            settings_cmd::history_lines(&json)?
+                .iter()
+                .for_each(|l| println!("{l}"));
+        }
+        Cmd::Undo { id, force } => {
+            let id = match id {
+                Some(id) => id,
+                None => {
+                    let json: String = proxy
+                        .call("ListHistory", &(1u32,))
+                        .await
+                        .map_err(describe)?;
+                    settings_cmd::newest_entry_id(&json)?
+                        .ok_or_else(|| "nothing to undo".to_string())?
+                }
+            };
+            let new_id = proxy
+                .call::<_, _, String>("Undo", &(id, force))
+                .await
+                .map_err(|e| {
+                    let conflict = matches!(&e, zbus::Error::MethodError(n, _, _)
+                        if n.as_str() == "org.uq.Desktop1.Error.Conflict");
+                    let msg = describe(e);
+                    if conflict {
+                        format!("{msg} (run again with --force)")
+                    } else {
+                        msg
+                    }
+                })?;
+            println!("{}", settings_cmd::undo_line(&new_id));
+        }
+        Cmd::Restore { cmd } => restore(&proxy, cmd).await?,
         Cmd::Reload => proxy
             .call::<_, _, ()>("Reload", &())
             .await
@@ -307,9 +363,42 @@ async fn set_setting(
     (key, value): settings_cmd::Setting,
 ) -> Result<(), String> {
     proxy
-        .call::<_, _, ()>("SetSetting", &(key, value.to_string()))
+        .call::<_, _, ()>("SetSetting", &(key, value.to_string(), ORIGIN))
         .await
         .map_err(describe)
+}
+
+async fn restore(proxy: &zbus::Proxy<'_>, cmd: RestoreCmd) -> Result<(), String> {
+    match cmd {
+        RestoreCmd::List => {
+            let json: String = proxy
+                .call("ListRestorePoints", &())
+                .await
+                .map_err(describe)?;
+            settings_cmd::restore_lines(&json)?
+                .iter()
+                .for_each(|l| println!("{l}"));
+        }
+        RestoreCmd::Save { name } => {
+            let id: String = proxy
+                .call("SaveRestorePoint", &(name,))
+                .await
+                .map_err(describe)?;
+            println!("{id}");
+        }
+        RestoreCmd::Delete { id } => proxy
+            .call::<_, _, ()>("DeleteRestorePoint", &(id,))
+            .await
+            .map_err(describe)?,
+        RestoreCmd::Restore(args) => match args.as_slice() {
+            [id] => proxy
+                .call::<_, _, ()>("Restore", &(id,))
+                .await
+                .map_err(describe)?,
+            _ => return Err("usage: uqctl restore list|save <name>|delete <id>|<id>".into()),
+        },
+    }
+    Ok(())
 }
 
 async fn current_pinned(proxy: &zbus::Proxy<'_>) -> Result<Vec<String>, String> {

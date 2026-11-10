@@ -14,7 +14,7 @@ use uq_core::launcher_providers::{self, ProviderDef};
 use uq_core::settings::{BUILTIN_PROVIDERS, Islands};
 
 use crate::desktop_entries;
-use crate::pages::runner::{PageLogic, parse_json, patch_section};
+use crate::pages::runner::{ORIGIN, PageLogic, parse_json, patch_section};
 
 /// The `SetSetting` keys this page may send.
 const SETTING_KEYS: [&str; 11] = [
@@ -213,20 +213,26 @@ impl PageLogic for ShellState {
         let proxy = DesktopProxy::new(&self.conn).await?;
         match op {
             Op::Refresh => Ok(()),
-            Op::SetSetting { key, value } => proxy.set_setting(&key, &value.to_string()).await,
+            Op::SetSetting { key, value } => {
+                proxy.set_setting(&key, &value.to_string(), ORIGIN).await
+            }
             Op::ClearLaunchCounts => proxy.clear_launch_counts().await,
             // Pins and providers are edited as intents on a fresh read, under the write lock,
             // so two quick edits both land.
             Op::PinRemove { id } => {
                 let mut pins = self.pins(&proxy).await?;
                 pins.retain(|p| *p != id);
-                proxy.set_setting("pinned", &json!(pins).to_string()).await
+                proxy
+                    .set_setting("pinned", &json!(pins).to_string(), ORIGIN)
+                    .await
             }
             Op::PinMove { id, from, to } => {
                 let mut pins = self.pins(&proxy).await?;
                 let pos = pins.iter().position(|p| *p == id);
                 move_by(&mut pins, pos, from, to);
-                proxy.set_setting("pinned", &json!(pins).to_string()).await
+                proxy
+                    .set_setting("pinned", &json!(pins).to_string(), ORIGIN)
+                    .await
             }
             Op::ProviderMove { .. } | Op::ProviderToggle { .. } => {
                 let defs = self.defs().await?;

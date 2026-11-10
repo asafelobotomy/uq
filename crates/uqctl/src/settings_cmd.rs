@@ -1,5 +1,6 @@
-//! `uqctl` settings commands: pin, weather, idle, notif, privacy, mouse and launches. The mapping from
-//! a command to the `SetSetting` call it makes is pure and tested here; `main.rs` does the D-Bus.
+//! `uqctl` settings commands: pin, weather, idle, notif, privacy, mouse, launches, history and
+//! restore points. The mapping from a command to the call it makes, and the printing of what uqd
+//! answers, are pure and tested here; `main.rs` does the D-Bus.
 
 use crate::bridge::net::GeoHit;
 use clap::{Subcommand, ValueEnum};
@@ -236,6 +237,89 @@ pub fn weather_choice(hits: &[GeoHit], pick: usize) -> Result<(Vec<String>, Sett
         .collect();
     let value = json!({"name": hit_label(chosen), "lat": chosen.lat, "lon": chosen.lon});
     Ok((lines, ("weather_location", value)))
+}
+
+#[derive(Subcommand, Debug, PartialEq)]
+pub enum RestoreCmd {
+    /// Print the restore points: id, time, kind and name.
+    List,
+    /// Save the current settings as a restore point named NAME.
+    Save { name: String },
+    /// Delete a restore point.
+    Delete { id: String },
+    /// `uqctl restore <id>`: bring back every setting as it was in that point.
+    #[command(external_subcommand)]
+    Restore(Vec<String>),
+}
+
+/// Unix seconds as local `YYYY-MM-DD HH:MM:SS`.
+fn local_time(secs: i64) -> String {
+    use chrono::TimeZone;
+    chrono::Local.timestamp_opt(secs, 0).earliest().map_or_else(
+        || secs.to_string(),
+        |t| t.format("%Y-%m-%d %H:%M:%S").to_string(),
+    )
+}
+
+fn parse_list(json: &str, what: &str) -> Result<Vec<Value>, String> {
+    serde_json::from_str(json).map_err(|e| format!("bad {what} from uqd: {e}"))
+}
+
+/// `ListHistory`'s JSON as `id  time  origin  summary` lines, newest first.
+pub fn history_lines(json: &str) -> Result<Vec<String>, String> {
+    Ok(parse_list(json, "history")?
+        .iter()
+        .map(|e| {
+            format!(
+                "{}  {}  {}  {}",
+                e["id"].as_str().unwrap_or("?"),
+                local_time(e["time"].as_i64().unwrap_or(0)),
+                e["origin"].as_str().unwrap_or("unknown"),
+                e["summary"].as_str().unwrap_or(""),
+            )
+        })
+        .collect())
+}
+
+/// The newest entry's id in `ListHistory`'s JSON, if any.
+pub fn newest_entry_id(json: &str) -> Result<Option<String>, String> {
+    Ok(parse_list(json, "history")?
+        .first()
+        .and_then(|e| e["id"].as_str())
+        .map(str::to_owned))
+}
+
+/// What `uqctl undo` prints: the id of the entry the undo recorded, or "nothing changed".
+pub fn undo_line(new_entry_id: &str) -> String {
+    if new_entry_id.is_empty() {
+        "nothing changed".into()
+    } else {
+        new_entry_id.to_string()
+    }
+}
+
+/// `ListRestorePoints`' JSON as `id  time  kind  name` lines; kind is `manual` or `auto:<why>`.
+pub fn restore_lines(json: &str) -> Result<Vec<String>, String> {
+    Ok(parse_list(json, "restore points")?
+        .iter()
+        .map(|p| {
+            let kind = match &p["kind"] {
+                Value::String(k) => k.clone(),
+                Value::Object(o) => o
+                    .iter()
+                    .map(|(k, v)| format!("{k}:{}", v.as_str().unwrap_or("?")))
+                    .collect(),
+                _ => "?".into(),
+            };
+            format!(
+                "{}  {}  {}  {}",
+                p["id"].as_str().unwrap_or("?"),
+                local_time(p["time"].as_i64().unwrap_or(0)),
+                kind,
+                p["name"].as_str().unwrap_or(""),
+            )
+        })
+        .collect())
 }
 
 #[cfg(test)]
@@ -491,6 +575,108 @@ mod tests {
             ["x", "y"]
         );
         assert!(pinned_of(&json!({})).is_empty());
+    }
+
+    #[test]
+    fn history_lines_format() {
+        let json = json!([
+            {"id": "1800000000-0001", "time": 1_800_000_000, "origin": "uqctl", "domain": "look",
+             "summary": "gaps_in: 5 → 8", "before": {}, "after": {}},
+            {"id": "1799999999-0000", "time": 1_799_999_999, "origin": "settings",
+             "domain": "theme", "summary": "theme: graphite → nord", "before": {}, "after": {}}
+        ])
+        .to_string();
+        let lines = history_lines(&json).unwrap();
+        assert_eq!(
+            lines,
+            [
+                format!(
+                    "1800000000-0001  {}  uqctl  gaps_in: 5 → 8",
+                    local_time(1_800_000_000)
+                ),
+                format!(
+                    "1799999999-0000  {}  settings  theme: graphite → nord",
+                    local_time(1_799_999_999)
+                ),
+            ]
+        );
+        assert_eq!(local_time(1_800_000_000).len(), "2027-01-15 08:00:00".len());
+        assert!(history_lines("[]").unwrap().is_empty());
+        assert!(history_lines("nope").is_err());
+        assert_eq!(
+            newest_entry_id(&json).unwrap().as_deref(),
+            Some("1800000000-0001")
+        );
+        assert_eq!(newest_entry_id("[]").unwrap(), None);
+    }
+
+    #[test]
+    fn undo_line_names_the_new_entry() {
+        assert_eq!(undo_line("1800000000-0002"), "1800000000-0002");
+        assert_eq!(undo_line(""), "nothing changed");
+    }
+
+    #[test]
+    fn restore_lines_format() {
+        let json = json!([
+            {"id": "1800000000-abcdef", "name": "Before", "time": 1_800_000_000,
+             "kind": {"auto": "before_restore"}},
+            {"id": "1700000000-000001", "name": "mine", "time": 1_700_000_000, "kind": "manual"}
+        ])
+        .to_string();
+        let lines = restore_lines(&json).unwrap();
+        assert_eq!(
+            lines[0],
+            format!(
+                "1800000000-abcdef  {}  auto:before_restore  Before",
+                local_time(1_800_000_000)
+            )
+        );
+        assert!(lines[1].ends_with("  manual  mine"), "{}", lines[1]);
+    }
+
+    #[test]
+    fn cli_parses_history_undo_and_restore() {
+        assert!(matches!(parse(&["history"]), Cmd::History { limit: 20 }));
+        assert!(matches!(
+            parse(&["history", "--limit", "5"]),
+            Cmd::History { limit: 5 }
+        ));
+        assert!(matches!(
+            parse(&["undo"]),
+            Cmd::Undo {
+                id: None,
+                force: false
+            }
+        ));
+        assert!(matches!(
+            parse(&["undo", "1-0001", "--force"]),
+            Cmd::Undo { id: Some(ref id), force: true } if id == "1-0001"
+        ));
+        assert_eq!(parse_restore(&["restore", "list"]), RestoreCmd::List);
+        assert_eq!(
+            parse_restore(&["restore", "save", "before party"]),
+            RestoreCmd::Save {
+                name: "before party".into()
+            }
+        );
+        assert_eq!(
+            parse_restore(&["restore", "delete", "1700000000-abcdef"]),
+            RestoreCmd::Delete {
+                id: "1700000000-abcdef".into()
+            }
+        );
+        assert_eq!(
+            parse_restore(&["restore", "1700000000-abcdef"]),
+            RestoreCmd::Restore(vec!["1700000000-abcdef".into()])
+        );
+    }
+
+    fn parse_restore(args: &[&str]) -> RestoreCmd {
+        match parse(args) {
+            Cmd::Restore { cmd } => cmd,
+            _ => panic!("not a restore command"),
+        }
     }
 
     #[test]

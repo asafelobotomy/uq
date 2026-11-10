@@ -22,7 +22,7 @@ pub mod qobject {
     unsafe extern "RustQt" {
         #[qobject]
         #[qml_element]
-        /// `{look, layouts}`; `{}` until uqd has been read.
+        /// `{look, layouts, defaults, sources}`; `{}` until uqd has been read.
         #[qproperty(QString, state_json)]
         /// The message of the last refused change, "" when there is none.
         #[qproperty(QString, error)]
@@ -51,6 +51,10 @@ pub mod qobject {
         /// Give a workspace a layout; an empty `layout` removes its rule.
         #[qinvokable]
         fn set_workspace(self: Pin<&mut LookModel>, selector: &QString, layout: &QString);
+
+        /// Apply `look` or `layouts` to the session again, over what changed it while running.
+        #[qinvokable]
+        fn reapply(self: Pin<&mut LookModel>, domain: &QString);
     }
 
     impl cxx_qt::Threading for LookModel {}
@@ -83,6 +87,7 @@ impl PageModel for LookModel {
         sections: &["look", "layouts"],
         theme: true,
         settings: false,
+        history: false,
     };
 
     fn core(&self) -> &ModelCore<LookState> {
@@ -111,6 +116,10 @@ impl cxx_qt::Initialize for LookModel {
 impl LookModel {
     fn refresh(self: Pin<&mut Self>) {
         model_core::start(self, Op::Refresh);
+    }
+
+    fn reapply(self: Pin<&mut Self>, domain: &QString) {
+        model_core::reapply(self, domain.to_string());
     }
 
     fn set_look(self: Pin<&mut Self>, field: &QString, json_value: &QString) {

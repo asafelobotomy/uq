@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 use tokio::sync::Mutex;
 use uq_core::client::DesktopProxy;
 
-use crate::pages::runner::{PageLogic, parse_json, patch_section};
+use crate::pages::runner::{ORIGIN, PageLogic, parse_json, patch_section, sources};
 use crate::system_lists;
 
 /// The `appearance` section's fields that [`Op::SetField`] may change.
@@ -55,7 +55,8 @@ impl AppearanceState {
     }
 }
 
-/// The state is `{themes, theme, variant, schedule, appearance, cursorThemes, iconThemes}`.
+/// The state is `{themes, theme, variant, schedule, appearance, cursorThemes, iconThemes,
+/// sources}`.
 impl PageLogic for AppearanceState {
     type Op = Op;
 
@@ -75,8 +76,8 @@ impl PageLogic for AppearanceState {
         let proxy = DesktopProxy::new(&self.conn).await?;
         match op {
             Op::Refresh => Ok(()),
-            Op::SetTheme { id, variant } => proxy.set_theme(&id, &variant).await,
-            Op::SetSchedule(schedule) => proxy.set_schedule(&schedule).await,
+            Op::SetTheme { id, variant } => proxy.set_theme(&id, &variant, ORIGIN).await,
+            Op::SetSchedule(schedule) => proxy.set_schedule(&schedule, ORIGIN).await,
             Op::SetField { field, value } => {
                 if !FIELDS.contains(&field.as_str()) {
                     return Err(zbus::Error::Failure(format!("unknown field {field:?}")));
@@ -96,6 +97,7 @@ impl PageLogic for AppearanceState {
         let themes = proxy.list_themes().await?;
         let schedule = parse_json(&proxy.get_schedule().await?)?;
         let appearance = parse_json(&proxy.get_section("appearance").await?)?;
+        let sources = sources(&proxy, &["appearance"]).await;
         Ok(json!({
             "themes": themes,
             "theme": theme,
@@ -104,6 +106,7 @@ impl PageLogic for AppearanceState {
             "appearance": appearance,
             "cursorThemes": system_lists::cursor_themes(&self.icon_dirs),
             "iconThemes": system_lists::icon_themes(&self.icon_dirs),
+            "sources": sources,
         }))
     }
 }
@@ -214,6 +217,22 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn snapshot_includes_appearance_sources() {
+        let (r, page) = rig().await;
+        r.explain
+            .set("appearance.cursor_size", json!({"source": "runtime"}));
+        let out = run(&page, Op::Refresh).await;
+        let s = &out.state["sources"];
+        assert_eq!(s["ui-font"], json!({"source": "uq", "detail": null}));
+        assert_eq!(s["mono-font"], json!({"source": "theme", "detail": null}));
+        assert_eq!(
+            s["cursor-size"],
+            json!({"source": "runtime", "detail": null})
+        );
+        assert!(s.get("gaps-inner").is_none(), "{s}");
+    }
+
+    #[tokio::test]
     async fn uqd_down_gives_empty_state_without_an_error() {
         let bus = private_bus();
         let page = AppearanceState::new(connect(&bus).await, vec![]);
@@ -225,5 +244,73 @@ mod tests {
                 error: None
             }
         );
+    }
+
+    /// Every field the page writes keeps its value: a fresh page object on the same uqd reads
+    /// back what each `Op` wrote, so no control resets itself.
+    #[tokio::test]
+    async fn every_field_round_trips() {
+        let (r, page) = rig().await;
+        let mut writes = vec![
+            (
+                Op::SetTheme {
+                    id: "dracula".into(),
+                    variant: "light".into(),
+                },
+                "/theme",
+                json!("dracula"),
+            ),
+            (
+                Op::SetTheme {
+                    id: "dracula".into(),
+                    variant: "light".into(),
+                },
+                "/variant",
+                json!("light"),
+            ),
+            (
+                Op::SetSchedule(
+                    r#"{"mode":"fixed","light_at":"07:00:00","dark_at":"19:30:00"}"#.into(),
+                ),
+                "/schedule/mode",
+                json!("fixed"),
+            ),
+        ];
+        for (name, value) in [
+            ("ui_font", json!("Noto Sans")),
+            ("mono_font", json!("JetBrains Mono")),
+            ("font_size", json!(14)),
+            ("cursor_theme", json!("Adwaita")),
+            ("cursor_size", json!(32)),
+            ("icon_theme", json!("Papirus")),
+            ("kvantum", json!(false)),
+        ] {
+            writes.push((
+                field(name, value.clone()),
+                Box::leak(format!("/appearance/{name}").into_boxed_str()),
+                value,
+            ));
+        }
+        assert_eq!(
+            writes.len() - 3,
+            FIELDS.len(),
+            "a field was added without a round trip"
+        );
+
+        let before = run(&page, Op::Refresh).await.state;
+        for (op, pointer, want) in &writes {
+            assert_ne!(
+                before.pointer(pointer),
+                Some(want),
+                "{pointer} starts at the value"
+            );
+            let out = run(&page, op.clone()).await;
+            assert_eq!(out.error, None, "{pointer}");
+        }
+        let fresh = AppearanceState::new(r.client.clone(), vec![]);
+        let state = run(&fresh, Op::Refresh).await.state;
+        for (_, pointer, want) in &writes {
+            assert_eq!(state.pointer(pointer), Some(want), "{pointer} reads back");
+        }
     }
 }

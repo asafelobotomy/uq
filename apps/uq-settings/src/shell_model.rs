@@ -93,6 +93,7 @@ impl PageModel for ShellModel {
         sections: &["shell"],
         theme: false,
         settings: true,
+        history: false,
     };
 
     fn core(&self) -> &ModelCore<ShellState> {

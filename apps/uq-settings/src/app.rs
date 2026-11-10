@@ -27,6 +27,9 @@ pub mod qobject {
         #[qml_singleton]
         /// The id of the page on show.
         #[qproperty(QString, page)]
+        /// A `ShowPage` (or `--page`) named a real page: it wins over the page the window
+        /// remembered from last time.
+        #[qproperty(bool, page_requested)]
         /// The setting id whose `SettingRow` flashes; set to "" first so a repeat flashes again.
         #[qproperty(QString, highlight)]
         /// Whether `org.uq.Desktop1` has an owner.
@@ -68,6 +71,7 @@ pub struct AppRust {
     /// Core pages, then the plugin pages found at startup.
     entries: Vec<PageEntry>,
     page: QString,
+    page_requested: bool,
     highlight: QString,
     uqd_up: bool,
     pages_json: QString,
@@ -81,6 +85,7 @@ impl Default for AppRust {
         let first = entries.first().map_or("", |p| p.id.as_str());
         Self {
             page: QString::from(first),
+            page_requested: false,
             pages_json: QString::from(&registry::pages_json(&entries)),
             entries,
             highlight: QString::default(),
@@ -193,6 +198,7 @@ impl App {
             return;
         };
         self.as_mut().set_page(QString::from(&id));
+        self.as_mut().set_page_requested(true);
         self.as_mut().set_highlight(QString::default());
         self.set_highlight(QString::from(setting));
     }

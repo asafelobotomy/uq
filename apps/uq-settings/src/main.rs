@@ -16,6 +16,7 @@ use cxx_qt_lib::{QQuickStyle, QString};
 mod app;
 mod appearance_model;
 mod desktop_entries;
+mod history_model;
 mod instance;
 mod look_model;
 mod model_core;

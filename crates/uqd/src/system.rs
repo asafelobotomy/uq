@@ -5,6 +5,22 @@ use uq_core::theme::{Theme, Variant};
 
 pub trait SystemSettings: Send + Sync {
     fn apply(&self, theme: &Theme) -> std::io::Result<()>;
+    /// One key's current value (`gsettings get`), as plain text: `'Inter 11'` reads `Inter 11`
+    /// and `uint32 24` reads `24`. `None` when gsettings is missing or fails.
+    fn read(&self, schema: &str, key: &str) -> Option<String>;
+}
+
+/// `gsettings get` output as plain text: no type prefix, no quotes around a string.
+fn gvariant_text(out: &str) -> String {
+    let s = out.trim();
+    let s = ["uint32 ", "int32 ", "uint64 ", "int64 ", "double "]
+        .iter()
+        .find_map(|p| s.strip_prefix(p))
+        .unwrap_or(s);
+    s.strip_prefix('\'')
+        .and_then(|s| s.strip_suffix('\''))
+        .unwrap_or(s)
+        .to_string()
 }
 
 const IFACE: &str = "org.gnome.desktop.interface";
@@ -66,6 +82,16 @@ impl SystemSettings for GSettings {
         }
         Ok(())
     }
+
+    fn read(&self, schema: &str, key: &str) -> Option<String> {
+        let out = std::process::Command::new(&self.binary)
+            .args(["get", schema, key])
+            .output()
+            .ok()?;
+        out.status
+            .success()
+            .then(|| gvariant_text(&String::from_utf8_lossy(&out.stdout)))
+    }
 }
 
 /// Records the themes it was asked to apply.
@@ -75,6 +101,18 @@ pub struct FakeSystem {
     pub applied: std::sync::Mutex<Vec<String>>,
     /// Makes `apply` fail, as a missing or broken gsettings would.
     pub fail: std::sync::atomic::AtomicBool,
+    /// What `read` answers per `(schema, key)`.
+    pub values: std::sync::Mutex<std::collections::HashMap<(String, String), String>>,
+}
+
+#[cfg(any(test, feature = "fake"))]
+impl FakeSystem {
+    pub fn set_value(&self, schema: &str, key: &str, value: &str) {
+        self.values
+            .lock()
+            .unwrap()
+            .insert((schema.to_string(), key.to_string()), value.to_string());
+    }
 }
 
 #[cfg(any(test, feature = "fake"))]
@@ -88,6 +126,13 @@ impl SystemSettings for FakeSystem {
             .unwrap()
             .push(format!("{} {}", theme.id, theme.variant));
         Ok(())
+    }
+    fn read(&self, schema: &str, key: &str) -> Option<String> {
+        self.values
+            .lock()
+            .unwrap()
+            .get(&(schema.to_string(), key.to_string()))
+            .cloned()
     }
 }
 
@@ -152,6 +197,33 @@ mod tests {
                 .lines()
                 .any(|l| l == "set org.gnome.desktop.interface color-scheme prefer-dark"),
             "{lines}"
+        );
+    }
+
+    #[test]
+    fn gsettings_read_strips_type_and_quotes() {
+        assert_eq!(gvariant_text("'Inter 11'\n"), "Inter 11");
+        assert_eq!(gvariant_text("uint32 24\n"), "24");
+        assert_eq!(gvariant_text("24"), "24");
+        let dir = tempfile::tempdir().unwrap();
+        let bin = dir.path().join("gsettings");
+        crate::test_util::write_script(
+            &bin,
+            "#!/bin/sh\n[ \"$1 $2 $3\" = \"get org.gnome.desktop.interface cursor-theme\" ] || exit 1\necho \"'Breeze'\"\n",
+        );
+        let g = GSettings::with_binary(&bin);
+        // `read` maps every failure to None, so retry a fresh script's ETXTBSY by hand.
+        let got = (0..250).find_map(|_| {
+            let v = g.read("org.gnome.desktop.interface", "cursor-theme");
+            if v.is_none() {
+                std::thread::sleep(std::time::Duration::from_millis(20));
+            }
+            v
+        });
+        assert_eq!(got.as_deref(), Some("Breeze"));
+        assert_eq!(
+            GSettings::with_binary("/nonexistent/gsettings").read("a", "b"),
+            None
         );
     }
 

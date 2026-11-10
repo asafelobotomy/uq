@@ -341,7 +341,7 @@ async fn disabled_builtin_and_external_are_not_asked() {
         {"id": "org.test.P", "enabled": false}
     ]);
     proxy
-        .set_section("shell", &shell.to_string())
+        .set_section("shell", &shell.to_string(), "settings")
         .await
         .unwrap();
     b.event("SettingsChanged").await;
@@ -404,7 +404,7 @@ async fn rows_from_before_switch_off_cannot_act() {
         {"id": "org.test.Fake", "enabled": false}
     ]);
     proxy
-        .set_section("shell", &shell.to_string())
+        .set_section("shell", &shell.to_string(), "settings")
         .await
         .unwrap();
     b.event("SettingsChanged").await;

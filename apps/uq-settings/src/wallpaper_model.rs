@@ -83,6 +83,7 @@ impl PageModel for WallpaperModel {
         sections: &["wallpaper"],
         theme: false,
         settings: false,
+        history: false,
     };
 
     fn core(&self) -> &ModelCore<WallpaperState> {

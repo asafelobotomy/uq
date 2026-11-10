@@ -497,4 +497,44 @@ mod tests {
             }
         );
     }
+
+    /// Every field of an output's entry keeps its value: a fresh page object on the same uqd
+    /// reads back what each `Op` wrote, so no control resets itself.
+    #[tokio::test]
+    async fn every_field_round_trips() {
+        let rig = rig(json!({})).await;
+        let image = json!({"image": "/usr/share/b.png", "fit": "tile", "interval": 600,
+                           "color": "#102030"});
+        let folder = json!({"folder": "/usr/share/pics", "fit": "center", "interval": 45});
+        for op in [
+            set("*", image.clone()),
+            set("DP-1", folder.clone()),
+            // A patch changes one field and keeps the rest.
+            Op::PatchEntry {
+                output: "*".into(),
+                patch: json!({"fit": "fit"}),
+            },
+            set("HDMI-A-1", json!({"image": "/usr/share/c.png"})),
+            Op::ClearEntry {
+                output: "HDMI-A-1".into(),
+            },
+        ] {
+            let out = run(&rig.state, op).await;
+            assert_eq!(out.error, None);
+        }
+        let fresh = WallpaperState::new(rig.r.client.clone());
+        let out = run(&fresh, Op::Refresh).await;
+        let outputs = &out.state["outputs"];
+        assert_eq!(
+            outputs["*"],
+            json!({"image": "/usr/share/b.png", "fit": "fit",
+                                        "interval": 600, "color": "#102030"})
+        );
+        assert_eq!(
+            outputs["DP-1"],
+            json!({"folder": "/usr/share/pics", "fit": "center",
+                                           "interval": 45})
+        );
+        assert!(outputs.get("HDMI-A-1").is_none(), "{outputs}");
+    }
 }

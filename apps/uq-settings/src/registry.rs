@@ -66,6 +66,8 @@ pub struct PageInfo {
     /// The page's QML file, relative to `qml/Main.qml`.
     pub qml: &'static str,
     pub settings: &'static [SearchEntry],
+    /// The history journal's domains whose changes this page makes (the History page's filter).
+    pub domains: &'static [&'static str],
 }
 
 const fn entry(
@@ -317,7 +319,20 @@ static SHELL_SETTINGS: [SearchEntry; 16] = [
     ),
 ];
 
-static CORE_PAGES: [PageInfo; 4] = [
+static HISTORY_SETTINGS: [SearchEntry; 2] = [
+    entry(
+        "history",
+        "Settings history",
+        &["undo", "revert", "changes", "log"],
+    ),
+    entry(
+        "restore-points",
+        "Restore points",
+        &["backup", "snapshot", "restore", "go back"],
+    ),
+];
+
+static CORE_PAGES: [PageInfo; 5] = [
     PageInfo {
         id: "appearance",
         name: "Appearance",
@@ -325,6 +340,7 @@ static CORE_PAGES: [PageInfo; 4] = [
         category: Category::Personal,
         qml: "pages/AppearancePage.qml",
         settings: &APPEARANCE_SETTINGS,
+        domains: &["theme", "schedule", "appearance"],
     },
     PageInfo {
         id: "look",
@@ -333,6 +349,7 @@ static CORE_PAGES: [PageInfo; 4] = [
         category: Category::Personal,
         qml: "pages/LookPage.qml",
         settings: &LOOK_SETTINGS,
+        domains: &["look", "layouts"],
     },
     PageInfo {
         id: "wallpaper",
@@ -341,6 +358,7 @@ static CORE_PAGES: [PageInfo; 4] = [
         category: Category::Personal,
         qml: "pages/WallpaperPage.qml",
         settings: &WALLPAPER_SETTINGS,
+        domains: &["wallpaper"],
     },
     PageInfo {
         id: "shell",
@@ -349,6 +367,16 @@ static CORE_PAGES: [PageInfo; 4] = [
         category: Category::Uq,
         qml: "pages/ShellPage.qml",
         settings: &SHELL_SETTINGS,
+        domains: &["shell", "settings"],
+    },
+    PageInfo {
+        id: "history",
+        name: "History",
+        icon: "document-open-recent",
+        category: Category::Uq,
+        qml: "pages/HistoryPage.qml",
+        settings: &HISTORY_SETTINGS,
+        domains: &[],
     },
 ];
 
@@ -432,7 +460,7 @@ pub fn all_pages(plugins: &[PluginPage]) -> Vec<PageEntry> {
 }
 
 /// The sidebar model: every page in category order, each with its category's heading, its QML
-/// file and whether it is a plugin page.
+/// file, whether it is a plugin page and the history domains it changes.
 pub fn pages_json(pages: &[PageEntry]) -> String {
     let pages: Vec<_> = pages
         .iter()
@@ -445,6 +473,7 @@ pub fn pages_json(pages: &[PageEntry]) -> String {
                 "categoryName": p.category.label(),
                 "qml": p.qml,
                 "plugin": p.plugin,
+                "domains": find(&p.id).filter(|_| !p.plugin).map_or(&[][..], |i| i.domains),
             })
         })
         .collect();
@@ -490,6 +519,67 @@ mod tests {
     }
 
     #[test]
+    fn provenance_rows_name_registry_settings() {
+        let ids: HashSet<_> = core_pages()
+            .iter()
+            .flat_map(|p| p.settings.iter().map(|s| s.id))
+            .collect();
+        for row in uq_core::settings::provenance::OPTIONS {
+            assert!(
+                ids.contains(row.setting_id),
+                "{} names setting {:?}, which no page lists",
+                row.key,
+                row.setting_id
+            );
+        }
+    }
+
+    #[test]
+    fn history_page_registered_with_search_entries() {
+        let page = find("history").expect("the history page is registered");
+        assert_eq!(page.name, "History");
+        assert_eq!(page.category, Category::Uq);
+        assert_eq!(page.icon, "document-open-recent");
+        assert_eq!(page.qml, "pages/HistoryPage.qml");
+        let entries: Vec<_> = page
+            .settings
+            .iter()
+            .map(|s| (s.id, s.label, s.keywords))
+            .collect();
+        assert_eq!(
+            entries,
+            [
+                (
+                    "history",
+                    "Settings history",
+                    &["undo", "revert", "changes", "log"][..]
+                ),
+                (
+                    "restore-points",
+                    "Restore points",
+                    &["backup", "snapshot", "restore", "go back"][..]
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn every_journal_domain_has_one_page() {
+        let mut domains: Vec<&str> = uq_core::settings::SECTION_DOMAINS.to_vec();
+        domains.extend(["theme", "schedule", "settings"]);
+        for domain in domains {
+            let pages: Vec<_> = core_pages()
+                .iter()
+                .filter(|p| p.domains.contains(&domain))
+                .map(|p| p.id)
+                .collect();
+            assert_eq!(pages.len(), 1, "{domain} is on pages {pages:?}");
+        }
+        let v: serde_json::Value = serde_json::from_str(&pages_json(&all_pages(&[]))).unwrap();
+        assert_eq!(v[1]["domains"], serde_json::json!(["look", "layouts"]));
+    }
+
+    #[test]
     fn pages_json_lists_pages_in_order() {
         let v: serde_json::Value = serde_json::from_str(&pages_json(&all_pages(&[]))).unwrap();
         let ids: Vec<_> = v
@@ -498,7 +588,7 @@ mod tests {
             .iter()
             .map(|p| p["id"].as_str().unwrap())
             .collect();
-        assert_eq!(ids, ["appearance", "look", "wallpaper", "shell"]);
+        assert_eq!(ids, ["appearance", "look", "wallpaper", "shell", "history"]);
         assert_eq!(v[0]["category"], "personal");
         assert_eq!(v[0]["categoryName"], "Personal");
         assert_eq!(v[1]["qml"], "pages/LookPage.qml");
@@ -521,14 +611,44 @@ mod tests {
         };
         let v: serde_json::Value =
             serde_json::from_str(&pages_json(&all_pages(&[plugin]))).unwrap();
-        assert_eq!(v.as_array().unwrap().len(), 5);
-        assert_eq!(v[4]["id"], "demo");
-        assert_eq!(v[4]["category"], "apps");
-        assert_eq!(v[4]["categoryName"], "Apps");
-        assert_eq!(v[4]["plugin"], true);
+        assert_eq!(v.as_array().unwrap().len(), 6);
+        assert_eq!(v[5]["id"], "demo");
+        assert_eq!(v[5]["category"], "apps");
+        assert_eq!(v[5]["categoryName"], "Apps");
+        assert_eq!(v[5]["plugin"], true);
+        assert_eq!(v[5]["domains"], serde_json::json!([]));
         assert_eq!(
-            v[4]["qml"],
+            v[5]["qml"],
             "file:///usr/share/uq/settings/pages/demo/Page.qml"
         );
+    }
+
+    #[test]
+    fn every_setting_has_keywords() {
+        for p in core_pages() {
+            for s in p.settings {
+                assert!(
+                    !s.keywords.is_empty() && s.keywords.iter().all(|k| !k.trim().is_empty()),
+                    "{} on {} has no search keywords",
+                    s.id,
+                    p.id
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn no_duplicate_setting_ids() {
+        let mut seen = HashSet::new();
+        for p in core_pages() {
+            for s in p.settings {
+                assert!(
+                    seen.insert(s.id),
+                    "setting id {:?} is on more than one page (second: {})",
+                    s.id,
+                    p.id
+                );
+            }
+        }
     }
 }
