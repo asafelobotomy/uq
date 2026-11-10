@@ -1,6 +1,7 @@
 //! uqctl: command-line client for uqd (`org.uq.Desktop1`).
 
 mod bridge;
+mod settings_app;
 mod settings_cmd;
 mod setup;
 
@@ -71,6 +72,11 @@ enum Cmd {
     Launches {
         #[command(subcommand)]
         cmd: LaunchesCmd,
+    },
+    /// Open the Settings app, optionally on a page and a setting (e.g. `uqctl settings wallpaper`).
+    Settings {
+        page: Option<String>,
+        setting: Option<String>,
     },
     /// Re-render every config file from uqd's state.
     Reload,
@@ -190,7 +196,7 @@ fn describe(err: zbus::Error) -> String {
 }
 
 async fn run(cmd: Cmd) -> Result<(), String> {
-    if matches!(cmd, Cmd::Bridge) {
+    if matches!(cmd, Cmd::Bridge | Cmd::Settings { .. }) {
         unreachable!("handled in main");
     }
     let conn = zbus::Connection::session().await.map_err(describe)?;
@@ -289,7 +295,9 @@ async fn run(cmd: Cmd) -> Result<(), String> {
             .call::<_, _, ()>("ClearLaunchCounts", &())
             .await
             .map_err(describe)?,
-        Cmd::Setup { .. } | Cmd::Bridge => unreachable!("handled before connecting"),
+        Cmd::Setup { .. } | Cmd::Bridge | Cmd::Settings { .. } => {
+            unreachable!("handled before connecting")
+        }
     }
     Ok(())
 }
@@ -333,6 +341,13 @@ async fn main() -> ExitCode {
     if let Cmd::Setup { apps, json } = cli.cmd {
         // Local files only: no uqd, no timeout.
         return setup::main(apps, json);
+    }
+    if let Cmd::Settings { page, setting } = cli.cmd {
+        return settings_app::main(
+            page.as_deref().unwrap_or(""),
+            setting.as_deref().unwrap_or(""),
+        )
+        .await;
     }
     if matches!(cli.cmd, Cmd::Bridge) {
         // Long-lived: no timeout; ends on stdin EOF.
