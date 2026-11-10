@@ -13,11 +13,14 @@ use clap::Parser;
 use cxx_qt_lib::{QQuickStyle, QString};
 
 mod app;
+mod appearance_model;
 mod instance;
+mod pages;
 mod plugins;
 mod registry;
 mod search;
 mod session;
+mod system_lists;
 #[cfg(test)]
 mod test_bus;
 mod window;
@@ -72,7 +75,12 @@ fn main() -> ExitCode {
     let _session = match &args.screenshots {
         Some(dir) => {
             app::post(Event::ScreenshotDir(dir.display().to_string()));
-            None
+            // Only against a private bus the caller points us at; never the real session.
+            if std::env::var_os("UQ_SETTINGS_SHOTS_BUS").is_some() {
+                runtime.block_on(session::follow_only()).ok()
+            } else {
+                None
+            }
         }
         None => match runtime.block_on(session::start(&args.page, &args.setting)) {
             Ok(Some(session)) => Some(session),

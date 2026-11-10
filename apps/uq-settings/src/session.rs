@@ -1,7 +1,7 @@
 //! The session-bus side, run on a tokio runtime off the Qt thread: claim the single-instance name,
 //! serve `org.uq.Settings1`, and follow whether uqd (`org.uq.Desktop1`) is running.
 
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use futures_util::StreamExt;
 use uq_core::client::DESKTOP_NAME;
@@ -10,6 +10,15 @@ use zbus::names::BusName;
 
 use crate::app::{self, Event};
 use crate::instance::{self, Claim};
+
+/// The runtime and bus connection that page models use for their D-Bus calls.
+static BUS: OnceLock<(tokio::runtime::Handle, zbus::Connection)> = OnceLock::new();
+
+/// The runtime handle and session-bus connection, once [`start`] has made them; `None` without a
+/// session bus (the offscreen screenshot run), when pages show uqd as down.
+pub fn bus() -> Option<(tokio::runtime::Handle, zbus::Connection)> {
+    BUS.get().cloned()
+}
 
 /// Keeps the bus connection (and with it the name) for the app's lifetime.
 pub struct Session {
@@ -32,10 +41,22 @@ pub async fn start(page: &str, setting: &str) -> Result<Option<Session>, StartEr
     let conn = zbus::Connection::session()
         .await
         .map_err(StartError::NoBus)?;
-    claim_on(&conn, page, setting)
+    let owner = claim_on(&conn, page, setting)
         .await
-        .map_err(StartError::Claim)
-        .map(|owner| owner.then_some(Session { _conn: conn }))
+        .map_err(StartError::Claim)?;
+    if owner {
+        let _ = BUS.set((tokio::runtime::Handle::current(), conn.clone()));
+    }
+    Ok(owner.then_some(Session { _conn: conn }))
+}
+
+/// Follow uqd without claiming the single-instance name, for the screenshot run
+/// (`UQ_SETTINGS_SHOTS_BUS=1`, with `DBUS_SESSION_BUS_ADDRESS` pointing at a private bus).
+pub async fn follow_only() -> zbus::Result<Session> {
+    let conn = zbus::Connection::session().await?;
+    watch_owner(&conn, DESKTOP_NAME, |up| app::post(Event::UqdUp(up))).await?;
+    let _ = BUS.set((tokio::runtime::Handle::current(), conn.clone()));
+    Ok(Session { _conn: conn })
 }
 
 /// Serve, claim, and when this process is the owner, start following uqd. `true` = owner.

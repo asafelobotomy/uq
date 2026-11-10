@@ -68,6 +68,63 @@ pub struct PageInfo {
     pub settings: &'static [SearchEntry],
 }
 
+const fn entry(
+    id: &'static str,
+    label: &'static str,
+    keywords: &'static [&'static str],
+) -> SearchEntry {
+    SearchEntry {
+        id,
+        label,
+        keywords,
+    }
+}
+
+static APPEARANCE_SETTINGS: [SearchEntry; 10] = [
+    entry(
+        "theme",
+        "Theme",
+        &["colors", "colours", "palette", "scheme"],
+    ),
+    entry(
+        "variant",
+        "Light or dark",
+        &["variant", "mode", "dark mode", "light mode"],
+    ),
+    entry(
+        "schedule",
+        "Switch automatically",
+        &["schedule", "sunrise", "sunset", "time", "auto"],
+    ),
+    entry(
+        "ui-font",
+        "Interface font",
+        &["typeface", "text", "system font"],
+    ),
+    entry(
+        "mono-font",
+        "Monospace font",
+        &["typeface", "terminal", "code"],
+    ),
+    entry(
+        "font-size",
+        "Font size",
+        &["text size", "scale", "bigger text"],
+    ),
+    entry("cursor-theme", "Cursor theme", &["mouse", "pointer"]),
+    entry(
+        "cursor-size",
+        "Cursor size",
+        &["mouse", "pointer", "bigger cursor"],
+    ),
+    entry("icon-theme", "Icon theme", &["icons", "symbols"]),
+    entry(
+        "kvantum",
+        "Style Qt apps to match",
+        &["kvantum", "qt", "widgets", "style"],
+    ),
+];
+
 static CORE_PAGES: [PageInfo; 2] = [
     PageInfo {
         id: "appearance",
@@ -75,7 +132,7 @@ static CORE_PAGES: [PageInfo; 2] = [
         icon: "preferences-desktop-theme",
         category: Category::Personal,
         qml: "pages/AppearancePage.qml",
-        settings: &[],
+        settings: &APPEARANCE_SETTINGS,
     },
     PageInfo {
         id: "wallpaper",
