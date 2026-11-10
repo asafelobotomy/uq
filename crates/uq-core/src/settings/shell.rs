@@ -139,7 +139,7 @@ impl Default for ShellSettings {
 
 /// A desktop id for launching: `valid_pinned_id`, ending in `.desktop`, a non-empty stem that
 /// starts alphanumeric (never `-x`, so it can't be read as an option) and has no `..`.
-fn valid_terminal(t: &str) -> bool {
+pub fn valid_terminal(t: &str) -> bool {
     valid_pinned_id(t)
         && t.strip_suffix(".desktop")
             .is_some_and(|stem| stem.starts_with(|c: char| c.is_ascii_alphanumeric()))

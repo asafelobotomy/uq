@@ -13,7 +13,7 @@ use uq_core::client::DesktopProxy;
 use uq_core::launcher_providers::{self, ProviderDef};
 use uq_core::settings::{BUILTIN_PROVIDERS, Islands};
 
-use crate::desktop_entries::{self, AppEntry};
+use crate::desktop_entries;
 use crate::pages::runner::{PageLogic, parse_json, patch_section};
 
 /// The `SetSetting` keys this page may send.
@@ -286,7 +286,7 @@ impl PageLogic for ShellState {
         })
         .await
         .map_err(|e| zbus::Error::Failure(format!("reading the installed apps failed: {e}")))?;
-        let terminals: Vec<&AppEntry> = apps.iter().filter(|a| a.terminal_emulator).collect();
+        let terminals = desktop_entries::terminals(&apps);
         Ok(json!({
             "settings": settings,
             "providers": providers_list(&defs, &shell),

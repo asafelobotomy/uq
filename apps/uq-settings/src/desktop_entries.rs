@@ -7,7 +7,7 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
-use uq_core::settings::valid_pinned_id;
+use uq_core::settings::{valid_pinned_id, valid_terminal};
 
 const MAX_NAME_CHARS: usize = 200;
 
@@ -113,6 +113,13 @@ pub fn scan(dirs: &[PathBuf]) -> Vec<AppEntry> {
     out
 }
 
+/// The terminal emulators the page may offer: only ids uqd would save as `shell.terminal`.
+pub fn terminals(apps: &[AppEntry]) -> Vec<&AppEntry> {
+    apps.iter()
+        .filter(|a| a.terminal_emulator && valid_terminal(&a.id))
+        .collect()
+}
+
 fn file_id(path: &Path) -> Option<String> {
     let id = path.file_name()?.to_str()?;
     (id.ends_with(".desktop") && valid_pinned_id(id)).then(|| id.to_string())
@@ -184,6 +191,20 @@ mod tests {
         let apps = scan(&[user.path().to_path_buf(), system.path().to_path_buf()]);
         let names: Vec<_> = apps.iter().map(|a| a.name.as_str()).collect();
         assert_eq!(names, ["Mine"], "{apps:?}");
+    }
+
+    #[test]
+    fn only_savable_terminals_are_offered() {
+        let d = tempfile::tempdir().unwrap();
+        let term = "[Desktop Entry]\nName=T\nCategories=TerminalEmulator;\n";
+        for id in ["foot.desktop", "-x.desktop", "a..b.desktop", "_t.desktop"] {
+            write(d.path(), id, term);
+        }
+        write(d.path(), "ed.desktop", "[Desktop Entry]\nName=Ed\n");
+        let apps = scan(&[d.path().to_path_buf()]);
+        assert_eq!(apps.len(), 5, "every app is still listed (for pins)");
+        let ids: Vec<_> = terminals(&apps).iter().map(|a| a.id.as_str()).collect();
+        assert_eq!(ids, ["foot.desktop"]);
     }
 
     #[test]

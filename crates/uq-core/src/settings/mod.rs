@@ -19,6 +19,7 @@ pub use layouts::{
 pub use look::Look;
 pub use shell::{
     BUILTIN_PROVIDERS, Islands, ProviderPref, ShellSettings, provider_enabled, provider_order,
+    valid_terminal,
 };
 pub use wallpaper::{Fit, Wallpaper, WallpaperEntry};
 
