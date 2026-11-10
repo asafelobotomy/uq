@@ -31,16 +31,19 @@ verified by Hyprland before they apply, journalled for undo and restore points, 
 - **uq-settings:** a Qt-free page logic module `pages/rules.rs`, tested against the fake uqd, a
   thin `rules_model.rs`, the `RulesPage.qml` page and its components, and a registry entry under
   the uQ category.
+- **Profiles (Task 11):** `uq_core::profile` gains a fourth domain kind, `Rules`. A profile holds
+  only `[rules] "<id>" = true|false`, the on/off switch of an existing window or panel rule; it
+  can't create, delete or edit a rule.
 
 **Tech Stack:** Rust edition 2024, zbus 5, `regex` 1 and `regex-syntax` (new), cxx-qt 0.10, Qt 6,
 Kirigami 6, Quickshell, Hyprland 0.56.2–0.57.x (Lua config).
 
 **Spec:** `docs/superpowers/specs/2026-11-10-uq-settings-enhancements-design.md`. This plan covers
 §5 (the authority), the rules parts of §2 (the `user_lua` and `error` sources for rules), §3
-(history entries and labels for the `rules` domain), the §4 `rules` reservation (kept, see the
-ruling), §9, §10 (`PickWindow → s` and the pick-mode security line), and §12 slice C. It builds on
-slice A (`2026-11-10-uq-settings-slice-a-trust.md`, merged) and follows slice B's layout
-(`2026-11-10-uq-settings-slice-b-profiles.md`, merged).
+(history entries and labels for the `rules` domain), §4's `rules` key (profiles switch window and
+panel rules on and off, Task 11), §9, §10 (`PickWindow → s` and the pick-mode security line),
+and §12 slice C. It builds on slice A (`2026-11-10-uq-settings-slice-a-trust.md`, merged) and
+follows slice B's layout (`2026-11-10-uq-settings-slice-b-profiles.md`, merged).
 
 **Paths.** The settings app lives at `apps/uq-settings` (not `crates/`). Its QML tests are in
 `tests/settings-qml`, the shell's in `tests/qml`.
@@ -49,8 +52,12 @@ slice A (`2026-11-10-uq-settings-slice-a-trust.md`, merged) and follows slice B'
 
 A conflict scan against the code at `a28e7ab`
 (`.superpowers/sdd/2026-11-10-uq-settings-slice-c-rules/preflight.md`) found 37 issues. All
-rulings are accepted and folded into the task text below; this list is the index. The task count
-is unchanged (1–11).
+rulings are accepted and folded into the task text below; this list is the index. The scan's
+task count was 1–11; the user's decision below added Task 11, so the docs task is now Task 12.
+
+- **D1 (user decision, 2026-11-10, decision card).** Profiles can switch window rules on and off,
+  in this slice. This replaces the earlier ruling that profiles keep refusing `rules`. Task 11
+  does it; `keybinds` stays reserved.
 
 - **F1** Rules load per entry: a custom `Deserialize` keeps the entries that parse; entry structs are `deny_unknown_fields` (Task 2).
 - **F2** A supplied id must be valid and unique *within the payload*; current ids only steer `fresh_id`. Resending `GetSection` unchanged is accepted (Task 2).
@@ -76,18 +83,18 @@ is unchanged (1–11).
 - **F22** `MATCH_KEYS` is `[Field; 11]`; `silent` is listed explicitly in the known-key list (Tasks 1, 2).
 - **F23** File lists completed (Tasks 5–9).
 - **F24** Task 10 updates `profiles_page_registered_with_search_entries` and `pages_json_lists_pages_in_order`; icon `preferences-system-windows` (Task 10).
-- **F25** The profile pin goes into `from_journal_maps_domains` in `profile/overlay.rs`; no comment-only test change (Task 5).
+- **F25** ~~The profile pin goes into `from_journal_maps_domains`~~ Superseded by D1: Task 5 no longer touches `profile/overlay.rs`; Task 11 pins `from_journal("rules", …)` as `None` (rule toggles go through `rule_toggles`) (Task 11).
 - **F26** QML plain-text tests find the label by `objectName` and assert its literal text (Task 10).
 - **F27** Summary "fuzz" is a deterministic enumeration (Task 5).
 - **F28** Dialog titles are fixed literals; no ToolTip/FormData bound to data; template menu items use `contentItem: UqLabel` (Task 10).
 - **F29** RuleEditor builds JSON from catalogue keys; raw names live in a new `components/AdvancedDetails.qml` (Task 10).
-- **F30** Spec deviations listed below and in the PR; rules-in-profiles gets a follow-up row (Task 11).
+- **F30** Spec deviations listed below and in the PR; with D1 there is no rules-in-profiles follow-up row, and §12 row C names §4's `rules` key instead (Task 12).
 - **F31** `Verdict` and `Needs` serialise snake_case (Task 4).
 - **F32** `window_at` skips disabled monitors (Task 4).
 - **F33** Tag names starting with `uq_` are refused (Task 2).
 - **F34** Summaries show `name:web` as "web" (Task 5).
 - **F35** `RulesModel` uses slice A's refresh on window activation (Task 10).
-- **F36** Undo restores a whole list; the README says so (Task 11).
+- **F36** Undo restores a whole list; the README says so (Task 12).
 - **F37** `regex` must be fetched once through the proxy before `--locked` builds (Task 1).
 
 **Spec deviations (F30, recorded here and in the PR):**
@@ -100,9 +107,10 @@ is unchanged (1–11).
 3. The pick reply has the clicked window's 10 fields, not 5.
 4. `ListWindows` exists (not in §10's D-Bus list).
 5. `tag` matches a tag name, not a regex.
-6. Profiles still refuse `rules`, so §4 "rules (enable or disable named rules only)" has no slice
-   yet; Task 11 adds a follow-up row. Random per-machine ids make `[rules] "<id>"` profiles
-   non-portable; the slice that lifts the reservation decides how to key them.
+6. Profiles key rules by uQ's per-computer rule id (`[rules] "r-7f2c" = false`), not by name
+   (§4 says "named rules"). Ids are random per computer, so a profile carried to another
+   computer usually turns no rule on or off there: its unknown ids are skipped with a notice and
+   kept in the file (Task 11). Workspace rules can't be in a profile, since they have no on/off.
 
 ## Global Constraints
 
@@ -360,8 +368,9 @@ These are copied from the spec and the user's standing rules, except the lines m
     `last_rejected` and calls it; the app's fake uqd calls it too.
   - **Ruling:** there's no `runtime` source for rules. Hyprland 0.56 has no request that lists
     live rules, so uqd can't compare.
-  - **Ruling:** a rule from the active profile can't exist, because profiles still refuse
-    `rules` (below).
+  - `profile` (with `name`), added in Task 11 (D1): a `window.<id>` or `layer.<id>` row whose
+    source would be `uq` and whose `enabled` is still what the active profile set (`holds`). It
+    never replaces `error` or `user_lua`, as for settings.
 - **History (§3).** `rules` is a journal domain, through `SECTION_DOMAINS`.
   - **Ruling, summaries:** `history::diff::summarize` hands the `rules` domain to
     `rules::summary(before, after)`. It names up to three changes and then "and N more", for
@@ -381,18 +390,48 @@ These are copied from the spec and the user's standing rules, except the lines m
   - **Undo** restores the whole list that changed (each list is one leaf, as arrays are today).
     A forced undo of an older entry therefore also undoes later edits to other rules in the same
     list; the conflict prompt warns, and the README says so (F36).
-- **Ruling, profiles keep refusing `rules` (§4).** Slice B reserved `rules` and `keybinds`
-  (`DomainKind::Reserved`, "…which this version of uQ can't do yet"). This slice keeps the
-  reservation, because it's the smaller option:
-  - §12 row C doesn't ask for profile support.
-  - Lifting it needs overlay memos that address list items by id. Slice B's
-    `read_leaf`/`write_leaves`/K3 logic works on object paths only, so that's a new
-    turn-off case: a rule deleted while the profile is on.
-  - The profile format (`[rules] "<id>" = true|false`) is already fixed, so a later slice can
-    lift it with no format change.
-
-  Task 5 adds a test pinning this, and `profile::from_journal("rules", …)` stays `None`, so
-  "create from history" counts rule changes as "can't go in a profile".
+- **Ruling (D1), profiles switch rules on and off (§4).** Slice B reserved `rules` and
+  `keybinds` (`DomainKind::Reserved`). This slice lifts `rules` only; `keybinds` stays reserved
+  with its "…which this version of uQ can't do yet" refusal. Task 11 does all of it:
+  - **Format, unchanged from slice B's reservation:** `[rules]` holds `"<id>" = true|false`, one
+    leaf per rule, path `[id]`. Window and panel rule ids share one namespace (Task 2), so the
+    key needs no kind. That's the shape slice B's overlay already walks: `leaves` gives
+    `(["r-7f2c"], false)`, so memos, `holds`, K3 and `without_key` work unchanged. Only the
+    on/off switch: a profile can't add, delete, edit or reorder rules. Workspace rules have no
+    on/off and can't be in a profile.
+  - **`DomainKind::Rules`.** `read_leaf("rules", [id])` is the rule's `enabled` (window or
+    layer), `None` when no rule has that id. `write_leaves("rules", …)` sets `enabled` on
+    `State.rules` directly (turning a valid rule on or off can't make it invalid); a non-bool
+    is refused, and an id with no rule is refused (callers filter first).
+  - **Validation (`Profile::validate`, so import, export, `SetProfile` and the page's edits):**
+    every `[rules]` leaf has a one-segment path that passes `rules::valid_id`, and a bool value.
+    Refusals: "a profile can only turn a rule on or off" (a nested table or a non-bool) and
+    "isn't a rule id uQ makes". Ids are *not* checked against the current rules, and they count
+    toward `MAX_KEYS` like any key.
+  - **Unknown ids (ruling): skipped on apply with a notice, kept in the file.** Ids are random
+    per computer, a rule deleted while the profile was off can come back through undo or a
+    restore point with the same id, and refusing would make a whole imported profile unusable
+    for one stale key. Dropping them from the file would lose them silently. So `apply` sets only
+    ids present now (no memo for the others), and uqd adds the notice "N rules in this profile
+    aren't on this computer, so they were left out." (singular "1 rule … isn't …"). The
+    Profiles page lists such a key as "A rule that isn't on this computer", removable as usual.
+  - **Back to normal (K3).** As for any key: put `before` back where `enabled` still holds the
+    profile's value, keep and name the rest. **Ruling:** a rule deleted while the profile was on
+    is skipped silently: there's nothing to put back, and "kept" would be wrong. A rule edited in
+    other ways (name, match, effects, order) but with the same `enabled` is still put back; the
+    profile only owns the switch.
+  - **Labels.** A rule key reads "Window rule “<name>”" or "Panel rule “<name>”" from the current
+    rules (`profile::rule_label`), in Kept reports and on the Profiles page; `key_label` alone
+    (no state) gives "A rule". Names are plain text already (Task 2).
+  - **History.** The apply and Back to normal commits already diff `State.rules`, so their
+    entries are domain `rules`, origin `profile:<id>`, with Task 5's summaries ("Window rule
+    “X” turned off"). "Create from history" maps a `rules` entry through
+    `profile::rule_toggles(before, after)`: a rule present on both sides whose `enabled` changed
+    becomes the key `("rules", [id])`; every other rule change (added, removed, edited, moved,
+    any workspace rule) counts as "can't go in a profile". `from_journal("rules", …)` stays
+    `None`, since journal leaves for `rules` are whole lists.
+  - **Explain.** The `profile` source above, from one pure helper `profile::mark_rules` that
+    uqd and the fake uqd both call after `rules::explain`.
 
 ### Pick mode (§5, §10)
 
@@ -522,6 +561,12 @@ These are copied from the spec and the user's standing rules, except the lines m
    `rules.workspace` entry for `3` renders one merged call. A `rules` write never changes
    `layouts.workspaces`, and the reverse holds too. Task 3 tests
    `workspace_rule_merges_layout`, and Task 6 tests `layout_and_workspace_rule_writes_stay_apart`.
+6. **A profile and the rules it switches (D1).** A profile can only flip `enabled`: a hostile
+   `[rules]` (nested tables, non-bools, bad ids, control characters in a key) is refused at
+   parse with a plain message. Unknown ids never fail an apply. Back to normal puts back only
+   switches that still hold the profile's value, skips deleted rules, and never touches a rule's
+   other fields. Task 11 tests `rules_tree_validation`, `apply_skips_unknown_rule_ids` and
+   `turn_off_rules_k3`.
 
 ---
 
@@ -870,7 +915,7 @@ These are copied from the spec and the user's standing rules, except the lines m
 - [ ] **Step 4:** Run `cargo test -j 2 -p uq-core -- --test-threads=2`. Expected: PASS.
 - [ ] **Step 5:** Commit (K5 trailers): `feat(core): match windows the way Hyprland does, find the clicked window, rule templates`
 
-### Task 5: History summaries, the `user.lua` finders and `rules::explain`; profiles still refuse rules
+### Task 5: History summaries, the `user.lua` finders and `rules::explain`
 
 **Files:**
 - Create: `crates/uq-core/src/rules/summary.rs` and `crates/uq-core/src/rules/explain.rs`.
@@ -883,8 +928,8 @@ These are copied from the spec and the user's standing rules, except the lines m
     - factor the existing `--` cut of `find_in_user_lua` into
       `fn strip_lua_comment(line: &str) -> &str` (F8), used by all three finders;
     - `pub fn find_rule_in_user_lua(text: &str, id: &str) -> Option<u32>` and
-      `pub fn find_workspace_rule_in_user_lua(text: &str, selector: &str) -> Option<u32>`;
-  - `crates/uq-core/src/profile/overlay.rs` (tests only; F25).
+      `pub fn find_workspace_rule_in_user_lua(text: &str, selector: &str) -> Option<u32>`.
+  - (No profile change here: D1's profile work, including the old F25 pin, is Task 11.)
 
 **Interfaces:**
 - Produces:
@@ -902,7 +947,9 @@ These are copied from the spec and the user's standing rules, except the lines m
     `window.<id>`, `layer.<id>`, `workspace.<selector>`, each
     `{source, live: null, stored: null, detail}`, and, when `rejected` is `Some`, the section
     row `"rules"` (F9). With `rejected`, every row's source is `error` with `{message}`;
-    otherwise `user_lua` with `{line, path}` when a finder hits, else `uq`.
+    otherwise `user_lua` with `{line, path}` when a finder hits, else `uq`. (Task 11's
+    `profile::mark_rules` turns `uq` rows into `profile` afterwards; `explain` itself knows
+    nothing of profiles.)
 
 - [ ] **Step 1: Write the failing tests:**
   - In `summary.rs`:
@@ -927,13 +974,10 @@ These are copied from the spec and the user's standing rules, except the lines m
     - `user_lua_override_has_line_and_path`;
     - `rejected_adds_a_section_row_even_with_no_rules` (F9): empty `Rules` and
       `rejected = Some("bad")` give exactly `{"rules": {source: "error", detail: {message: "bad"}, …}}`.
-  - In `profile/overlay.rs`: add `"rules"` to the loop of the existing `from_journal_maps_domains`
-    (`from_journal("rules", …)` is `None`). `refuses_reserved_domains_for_now` already pins the
-    reservation and is left alone (F25).
 - [ ] **Step 2:** Run `cargo test -j 2 -p uq-core -- --test-threads=2`. Expected: FAIL.
 - [ ] **Step 3:** Implement.
 - [ ] **Step 4:** Re-run. Expected: PASS.
-- [ ] **Step 5:** Commit (K5 trailers): `feat(core): plain history lines for rule changes, rule overrides in user.lua; profiles keep refusing rules`
+- [ ] **Step 5:** Commit (K5 trailers): `feat(core): plain history lines for rule changes, rule overrides in user.lua`
 
 ### Task 6: uqd: the `rules` section, `Explain("rules")`, `ListWindows` and the compositor reads
 
@@ -1355,12 +1399,143 @@ These are copied from the spec and the user's standing rules, except the lines m
   and `cargo test -p uq-settings`.
 - [ ] **Step 5:** Commit (K5 trailers): `feat(settings): the Window rules page`
 
-### Task 11: Docs, changelog, live checks and the whole gate
+### Task 11: Profiles switch window and panel rules on and off
+
+D1 (user decision, 2026-11-10). Global Constraints, "Sources and history", has the rulings; this
+task builds them on slice B's overlay without changing its file format or its K3 logic.
+
+**Files:**
+- Create: `crates/uq-core/src/profile/rules.rs` (the rule helpers below and their tests; keeps
+  `mod.rs` and `overlay.rs` from growing past their size).
+- Modify:
+  - `crates/uq-core/src/profile/mod.rs`:
+    - `DomainKind` gains `Rules` ("the on/off switch of existing rules, by id");
+      `PROFILE_DOMAINS` maps `("rules", DomainKind::Rules)`; `("keybinds", Reserved)` stays;
+    - `needs_newer` loses its `rules` branch (only keyboard shortcuts are left);
+    - `validate` checks the `[rules]` tree with `rules::check_tree` (it isn't written to a
+      default `State`, which has no rules);
+    - `read_leaf` and `write_leaves` dispatch `DomainKind::Rules` to `rules::enabled_of` and
+      `rules::set_enabled`;
+    - `key_label("rules", [_])` is "A rule" (no state to name it);
+    - test `refuses_reserved_domains_for_now` keeps the `keybinds` case and drops the `rules`
+      one (its `"float-pavucontrol"` key isn't a valid id any more, and `[rules]` is no longer
+      reserved).
+  - `crates/uq-core/src/profile/overlay.rs`:
+    - `apply` leaves out `Rules` keys whose id has no rule in `current` (no write, no memo);
+    - `created_leaves` skips `DomainKind::Rules` domains;
+    - `turn_off` skips a `Rules` memo whose rule is gone (`read_leaf` is `None`), and labels Kept
+      rule keys with `rule_label(&current.rules, id)`;
+    - `changed_since` sends `rules` entries through `rule_toggles`;
+    - test `from_journal_maps_domains` gains `"rules"` → `None` (the old F25 pin).
+  - `crates/uqd/src/profiles.rs`: `apply_profile` adds the `missing_rules_notice` to `notices`.
+  - `crates/uqd/src/rules.rs`: `explain_rules` calls `profile::mark_rules` when a profile is on.
+  - `crates/uqd/src/profiles/tests.rs` and `crates/uqd/src/rules/tests.rs`.
+  - `apps/uq-settings/src/pages/profiles.rs`:
+    - `current` reads `GetSection("rules")` for the `rules` domain and turns it into keys with
+      `rule_keys`; `profile_journal_domains` and `holds_journal_domain` include `rules`, so the
+      Window rules page is offered under "The current settings of these pages" and every rule's
+      switch is offered in **Add settings**;
+    - the snapshot labels rule keys with `rule_label` (one `GetSection("rules")` per snapshot);
+  - `apps/uq-settings/src/profiles_model.rs`: `FOLLOW.sections` gains `"rules"`.
+  - `apps/uq-settings/src/pages/fake_uqd/profiles.rs`: `apply` adds the same notice.
+  - `apps/uq-settings/src/pages/fake_uqd.rs`: `explain("rules")` calls `profile::mark_rules`
+    before applying `Explain.overrides`.
+  - `apps/uq-settings/src/pages/rules.rs` (snapshot rows gain `profile`), `rules_model.rs`
+    (`FOLLOW.profiles = true`, so the label follows a profile turning on or off even when no
+    switch changed).
+  - `apps/uq-settings/qml/pages/RulesPage.qml`: the "From the X profile" line.
+  - `apps/uq-settings/src/pages/profiles/tests.rs` and `apps/uq-settings/src/pages/rules/tests.rs`.
+
+**Interfaces:**
+- Consumes: Task 2 (`Rules`, `valid_id`, ids unique across window and layer), Task 5
+  (`rules::explain`, summaries), Task 6 (`explain_rules`), Task 9 (the snapshot, the fake uqd),
+  Task 10 (`RulesPage.qml`, `RulesModel`), slice B's `profile` overlay.
+- Produces (`uq_core::profile`, re-exported from `profile/rules.rs`):
+  - `pub fn enabled_of(state: &State, id: &str) -> Option<bool>`: window rules, then layer.
+  - `pub fn set_enabled(state: &mut State, id: &str, on: bool) -> bool`: false when no rule has
+    the id.
+  - `pub fn check_tree(tree: &Value) -> Result<(), ProfileError>`: each leaf is one segment, a
+    `valid_id`, and a bool; keys `rules.<id>` in `Invalid`, read through `plain`.
+  - `pub fn rule_keys(rules: &Rules) -> Vec<Key>`: one `("rules", [id], bool)` per window and
+    layer rule, in list order (window first).
+  - `pub fn rule_label(rules: &Rules, id: &str) -> String`: "Window rule “<name>”", "Panel rule
+    “<name>”", or "A rule that isn't on this computer".
+  - `pub fn missing_rules(state: &State, profile: &Profile) -> usize` and
+    `pub fn missing_rules_notice(n: usize) -> String`. uqd and the fake count against the state
+    the profile is applied to (after the old profile's turn-off, in a switch).
+  - `pub fn rule_toggles(before: &Value, after: &Value) -> (Vec<String>, Vec<String>)`: ids
+    whose `enabled` changed with the rule on both sides; and the other changes, one tag each
+    (an id, or `workspace:<selector>`, or `order:window`/`order:layer`), so `changed_since` can
+    count them once.
+  - `pub fn mark_rules(rows: &mut Value, rules: &Rules, active: &ActiveProfile)`: for each
+    `window.<id>`/`layer.<id>` row with source `uq` where `holds(active, "rules", [id],
+    Bool(enabled))`, sets `source: "profile"`, `detail: {name}`.
+  - The Window rules snapshot rows (`window[]`, `layer[]`) gain `profile`: the profile's name
+    when `source == "profile"`, else `""`.
+
+- [ ] **Step 1: Write the failing tests:**
+  - In `profile/rules.rs`:
+    - `rules_tree_validation` (Review Focus 6): `[rules]\n"r-7f2c" = false` parses and
+      round-trips through `to_toml`; refused, each with a plain one-line message and the key
+      `rules.<…>`: `"x" = true`, `"r-ZZZZ" = true`, `"r-7f2c" = "off"`, `"r-7f2c" = [true]`,
+      `[rules.enabled]\n"r-7f2c" = true`, and a key holding `\u001b` (no control character in
+      the text). `[keybinds]` is still `NeedsNewer("keybinds")`.
+    - `read_and_write_rule_leaves`: `read_leaf`/`write_leaves` on a window and a layer rule;
+      a non-bool and an unknown id are refused and leave the state unchanged; the rule's
+      other fields are untouched.
+    - `rule_keys_and_labels` (names, the panel wording, the missing fallback).
+    - `rule_toggles_classifies` (a toggle; a toggle plus a rename is still a toggle; added,
+      removed, edited, moved and a workspace rule change are "other", each once).
+    - `mark_rules_only_overrides_uq` (a `user_lua` row and an `error` row stay; a switch
+      changed by hand since the apply stays `uq`).
+  - In `profile/overlay.rs`:
+    - `apply_skips_unknown_rule_ids`: a profile with one present and one unknown id sets the
+      present one, has one memo, and `missing_rules` is 1; the file text is unchanged.
+    - `turn_off_rules_k3`: profile turns rule A off and B on. By hand: B switched off again, C
+      (also in the profile) deleted, and A renamed. Back to normal turns A back on (its new
+      name kept), leaves B off and names it in Kept as "Window rule “B”", and says nothing of C.
+    - `changed_since_offers_rule_toggles`: an entry turning a rule off gives `("rules",
+      [id])`; an entry adding a rule counts 1 in "can't go in a profile".
+    - `from_journal_maps_domains` gains `"rules"` → `None`.
+  - In `crates/uqd/src/profiles/tests.rs`:
+    - `profile_turns_a_rule_off_and_back`: apply journals a `rules` entry with origin
+      `profile:<id>` and summary "Window rule “…” turned off", the verified `generated.lua` has
+      `enabled = false` for `uq:<id>`, and Back to normal puts it back on;
+    - `unknown_rule_id_is_a_notice`: the report's `notices` holds the missing-rules text and the
+      apply succeeds.
+  - In `crates/uqd/src/rules/tests.rs`: `explain_says_from_the_profile` (the row is `profile`
+    with the name while the switch holds; `uq` after a hand toggle; `user_lua` wins).
+  - In `apps/uq-settings/src/pages/profiles/tests.rs`:
+    - `rules_offered_in_add_settings` (`available` has each rule's switch, labelled by name,
+      text "On"/"Off"; workspace rules aren't there);
+    - `create_from_rules_page` (the Window rules page is in `pages`, and a profile made from it
+      holds every window and panel rule's switch);
+    - `create_from_history_takes_rule_toggles`;
+    - `missing_rule_key_is_labelled_and_removable`;
+    - `import_and_export_rules_round_trip`.
+  - In `apps/uq-settings/src/pages/rules/tests.rs`: `row_says_from_the_profile` (the fake's
+    profile on → the row's `source == "profile"` and `profile == "Gaming"`).
+- [ ] **Step 2:** Run `cargo test -j 2 -p uq-core profile -- --test-threads=2` and
+  `cargo test -j 2 -p uqd profile -- --test-threads=2`. Expected: FAIL.
+- [ ] **Step 3:** Implement. On the Window rules page each window and panel row, under its on/off
+  switch, shows a muted `UqLabel` "From the " + name + " profile" when `profile` isn't empty
+  (as `SettingRow` words it; `objectName: "ruleProfile"`, so it's a plain-text `UqLabel` the
+  lints already check), and the switch's `Accessible.description` says the same. The
+  Profiles page needs no QML change: rule keys arrive in `available` and in each profile's
+  `keys` like any other, shown through `UqLabel`. uqctl needs no change (`profile apply`
+  already prints notices and Kept labels; rule names have no control characters).
+- [ ] **Step 4:** Run `cargo test -j 2 -p uq-core -p uqd -p uqctl -- --test-threads=2`. Expected:
+  PASS, every slice B profile test included. Where Qt is installed (else CI, K4):
+  `cargo test -j 2 -p uq-settings -- --test-threads=2`, the settings QML suite and
+  `scripts/lint-settings.sh`.
+- [ ] **Step 5:** Commit (K5 trailers): `feat: profiles switch window and panel rules on and off`
+
+### Task 12: Docs, changelog, live checks and the whole gate
 
 **Files:**
 - Modify: `README.md`, `CHANGELOG.md` (`## [Unreleased]` → `### Added`) and
-  `docs/superpowers/specs/2026-11-10-uq-settings-enhancements-design.md` (§12: a follow-up row
-  for rules in profiles, F30).
+  `docs/superpowers/specs/2026-11-10-uq-settings-enhancements-design.md` (§12 row C names §4's
+  `rules` key, D1, F30).
 - Create: `docs/notes/settings-slice-c-live-check.md`.
 
 - [ ] **Step 1:** Update `README.md`:
@@ -1378,11 +1553,15 @@ These are copied from the spec and the user's standing rules, except the lines m
     a line that is a `--` comment doesn't count.
   - Add `PickWindow`, `PickDone`, `ListWindows` and `PickRequested` to the Settings D-Bus
     paragraph, and say that rules use `GetSection`/`SetSection("rules")`.
-  - Say that profiles can't hold rules yet.
+  - In the Profiles paragraph, say that a profile can turn window and panel rules on and off
+    (not add, change or delete them), keyed by the rule's id, so a profile from another computer
+    usually skips its rules with a notice; that "Back to normal" keeps a switch you flipped by
+    hand; and that keyboard shortcuts still can't be in a profile (D1).
 - [ ] **Step 2:** Add a `CHANGELOG.md` entry, **Window rules.** It names the page, pick mode, live
   preview, Why does this window…?, templates, panel and workspace rules, history and undo for
-  rules, and the new D-Bus calls. In the spec, add to §12 a row "C2. Rules in profiles | §4
-  `rules` key (enable or disable named rules), portable rule keys | C, B".
+  rules, profiles that turn rules on and off, and the new D-Bus calls. In the spec, change §12
+  row C's contents to "§5 rules domain, editor, pick mode, "why does this window…", §4 `rules`
+  key (on/off by rule id)" and its Needs to "A, B" (D1). No follow-up row.
 - [ ] **Step 3:** Write `docs/notes/settings-slice-c-live-check.md` in the style of
   `settings-slice-b-live-check.md` (run on real Hyprland; tick each item). The checks:
   1. **§1 criterion 4.** Open Pavucontrol. On **Window rules**, press **Pick a window** and click
@@ -1431,8 +1610,15 @@ These are copied from the spec and the user's standing rules, except the lines m
   10. **Refusals in plain words.** The patterns `negative:foo`, `[a&&b]`, `(?x)a` and `a{1001}`,
       a 201st rule and Float + Tile are each refused with a plain message (no "regex", one
       line), and nothing changes.
-  11. **Profiles.** Importing a profile with a `[rules]` table is still refused with "…which this
-      version of uQ can't do yet."
+  11. **Profiles (D1).** Add the Window rules page's switches of a float rule and a panel rule
+      to a profile with **Add settings** (they're listed by rule name), the float rule's set to
+      off. Turn the profile on: the rule's row says "From the <name> profile", History has a
+      "Window rule “…” turned off" row from the profile, and a reopened window no longer
+      floats. Flip the panel rule's switch by hand, then **Back to normal**: the float rule is
+      on again and the panel rule is named as kept. Export the profile, change one id in the
+      file, import it as a copy, and turn it on: it applies with "1 rule in this profile isn't
+      on this computer, so it was left out." A `[keybinds]` profile is still refused with
+      "…which this version of uQ can't do yet."
 - [ ] **Step 4:** Run the full gate, exactly as CI does:
   - `cargo fmt --all --check`;
   - `cargo clippy -j 2 --workspace --all-targets --all-features --locked -- -D warnings`;
