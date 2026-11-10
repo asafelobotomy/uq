@@ -4,8 +4,15 @@
 //! empty. The same text is the stored file and the export, so `parse` is the one gate every file
 //! passes: size, TOML, `format`, id, name, icon, domains, the power mode and every value.
 
+mod active;
+mod overlay;
 mod store;
 
+pub use active::{clear_active, load_active, save_active};
+pub use overlay::{
+    ActiveProfile, Kept, KeyMemo, PowerMemo, apply, changed_since, from_journal, holds, next_after,
+    turn_off,
+};
 pub use store::ProfileStore;
 
 use crate::history;
