@@ -369,4 +369,19 @@ mod tests {
             "{lines:?}"
         );
     }
+
+    #[test]
+    fn rules_summary_uses_names() {
+        let old = State::default();
+        let mut new = old.clone();
+        new.set_section(
+            "rules",
+            serde_json::json!({"window": [{"name": "Pavucontrol floats", "enabled": true,
+                "match": {"class": "a"}, "effects": {"float": true}}]}),
+        )
+        .unwrap();
+        let changes = crate::history::diff(&old, &new, &label);
+        let lines: Vec<_> = changes.iter().map(|c| c.summary.as_str()).collect();
+        assert_eq!(lines, ["Window rule “Pavucontrol floats” added"]);
+    }
 }

@@ -384,6 +384,41 @@ const MAX_TABLE_DEPTH: usize = 64;
 /// `decoration = {` finds `decoration:blur:enabled`). Lua `--` comments are ignored (a `--[[`
 /// block comment only on its first line); strings are not parsed, so `--` inside one also ends
 /// the scanned part of that line.
+/// The part of a `user.lua` line before a `--` comment. Strings are not parsed, so `--` inside
+/// one also ends the scanned part.
+fn strip_lua_comment(line: &str) -> &str {
+    line.find("--").map_or(line, |i| &line[..i])
+}
+
+/// The 1-based line of `user.lua` that names uQ's rule `id` (`name = "uq:<id>"`): the text
+/// `uq:<id>` followed by `"`, `'` or `]`. Comments are ignored.
+pub fn find_rule_in_user_lua(text: &str, id: &str) -> Option<u32> {
+    let marker = format!("uq:{id}");
+    text.lines().enumerate().find_map(|(n, line)| {
+        let line = strip_lua_comment(line);
+        let mut from = 0;
+        while let Some(i) = line[from..].find(&marker) {
+            let end = from + i + marker.len();
+            if matches!(line[end..].chars().next(), Some('"' | '\'' | ']')) {
+                return Some(u32::try_from(n + 1).unwrap_or(u32::MAX));
+            }
+            from += i + 1;
+        }
+        None
+    })
+}
+
+/// The 1-based line of `user.lua` with a `workspace_rule` call that names `selector` in quotes.
+/// Comments are ignored.
+pub fn find_workspace_rule_in_user_lua(text: &str, selector: &str) -> Option<u32> {
+    let (dq, sq) = (format!("\"{selector}\""), format!("'{selector}'"));
+    text.lines().enumerate().find_map(|(n, line)| {
+        let line = strip_lua_comment(line);
+        (line.contains("workspace_rule") && (line.contains(&dq) || line.contains(&sq)))
+            .then(|| u32::try_from(n + 1).unwrap_or(u32::MAX))
+    })
+}
+
 pub fn find_in_user_lua(text: &str, hypr_path: &str) -> Option<u32> {
     let (section, leaf) = hypr_path.rsplit_once(':')?;
     let sections: Vec<&str> = section.split(':').collect();
@@ -393,7 +428,7 @@ pub fn find_in_user_lua(text: &str, hypr_path: &str) -> Option<u32> {
     let mut deep = 0usize;
     for (n, line) in text.lines().enumerate() {
         let lineno = u32::try_from(n + 1).unwrap_or(u32::MAX);
-        let line = line.find("--").map_or(line, |i| &line[..i]);
+        let line = strip_lua_comment(line);
         if contains_word(line, &dotted) || contains_word(line, hypr_path) {
             return Some(lineno);
         }
@@ -453,6 +488,32 @@ mod tests {
             find_in_user_lua("general.gaps_inner = 1", "general:gaps_in"),
             None
         );
+    }
+
+    #[test]
+    fn finds_rule_name_in_user_lua() {
+        let text = "-- hl.window_rule({ name = \"uq:r-7f2c\" })\nx = 1 -- uq:r-7f2c\"\n\
+            hl.window_rule({ name = \"uq:r-7f2c0\", enabled = false })\n\
+            hl.window_rule({ name = \"uq:r-7f2c\", enabled = false })\n";
+        assert_eq!(find_rule_in_user_lua(text, "r-7f2c"), Some(4));
+        assert_eq!(find_rule_in_user_lua("n = 'uq:r-7f2c'", "r-7f2c"), Some(1));
+        assert_eq!(
+            find_rule_in_user_lua("n = [[uq:r-7f2c]]", "r-7f2c"),
+            Some(1)
+        );
+        assert_eq!(find_rule_in_user_lua("n = \"uq:r-7f2c0\"", "r-7f2c"), None);
+        assert_eq!(find_rule_in_user_lua("n = \"uq:r-7f2c", "r-7f2c"), None);
+        assert_eq!(find_rule_in_user_lua("-- \"uq:r-7f2c\"", "r-7f2c"), None);
+    }
+
+    #[test]
+    fn finds_workspace_rule_line() {
+        let text = "-- hl.workspace_rule({ workspace = \"3\" })\nx = \"3\"\n\
+            hl.workspace_rule({ workspace = \"3\", persistent = false })\n\
+            hl.workspace_rule({ workspace = 'name:web' })\n";
+        assert_eq!(find_workspace_rule_in_user_lua(text, "3"), Some(3));
+        assert_eq!(find_workspace_rule_in_user_lua(text, "name:web"), Some(4));
+        assert_eq!(find_workspace_rule_in_user_lua(text, "4"), None);
     }
 
     #[test]

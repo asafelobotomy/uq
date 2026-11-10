@@ -4,13 +4,17 @@
 //! repair. Hyprland's names live in [`hypr`]; patterns and value checks in `check`.
 
 mod check;
+mod explain;
 pub mod hypr;
 mod matcher;
+mod summary;
 mod templates;
 mod words;
 
 pub use check::check_pattern;
+pub use explain::explain;
 pub use matcher::{Compiled, Verdict, WindowInfo, matching, window_at, windows_from_clients};
+pub use summary::summary;
 pub use templates::{Needs, TEMPLATES, Template, build as build_template};
 pub use words::{effects_text, has_static, layer_effects_text, match_text, workspace_text};
 
