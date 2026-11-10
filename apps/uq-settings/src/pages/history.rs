@@ -58,7 +58,8 @@ pub struct UndoStack {
     pub own: Vec<String>,
     /// What Ctrl+Shift+Z undoes, newest last: the entries this app's undo wrote.
     pub redo: Vec<String>,
-    /// Every entry this app's undo and redo wrote (origin `restore`).
+    /// Every entry this app's Ctrl+Z and Ctrl+Shift+Z steps wrote (origin `restore`): undos of
+    /// `own` entries and redos. An undo of another change, picked from a list, isn't one.
     made: HashSet<String>,
     /// The entries redo wrote: undoable again, like `settings` ones.
     redone: HashSet<String>,
@@ -80,7 +81,7 @@ impl UndoStack {
         e.origin == ORIGIN && e.time >= self.session_start
     }
 
-    /// Whether this app wrote `e`: its own settings change, or its undo or redo.
+    /// Whether this app wrote `e`: its own settings change, or a step of its undo or redo.
     fn is_ours(&self, e: &Entry) -> bool {
         self.is_own_setting(e) || self.made.contains(&e.id)
     }
@@ -126,12 +127,10 @@ impl UndoStack {
     /// entry is a redo: its result is undoable again. Undoing an own entry moves it to redo.
     pub fn record(&mut self, target: &str, result: &str) {
         let has_result = !result.is_empty();
-        if has_result {
-            self.made.insert(result.to_string());
-        }
         if let Some(i) = self.redo.iter().position(|r| r == target) {
             self.redo.remove(i);
             if has_result {
+                self.made.insert(result.to_string());
                 self.redone.insert(result.to_string());
                 self.own.push(result.to_string());
             }
@@ -139,6 +138,7 @@ impl UndoStack {
             self.own.remove(i);
             self.undone.insert(target.to_string());
             if has_result {
+                self.made.insert(result.to_string());
                 self.redo.push(result.to_string());
             }
         }
@@ -157,7 +157,18 @@ struct Notice {
 struct Conflict {
     seq: u64,
     id: String,
+    /// Whether it was a redo (undoing an undo), so the window says "Redo".
+    redo: bool,
+    /// uqd's message without its closing "Undo anyway?": the window asks the question.
     message: String,
+}
+
+/// uqd's conflict message without the question it ends with.
+fn conflict_message(text: &str) -> String {
+    let text = text.trim();
+    text.strip_suffix("Undo anyway?")
+        .map_or(text, str::trim_end)
+        .to_string()
 }
 
 #[derive(Debug, Default)]
@@ -233,12 +244,14 @@ impl HistoryState {
                 Ok(())
             }
             Err(zbus::Error::MethodError(name, text, _)) if name.as_str() == CONFLICT => {
+                let redo = self.stack.lock().unwrap().redo.iter().any(|r| r == target);
                 let mut shown = self.shown.lock().unwrap();
                 shown.seq += 1;
                 shown.conflict = Some(Conflict {
                     seq: shown.seq,
                     id: target.to_string(),
-                    message: text.unwrap_or_default(),
+                    redo,
+                    message: conflict_message(&text.unwrap_or_default()),
                 });
                 Ok(())
             }
@@ -248,7 +261,7 @@ impl HistoryState {
 }
 
 /// The state is `{entries, points, session_start, canUndo, canRedo, notice: {seq, text},
-/// conflict: {seq, id, message} | null}`; entries and points newest first, as uqd lists them.
+/// conflict: {seq, id, redo, message} | null}`; entries and points newest first, as uqd lists them.
 impl PageLogic for HistoryState {
     type Op = Op;
 
@@ -358,6 +371,7 @@ impl PageLogic for HistoryState {
             "conflict": shown.conflict.as_ref().map(|c| json!({
                 "seq": c.seq,
                 "id": c.id,
+                "redo": c.redo,
                 "message": c.message,
             })),
         }))
@@ -523,10 +537,9 @@ mod tests {
         );
         let conflict = &out.state["conflict"];
         assert_eq!(conflict["id"], own.as_str());
-        assert_eq!(
-            conflict["message"],
-            "look was changed again after this. Undo anyway?"
-        );
+        assert_eq!(conflict["redo"], false);
+        // The window asks the question; uqd's own "Undo anyway?" would ask it twice.
+        assert_eq!(conflict["message"], "look was changed again after this.");
         assert_eq!(section(&r, "look")["rounding"], 4, "nothing undone yet");
 
         // "Undo anyway".
@@ -551,6 +564,49 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn redo_conflict_says_redo() {
+        let (r, page) = rig().await;
+        write(&r, ORIGIN, "look", "rounding", json!(4)).await;
+        let undo = {
+            run(&page, Op::UndoLast).await;
+            r.history.last_id()
+        };
+        write(&r, "uqctl", "look", "border_width", json!(3)).await;
+        let out = run(&page, Op::RedoLast).await;
+        let conflict = &out.state["conflict"];
+        assert_eq!(conflict["id"], undo.as_str());
+        assert_eq!(conflict["redo"], true);
+        assert_eq!(conflict["message"], "look was changed again after this.");
+        assert_eq!(
+            section(&r, "look")["rounding"],
+            Value::Null,
+            "not redone yet"
+        );
+    }
+
+    #[tokio::test]
+    async fn picked_undo_of_another_change_is_not_ours() {
+        let (r, page) = rig().await;
+        let other = write(&r, "uqctl", "look", "gaps_in", json!(6)).await;
+        let own = write(&r, ORIGIN, "look", "rounding", json!(4)).await;
+        // The user picks the terminal's change from the list and forces its undo.
+        let out = run(
+            &page,
+            Op::Undo {
+                id: other,
+                force: true,
+            },
+        )
+        .await;
+        assert_eq!(out.error, None);
+        // That undo wrote `look` after the app's own change, and it was not a Ctrl+Z step: Ctrl+Z
+        // must ask, not silently write back a section that still holds the terminal's change.
+        let out = run(&page, Op::UndoLast).await;
+        assert_eq!(out.state["conflict"]["id"], own.as_str());
+        assert_eq!(out.state["conflict"]["redo"], false);
+    }
+
+    #[tokio::test]
     async fn picked_undo_keeps_uqds_check_and_joins_the_stack() {
         let (r, page) = rig().await;
         let first = write(&r, ORIGIN, "look", "rounding", json!(4)).await;
@@ -567,7 +623,7 @@ mod tests {
         .await;
         assert_eq!(
             out.state["conflict"]["message"],
-            "look was changed again after this. Undo anyway?"
+            "look was changed again after this."
         );
         assert_eq!(section(&r, "look")["gaps_in"], 6);
 

@@ -72,32 +72,37 @@ Kirigami.ApplicationWindow {
         }
     }
 
-    // Undo and redo this app's own changes of this session (see pages::history).
+    // Undo and redo this app's own changes of this session (see pages::history). Not while a
+    // history request is in flight: each press is its own task, so a quick undo then redo could
+    // otherwise reach uqd in the other order.
     Shortcut {
         sequences: [StandardKey.Undo]
-        enabled: !root.editingText
+        enabled: !root.editingText && !HistoryModel.busy
         onActivated: HistoryModel.undoLast()
     }
     Shortcut {
         sequences: [StandardKey.Redo, "Ctrl+Shift+Z"]
-        enabled: !root.editingText
+        enabled: !root.editingText && !HistoryModel.busy
         onActivated: HistoryModel.redoLast()
         // StandardKey.Redo is often Ctrl+Shift+Z itself; the same key twice in one Shortcut is
         // reported as ambiguous instead of activated.
         onActivatedAmbiguously: HistoryModel.redoLast()
     }
 
-    // uqd refused an undo because the setting changed again since: ask before forcing it.
+    // uqd refused an undo (or a redo, which undoes an undo) because the setting changed again
+    // since: ask before forcing it. uqd's message says what changed; the title and the button
+    // ask the question.
     Kirigami.PromptDialog {
         id: conflictDialog
 
         property string entryId
+        property bool redo: false
 
-        title: "Undo anyway?"
+        title: conflictDialog.redo ? "Redo this change?" : "Undo this change?"
         standardButtons: Kirigami.Dialog.Cancel
         customFooterActions: [
             Kirigami.Action {
-                text: "Undo anyway"
+                text: conflictDialog.redo ? "Redo anyway" : "Undo anyway"
                 icon.name: "edit-undo"
                 onTriggered: {
                     HistoryModel.undo(conflictDialog.entryId, true);
@@ -159,6 +164,7 @@ Kirigami.ApplicationWindow {
             if (conflict && conflict.seq > root.conflictSeen) {
                 root.conflictSeen = conflict.seq;
                 conflictDialog.entryId = conflict.id;
+                conflictDialog.redo = conflict.redo === true;
                 conflictMessage.text = conflict.message;
                 conflictDialog.open();
             }
