@@ -83,6 +83,7 @@ impl PageModel for AppearanceModel {
         theme: true,
         settings: true,
         history: false,
+        monitors: false,
     };
 
     fn core(&self) -> &ModelCore<AppearanceState> {

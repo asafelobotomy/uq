@@ -28,6 +28,10 @@ pub trait Compositor: Send + Sync {
     async fn set_cursor(&self, theme: &str, size: u8) -> Result<(), CompositorError>;
     /// Current config errors (`hyprctl configerrors`).
     async fn config_errors(&self) -> Result<Vec<String>, CompositorError>;
+    /// Live outputs as JSON (`hyprctl monitors all -j`).
+    async fn monitors(&self) -> Result<String, CompositorError>;
+    /// Live input devices as JSON (`hyprctl devices -j`).
+    async fn devices(&self) -> Result<String, CompositorError>;
     /// One option's live value (`hyprctl -j getoption <path>`, path like `general:gaps_in`):
     /// the reply's value field (`int`, `float`, `bool`, `str`, `custom`, `css`, …).
     async fn get_option(&self, path: &str) -> Result<serde_json::Value, CompositorError>;
@@ -149,6 +153,14 @@ impl Compositor for Hyprland {
         Ok(lines.into_iter().filter(|l| !l.trim().is_empty()).collect())
     }
 
+    async fn monitors(&self) -> Result<String, CompositorError> {
+        self.socket.request("j/monitors all").await
+    }
+
+    async fn devices(&self) -> Result<String, CompositorError> {
+        self.socket.request("j/devices").await
+    }
+
     async fn get_option(&self, path: &str) -> Result<serde_json::Value, CompositorError> {
         option_value(&self.socket.request(&format!("j/getoption {path}")).await?)
     }
@@ -168,6 +180,14 @@ pub mod fake {
         pub calls: Mutex<Vec<String>>,
         /// (main config path, its contents) for every `verify` call.
         pub verified: Mutex<Vec<(std::path::PathBuf, String)>>,
+        /// What `monitors` returns (`monitors all -j`); empty means `[]`.
+        pub monitors_json: Mutex<String>,
+        /// What `devices` returns (`devices -j`); empty means `{}`.
+        pub devices_json: Mutex<String>,
+        /// `Some(msg)` makes the next `eval` return `Rejected(msg)`, once.
+        pub eval_error: Mutex<Option<String>>,
+        /// `Some(msg)` makes the next `reload` return `Rejected(msg)`, once.
+        pub reload_error: Mutex<Option<String>>,
         /// What `get_option` answers per option path; a missing path is `Rejected`.
         pub options: Mutex<std::collections::HashMap<String, serde_json::Value>>,
     }
@@ -213,16 +233,34 @@ pub mod fake {
             }
         }
         async fn eval(&self, lua: &str) -> Result<(), CompositorError> {
-            self.record(format!("eval {lua}"))
+            self.record(format!("eval {lua}"))?;
+            match self.eval_error.lock().unwrap().take() {
+                Some(msg) => Err(CompositorError::Rejected(msg)),
+                None => Ok(()),
+            }
         }
         async fn reload(&self) -> Result<(), CompositorError> {
-            self.record("reload".into())
+            self.record("reload".into())?;
+            match self.reload_error.lock().unwrap().take() {
+                Some(msg) => Err(CompositorError::Rejected(msg)),
+                None => Ok(()),
+            }
         }
         async fn set_cursor(&self, theme: &str, size: u8) -> Result<(), CompositorError> {
             self.record(format!("setcursor {theme} {size}"))
         }
         async fn config_errors(&self) -> Result<Vec<String>, CompositorError> {
             self.record("configerrors".into()).map(|()| Vec::new())
+        }
+        async fn monitors(&self) -> Result<String, CompositorError> {
+            self.record("monitors".into())?;
+            let j = self.monitors_json.lock().unwrap().clone();
+            Ok(if j.is_empty() { "[]".into() } else { j })
+        }
+        async fn devices(&self) -> Result<String, CompositorError> {
+            self.record("devices".into())?;
+            let j = self.devices_json.lock().unwrap().clone();
+            Ok(if j.is_empty() { "{}".into() } else { j })
         }
         async fn get_option(&self, path: &str) -> Result<serde_json::Value, CompositorError> {
             if !*self.running.lock().unwrap() {
@@ -305,6 +343,34 @@ mod tests {
             server.await.unwrap(),
             vec![format!("eval {rule}"), "reload".to_string()]
         );
+    }
+
+    #[tokio::test]
+    async fn oversized_reply_is_an_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let sock_dir = dir.path().join("hypr/SIG");
+        std::fs::create_dir_all(&sock_dir).unwrap();
+        let listener = UnixListener::bind(sock_dir.join(".socket.sock")).unwrap();
+        tokio::spawn(async move {
+            for len in [
+                crate::hypr::MAX_REPLY_BYTES,
+                crate::hypr::MAX_REPLY_BYTES + 1,
+            ] {
+                let (mut s, _) = listener.accept().await.unwrap();
+                let mut buf = [0u8; 64];
+                let _ = s.read(&mut buf).await.unwrap();
+                let _ = s.write_all(&vec![b'x'; len]).await;
+            }
+        });
+        let h = Hyprland::new(Some(dir.path().into()), Some("SIG".into()));
+        assert_eq!(
+            h.devices().await.unwrap().len(),
+            crate::hypr::MAX_REPLY_BYTES
+        );
+        assert!(matches!(
+            h.devices().await,
+            Err(CompositorError::Rejected(_))
+        ));
     }
 
     #[tokio::test]

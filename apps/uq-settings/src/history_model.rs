@@ -99,6 +99,7 @@ impl PageModel for HistoryModel {
         theme: false,
         settings: false,
         history: true,
+        monitors: false,
     };
 
     fn core(&self) -> &ModelCore<HistoryState> {

@@ -739,3 +739,69 @@ async fn desktop_proxy_matches_the_interface() {
     proxy.reapply("look").await.unwrap();
     assert!(proxy.explain("bogus").await.is_err());
 }
+
+#[tokio::test]
+async fn input_section_round_trip_over_dbus() {
+    let dir = tempfile::tempdir().unwrap();
+    let bus = private_bus();
+    let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut paths = uq_core::paths::Paths::under(&dir.path().join("root"));
+    paths.themes_dir = repo.join("themes");
+    paths.templates_dir = repo.join("templates");
+    let generated = paths.generated_lua.clone();
+    let comp = Arc::new(FakeCompositor::running());
+    *comp.devices_json.lock().unwrap() =
+        r#"{"mice":[{"name":"mx","defaultSpeed":0.25}],"keyboards":[{"name":"kb"}],"touch":[]}"#
+            .into();
+    let desktop = Desktop::new(paths, comp, Arc::new(FakeSystem::default())).unwrap();
+    let _server = serve(
+        zbus::connection::Builder::address(bus.address.as_str()).unwrap(),
+        desktop,
+    )
+    .await
+    .unwrap();
+    let client = zbus::connection::Builder::address(bus.address.as_str())
+        .unwrap()
+        .build()
+        .await
+        .unwrap();
+    let proxy = zbus::Proxy::new(&client, NAME, PATH, IFACE).await.unwrap();
+    let mut changed = proxy.receive_signal("SectionChanged").await.unwrap();
+
+    let () = proxy
+        .call(
+            "SetSection",
+            &(
+                "input",
+                r#"{"keyboard":{"layouts":[{"layout":"us"},{"layout":"de"}]}}"#,
+                "settings",
+            ),
+        )
+        .await
+        .unwrap();
+    let got: String = proxy.call("GetSection", &("input",)).await.unwrap();
+    let got: serde_json::Value = serde_json::from_str(&got).unwrap();
+    assert_eq!(got["keyboard"]["layouts"][1]["layout"], "de");
+    assert!(
+        std::fs::read_to_string(&generated)
+            .unwrap()
+            .contains(r#"kb_layout = "us,de""#)
+    );
+    let msg = tokio::time::timeout(std::time::Duration::from_secs(5), changed.next())
+        .await
+        .unwrap()
+        .unwrap();
+    let (domain, _): (String, String) = msg.body().deserialize().unwrap();
+    assert_eq!(domain, "input");
+
+    let devices: String = proxy.call("ListInputDevices", &()).await.unwrap();
+    let devices: serde_json::Value = serde_json::from_str(&devices).unwrap();
+    assert_eq!(devices["pointers"][0]["name"], "mx");
+    assert_eq!(devices["keyboards"][0]["name"], "kb");
+
+    let err = proxy
+        .call::<_, _, ()>("SetSection", &("monitors", r#"{"outputs":{}}"#, "settings"))
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("InvalidSetting"), "{err}");
+}

@@ -18,6 +18,11 @@ pub trait Desktop {
     fn get_settings(&self) -> zbus::Result<String>;
     fn get_section(&self, domain: &str) -> zbus::Result<String>;
     fn set_section(&self, domain: &str, json: &str, origin: &str) -> zbus::Result<()>;
+    fn list_input_devices(&self) -> zbus::Result<String>;
+    fn list_outputs(&self) -> zbus::Result<String>;
+    fn apply_monitors(&self, json: &str) -> zbus::Result<String>;
+    fn confirm_monitors(&self, token: &str, origin: &str) -> zbus::Result<()>;
+    fn revert_monitors(&self, token: &str) -> zbus::Result<()>;
     fn set_setting(&self, key: &str, json: &str, origin: &str) -> zbus::Result<()>;
     fn get_launch_counts(&self) -> zbus::Result<HashMap<String, u32>>;
     fn clear_launch_counts(&self) -> zbus::Result<()>;
@@ -45,6 +50,8 @@ pub trait Desktop {
     fn settings_changed(&self, json: &str) -> zbus::Result<()>;
     #[zbus(signal)]
     fn history_changed(&self) -> zbus::Result<()>;
+    #[zbus(signal)]
+    fn monitors_changed(&self) -> zbus::Result<()>;
 }
 
 /// The Settings app's single-instance interface. An empty `page_id` means "just raise".

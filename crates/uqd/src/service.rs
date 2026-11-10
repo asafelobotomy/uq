@@ -15,7 +15,7 @@ use uq_core::history::{
 };
 use uq_core::lua::{Layout, emit_generated, emit_workspace_rule, lua_string};
 use uq_core::paths::Paths;
-use uq_core::render::{kvantum_base, render};
+use uq_core::render::{RenderedFiles, kvantum_base, render};
 use uq_core::schedule::{Schedule, last_event, variant_at};
 use uq_core::settings::{
     SECTION_DOMAINS, Settings, provenance, renders_config, renders_section, set_rule,
@@ -49,6 +49,8 @@ pub enum Event {
     },
     /// The journal gained entries.
     HistoryChanged,
+    /// A display change was applied, confirmed or reverted: `ListOutputs` has the new picture.
+    MonitorsChanged,
 }
 
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
@@ -97,7 +99,7 @@ pub struct Desktop {
     pub(crate) paths: Paths,
     themes: ThemeRegistry,
     pub(crate) state: State,
-    comp: Arc<dyn Compositor>,
+    pub(crate) comp: Arc<dyn Compositor>,
     sys: Arc<dyn SystemSettings>,
     pub(crate) events: broadcast::Sender<Event>,
     kvantum_dir: PathBuf,
@@ -111,6 +113,10 @@ pub struct Desktop {
     last_entry_ids: Vec<String>,
     /// `(domain, Hyprland's message)` of the last section write that failed verification.
     last_rejected: Option<(String, String)>,
+    /// The display change waiting for `ConfirmMonitors`, if any.
+    pub(crate) pending: Option<crate::monitors::Pending>,
+    /// How long an unconfirmed display change stays ([`crate::monitors::REVERT_AFTER`]).
+    pub(crate) revert_after: Duration,
 }
 
 /// How much of `user.lua` `explain` scans.
@@ -139,6 +145,17 @@ fn domain_label(domain: &str) -> &'static str {
         "settings" => "A setting",
         _ => "This setting",
     }
+}
+
+/// A rendered, verified candidate config, left on disk until `install` writes it.
+pub(crate) struct Candidate {
+    pub(crate) files: RenderedFiles,
+    /// The candidate's text; Task 5's `apply_monitors` diffs and evals from it.
+    #[allow(dead_code)]
+    pub(crate) generated: String,
+    pub(crate) path: PathBuf,
+    /// The theme resolved for `next`, so `install` needs no second lookup.
+    pub(crate) theme: uq_core::theme::Theme,
 }
 
 /// Launch counts stop here per app.
@@ -213,6 +230,8 @@ impl Desktop {
             restore,
             last_entry_ids: Vec::new(),
             last_rejected: None,
+            pending: None,
+            revert_after: crate::monitors::REVERT_AFTER,
         })
     }
 
@@ -394,11 +413,17 @@ impl Desktop {
             tracing::warn!("{e}");
         }
         self.save_new_version_point();
+        // A display change left unconfirmed by a crash: the stored config never changed, so
+        // the reload below puts the old layout back.
+        let crashed_mid_apply = self.clear_stale_monitor_marker();
         if let Err(e) = self
             .commit(self.state.clone(), Change::Theme, Origin::Schedule)
             .await
         {
             tracing::warn!("startup render failed: {e}");
+        }
+        if crashed_mid_apply {
+            let _ = self.events.send(Event::MonitorsChanged);
         }
     }
 
@@ -554,8 +579,17 @@ impl Desktop {
                     .section(&domain)
                     .map_err(|e| DesktopError::InvalidSetting(e.to_string()))?;
                 let value = revert_changed(&current, &before, &entry.after);
-                self.set_section(&domain, &value.to_string(), Origin::Restore)
-                    .await?;
+                if domain == "monitors" {
+                    // Displays never take SetSection; an undo goes back to a layout the user
+                    // already kept, so it is saved and reloaded without a revert window.
+                    let mut next = self.state.clone();
+                    next.set_section(&domain, value)
+                        .map_err(|e| DesktopError::InvalidSetting(e.to_string()))?;
+                    self.write_monitors(next, Origin::Restore).await?;
+                } else {
+                    self.set_section(&domain, &value.to_string(), Origin::Restore)
+                        .await?;
+                }
             }
         }
         Ok(())
@@ -825,6 +859,13 @@ impl Desktop {
         change: Change,
         origin: Origin,
     ) -> Result<(), DesktopError> {
+        let c = self.render_candidate(&next).await?;
+        self.install(c, next, change, origin).await
+    }
+
+    /// Render `next`, write the candidate `generated.lua` and have Hyprland verify it. The
+    /// candidate stays on disk for `install`; a rejected one is removed.
+    pub(crate) async fn render_candidate(&self, next: &State) -> Result<Candidate, DesktopError> {
         let theme = self
             .themes
             .get(&next.theme, next.variant)
@@ -842,7 +883,7 @@ impl Desktop {
         let generated = emit_generated(&theme, &next.layouts, &next.settings);
 
         self.ensure_user_lua()?;
-        let candidate = self
+        let path = self
             .paths
             .generated_lua
             .with_file_name("generated.lua.candidate");
@@ -852,7 +893,7 @@ impl Desktop {
             .paths
             .hypr_dir
             .join(format!(".uq-verify-{}.lua", std::process::id()));
-        atomic_write(&candidate, &generated).map_err(io_err("writing candidate config"))?;
+        atomic_write(&path, &generated).map_err(io_err("writing candidate config"))?;
         let main_src = format!(
             "require({})\nrequire(\"./uq/generated.lua.candidate\")\nrequire(\"./uq/user.lua\")\n",
             lua_string(&self.paths.base_lua.to_string_lossy())
@@ -865,22 +906,38 @@ impl Desktop {
         match verdict {
             Ok(()) => {}
             Err(CompositorError::Rejected(msg)) => {
-                let _ = std::fs::remove_file(&candidate);
+                let _ = std::fs::remove_file(&path);
                 let _ = self.events.send(Event::ConfigError(msg.clone()));
                 return Err(DesktopError::ConfigInvalid(msg));
             }
             Err(e) => tracing::warn!("could not validate config ({e}); applying unvalidated"),
         }
+        Ok(Candidate {
+            files,
+            generated,
+            path,
+            theme,
+        })
+    }
 
-        let committed = atomic_replace_dir(&self.paths.theme_dir, &files)
+    /// Write a verified candidate (theme dir, `generated.lua`, state), then apply `change` live.
+    pub(crate) async fn install(
+        &mut self,
+        c: Candidate,
+        next: State,
+        change: Change,
+        origin: Origin,
+    ) -> Result<(), DesktopError> {
+        let theme = c.theme.clone();
+        let committed = atomic_replace_dir(&self.paths.theme_dir, &c.files)
             .map_err(io_err("writing theme files"))
             .and_then(|()| {
-                std::fs::rename(&candidate, &self.paths.generated_lua)
+                std::fs::rename(&c.path, &self.paths.generated_lua)
                     .map_err(io_err("installing generated.lua"))
             })
             .and_then(|()| self.persist(next, origin));
         if let Err(e) = committed {
-            let _ = std::fs::remove_file(&candidate);
+            let _ = std::fs::remove_file(&c.path);
             return Err(e);
         }
         // Every section is rendered into the config just installed, so no rejection is pending.
@@ -904,9 +961,11 @@ impl Desktop {
             }
             Change::Reload => {
                 let _ = self.live(self.comp.reload().await);
+                self.reapply_pending().await;
             }
             Change::Input => {
                 let _ = self.live(self.comp.reload().await);
+                self.reapply_pending().await;
                 let _ = self.events.send(Event::SettingsChanged(Box::new(
                     self.state.settings.clone(),
                 )));
@@ -914,7 +973,9 @@ impl Desktop {
             Change::Theme => {
                 // gsettings are desktop-wide: only touch them while a Hyprland session is live,
                 // so a uqd left running never re-themes another desktop.
-                if self.live(self.comp.reload().await) {
+                let live = self.live(self.comp.reload().await);
+                self.reapply_pending().await;
+                if live {
                     if let Err(e) = self.sys.apply(&theme) {
                         tracing::warn!("system settings: {e}");
                     }

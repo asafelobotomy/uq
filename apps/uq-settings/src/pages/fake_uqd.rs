@@ -16,6 +16,10 @@ use uq_core::settings::provenance;
 use uq_core::settings::renders_section;
 use uq_core::state::State;
 use uq_core::test_bus::{Bus, connect, private_bus};
+use zbus::object_server::SignalEmitter;
+
+mod devices;
+pub use devices::Displays;
 
 #[derive(Debug, zbus::DBusError)]
 #[zbus(prefix = "org.uq.Desktop1.Error")]
@@ -40,6 +44,7 @@ pub struct FakeUqd {
     pub verify_error: Arc<Mutex<Option<String>>>,
     pub explain: Explain,
     pub history: History,
+    pub displays: Displays,
 }
 
 /// The fake's journal and restore points.
@@ -200,6 +205,9 @@ impl FakeUqd {
     }
 
     fn set_section(&self, domain: &str, json: &str, origin: &str) -> Result<(), FakeError> {
+        if domain == "monitors" {
+            return Err(invalid("displays change through ApplyMonitors"));
+        }
         let value =
             serde_json::from_str(json).map_err(|e| invalid(format!("value is not JSON: {e}")))?;
         self.write(origin, |next| {
@@ -215,6 +223,53 @@ impl FakeUqd {
         })?;
         Ok(())
     }
+
+    fn list_outputs(&self) -> String {
+        let stored = self.state.lock().unwrap().settings.monitors.clone();
+        self.displays.list(&stored)
+    }
+
+    async fn apply_monitors(
+        &self,
+        json: &str,
+        #[zbus(signal_emitter)] e: SignalEmitter<'_>,
+    ) -> Result<String, FakeError> {
+        let token = self.displays.apply(json)?;
+        let _ = Self::monitors_changed(&e).await;
+        Ok(token)
+    }
+
+    async fn confirm_monitors(
+        &self,
+        token: &str,
+        origin: &str,
+        #[zbus(signal_emitter)] e: SignalEmitter<'_>,
+    ) -> Result<(), FakeError> {
+        let candidate = self.displays.take(token)?;
+        self.write(origin, |s| {
+            s.settings.monitors = candidate;
+            Ok(())
+        })?;
+        let _ = Self::monitors_changed(&e).await;
+        Ok(())
+    }
+
+    async fn revert_monitors(
+        &self,
+        token: &str,
+        #[zbus(signal_emitter)] e: SignalEmitter<'_>,
+    ) -> Result<(), FakeError> {
+        self.displays.take(token)?;
+        let _ = Self::monitors_changed(&e).await;
+        Ok(())
+    }
+
+    fn list_input_devices(&self) -> String {
+        devices::input_devices()
+    }
+
+    #[zbus(signal)]
+    async fn monitors_changed(e: &SignalEmitter<'_>) -> zbus::Result<()>;
 
     fn list_history(&self, limit: u32) -> String {
         let entries = self.history.entries.lock().unwrap();
@@ -385,6 +440,22 @@ pub struct Rig {
     pub explain: Explain,
     /// The journal and the restore points.
     pub history: History,
+    /// The live outputs and the pending display change.
+    pub displays: Displays,
+}
+
+/// uqd's revert timer firing: the pending display change is dropped and `MonitorsChanged` sent.
+pub async fn expire(rig: &Rig) {
+    rig.displays.pending.lock().unwrap().take();
+    let iface = rig
+        .uqd
+        .object_server()
+        .interface::<_, FakeUqd>("/org/uq/Desktop1")
+        .await
+        .unwrap();
+    FakeUqd::monitors_changed(iface.signal_emitter())
+        .await
+        .unwrap();
 }
 
 /// A private bus with a [`FakeUqd`] serving `state`.
@@ -394,6 +465,7 @@ pub async fn rig(state: State) -> Rig {
     let verify_error = Arc::new(Mutex::new(None));
     let explain = Explain::default();
     let history = History::default();
+    let displays = Displays::default();
     let uqd = connect(&bus).await;
     uqd.object_server()
         .at(
@@ -403,6 +475,7 @@ pub async fn rig(state: State) -> Rig {
                 verify_error: verify_error.clone(),
                 explain: explain.clone(),
                 history: history.clone(),
+                displays: displays.clone(),
             },
         )
         .await
@@ -417,5 +490,6 @@ pub async fn rig(state: State) -> Rig {
         verify_error,
         explain,
         history,
+        displays,
     }
 }

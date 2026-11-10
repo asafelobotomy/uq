@@ -54,6 +54,14 @@ All notable changes to uQ are listed here. The format follows
   "Changed this session" list shows what changed (including changes "from the terminal"), and a
   History page lists restore points and past changes, with Undo, Save and Restore. The window
   remembers its size.
+- **Displays page.** Arrange outputs by dragging, and set mode, refresh rate, scale, rotation,
+  mirroring, VRR and on/off. A change applies live and a dialog asks to keep it; if you don't
+  answer within 15 seconds (or press Escape, or the app or uqd stops), the old layout comes back.
+  `uqd` gains `ListOutputs`, `ApplyMonitors`, `ConfirmMonitors`, `RevertMonitors` and a
+  `MonitorsChanged` signal; only a confirmed change is saved and recorded in the history.
+- **Input page.** Keyboard layouts (from xkeyboard-config's list) with variants, order and a
+  switch combo, repeat delay and rate, mouse and touchpad speed, acceleration, natural scroll,
+  tap-to-click and per-device overrides. `uqd` gains an `input` section and `ListInputDevices`.
 
 ### Changed
 

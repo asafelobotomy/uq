@@ -48,6 +48,8 @@ pub fn label(domain: &str, key: &str) -> Option<String> {
             return Some(format!("Workspace {ws} layout"));
         }
         ("wallpaper", k) => return wallpaper(k),
+        ("input", k) => return input(k),
+        ("monitors", k) => return monitors(k),
         _ => return None,
     };
     Some(fixed.into())
@@ -71,13 +73,72 @@ fn wallpaper(key: &str) -> Option<String> {
     })
 }
 
+/// `keyboard.*`, `mouse.*`, `touchpad.*` and `devices.<device>.<field>`. Older journals
+/// recorded the mouse keys under `settings`, which keeps its own labels for them.
+fn input(key: &str) -> Option<String> {
+    if let Some(k) = key.strip_prefix("mouse.") {
+        return label("settings", &format!("mouse.{k}"));
+    }
+    let fixed = match key {
+        "keyboard.layouts" => "Keyboard layouts",
+        "keyboard.switch_combo" => "Layout switch keys",
+        "keyboard.repeat_rate" => "Key repeat rate",
+        "keyboard.repeat_delay" => "Key repeat delay",
+        "touchpad.natural_scroll" => "Touchpad natural scrolling",
+        "touchpad.tap_to_click" => "Tap to click",
+        "touchpad.disable_while_typing" => "Touchpad off while typing",
+        "touchpad.scroll_factor" => "Touchpad scroll speed",
+        k => {
+            let (device, field) = k.strip_prefix("devices.")?.rsplit_once('.')?;
+            let what = match field {
+                "sensitivity" => "Pointer speed",
+                "accel_profile" => "Pointer acceleration",
+                "natural_scroll" => "Natural scrolling",
+                "left_handed" => "Left-handed buttons",
+                "scroll_factor" => "Scroll speed",
+                _ => return None,
+            };
+            return Some(format!("{what} for {device}"));
+        }
+    };
+    Some(fixed.into())
+}
+
+/// `outputs.<output>.<field>`, where `position` has `x` and `y` leaves.
+fn monitors(key: &str) -> Option<String> {
+    let rest = key.strip_prefix("outputs.")?;
+    let (output, what) = if let Some(o) = rest.strip_suffix(".position.x") {
+        (o, "Position (across)")
+    } else if let Some(o) = rest.strip_suffix(".position.y") {
+        (o, "Position (down)")
+    } else {
+        let (o, field) = rest.rsplit_once('.')?;
+        let what = match field {
+            "mode" => "Resolution and refresh rate",
+            "position" => "Position",
+            "scale" => "Scale",
+            "transform" => "Rotation",
+            "enabled" => "On or off",
+            "mirror_of" => "Mirroring",
+            "vrr" => "Variable refresh rate",
+            "description" => "Display model",
+            _ => return None,
+        };
+        (o, what)
+    };
+    Some(format!("{what} of {output}"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::history::diff::{journal_domains, leaf_keys};
     use crate::lua::Layout;
     use crate::schedule::Schedule;
-    use crate::settings::{ForceSplit, Location, NewStatus, Orientation, ProviderPref};
+    use crate::settings::{
+        AccelProfile, DeviceOverride, ForceSplit, KbLayout, Location, NewStatus, Orientation,
+        OutputConfig, Position, ProviderPref,
+    };
     use crate::state::State;
     use std::path::PathBuf;
 
@@ -137,6 +198,45 @@ mod tests {
             enabled: true,
         }];
         s.shell.terminal = Some("kitty.desktop".into());
+        s.mouse.sensitivity = 0.2;
+        let kb = &mut s.input.keyboard;
+        kb.layouts = vec![KbLayout {
+            layout: "us".into(),
+            variant: Some("intl".into()),
+        }];
+        kb.switch_combo = Some("grp:alt_shift_toggle".into());
+        kb.repeat_rate = Some(30);
+        kb.repeat_delay = Some(400);
+        let tp = &mut s.input.touchpad;
+        tp.natural_scroll = Some(true);
+        tp.tap_to_click = Some(true);
+        tp.disable_while_typing = Some(true);
+        tp.scroll_factor = Some(0.5);
+        s.input.devices.insert(
+            "logitech-mx.v2".into(),
+            DeviceOverride {
+                sensitivity: Some(0.1),
+                accel_profile: Some(AccelProfile::Flat),
+                natural_scroll: Some(true),
+                left_handed: Some(true),
+                scroll_factor: Some(1.5),
+            },
+        );
+        for name in ["DP-1", "HDMI-A.1"] {
+            s.monitors.outputs.insert(
+                name.into(),
+                OutputConfig {
+                    mode: Some("1920x1080@60".into()),
+                    position: Some(Position { x: 0, y: 0 }),
+                    scale: Some(1.25),
+                    transform: Some(1),
+                    enabled: Some(true),
+                    mirror_of: Some("eDP-1".into()),
+                    vrr: Some(1),
+                    description: Some("Dell U2720Q ABC123".into()),
+                },
+            );
+        }
         st.layouts.insert("2".into(), Layout::Scrolling);
         let schedules = [
             Schedule::Off,

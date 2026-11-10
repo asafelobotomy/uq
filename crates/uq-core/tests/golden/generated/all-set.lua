@@ -25,8 +25,21 @@ hl.config({
         natural_scroll = false,
         left_handed = false,
         scroll_factor = 1.0,
+        kb_layout = "us,de",
+        kb_variant = ",nodeadkeys",
+        kb_options = "grp:alt_shift_toggle",
+        repeat_rate = 35,
+        repeat_delay = 250,
+        touchpad = { natural_scroll = true, tap_to_click = false, disable_while_typing = true, scroll_factor = 0.8 },
     },
 })
+
+-- Monitors
+hl.monitor({ output = "DP-1", mode = "2560x1440@144", position = "0x0", scale = "1.25", transform = 1, vrr = 1 })
+hl.monitor({ output = "HDMI-A-1", mode = "preferred", position = "auto", scale = "auto", mirror = "DP-1" })
+
+-- Input devices
+hl.device({ name = "logitech-g-pro", sensitivity = -0.4, accel_profile = "flat", natural_scroll = false, left_handed = true, scroll_factor = 1.5 })
 hl.curve("easeOutQuint", { type = "bezier", points = { {0.23, 1},  {0.32, 1} } })
 hl.curve("linear",       { type = "bezier", points = { {0, 0},     {1, 1}    } })
 hl.curve("almostLinear", { type = "bezier", points = { {0.5, 0.5}, {0.75, 1} } })

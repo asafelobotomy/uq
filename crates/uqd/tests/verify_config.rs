@@ -11,7 +11,8 @@ use std::process::Command;
 use uq_core::lua::{Layout, emit_generated};
 use uq_core::paths::Paths;
 use uq_core::settings::{
-    AccelProfile, ForceSplit, MouseSettings, NewStatus, Orientation, Settings,
+    AccelProfile, DeviceOverride, ForceSplit, KbLayout, MouseSettings, NewStatus, Orientation,
+    OutputConfig, Position, Settings,
 };
 use uq_core::stub::stub_contents;
 use uq_core::theme::ThemeRegistry;
@@ -57,6 +58,62 @@ fn settings() -> Settings {
     lo.master.orientation = Some(Orientation::Right);
     lo.scrolling.column_width = Some(0.6);
     lo.scrolling.fullscreen_on_one_column = Some(true);
+    // Every monitor, keyboard, touchpad and device option away from "unset".
+    s.monitors.outputs.insert(
+        "DP-1".into(),
+        OutputConfig {
+            mode: Some("2560x1440@144".into()),
+            position: Some(Position { x: 0, y: 0 }),
+            scale: Some(1.25),
+            transform: Some(1),
+            enabled: Some(true),
+            vrr: Some(1),
+            ..Default::default()
+        },
+    );
+    s.monitors.outputs.insert(
+        "HDMI-A-1".into(),
+        OutputConfig {
+            mirror_of: Some("DP-1".into()),
+            ..Default::default()
+        },
+    );
+    s.monitors.outputs.insert(
+        "eDP-1".into(),
+        OutputConfig {
+            enabled: Some(false),
+            ..Default::default()
+        },
+    );
+    let k = &mut s.input.keyboard;
+    k.layouts = vec![
+        KbLayout {
+            layout: "us".into(),
+            variant: None,
+        },
+        KbLayout {
+            layout: "de".into(),
+            variant: Some("nodeadkeys".into()),
+        },
+    ];
+    k.switch_combo = Some("grp:alt_shift_toggle".into());
+    k.repeat_rate = Some(35);
+    k.repeat_delay = Some(250);
+    let t = &mut s.input.touchpad;
+    t.natural_scroll = Some(true);
+    t.tap_to_click = Some(false);
+    t.disable_while_typing = Some(true);
+    t.scroll_factor = Some(0.8);
+    s.input.devices.insert(
+        "logitech-g-pro".into(),
+        DeviceOverride {
+            sensitivity: Some(-0.4),
+            accel_profile: Some(AccelProfile::Flat),
+            natural_scroll: Some(false),
+            left_handed: Some(true),
+            scroll_factor: Some(1.5),
+        },
+    );
     s
 }
 
@@ -123,7 +180,7 @@ hl = proxy("hl")
 for i = 1, #arg do dofile(arg[i]) end
 local seen = {}
 for _, c in ipairs(calls) do seen[c] = true end
-for _, want in ipairs({"hl.config", "hl.bind", "hl.on", "hl.workspace_rule"}) do
+for _, want in ipairs({"hl.config", "hl.bind", "hl.on", "hl.workspace_rule", "hl.monitor", "hl.device"}) do
   if not seen[want] then error("never called " .. want) end
 end
 local function called(prefix, needle)

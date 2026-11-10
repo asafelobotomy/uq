@@ -1,8 +1,13 @@
-//! Whole-section settings (`appearance`, `wallpaper`) for `GetSection` / `SetSection`.
+//! Whole-section settings (`appearance`, `wallpaper`, `look`, `input`, ...) for
+//! `GetSection` / `SetSection`.
 
 use crate::service::{Desktop, DesktopError, Event, change_for};
 use uq_core::history::Origin;
-use uq_core::settings::renders_section;
+use uq_core::settings::{clean_text, renders_section};
+use uq_core::state::State;
+
+/// Entries read per device class; Hyprland's reply is untrusted.
+const MAX_DEVICES_PER_CLASS: usize = 32;
 
 impl Desktop {
     /// One settings section as JSON (`appearance` or `wallpaper`).
@@ -14,9 +19,8 @@ impl Desktop {
         serde_json::to_string(&v).map_err(|e| DesktopError::Io(e.to_string()))
     }
 
-    /// Replace a whole section. `appearance` re-renders through the normal commit (verify,
-    /// reload, theme events); `look` and `layouts` render, verify and reload Hyprland only;
-    /// `wallpaper` and `shell` just save, since the shell reads them.
+    /// Replace a whole section: parse and validate, then `commit_section`. `monitors` is
+    /// refused; displays change only through the apply/confirm path.
     pub async fn set_section(
         &mut self,
         domain: &str,
@@ -25,11 +29,34 @@ impl Desktop {
     ) -> Result<(), DesktopError> {
         let value: serde_json::Value = serde_json::from_str(json)
             .map_err(|e| DesktopError::InvalidSetting(format!("value is not JSON: {e}")))?;
+        if domain == "monitors" {
+            return Err(DesktopError::InvalidSetting(
+                "displays change through ApplyMonitors".into(),
+            ));
+        }
         let mut next = self.state.clone();
         next.set_section(domain, value)
             .map_err(|e| DesktopError::InvalidSetting(e.to_string()))?;
+        self.commit_section(domain, next, origin).await
+    }
+
+    /// The single section save path: every section write is saved, applied and announced here.
+    /// `appearance` re-renders through the normal commit (verify, reload, theme events); `look`,
+    /// `layouts` and `input` render, verify and reload Hyprland only; `monitors` renders and
+    /// verifies but applies nothing (only the confirm path calls it, and the config is already
+    /// live); `wallpaper` and `shell` just save, since the shell reads them. Then the layout
+    /// events, `SectionChanged` and `SettingsChanged` go out.
+    ///
+    /// The save is `persist(next, origin)`, reached through `commit` (`install`) or directly, so
+    /// each accepted write is journalled exactly once.
+    pub(crate) async fn commit_section(
+        &mut self,
+        domain: &str,
+        next: State,
+        origin: Origin,
+    ) -> Result<(), DesktopError> {
         let before = (domain == "layouts").then(|| self.state.layouts.clone());
-        if renders_section(domain) {
+        if renders_section(domain) || domain == "monitors" {
             let res = self.commit(next, change_for(domain), origin).await;
             self.note_section_commit(domain, &res);
             res?;
@@ -71,6 +98,44 @@ impl Desktop {
             self.state.settings.clone(),
         )));
         Ok(())
+    }
+
+    /// Input devices Hyprland reports, as `{keyboards, pointers, touch}` JSON for the settings
+    /// page. Names are untrusted: control characters are stripped and they are cut to 128
+    /// characters. Hyprland down (or unreadable) gives empty lists.
+    pub async fn list_input_devices(&self) -> Result<String, DesktopError> {
+        let raw = self.comp.devices().await.unwrap_or_default();
+        let v: serde_json::Value = serde_json::from_str(&raw).unwrap_or_default();
+        let names = |key: &str| -> Vec<(String, f64)> {
+            v.get(key)
+                .and_then(|a| a.as_array())
+                .into_iter()
+                .flatten()
+                .take(MAX_DEVICES_PER_CLASS)
+                .filter_map(|d| {
+                    let name = clean_text(d.get("name")?.as_str()?, 128);
+                    let speed = d.get("defaultSpeed").and_then(|s| s.as_f64());
+                    (!name.is_empty())
+                        .then_some((name, speed.filter(|s| s.is_finite()).unwrap_or(0.0)))
+                })
+                .collect()
+        };
+        let named = |key: &str| -> Vec<serde_json::Value> {
+            names(key)
+                .into_iter()
+                .map(|(name, _)| serde_json::json!({ "name": name }))
+                .collect()
+        };
+        let pointers: Vec<_> = names("mice")
+            .into_iter()
+            .map(|(name, speed)| serde_json::json!({ "name": name, "default_speed": speed }))
+            .collect();
+        serde_json::to_string(&serde_json::json!({
+            "keyboards": named("keyboards"),
+            "pointers": pointers,
+            "touch": named("touch"),
+        }))
+        .map_err(|e| DesktopError::Io(e.to_string()))
     }
 }
 
@@ -430,5 +495,233 @@ mod tests {
             .expect("SectionChanged layouts");
         let v: serde_json::Value = serde_json::from_str(json).unwrap();
         assert_eq!(v["workspaces"]["2"], "scrolling");
+    }
+
+    #[tokio::test]
+    async fn set_input_renders_and_reloads() {
+        let mut r = rig();
+        r.desktop.startup().await;
+        r.comp.calls.lock().unwrap().clear();
+        drain(&mut r.events);
+        r.desktop
+            .set_section(
+                "input",
+                r#"{"keyboard":{"layouts":[{"layout":"us"},{"layout":"de"}]}}"#,
+                Origin::Settings,
+            )
+            .await
+            .unwrap();
+        assert!(generated(&r).contains(r#"kb_layout = "us,de""#));
+        assert!(r.comp.calls().contains(&"reload".to_string()));
+        let evs = drain(&mut r.events);
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, Event::SectionChanged { domain, .. } if domain == "input"))
+        );
+        let saved = State::load(&r.desktop.paths().state_file);
+        assert_eq!(saved.settings.input.keyboard.layouts.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn rejected_input_keeps_previous_config() {
+        let mut r = rig();
+        r.desktop.startup().await;
+        let gen_before = std::fs::read(&r.desktop.paths().generated_lua).unwrap();
+        let state_before = std::fs::read(&r.desktop.paths().state_file).unwrap();
+        drain(&mut r.events);
+        *r.comp.verify_error.lock().unwrap() = Some("bad option".into());
+        let res = r
+            .desktop
+            .set_section(
+                "input",
+                r#"{"keyboard":{"layouts":[{"layout":"de"}]}}"#,
+                Origin::Settings,
+            )
+            .await;
+        assert_eq!(res, Err(DesktopError::ConfigInvalid("bad option".into())));
+        assert_eq!(
+            std::fs::read(&r.desktop.paths().generated_lua).unwrap(),
+            gen_before
+        );
+        assert_eq!(
+            std::fs::read(&r.desktop.paths().state_file).unwrap(),
+            state_before
+        );
+        let evs = drain(&mut r.events);
+        assert!(
+            evs.iter().all(|e| matches!(e, Event::ConfigError(_))),
+            "{evs:?}"
+        );
+        let input: serde_json::Value =
+            serde_json::from_str(&r.desktop.get_section("input").unwrap()).unwrap();
+        assert_eq!(input["keyboard"]["layouts"], serde_json::json!([]));
+    }
+
+    #[tokio::test]
+    async fn monitors_section_write_refused() {
+        let mut r = rig();
+        r.desktop.startup().await;
+        let state_before = std::fs::read(&r.desktop.paths().state_file).unwrap();
+        drain(&mut r.events);
+        let res = r
+            .desktop
+            .set_section("monitors", r#"{"outputs":{}}"#, Origin::Settings)
+            .await;
+        assert_eq!(
+            res,
+            Err(DesktopError::InvalidSetting(
+                "displays change through ApplyMonitors".into()
+            ))
+        );
+        assert_eq!(
+            std::fs::read(&r.desktop.paths().state_file).unwrap(),
+            state_before
+        );
+        assert!(drain(&mut r.events).is_empty());
+        assert!(r.desktop.history(100).is_empty());
+    }
+
+    #[tokio::test]
+    async fn every_section_write_journals_once() {
+        let mut r = rig();
+        let before = r.desktop.history(100).len();
+        r.desktop
+            .set_section("appearance", r#"{"ui_font":"Cantarell"}"#, Origin::Settings)
+            .await
+            .unwrap();
+        assert_eq!(r.desktop.history(100).len(), before + 1);
+        r.desktop
+            .set_section("look", r#"{"gaps_in":9}"#, Origin::Settings)
+            .await
+            .unwrap();
+        assert_eq!(r.desktop.history(100).len(), before + 2);
+        r.desktop
+            .set_section(
+                "input",
+                r#"{"keyboard":{"layouts":[{"layout":"us"}]}}"#,
+                Origin::Settings,
+            )
+            .await
+            .unwrap();
+        assert_eq!(r.desktop.history(100).len(), before + 3);
+        // Refused writes (bad value, monitors, failed verify) add nothing.
+        assert!(
+            r.desktop
+                .set_section("look", r#"{"gaps_in":999}"#, Origin::Settings)
+                .await
+                .is_err()
+        );
+        assert!(
+            r.desktop
+                .set_section("monitors", "{}", Origin::Settings)
+                .await
+                .is_err()
+        );
+        *r.comp.verify_error.lock().unwrap() = Some("no".into());
+        assert!(
+            r.desktop
+                .set_section("look", r#"{"gaps_in":3}"#, Origin::Settings)
+                .await
+                .is_err()
+        );
+        assert_eq!(r.desktop.history(100).len(), before + 3);
+        let newest = &r.desktop.history(1)[0];
+        assert_eq!(
+            (newest.domain.as_str(), newest.origin.as_str()),
+            ("input", "settings")
+        );
+    }
+
+    #[tokio::test]
+    async fn input_devices_from_hyprland() {
+        let r = rig();
+        let long = "x".repeat(300);
+        *r.comp.devices_json.lock().unwrap() = format!(
+            r#"{{"mice":[{{"address":"0x1","name":"logitech-mx","defaultSpeed":0.5}},
+                        {{"address":"0x2","name":"{long}","defaultSpeed":0.0}}],
+                "keyboards":[{{"address":"0x3","name":"at-keyboard","main":true}}],
+                "touch":[],"tablets":[{{"name":"ignored"}}]}}"#
+        );
+        let v: serde_json::Value =
+            serde_json::from_str(&r.desktop.list_input_devices().await.unwrap()).unwrap();
+        assert_eq!(v["keyboards"], serde_json::json!([{"name": "at-keyboard"}]));
+        assert_eq!(v["touch"], serde_json::json!([]));
+        let p = v["pointers"].as_array().unwrap();
+        assert_eq!(p.len(), 2);
+        assert_eq!(p[0]["name"], "logitech-mx");
+        assert_eq!(p[0]["default_speed"], 0.5);
+        assert_eq!(p[1]["name"].as_str().unwrap().chars().count(), 128);
+    }
+
+    #[tokio::test]
+    async fn input_devices_empty_when_hyprland_is_down() {
+        let r = rig();
+        *r.comp.running.lock().unwrap() = false;
+        assert_eq!(
+            r.desktop.list_input_devices().await.unwrap(),
+            r#"{"keyboards":[],"pointers":[],"touch":[]}"#
+        );
+    }
+
+    #[tokio::test]
+    async fn hostile_device_replies_are_bounded() {
+        let r = rig();
+        let many: Vec<_> = (0..500)
+            .map(|i| serde_json::json!({"name": format!("m{i}"), "defaultSpeed": 0.0}))
+            .collect();
+        *r.comp.devices_json.lock().unwrap() =
+            serde_json::json!({"mice": many, "keyboards": [{"name": 5}, {"name": null}, 7,
+                {"name": "a\u{7}b"}], "touch": "nope"})
+            .to_string();
+        let v: serde_json::Value =
+            serde_json::from_str(&r.desktop.list_input_devices().await.unwrap()).unwrap();
+        assert_eq!(v["pointers"].as_array().unwrap().len(), 32);
+        assert_eq!(v["keyboards"], serde_json::json!([{"name": "ab"}]));
+        assert_eq!(v["touch"], serde_json::json!([]));
+        for raw in ["[1,2]", "\"str\"", "null", "not json"] {
+            *r.comp.devices_json.lock().unwrap() = raw.into();
+            assert_eq!(
+                r.desktop.list_input_devices().await.unwrap(),
+                r#"{"keyboards":[],"pointers":[],"touch":[]}"#,
+                "{raw}"
+            );
+        }
+        *r.comp.devices_json.lock().unwrap() =
+            r#"{"mice":[{"name":"a","defaultSpeed":"fast"},{"name":"b","defaultSpeed":null}]}"#
+                .into();
+        let v: serde_json::Value =
+            serde_json::from_str(&r.desktop.list_input_devices().await.unwrap()).unwrap();
+        assert_eq!(v["pointers"][0]["default_speed"], 0.0);
+        assert_eq!(v["pointers"][1]["default_speed"], 0.0);
+        // A number JSON can't hold makes the whole reply unreadable: empty lists, no panic.
+        *r.comp.devices_json.lock().unwrap() =
+            r#"{"mice":[{"name":"a","defaultSpeed":1e999}]}"#.into();
+        assert_eq!(
+            r.desktop.list_input_devices().await.unwrap(),
+            r#"{"keyboards":[],"pointers":[],"touch":[]}"#
+        );
+    }
+
+    #[tokio::test]
+    async fn setting_light_path_journals_through_persist() {
+        let mut r = rig();
+        let before = r.desktop.history(100).len();
+        r.desktop
+            .set_setting("idle.screen_off", serde_json::json!(500), Origin::Uqctl)
+            .await
+            .unwrap();
+        assert_eq!(r.desktop.history(100).len(), before + 1);
+        assert_eq!(r.desktop.history(1)[0].origin, "uqctl");
+        let json = r#"{"outputs":{"*":{"image":"/a.png"}}}"#;
+        r.desktop
+            .set_section("wallpaper", json, Origin::Settings)
+            .await
+            .unwrap();
+        assert_eq!(r.desktop.history(100).len(), before + 2);
+        r.desktop
+            .set_setting("nope", serde_json::json!(1), Origin::Settings)
+            .await
+            .unwrap_err();
+        assert_eq!(r.desktop.history(100).len(), before + 2);
     }
 }

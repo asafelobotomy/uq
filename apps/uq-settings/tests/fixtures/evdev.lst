@@ -1,0 +1,39 @@
+! model
+  pc86            Generic 86-key PC
+  pc101           Generic 101-key PC
+  pc102           Generic 102-key PC
+
+! layout
+  gb              English (UK)
+  us              English (US)
+  fr              French
+  de              German
+
+! variant
+  euro            us: English (US, euro on 5)
+  intl            us: English (US, intl., with dead keys)
+  alt-intl        us: English (US, alt. intl.)
+  altgr-intl      us: English (intl., with AltGr dead keys)
+  mac             us: English (Macintosh)
+  colemak         us: English (Colemak)
+  colemak_dh      us: English (Colemak-DH)
+  colemak_dh_wide us: English (Colemak-DH Wide)
+  nodeadkeys      de: German (no dead keys)
+
+! option
+  grp                  Switching to another layout
+  grp:switch           Right Alt (while pressed)
+  grp:lswitch          Left Alt (while pressed)
+  grp:lwin_switch      Left Win (while pressed)
+  grp:rwin_switch      Right Win (while pressed)
+  grp:win_switch       Any Win (while pressed)
+  grp:menu_switch      Menu (while pressed), Shift+Menu for Menu
+  grp:caps_switch      Caps Lock (while pressed), Alt+Caps Lock for the original Caps Lock action
+  grp:rctrl_switch     Right Ctrl (while pressed)
+  grp:toggle           Right Alt
+  grp:lalt_toggle      Left Alt
+  grp:alt_shift_toggle Alt+Shift
+  grp:sclk_toggle      Scroll Lock
+  grp_led              Use keyboard LED to show alternative layout
+  ctrl                 Ctrl position
+  ctrl:nocaps          Caps Lock as Ctrl

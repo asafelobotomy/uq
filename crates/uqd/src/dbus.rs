@@ -149,6 +149,11 @@ impl DesktopIface {
             .await?)
     }
 
+    /// Input devices Hyprland reports: `{keyboards, pointers, touch}` as JSON.
+    async fn list_input_devices(&self) -> Result<String, UqError> {
+        Ok(self.desktop.lock().await.list_input_devices().await?)
+    }
+
     async fn record_launch(&self, id: &str) {
         self.desktop.lock().await.record_launch(id);
     }
@@ -212,6 +217,47 @@ impl DesktopIface {
         Ok(self.desktop.lock().await.reapply(domain).await?)
     }
 
+    /// Live outputs, the stored layout and any pending change, as JSON:
+    /// `{live: [...], stored: {outputs}, pending: null | {token, seconds_left}}`.
+    async fn list_outputs(&self) -> String {
+        self.desktop
+            .lock()
+            .await
+            .list_outputs(std::time::Instant::now())
+            .await
+    }
+
+    /// Apply a whole `monitors` section live for 15 s. Returns the token `ConfirmMonitors`
+    /// needs; without a confirm, uqd puts the old layout back on its own.
+    async fn apply_monitors(&self, json: &str) -> Result<String, UqError> {
+        let (token, deadline) = self
+            .desktop
+            .lock()
+            .await
+            .apply_monitors(json, std::time::Instant::now())
+            .await?;
+        tokio::spawn(revert_timer(self.desktop.clone(), token.clone(), deadline));
+        Ok(token)
+    }
+
+    /// Keep the pending display change: it is saved and recorded with `origin`.
+    async fn confirm_monitors(&self, token: &str, origin: &str) -> Result<(), UqError> {
+        Ok(self
+            .desktop
+            .lock()
+            .await
+            .confirm_monitors(token, Origin::parse(origin))
+            .await?)
+    }
+
+    /// Put the old layout back now.
+    async fn revert_monitors(&self, token: &str) -> Result<(), UqError> {
+        Ok(self.desktop.lock().await.revert_monitors(token).await?)
+    }
+
+    #[zbus(signal)]
+    async fn monitors_changed(e: &SignalEmitter<'_>) -> zbus::Result<()>;
+
     #[zbus(signal)]
     async fn history_changed(e: &SignalEmitter<'_>) -> zbus::Result<()>;
 
@@ -244,6 +290,17 @@ impl DesktopIface {
 
     #[zbus(signal)]
     async fn config_error(e: &SignalEmitter<'_>, message: &str) -> zbus::Result<()>;
+}
+
+/// uqd's own revert timer: sleeps without the lock, then reverts if `token` is still pending.
+/// A confirmed or replaced token makes it a no-op.
+async fn revert_timer(shared: SharedDesktop, token: String, deadline: std::time::Instant) {
+    tokio::time::sleep_until(tokio::time::Instant::from_std(deadline)).await;
+    shared
+        .lock()
+        .await
+        .expire_monitors(&token, std::time::Instant::now())
+        .await;
 }
 
 /// Claim the bus name, export the interface and forward service events as signals.
@@ -304,6 +361,7 @@ pub async fn serve(
                     DesktopIface::section_changed(e, domain, json).await
                 }
                 Event::HistoryChanged => DesktopIface::history_changed(e).await,
+                Event::MonitorsChanged => DesktopIface::monitors_changed(e).await,
                 Event::LaunchCountsChanged(counts) => {
                     DesktopIface::launch_counts_changed(
                         e,

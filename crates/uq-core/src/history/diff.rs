@@ -59,7 +59,9 @@ fn domain_value(st: &State, domain: &str) -> Value {
         "settings" => {
             let all = serde_json::to_value(&st.settings).expect("settings serialise");
             let mut m = Map::new();
-            for key in SETTING_KEYS {
+            // `mouse.*` is the `input` section's mouse part: it is recorded there, once, so
+            // the Input page owns it in History.
+            for key in SETTING_KEYS.iter().filter(|k| !k.starts_with("mouse.")) {
                 let v = key
                     .split('.')
                     .try_fold(&all, |v, part| v.get(part))
@@ -233,6 +235,24 @@ mod tests {
 
     fn labels(d: &str, k: &str) -> Option<String> {
         (d == "look" && k == "gaps_in").then(|| "Gaps between windows".into())
+    }
+
+    #[test]
+    fn a_mouse_change_is_recorded_once() {
+        let old = State::default();
+        let mut new = old.clone();
+        new.settings.mouse.sensitivity = 0.4;
+        let domains: Vec<_> = diff(&old, &new, &labels)
+            .into_iter()
+            .map(|c| c.domain)
+            .collect();
+        assert_eq!(domains, ["input"]);
+        new.settings.idle.dim = Some(30);
+        let domains: Vec<_> = diff(&old, &new, &labels)
+            .into_iter()
+            .map(|c| c.domain)
+            .collect();
+        assert_eq!(domains, ["input", "settings"]);
     }
 
     #[test]

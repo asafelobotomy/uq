@@ -28,6 +28,8 @@ pub struct Follow {
     pub settings: bool,
     /// `HistoryChanged`.
     pub history: bool,
+    /// `MonitorsChanged`: a display change was applied, kept or put back.
+    pub monitors: bool,
 }
 
 /// Whether a `SectionChanged(domain, …)` concerns the page.
@@ -119,6 +121,9 @@ async fn follow_uqd<M: PageModel>(
         if follow.history {
             all.push(proxy.receive_history_changed().await?.map(|_| ()).boxed());
         }
+        if follow.monitors {
+            all.push(proxy.receive_monitors_changed().await?.map(|_| ()).boxed());
+        }
         zbus::Result::Ok(futures_util::stream::select_all(all))
     };
     let mut changes = match streams.await {
@@ -130,10 +135,14 @@ async fn follow_uqd<M: PageModel>(
     };
     while changes.next().await.is_some() {
         let outcome = runner::run(&*logic, M::Logic::refresh()).await;
-        if qt
-            .queue(move |m| m.show_state(QString::from(&outcome.state.to_string())))
-            .is_err()
-        {
+        // A refresh's message (the Displays page's "restored") shows; none leaves the last one.
+        let shown = qt.queue(move |mut m| {
+            if let Some(error) = &outcome.error {
+                m.as_mut().show_error(QString::from(error));
+            }
+            m.show_state(QString::from(&outcome.state.to_string()));
+        });
+        if shown.is_err() {
             return;
         }
     }
@@ -208,6 +217,7 @@ mod tests {
             theme: false,
             settings: false,
             history: false,
+            monitors: false,
         };
         assert!(wants(&wallpaper, "wallpaper"));
         assert!(!wants(&wallpaper, "appearance"));
@@ -217,6 +227,7 @@ mod tests {
             theme: true,
             settings: true,
             history: false,
+            monitors: false,
         };
         assert!(wants(&two, "look") && wants(&two, "layouts"));
         assert!(!wants(&two, "shell"));

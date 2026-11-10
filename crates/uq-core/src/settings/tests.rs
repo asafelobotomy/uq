@@ -230,8 +230,17 @@ fn section_round_trip() {
     assert!(renders_section("look") && renders_section("layouts"));
     assert_eq!(
         SECTION_DOMAINS,
-        ["appearance", "wallpaper", "look", "layouts", "shell"]
+        [
+            "appearance",
+            "wallpaper",
+            "look",
+            "layouts",
+            "shell",
+            "monitors",
+            "input"
+        ]
     );
+    assert!(!renders_section("monitors") && renders_section("input"));
 }
 
 #[test]

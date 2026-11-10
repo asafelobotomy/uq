@@ -130,6 +130,12 @@ impl Settings {
             Err(e) => errors.push(e),
         }
         out.shell = self.shell.clone().sanitised();
+        let (monitors, repaired) = self.monitors.clone().sanitised();
+        errors.extend(repaired);
+        out.monitors = monitors;
+        let (input, repaired) = self.input.clone().sanitised();
+        errors.extend(repaired);
+        out.input = input;
         (out, errors)
     }
 }
