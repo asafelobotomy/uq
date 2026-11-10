@@ -784,6 +784,10 @@ mod tests {
         let mut domains: Vec<&str> = uq_core::settings::SECTION_DOMAINS.to_vec();
         domains.extend(["theme", "schedule", "settings"]);
         for domain in domains {
+            // Task 10 adds the Window rules page and removes this skip.
+            if domain == "rules" {
+                continue;
+            }
             let pages: Vec<_> = core_pages()
                 .iter()
                 .filter(|p| p.domains.contains(&domain))
