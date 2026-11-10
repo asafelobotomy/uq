@@ -2,8 +2,10 @@
 // workspace rule. Every field comes from `fields`, the catalogue in the page's snapshot (built
 // in Rust from uQ's one table of Hyprland names), so this file never lists them; the rule JSON is
 // built from the catalogue's `key`s. While a window rule is edited, "Matches now" shows the open
-// windows it matches (RulesModel.preview, 150 ms after the last change). The title is a fixed
-// phrase, never the rule's name: a dialog title is drawn by a styled label.
+// windows it matches (RulesModel.preview, 150 ms after the last change). Save checks the draft
+// first (RulesModel.check) and then stays open until uQ answers: it closes when the rule was
+// saved, and shows uQ's refusal otherwise, so a refused rule never loses what was typed. The
+// title is a fixed phrase, never the rule's name: a dialog title is drawn by a styled label.
 import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
@@ -19,6 +21,8 @@ Kirigami.Dialog {
     property var exact: text => text
     /// `draftJson => {valid, error, matches}` as JSON (RulesModel.preview), or null for none.
     property var preview: null
+    /// `(kind, draftJson, replaces) => {valid, problems}` as JSON (RulesModel.check), or null.
+    property var check: null
     property int nameLimit: 100
     property int patternLimit: 256
     /// Whether Save can be pressed (the page isn't busy).
@@ -40,6 +44,16 @@ Kirigami.Dialog {
     /// "Quietly": open on the workspace without switching to it.
     property bool quietly: false
     property var previewResult: ({ valid: true, error: "", matches: [] })
+    /// Save was pressed and uQ hasn't answered yet (the page calls finishSave()).
+    property bool saving: false
+    /// Why the last Save didn't happen, as plain text ("" for none).
+    property string saveError
+    /// What a save replaces: "" for a new rule, else the id (or workspace) it was opened on.
+    readonly property string replaces: isNew ? "" : kind === "workspace" ? String(original.workspace || "") : ruleId
+    /// The preview found the window rule can't be saved.
+    readonly property bool previewSaysNo: kind === "window" && previewResult.valid === false
+    /// Whether Save can be pressed now.
+    readonly property bool saveEnabled: canSave && complete && !saving && !previewSaysNo
 
     // The few rule keys this file has to name, because the catalogue says nothing about them:
     // the pairs of effects that can't both be on, the effect "Quietly" belongs to, and the field
@@ -55,8 +69,9 @@ Kirigami.Dialog {
     readonly property alias matchList: matchView
     readonly property alias body: body
 
-    /// Save was pressed: `ruleJson` is the rule for RulesModel.save(kind, ruleJson).
-    signal ruleAccepted(string kind, string ruleJson)
+    /// Save was pressed: `ruleJson` is the rule for RulesModel.save(kind, ruleJson, replaces).
+    /// The editor stays open until the page calls finishSave().
+    signal ruleAccepted(string kind, string ruleJson, string replaces)
     /// "Pick a window" was pressed: the page picks one and calls fillFromPick().
     signal pickRequested()
 
@@ -172,6 +187,10 @@ Kirigami.Dialog {
         const values = { match: {}, effect: {} };
         const take = (fs, from, group) => {
             for (const f of fs) {
+                // An effect has no Yes or No: one stored as false does nothing, so it starts
+                // unticked (and is left out when saved).
+                if (group === "effect" && f.kind === "bool" && from && from[f.key] === false)
+                    continue;
                 if (from && from[f.key] !== undefined && from[f.key] !== null) {
                     on[group][f.key] = true;
                     values[group][f.key] = from[f.key];
@@ -186,6 +205,8 @@ Kirigami.Dialog {
         nameBox.text = String(r.name || "");
         selectorBox.text = kind === "workspace" ? String(r.workspace || "") : "";
         editor.previewResult = { valid: true, error: "", matches: [] };
+        editor.saving = false;
+        editor.saveError = "";
         editor.refreshPreview();
     }
     function startNew(kind) {
@@ -197,10 +218,35 @@ Kirigami.Dialog {
         editor.open();
     }
     function save() {
-        if (!editor.canSave || !editor.complete)
+        if (!editor.saveEnabled)
             return;
-        editor.ruleAccepted(editor.kind, editor.ruleJson());
-        editor.close();
+        const json = editor.ruleJson();
+        if (typeof editor.check === "function") {
+            let answer = null;
+            try {
+                answer = JSON.parse(editor.check(editor.kind, json, editor.replaces));
+            } catch (e) {
+                answer = null;
+            }
+            if (answer && answer.valid === false) {
+                editor.saveError = "This rule can't be saved yet: " + (answer.problems || []).map(p => String(p)).join(" ");
+                return;
+            }
+        }
+        editor.saveError = "";
+        editor.saving = true;
+        editor.ruleAccepted(editor.kind, json, editor.replaces);
+    }
+    /// uQ answered the save: close on success, else keep the draft and say why.
+    function finishSave(error) {
+        if (!editor.saving)
+            return;
+        editor.saving = false;
+        const why = String(error || "");
+        if (why === "")
+            editor.close();
+        else
+            editor.saveError = "That wasn't saved: " + why;
     }
 
     title: editor.isNew ? "New rule" : "Edit rule"
@@ -211,7 +257,7 @@ Kirigami.Dialog {
         Kirigami.Action {
             text: "Save"
             icon.name: "document-save"
-            enabled: editor.canSave && editor.complete
+            enabled: editor.saveEnabled
             onTriggered: editor.save()
         }
     ]
@@ -412,6 +458,7 @@ Kirigami.Dialog {
             QQC2.Button {
                 objectName: "editorPick"
                 visible: editor.kind === "window"
+                enabled: editor.canSave && !editor.saving
                 text: "Pick a window"
                 icon.name: "edit-select"
                 onClicked: editor.pickRequested()
@@ -443,6 +490,15 @@ Kirigami.Dialog {
             objectName: "previewError"
             visible: editor.kind === "window" && editor.previewResult.valid === false && String(editor.previewResult.error || "") !== ""
             text: "This rule can't be saved yet: " + String(editor.previewResult.error || "")
+            color: Kirigami.Theme.negativeTextColor
+            wrapMode: Text.Wrap
+            Layout.fillWidth: true
+            Layout.topMargin: Kirigami.Units.largeSpacing
+        }
+        UqLabel {
+            objectName: "saveError"
+            visible: editor.saveError !== ""
+            text: editor.saveError
             color: Kirigami.Theme.negativeTextColor
             wrapMode: Text.Wrap
             Layout.fillWidth: true

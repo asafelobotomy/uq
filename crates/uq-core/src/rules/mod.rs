@@ -327,9 +327,10 @@ impl Rules {
         }
     }
 
-    /// Load-time repair: entries that break a rule, repeat an id or a workspace, or pass the
-    /// limit are dropped with a log line, so the section stays writable. Values are normalised
-    /// as a write would; a missing id is made.
+    /// Load-time repair, so the section stays writable: entries that break a rule, repeat a
+    /// workspace, or pass the limit are dropped with a log line. A bad or repeated id doesn't
+    /// cost the rule: the id is cleared and a new one made, as is a missing id. Values are
+    /// normalised as a write would.
     pub fn repaired(mut self) -> Rules {
         for r in &mut self.window {
             if r.effects.workspace.is_none() {

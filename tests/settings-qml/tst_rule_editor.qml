@@ -16,6 +16,11 @@ Item {
         }
     }
 
+    Component {
+        id: spyComp
+        SignalSpy {}
+    }
+
     TestCase {
         name: "RuleEditor"
         when: windowShown
@@ -122,6 +127,77 @@ Item {
             compare(e.title, "Edit rule");
             verify(e.selectorField.readOnly, "a workspace rule keeps its workspace");
             compare(JSON.parse(e.ruleJson()), { workspace: "3", persistent: true, gaps_in: 5 });
+        }
+
+        function floatRule(e) {
+            e.nameField.text = "A floats";
+            tick(e, "effectOn_float");
+            type(e, "matchValue_class", "^a$");
+        }
+
+        function test_invalid_preview_disables_save() {
+            const e = make("window");
+            floatRule(e);
+            verify(e.saveEnabled);
+            e.previewResult = { valid: false, error: "this pattern can't be used", matches: [] };
+            verify(!e.saveEnabled, "Save waits for a draft that can be saved");
+            const spy = createTemporaryObject(spyComp, root, { target: e, signalName: "ruleAccepted" });
+            e.save();
+            compare(spy.count, 0);
+        }
+
+        function test_save_waits_for_the_answer_and_keeps_a_refused_draft() {
+            const e = make("window");
+            floatRule(e);
+            const spy = createTemporaryObject(spyComp, root, { target: e, signalName: "ruleAccepted" });
+            e.save();
+            compare(spy.count, 1);
+            compare(spy.signalArguments[0][0], "window");
+            compare(spy.signalArguments[0][2], "", "a new rule replaces nothing");
+            verify(e.saving);
+            verify(!e.saveEnabled, "no second Save while the first is out");
+            e.finishSave("<b>Hyprland</b> said no");
+            verify(!e.saving);
+            compare(e.saveError, "That wasn't saved: <b>Hyprland</b> said no");
+            compare(control(e, "saveError").textFormat, Text.PlainText);
+            compare(e.nameField.text, "A floats", "the draft is still there");
+            verify(control(e, "effectOn_float").checked);
+            e.save();
+            compare(spy.count, 2);
+            e.finishSave("");
+            verify(!e.saving);
+        }
+
+        function test_check_problems_stop_the_save() {
+            const e = make("workspace");
+            e.check = (kind, draft, replaces) => JSON.stringify({ valid: false, problems: ["Workspace 3 already has a rule; edit that one."] });
+            e.selectorField.text = "3";
+            tick(e, "effectOn_persistent");
+            const spy = createTemporaryObject(spyComp, root, { target: e, signalName: "ruleAccepted" });
+            e.save();
+            compare(spy.count, 0);
+            verify(!e.saving);
+            compare(e.saveError, "This rule can't be saved yet: Workspace 3 already has a rule; edit that one.");
+        }
+
+        function test_edit_says_what_it_replaces() {
+            const e = make("workspace", { workspace: "name:web", persistent: true });
+            compare(e.replaces, "name:web");
+            e.load("window", { id: "r-00ab", name: "A", enabled: true, match: { "class": "^a$" }, effects: { "float": true } });
+            compare(e.replaces, "r-00ab");
+        }
+
+        function test_false_effect_starts_unticked() {
+            const e = make("window", { id: "r-00ab", name: "A", enabled: true, match: { "class": "^a$" }, effects: { "float": false, "center": true } });
+            verify(!control(e, "effectOn_float").checked, "an effect stored as false does nothing");
+            compare(JSON.parse(e.ruleJson()).effects, { "center": true });
+        }
+
+        function test_pick_follows_busy() {
+            const e = make("window");
+            verify(control(e, "editorPick").enabled);
+            e.canSave = false;
+            verify(!control(e, "editorPick").enabled);
         }
     }
 }

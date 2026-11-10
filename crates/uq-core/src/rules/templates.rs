@@ -80,6 +80,9 @@ pub fn build(
             _ => return Err(invalid("app", "choose an app first")),
         },
     };
+    if app.is_some_and(|a| exact_pattern(a).chars().count() > super::MAX_PATTERN_CHARS) {
+        return Err(invalid("app", "this app ID is too long"));
+    }
     let word = app.map(app_word).unwrap_or_default();
     let class = app.map(exact_pattern);
     let mut matches = WindowMatch {
@@ -158,6 +161,23 @@ mod tests {
             Rules::from_section(&v, &Rules::default()).unwrap_or_else(|e| panic!("{}: {e}", t.id));
         }
         assert_eq!(TEMPLATES.len(), 5);
+    }
+
+    #[test]
+    fn long_inputs_give_a_name_within_the_limit() {
+        let app = format!("org.example.{}", "a".repeat(60));
+        let ws = format!("name:{}", "w".repeat(59));
+        let r = build("open_on_workspace", Some(&app), Some(&ws), false).unwrap();
+        assert_eq!(r.name.chars().count(), crate::rules::MAX_NAME_CHARS);
+        let v = json!({"window": [r]});
+        Rules::from_section(&v, &Rules::default()).unwrap();
+    }
+
+    #[test]
+    fn an_app_id_too_long_for_a_pattern_is_refused_as_such() {
+        let app = "a".repeat(300);
+        let e = build("no_blur", Some(&app), None, false).unwrap_err();
+        assert!(e.to_string().contains("this app ID is too long"), "{e}");
     }
 
     #[test]

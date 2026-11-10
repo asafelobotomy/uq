@@ -26,6 +26,8 @@ QQC2.ScrollView {
     readonly property var templates: snap.templates || []
     readonly property bool ready: App.uqdUp && snap.error === undefined
     readonly property bool idle: page.ready && !rm.busy
+    /// Hyprland's message for the last rules change it refused, or "".
+    readonly property string sectionMessage: page.snap.section && page.snap.section.source === "error" ? String(page.snap.section.message || "") : ""
     readonly property var kinds: ["window", "layer", "workspace"]
     readonly property string currentKind: kinds[tabs.currentIndex]
     /// The last pick, Why, reopen note and notice shown, so each is shown once.
@@ -99,6 +101,9 @@ QQC2.ScrollView {
     /// Show what the last request brought: a pick, a Why answer, a reopen note or a notice.
     function showNews() {
         const s = page.snap;
+        // The editor's save has ended (busy goes false before the error and the state arrive).
+        if (editor.saving && !rm.busy)
+            editor.finishSave(rm.error);
         const pick = s.pick;
         if (pick && pick.seq > page.pickSeen) {
             page.pickSeen = pick.seq;
@@ -196,10 +201,16 @@ QQC2.ScrollView {
         fields: page.catalogue
         exact: text => rm.exact(text)
         preview: draft => rm.preview(draft)
+        check: (kind, draft, replaces) => rm.check(kind, draft, replaces)
         nameLimit: page.limits.name || 100
         patternLimit: page.limits.pattern || 256
         canSave: page.idle
-        onRuleAccepted: (kind, ruleJson) => rm.save(kind, ruleJson)
+        onRuleAccepted: (kind, ruleJson, replaces) => {
+            rm.save(kind, ruleJson, replaces);
+            // No request went out (no session bus, or the rule couldn't be read): say so here.
+            if (!rm.busy)
+                editor.finishSave(rm.error !== "" ? rm.error : "uQ isn't running");
+        }
         onPickRequested: page.startPick("editor")
         // "Matches now" should see the windows open now.
         onOpened: {
@@ -353,7 +364,7 @@ QQC2.ScrollView {
         SettingRow {
             label: ruleRow.title
             // A profile's switch is said under the switch (ruleProfile), so not here as well.
-            source: ({ source: ruleRow.modelData.source === "profile" ? "uq" : ruleRow.modelData.source, detail: { line: ruleRow.modelData.line, path: ruleRow.modelData.path } })
+            source: ({ source: ruleRow.modelData.source === "profile" ? "uq" : ruleRow.modelData.source, detail: { line: ruleRow.modelData.line, path: ruleRow.modelData.path, message: ruleRow.modelData.message } })
             Layout.fillWidth: true
 
             ColumnLayout {
@@ -474,14 +485,15 @@ QQC2.ScrollView {
             objectName: "sectionError"
             negative: true
             closable: false
-            lines: page.snap.section && page.snap.section.source === "error" ? ["The last change to the rules wasn't applied. Hyprland said: " + String(page.snap.section.message || "")] : []
+            lines: page.sectionMessage !== "" ? ["The last change to the rules wasn't applied. Hyprland said: " + page.sectionMessage] : []
             Layout.fillWidth: true
         }
         RuleMessage {
             objectName: "rulesError"
             negative: true
             closable: false
-            lines: rm.error !== "" ? ["That wasn't done: " + rm.error] : []
+            // A write Hyprland refused is already said by sectionError: one card, not two.
+            lines: rm.error !== "" && !(page.sectionMessage !== "" && rm.error.indexOf(page.sectionMessage) >= 0) ? ["That wasn't done: " + rm.error] : []
             Layout.fillWidth: true
         }
         RuleMessage {

@@ -18,6 +18,14 @@ pub(super) fn source_of(explained: &Value, key: &str) -> (String, Value, Value) 
     (source, detail("line"), detail("path"))
 }
 
+/// The message of a row whose last write was rejected (`source` is `error`), or null.
+fn message_of(explained: &Value, key: &str) -> Value {
+    explained[key]["detail"]
+        .get("message")
+        .cloned()
+        .unwrap_or(Value::Null)
+}
+
 /// The name of the profile whose switch the row's rule holds, or `""`.
 fn profile_of(explained: &Value, key: &str) -> String {
     let row = &explained[key];
@@ -49,7 +57,7 @@ impl RulesState {
                     "effects_text": effects_text(&r.effects),
                     "static": has_static(&r.effects),
                     "source": source, "line": line, "path": path, "profile": profile,
-                    "matches_now": now})
+                    "message": message_of(explained, &key), "matches_now": now})
             })
             .collect();
         let layer: Vec<Value> = rules
@@ -62,19 +70,21 @@ impl RulesState {
                 json!({"raw": r, "id": r.id, "name": r.name, "enabled": r.enabled,
                     "namespace": r.matches.namespace,
                     "effects_text": layer_effects_text(&r.effects),
-                    "source": source, "line": line, "path": path, "profile": profile})
+                    "source": source, "line": line, "path": path, "profile": profile,
+                    "message": message_of(explained, &key)})
             })
             .collect();
         let workspace: Vec<Value> = rules
             .workspace
             .iter()
             .map(|r| {
-                let (source, line, path) =
-                    source_of(explained, &format!("workspace.{}", r.workspace));
+                let key = format!("workspace.{}", r.workspace);
+                let (source, line, path) = source_of(explained, &key);
                 let layout = layouts["workspaces"][&r.workspace].as_str().unwrap_or("");
                 json!({"raw": r, "workspace": r.workspace, "layout": layout,
                     "fields_text": workspace_text(r),
-                    "source": source, "line": line, "path": path})
+                    "source": source, "line": line, "path": path,
+                    "message": message_of(explained, &key)})
             })
             .collect();
         json!({"window": window, "layer": layer, "workspace": workspace})

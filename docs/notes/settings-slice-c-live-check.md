@@ -15,8 +15,8 @@ errors.
   and **Matches now** lists Pavucontrol. Tick **Float** and save. The page says "Close and reopen
   Pavucontrol to apply." Close Pavucontrol and open it again: it floats.
 - [ ] **2. Dynamic effects apply at once.** Open a terminal. Add a rule for it (use Pick a window)
-  with only **See-through 80 %**. The terminal turns see-through right away, without closing it,
-  and the page shows no "Close and reopen" message.
+  with only **Opacity** set to 0.80 (the rule's row reads "Opacity: 80 %"). The terminal turns
+  see-through right away, without closing it, and the page shows no "Close and reopen" message.
 - [ ] **3. Why does this window…?** Make three rules: two that match your terminal (one by App
   ID, one by its title) and one that doesn't (some other App ID). Press **Why does this
   window…?** and click the terminal. It lists the two matching rules, in list order, and not the
@@ -57,10 +57,15 @@ errors.
   - "Keep the screen awake while an app is fullscreen": play a video in mpv fullscreen and
     confirm the screen doesn't dim or lock (`systemd-inhibit --list` shows an idle block).
 - [ ] **8. Panel and workspace rules.**
-  - Add a panel rule "Blur notifications" for the App ID `^noti-fi$` (see the shell's panel
-    names under Advanced details): trigger a notification. Its popup is blurred.
-  - Add a workspace rule for workspace 3: on your second monitor, stays when empty, gaps 0.
-    Workspace 3 moves to that monitor and is still there when empty, with no gaps.
+  - On the **Panels** tab, press **New rule**, then **Blank rule**. Name it "Blur notifications",
+    give it the **Panel name** `^noti-fi$` (`hyprctl layers` lists the shell's panel names) and
+    tick **Blur**. Trigger a notification: its popup is blurred.
+  - On the **Workspaces** tab, add a rule for workspace 3 with **Screen** set to your second
+    monitor's name, **Keep when empty** ticked and **Gap between windows** 0. Workspace 3 moves
+    to that monitor and is still there when empty, with no gaps.
+  - Press **New rule** on the **Workspaces** tab again and type `3`, with any setting ticked:
+    Save leaves the editor open with "Workspace 3 already has a rule; edit that one." and the
+    first rule is unchanged.
   - Run `uqctl layout set 3 master`. The rule is still on the page, and
     `hyprctl workspacerules` shows one merged rule for 3 (monitor, persistent, gaps and layout).
   - Make a window rule that matches workspace `name:web` and have a window open on a workspace
@@ -85,10 +90,14 @@ errors.
   as it was). Restore the restore point from yesterday (or one you saved at the start): the rules
   list matches it.
 - [ ] **11. Refusals in plain words.** Each of these is refused with one plain line (no word
-  "regex", no pasted error) and nothing changes:
-  - the patterns `negative:foo`, `[a&&b]`, `(?x)a` and `a{1001}`;
-  - a 201st window rule (add them with `uqctl` or the app until you hit the limit);
-  - a rule with both Float and Tile.
+  "regex", no pasted error), the editor stays open with what you typed, and nothing changes:
+  - the patterns `negative:foo`, `[a&&b]`, `(?x)a` and `a{1001}` (Save stays greyed out while
+    the editor says "This rule can't be saved yet: …");
+  - a 201st window rule (stop uqd, write 200 `[[rules.window]]` entries into
+    `~/.local/state/uq/state.toml`, start uqd, then add one more in the app);
+  - a panel rule whose Panel name is `[a&&b]`.
+
+  Also: ticking **Tile** unticks **Float**, and the other way round, so a rule never has both.
 - [ ] **12. Profiles (rules on and off).** Make a float rule and a panel rule. On **Profiles**,
   create a profile and use **Add settings**: the two rules' switches are listed by rule name.
   Set the float rule's switch to off in the profile. Turn the profile on:

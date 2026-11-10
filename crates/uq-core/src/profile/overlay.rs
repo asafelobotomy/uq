@@ -605,6 +605,21 @@ mod tests {
                 label: "Window rule \u{201c}B\u{201d}".into(),
             }]
         );
+        // The literal K3 case: a rule the profile turned off, turned on and off again by hand,
+        // still holds what the profile set, so it goes back on and nothing is kept.
+        let cur = rules_state(vec![rule("r-000a", "A", true)]);
+        let p = profile("rules", "[rules]\n\"r-000a\" = false\n");
+        let (on, active) = apply(&cur, &p, 0).unwrap();
+        let mut on = on;
+        for by_hand in [true, false] {
+            let mut hand = on.section("rules").unwrap();
+            hand["window"][0]["enabled"] = json!(by_hand);
+            on.set_section("rules", hand).unwrap();
+        }
+        assert_eq!(enabled(&on, "r-000a"), Some(false));
+        let (off, kept) = turn_off(&on, &active).unwrap();
+        assert_eq!(enabled(&off, "r-000a"), Some(true));
+        assert!(kept.is_empty(), "{kept:?}");
     }
 
     #[test]

@@ -7,6 +7,7 @@
 
 mod fields;
 mod rows;
+mod save;
 
 use std::sync::Mutex as StdMutex;
 
@@ -32,11 +33,13 @@ const REOPEN_NAMES: usize = 3;
 pub enum Op {
     Refresh,
     RefreshWindows,
-    /// `kind` is `"window" | "layer" | "workspace"`. An add when `rule` has no `id` (or a
-    /// workspace selector not yet present), else a replace.
+    /// `kind` is `"window" | "layer" | "workspace"`. An add when `replaces` is `None` (a
+    /// workspace that already has a rule is refused), else a replace of the rule with that id
+    /// (or workspace).
     Save {
         kind: String,
         rule: Value,
+        replaces: Option<String>,
     },
     /// `key` is a rule id, or a workspace selector.
     Delete {
@@ -102,6 +105,8 @@ pub struct RulesState {
     shown: StdMutex<Shown>,
     /// The last window list, for `preview` and `matches_now`.
     windows: StdMutex<Vec<WindowInfo>>,
+    /// The last `rules` section read from uqd, for `check`.
+    last: StdMutex<Value>,
 }
 
 fn failure(text: impl Into<String>) -> zbus::Error {
@@ -172,6 +177,7 @@ impl RulesState {
             write: Mutex::new(()),
             shown: StdMutex::new(Shown::default()),
             windows: StdMutex::new(Vec::new()),
+            last: StdMutex::new(Value::Null),
         }
     }
 
@@ -260,19 +266,16 @@ impl RulesState {
         };
     }
 
-    async fn save(&self, proxy: &DesktopProxy<'_>, kind: &str, rule: Value) -> zbus::Result<()> {
+    async fn save(
+        &self,
+        proxy: &DesktopProxy<'_>,
+        kind: &str,
+        rule: Value,
+        replaces: Option<&str>,
+    ) -> zbus::Result<()> {
         let saved = rule.clone();
         patch_section(proxy, "rules", |section| {
-            let list = list_mut(section, kind)?;
-            let key = key_of(kind, &rule).to_string();
-            match list.iter().position(|r| key_of(kind, r) == key) {
-                Some(i) if !key.is_empty() => list[i] = rule,
-                None if kind != "workspace" && !key.is_empty() => {
-                    return Err(failure("that rule isn't there any more"));
-                }
-                _ => list.push(rule),
-            }
-            Ok(())
+            save::put(section, kind, rule, replaces)
         })
         .await?;
         self.refresh_windows(proxy).await.ok();
@@ -368,7 +371,11 @@ impl PageLogic for RulesState {
         let proxy = DesktopProxy::new(&self.conn).await?;
         match op {
             Op::Refresh | Op::RefreshWindows => self.refresh_windows(&proxy).await,
-            Op::Save { kind, rule } => self.save(&proxy, &kind, rule).await,
+            Op::Save {
+                kind,
+                rule,
+                replaces,
+            } => self.save(&proxy, &kind, rule, replaces.as_deref()).await,
             Op::Delete { kind, key } => {
                 patch_section(&proxy, "rules", |s| {
                     let list = list_mut(s, &kind)?;
@@ -445,8 +452,9 @@ impl RulesState {
     async fn read_all(&self) -> zbus::Result<Value> {
         let proxy = DesktopProxy::new(&self.conn).await?;
         let section = parse_json(&proxy.get_section("rules").await?)?;
-        let rules: Rules = serde_json::from_value(section)
+        let rules: Rules = serde_json::from_value(section.clone())
             .map_err(|_| failure("uQ's settings service sent unreadable rules"))?;
+        *self.last.lock().unwrap() = section;
         let layouts = parse_json(&proxy.get_section("layouts").await?)?;
         // A failed `Explain` leaves the rows without a source; uqd being gone is the caller's.
         let explained = match proxy.explain("rules").await.and_then(|t| parse_json(&t)) {

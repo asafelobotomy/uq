@@ -41,9 +41,26 @@ pub mod qobject {
         fn refresh_windows(self: Pin<&mut RulesModel>);
 
         /// Add or replace a rule; `kind` is "window", "layer" or "workspace" and `rule_json` the
-        /// rule as JSON (no id: a new rule).
+        /// rule as JSON. `replaces` is "" for a new rule, else the id (or workspace) of the rule
+        /// the editor was opened on.
         #[qinvokable]
-        fn save(self: Pin<&mut RulesModel>, kind: &QString, rule_json: &QString);
+        fn save(
+            self: Pin<&mut RulesModel>,
+            kind: &QString,
+            rule_json: &QString,
+            replaces: &QString,
+        );
+
+        /// Whether a draft can be saved as `save` would save it (against the rules last read):
+        /// `{valid, problems}`, problems in plain words. Synchronous, no request to uqd, never
+        /// busy, never sets `error`.
+        #[qinvokable]
+        fn check(
+            self: &RulesModel,
+            kind: &QString,
+            draft_json: &QString,
+            replaces: &QString,
+        ) -> QString;
 
         /// Delete the rule with this id (or workspace selector).
         #[qinvokable]
@@ -163,17 +180,29 @@ impl RulesModel {
         model_core::start(self, Op::RefreshWindows);
     }
 
-    fn save(self: Pin<&mut Self>, kind: &QString, rule_json: &QString) {
+    fn save(self: Pin<&mut Self>, kind: &QString, rule_json: &QString, replaces: &QString) {
         match serde_json::from_str(&rule_json.to_string()) {
             Ok(rule) => model_core::start(
                 self,
                 Op::Save {
                     kind: kind.to_string(),
                     rule,
+                    replaces: given(replaces),
                 },
             ),
             Err(e) => self.set_error(unreadable(e)),
         }
+    }
+
+    fn check(&self, kind: &QString, draft_json: &QString, replaces: &QString) -> QString {
+        let answer = match serde_json::from_str::<Value>(&draft_json.to_string()) {
+            Ok(draft) => match self.core().logic() {
+                Some(logic) => logic.check(&kind.to_string(), &draft, given(replaces)),
+                None => json!({"valid": false, "problems": ["uQ isn't running"]}),
+            },
+            Err(_) => json!({"valid": false, "problems": ["this rule can't be read"]}),
+        };
+        QString::from(&answer.to_string())
     }
 
     fn remove(self: Pin<&mut Self>, kind: &QString, key: &QString) {

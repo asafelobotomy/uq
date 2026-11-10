@@ -73,10 +73,10 @@ pub trait Desktop {
     fn history_changed(&self) -> zbus::Result<()>;
     #[zbus(signal)]
     fn monitors_changed(&self) -> zbus::Result<()>;
-    /// The active profile, or `""`; also sent when the list of profiles changes.
     /// A pick began; the shell shows its overlay and answers `PickDone(token, …)`.
     #[zbus(signal)]
     fn pick_requested(&self, token: &str) -> zbus::Result<()>;
+    /// The active profile, or `""`; also sent when the list of profiles changes.
     #[zbus(signal)]
     fn profile_changed(&self, id: &str) -> zbus::Result<()>;
 }
