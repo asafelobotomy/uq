@@ -263,7 +263,8 @@ c_L8() {
         dt=$(since "$t0")
         SLEPT_THIS_BOOT=1
         note "with uq-lock masked: suspended $dt s after systemctl suspend"
-        lt "$dt" 4 || bad "expected suspend within about 2 s (the inhibitor's fallback); observed $dt s"
+        # The fallback is logind's InhibitDelayMaxSec (5 s by default) less 0.5 s (642d495).
+        lt "$dt" 7 || bad "expected suspend within logind's inhibit delay (about 4.5 s); observed $dt s"
     else
         bad "did not suspend within 15 s with uq-lock masked"
     fi
@@ -686,8 +687,10 @@ c_LJ() {
         grep -F -e "$UQVM_PASS" -e "$WRONG_PW" | head -5)
     [ -z "$hits" ] && note "no password typed in this run appears in the user or system journal" ||
         bad "a password appears in the journal: $hits"
-    hits=$(vg journalctl --user --no-pager -o cat -b -u uq-shell -u uq-lock 2>/dev/null | grep -iE 'pam' | sort | uniq -c | sort -rn | head -8)
-    note "PAM lines in journalctl --user -u uq-shell -u uq-lock (this boot):"
+    # Only the processes' own output (stdout/stderr) counts: PAM modules' syslog lines, such as
+    # pam_unix's "authentication failure", are the system's audit trail, as for any login.
+    hits=$(vg journalctl --user --no-pager -o cat -b -u uq-shell -u uq-lock _TRANSPORT=stdout 2>/dev/null | grep -iE 'pam' | sort | uniq -c | sort -rn | head -8)
+    note "PAM lines in the stdout/stderr of uq-shell and uq-lock (this boot):"
     printf '%s\n' "$hits" | sed 's/^/    /' >>"$EVID/$CUR.txt"
     [ -z "$hits" ] || bad "PAM messages reach the journal (uq-lock-run's filter misses them): $(printf '%s' "$hits" | head -2 | sed 's/^ *//' | tr '\n' ';')"
     # The filter (uq-lock-run's grep) must not outlive the lock unit.

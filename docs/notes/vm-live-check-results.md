@@ -20,6 +20,25 @@ run but failed in earlier runs; they're a load-dependent race, described under t
 | noti-fi | N2, N4, N6: uQ never connects to noti-fi's socket; N1: `takeover --plain` doesn't start the service; N7: noti-fi's default theme hides uQ's tokens |
 | Race | L6, L7 (intermittent): the machine can sleep before the lock is up when the lock takes more than 2 s to start |
 
+## Re-run after the fix wave (2026-11-10)
+
+Run `~/.cache/uq-vm/runs/20261110-002529/` at `aa3d6d0` (uq 0.2.0, Hyprland 0.57.2, Quickshell
+0.3.2): **31 PASS, 5 FAIL, 5 N/A**, and after the check fixes on this branch, re-running L8, L21
+and LJ on the same VM: all three PASS.
+
+- **Fixed by the fix wave:** L9, L10 and L11 (idle timings now apply without a lock/unlock), L6
+  and L7 (no longer intermittent), N1, N2, N4 and N6 (uQ connects to noti-fi's socket).
+- **L21 and Q2** were already working: faillock's "The account is locked due to 3 failed
+  logins" shows under the field, and uq-open's row reads "Open". They failed only because their
+  templates had not been captured; they are now.
+- **L8** suspended 5.0 s after `systemctl suspend`, which is logind's 5 s inhibit delay: the
+  intended fallback since `642d495`. The check now allows up to 7 s.
+- **LJ:** no password and no relayed PAM conversation in uq-shell's or uq-lock's own output. The
+  remaining lines were pam_unix and pam_faillock's own syslog entries, which every login writes;
+  the check now reads only `_TRANSPORT=stdout`.
+- **Still open: N7.** noti-fi's list keeps the same colours after `uqctl theme set`; that's for the
+  noti-fi repo.
+
 ## How to run
 
 ```bash

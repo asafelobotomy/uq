@@ -8,8 +8,9 @@ failure that leaves the session unlocked is a security bug: stop and fix it befo
 
 Before you start: keep a TTY login handy (`CTRL+ALT+F3`) in case the lock won't come back, enroll
 a finger (`fprintd-enroll`), and have a laptop on battery for the suspend check. Watch
-`journalctl --user -fu uq-shell -u uq-lock` in a second session; no password or PAM message may
-ever appear in it.
+`journalctl --user -fu uq-shell -u uq-lock _TRANSPORT=stdout` in a second session; no password or
+PAM message may ever appear in it. (Without the `_TRANSPORT` filter you also see PAM modules' own
+syslog lines, such as pam_unix's "authentication failure": that is the normal audit trail.)
 
 | # | Check | How | Expected | Result |
 |---|-------|-----|----------|--------|
@@ -20,7 +21,7 @@ ever appear in it.
 | 5 | `kill -9` the shell | Lock, then from the TTY `pkill -9 -f /usr/share/uq/shell` | The session stays locked; the shell restarts; after unlocking, the bar and idle stages work. | |
 | 6 | Suspend from the power menu | Unlocked, `SUPER+Escape`, Suspend, then wake | The lock is already up when the screen comes back; nothing of the desktop flashes. | |
 | 7 | Suspend from logind | Unlocked, `systemctl suspend` from a terminal, then wake | As 6. Before suspending, `systemd-inhibit --list` shows uQ's "Lock the screen before sleep" delay lock; after waking it shows a fresh one. | |
-| 8 | Sleep fallback | Unlocked, `systemctl --user mask --runtime uq-lock`, `systemctl suspend`, wake, then `systemctl --user unmask --runtime uq-lock` | The machine still suspends within about 2 s (the inhibitor's fallback). Nothing locks, so it wakes unlocked: that is the documented failure mode when the lock can't start, not a pass for the lock. | |
+| 8 | Sleep fallback | Unlocked, `systemctl --user mask --runtime uq-lock`, `systemctl suspend`, wake, then `systemctl --user unmask --runtime uq-lock` | The machine still suspends within logind's inhibit delay, about 4.5 s with the default `InhibitDelayMaxSec=5` (the inhibitor's fallback). Nothing locks, so it wakes unlocked: that is the documented failure mode when the lock can't start, not a pass for the lock. | |
 | 9 | Dim | `uqctl idle set dim 30`, wait 30 s | A 60% dark overlay on every screen. The first click or key press removes it and also reaches the app under it. | |
 | 10 | Lock on idle | `uqctl idle set lock 40`, wait | Locks after 40 s. | |
 | 11 | Screens off | `uqctl idle set screen-off 50`, wait | Screens turn off after 50 s; input turns them back on. | |
