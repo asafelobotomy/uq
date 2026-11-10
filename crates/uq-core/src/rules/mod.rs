@@ -5,8 +5,14 @@
 
 mod check;
 pub mod hypr;
+mod matcher;
+mod templates;
+mod words;
 
 pub use check::check_pattern;
+pub use matcher::{Compiled, Verdict, WindowInfo, matching, window_at, windows_from_clients};
+pub use templates::{Needs, TEMPLATES, Template, build as build_template};
+pub use words::{effects_text, has_static, layer_effects_text, match_text, workspace_text};
 
 use crate::settings::{SettingError, check_known, invalid};
 use serde::de::DeserializeOwned;

@@ -25,8 +25,8 @@ pub use layouts::{
 };
 pub use look::Look;
 pub use monitors::{
-    LiveOutput, Monitors, OutputConfig, Position, clean_text, parse_live, stays_visible,
-    valid_mode, valid_output_name,
+    LiveOutput, Monitors, OutputConfig, Position, clean_text, clean_text_spaced, parse_live,
+    stays_visible, valid_mode, valid_output_name,
 };
 pub use shell::{
     BUILTIN_PROVIDERS, Islands, ProviderPref, ShellSettings, provider_enabled, provider_order,

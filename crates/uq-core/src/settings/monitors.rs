@@ -29,6 +29,15 @@ pub fn clean_text(s: &str, max: usize) -> String {
     s.chars().filter(|c| !c.is_control()).take(max).collect()
 }
 
+/// Like [`clean_text`], but each control character becomes a space, so words around it stay
+/// apart (a title with an escape sequence shows as plain text).
+pub fn clean_text_spaced(s: &str, max: usize) -> String {
+    s.chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .take(max)
+        .collect()
+}
+
 fn digits(s: &str, len: std::ops::RangeInclusive<usize>) -> bool {
     len.contains(&s.len()) && s.bytes().all(|b| b.is_ascii_digit())
 }
