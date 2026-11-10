@@ -95,7 +95,7 @@ function searchApps(query, entries, counts, limit) {
     return out.slice(0, max);
 }
 
-function merge(apps, providerGroups, generation) {
+function merge(apps, providerGroups, generation, order) {
     var appList = apps || [];
     var groups = [];
     if (appList.length > 0)
@@ -111,9 +111,13 @@ function merge(apps, providerGroups, generation) {
         live.push({ provider: g.provider || ids[i], providerName: g.provider_name || g.providerName || "",
                     items: g.items });
     }
+    var custom = Array.isArray(order) ? order : [];
     var rank = function (p) {
+        var c = custom.indexOf(p.provider);
+        if (c >= 0)
+            return c;
         var b = BUILTIN_ORDER.indexOf(p.provider);
-        return b >= 0 ? b : BUILTIN_ORDER.length;
+        return custom.length + (b >= 0 ? b : BUILTIN_ORDER.length);
     };
     live.sort(function (a, b) {
         var d = rank(a) - rank(b);
