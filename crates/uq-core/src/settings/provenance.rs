@@ -376,14 +376,6 @@ fn contains_word(line: &str, needle: &str) -> bool {
 /// Tables nested deeper than this are counted but not named.
 const MAX_TABLE_DEPTH: usize = 64;
 
-/// The 1-based line of `user.lua` text that seems to set Hyprland option `hypr_path`
-/// (`general:gaps_in`, `decoration:blur:enabled`). A case-sensitive, plain-text heuristic, not
-/// a parser; the first hit wins. A line hits when it has the path in dotted form
-/// (`general.gaps_in`) or colon form (`general:gaps_in`), or has `gaps_in =` inside a
-/// `general = {` table (tables are tracked by brace depth, so `blur = { enabled = … }` inside
-/// `decoration = {` finds `decoration:blur:enabled`). Lua `--` comments are ignored (a `--[[`
-/// block comment only on its first line); strings are not parsed, so `--` inside one also ends
-/// the scanned part of that line.
 /// The part of a `user.lua` line before a `--` comment. Strings are not parsed, so `--` inside
 /// one also ends the scanned part.
 fn strip_lua_comment(line: &str) -> &str {
@@ -419,6 +411,14 @@ pub fn find_workspace_rule_in_user_lua(text: &str, selector: &str) -> Option<u32
     })
 }
 
+/// The 1-based line of `user.lua` text that seems to set Hyprland option `hypr_path`
+/// (`general:gaps_in`, `decoration:blur:enabled`). A case-sensitive, plain-text heuristic, not
+/// a parser; the first hit wins. A line hits when it has the path in dotted form
+/// (`general.gaps_in`) or colon form (`general:gaps_in`), or has `gaps_in =` inside a
+/// `general = {` table (tables are tracked by brace depth, so `blur = { enabled = … }` inside
+/// `decoration = {` finds `decoration:blur:enabled`). Lua `--` comments are ignored (a `--[[`
+/// block comment only on its first line); strings are not parsed, so `--` inside one also ends
+/// the scanned part of that line.
 pub fn find_in_user_lua(text: &str, hypr_path: &str) -> Option<u32> {
     let (section, leaf) = hypr_path.rsplit_once(':')?;
     let sections: Vec<&str> = section.split(':').collect();
