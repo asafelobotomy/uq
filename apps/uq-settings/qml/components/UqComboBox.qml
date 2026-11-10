@@ -4,7 +4,6 @@
 import QtQuick
 import QtQuick.Controls as QQC2
 import org.kde.kirigami as Kirigami
-import "."
 
 QQC2.ComboBox {
     id: combo
@@ -12,7 +11,11 @@ QQC2.ComboBox {
     // The desktop style paints `displayText` itself (rich-text capable); blank it so only our
     // UqLabel below shows the value, taken from currentText.
     displayText: ""
+    // displayText is blanked, so the accessible value comes from here; callers set Accessible.name.
+    Accessible.role: Accessible.ComboBox
+    Accessible.description: currentText
     contentItem: UqLabel {
+        // Binds currentText because displayText is blanked above.
         text: combo.currentText
         elide: Text.ElideRight
         verticalAlignment: Text.AlignVCenter

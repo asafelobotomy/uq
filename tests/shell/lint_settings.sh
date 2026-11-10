@@ -45,6 +45,9 @@ bad combo_without_contentitem Case.qml 'Item {\n  QQC2.ComboBox {\n    model: m\
 good control_literal 'Item {\n  QQC2.CheckBox { text: "Show seconds" }\n}\n'
 good combo_full 'Item {\n  QQC2.ComboBox {\n    id: c\n    model: m\n    contentItem: UqLabel { text: c.displayText }\n    delegate: D {}\n  }\n}\n'
 good nested_uqlabel_text 'Item {\n  QQC2.Button {\n    contentItem: UqLabel {\n      text: modelData\n    }\n  }\n}\n'
+bad templates_prefix Case.qml 'Item {\n  T.CheckBox {\n    text: modelData\n  }\n}\n' 3
+bad uqcombobox_text Case.qml 'Item {\n  UqComboBox {\n    text: modelData\n  }\n}\n' 3
+good uqcombobox_plain 'Item {\n  UqComboBox { model: m }\n}\n'
 
 [ $fail = 0 ] && echo "lint_settings ok"
 exit $fail
