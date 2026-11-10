@@ -121,10 +121,11 @@ pub fn build(
             effects.keep_aspect_ratio = Some(true);
             "Picture-in-picture floats".to_string()
         }
-        _ => {
+        "keep_awake" => {
             effects.idle_inhibit = Some("fullscreen".to_string());
             format!("{word} keeps the screen awake in fullscreen")
         }
+        _ => return Err(invalid("template", "no such template")),
     };
     Ok(WindowRule {
         id: String::new(),
@@ -166,6 +167,7 @@ mod tests {
         assert!(build("open_on_workspace", Some("a"), None, false).is_err());
         assert!(build("open_on_workspace", None, Some("3"), false).is_err());
         assert!(build("nope", Some("a"), None, false).is_err());
+        assert!(build("nope", None, None, false).is_err());
         let r = build("open_on_workspace", Some("a"), Some("3"), true).unwrap();
         assert_eq!(r.effects.workspace.as_deref(), Some("3"));
         assert_eq!(r.effects.silent, Some(true));

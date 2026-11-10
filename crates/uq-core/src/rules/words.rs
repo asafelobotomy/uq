@@ -67,7 +67,7 @@ pub fn effects_text(e: &WindowEffects) -> Vec<String> {
         "Takes focus when it opens",
     );
     if let Some(x) = e.opacity {
-        o.push(format!("See-through: {} %", (x * 100.0).round() as i64));
+        o.push(format!("Opacity: {} %", (x * 100.0).round() as i64));
     }
     on_off(&mut o, e.no_blur, "No blur", "Blur stays on");
     on_off(&mut o, e.no_shadow, "No shadow", "Shadow stays on");
@@ -113,7 +113,8 @@ pub fn layer_effects_text(e: &LayerEffects) -> Vec<String> {
     }
     on_off(&mut o, e.no_anim, "No animations", "Animations stay on");
     if let Some(a) = &e.animation {
-        o.push(format!("Animation style: {a}"));
+        let style = if a == "popin" { "Pop in" } else { a.as_str() };
+        o.push(format!("Animation style: {style}"));
     }
     o
 }

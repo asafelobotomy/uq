@@ -108,6 +108,13 @@ fn workspace_match_forms() {
     assert_eq!(ws("special:magic", &sp), Verdict::Yes);
     assert_eq!(ws("special:other", &sp), Verdict::No);
     assert_eq!(ws("w[tv1]", &w), Verdict::Unknown);
+    let mut def = win("a");
+    def.workspace_id = -99;
+    def.workspace_name = "special:special".into();
+    assert_eq!(ws("special", &def), Verdict::Yes);
+    assert_eq!(ws("special", &sp), Verdict::No);
+    assert_eq!(ws("special:special", &def), Verdict::Yes);
+    assert_eq!(ws("special", &w), Verdict::No);
 }
 
 #[test]
@@ -365,7 +372,7 @@ fn effects_text_is_plain() {
     let lines = effects_text(&e);
     assert!(lines.contains(&"Floats".to_string()));
     assert!(lines.contains(&"Opens on workspace 3, without switching to it".to_string()));
-    assert!(lines.contains(&"See-through: 90 %".to_string()));
+    assert!(lines.contains(&"Opacity: 90 %".to_string()));
     assert!(lines.contains(&"Keeps the screen awake while fullscreen".to_string()));
     let others = [
         layer_effects_text(&LayerEffects {
@@ -410,16 +417,20 @@ fn effects_text_is_plain() {
             assert!(!line.contains(b), "{line:?} holds {b:?}");
         }
     }
-    assert!(
-        others[1]
-            .iter()
-            .any(|l| l.contains("web") && !l.contains("name:"))
-            || others[1].iter().all(|l| !l.contains("name:"))
-    );
+    assert!(others[2].contains(&"Is on workspace web".to_string()));
+    assert!(others[0].contains(&"Animation style: fade".to_string()));
     assert!(has_static(&e));
     assert!(!has_static(&WindowEffects {
         opacity: Some(0.5),
         no_blur: Some(true),
         ..Default::default()
     }));
+}
+
+#[test]
+fn tag_match_accepts_effect_tags() {
+    let mut w = win("a");
+    w.tags = vec!["music*".into()];
+    assert_eq!(m(|x| x.tag = Some("music".into())).test(&w), Verdict::Yes);
+    assert_eq!(m(|x| x.tag = Some("mus".into())).test(&w), Verdict::No);
 }

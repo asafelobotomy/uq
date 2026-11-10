@@ -106,6 +106,8 @@ pub enum Verdict {
 enum Ws {
     Id(i64),
     Name(String),
+    /// A bare `special`: the default special workspace.
+    DefaultSpecial,
     Unknown,
 }
 
@@ -147,7 +149,9 @@ fn workspace(sel: &str) -> Ws {
         Ws::Id(id)
     } else if let Some(n) = sel.strip_prefix("name:") {
         Ws::Name(n.to_string())
-    } else if sel.starts_with("special") {
+    } else if sel == "special" {
+        Ws::DefaultSpecial
+    } else if sel.starts_with("special:") {
         Ws::Name(sel.to_string())
     } else {
         Ws::Unknown
@@ -184,7 +188,11 @@ impl Compiled {
             && re(&self.title, &w.title)
             && re(&self.initial_class, &w.initial_class)
             && re(&self.initial_title, &w.initial_title)
-            && self.tag.as_ref().is_none_or(|t| w.tags.contains(t))
+            && self.tag.as_ref().is_none_or(|t| {
+                w.tags
+                    .iter()
+                    .any(|g| g == t || g.strip_suffix('*') == Some(t))
+            })
             && eq(self.xwayland, w.xwayland)
             && eq(self.floating, w.floating)
             && eq(self.fullscreen, w.fullscreen)
@@ -202,6 +210,11 @@ impl Compiled {
             Some(Ws::Unknown) => verdict = Verdict::Unknown,
             Some(Ws::Id(id)) if *id != w.workspace_id => return Verdict::No,
             Some(Ws::Name(n)) if *n != w.workspace_name => return Verdict::No,
+            Some(Ws::DefaultSpecial)
+                if !matches!(w.workspace_name.as_str(), "special" | "special:special") =>
+            {
+                return Verdict::No;
+            }
             Some(_) => {}
         }
         verdict
