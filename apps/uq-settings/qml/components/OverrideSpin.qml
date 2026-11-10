@@ -15,6 +15,8 @@ SettingRow {
     /// What unticking "Use theme" starts from: the theme's current value.
     property int fallback: 10
     property string unit: ""
+    /// The caption of the checkbox, for settings whose fallback is not a theme value.
+    property string useLabel: "Use theme"
     /// True while a request is in flight; the spin box then keeps what the user chose, and shows
     /// the saved value again once it is done (so a refused change snaps back).
     property bool busy: false
@@ -58,7 +60,7 @@ SettingRow {
         }
     }
     UqLabel {
-        text: "Use theme"
+        text: root.useLabel
         MouseArea {
             anchors.fill: parent
             enabled: useTheme.enabled

@@ -153,7 +153,81 @@ static WALLPAPER_SETTINGS: [SearchEntry; 5] = [
     ),
 ];
 
-static CORE_PAGES: [PageInfo; 2] = [
+static LOOK_SETTINGS: [SearchEntry; 15] = [
+    entry(
+        "gaps-inner",
+        "Gaps between windows",
+        &["gap", "spacing", "padding", "inner"],
+    ),
+    entry(
+        "gaps-outer",
+        "Gaps around the screen",
+        &["gap", "margin", "outer", "edge"],
+    ),
+    entry(
+        "border-width",
+        "Window border width",
+        &["outline", "frame", "thickness"],
+    ),
+    entry(
+        "rounding",
+        "Corner rounding",
+        &["radius", "round corners", "corners"],
+    ),
+    entry(
+        "blur",
+        "Blur behind windows",
+        &["frosted", "glass", "transparency"],
+    ),
+    entry(
+        "blur-size",
+        "Blur size",
+        &["blur radius", "frosted", "strength"],
+    ),
+    entry(
+        "blur-passes",
+        "Blur passes",
+        &["blur quality", "frosted", "iterations"],
+    ),
+    entry("shadow", "Window shadows", &["drop shadow", "depth"]),
+    entry(
+        "animations",
+        "Animations",
+        &["motion", "transitions", "effects"],
+    ),
+    entry(
+        "animation-speed",
+        "Animation speed",
+        &["faster", "slower", "motion", "transitions"],
+    ),
+    entry(
+        "default-layout",
+        "Default layout",
+        &["tiling", "dwindle", "master", "scrolling"],
+    ),
+    entry(
+        "workspace-layouts",
+        "Layout for each workspace",
+        &["tiling", "workspace rules", "per workspace"],
+    ),
+    entry(
+        "dwindle-options",
+        "Dwindle layout options",
+        &["split", "tiling", "preserve split"],
+    ),
+    entry(
+        "master-options",
+        "Master layout options",
+        &["master", "mfact", "orientation", "stack"],
+    ),
+    entry(
+        "scrolling-options",
+        "Scrolling layout options",
+        &["columns", "column width", "tiling"],
+    ),
+];
+
+static CORE_PAGES: [PageInfo; 3] = [
     PageInfo {
         id: "appearance",
         name: "Appearance",
@@ -161,6 +235,14 @@ static CORE_PAGES: [PageInfo; 2] = [
         category: Category::Personal,
         qml: "pages/AppearancePage.qml",
         settings: &APPEARANCE_SETTINGS,
+    },
+    PageInfo {
+        id: "look",
+        name: "Look and layouts",
+        icon: "preferences-desktop-effects",
+        category: Category::Personal,
+        qml: "pages/LookPage.qml",
+        settings: &LOOK_SETTINGS,
     },
     PageInfo {
         id: "wallpaper",
@@ -281,7 +363,7 @@ mod tests {
         let pages = core_pages();
         let ids: HashSet<_> = pages.iter().map(|p| p.id).collect();
         assert_eq!(ids.len(), pages.len(), "duplicate page id");
-        assert!(ids.contains("appearance") && ids.contains("wallpaper"));
+        assert!(ids.contains("appearance") && ids.contains("look") && ids.contains("wallpaper"));
         assert!(
             pages.windows(2).all(|w| w[0].category <= w[1].category),
             "core pages out of category order"
@@ -318,11 +400,12 @@ mod tests {
             .iter()
             .map(|p| p["id"].as_str().unwrap())
             .collect();
-        assert_eq!(ids, ["appearance", "wallpaper"]);
+        assert_eq!(ids, ["appearance", "look", "wallpaper"]);
         assert_eq!(v[0]["category"], "personal");
         assert_eq!(v[0]["categoryName"], "Personal");
-        assert_eq!(v[1]["qml"], "pages/WallpaperPage.qml");
-        assert_eq!(v[1]["plugin"], false);
+        assert_eq!(v[1]["qml"], "pages/LookPage.qml");
+        assert_eq!(v[2]["qml"], "pages/WallpaperPage.qml");
+        assert_eq!(v[2]["plugin"], false);
     }
 
     #[test]
@@ -338,13 +421,13 @@ mod tests {
         };
         let v: serde_json::Value =
             serde_json::from_str(&pages_json(&all_pages(&[plugin]))).unwrap();
-        assert_eq!(v.as_array().unwrap().len(), 3);
-        assert_eq!(v[2]["id"], "demo");
-        assert_eq!(v[2]["category"], "apps");
-        assert_eq!(v[2]["categoryName"], "Apps");
-        assert_eq!(v[2]["plugin"], true);
+        assert_eq!(v.as_array().unwrap().len(), 4);
+        assert_eq!(v[3]["id"], "demo");
+        assert_eq!(v[3]["category"], "apps");
+        assert_eq!(v[3]["categoryName"], "Apps");
+        assert_eq!(v[3]["plugin"], true);
         assert_eq!(
-            v[2]["qml"],
+            v[3]["qml"],
             "file:///usr/share/uq/settings/pages/demo/Page.qml"
         );
     }
