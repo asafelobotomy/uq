@@ -14,7 +14,7 @@ mod wallpaper;
 pub use appearance::{Appearance, valid_theme_name};
 pub use layouts::{
     DwindleOptions, ForceSplit, LayoutOptions, MasterOptions, NewStatus, Orientation,
-    ScrollingOptions,
+    ScrollingOptions, repair_rules, rule_selector, set_rule,
 };
 pub use look::Look;
 pub use shell::{

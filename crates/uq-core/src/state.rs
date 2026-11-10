@@ -108,6 +108,7 @@ impl State {
             tracing::warn!("{}: {e}; that setting uses its default", path.display());
         }
         state.settings = valid;
+        state.layouts = crate::settings::repair_rules(std::mem::take(&mut state.layouts));
         state
     }
 

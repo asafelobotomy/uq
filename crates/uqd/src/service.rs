@@ -9,11 +9,11 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::broadcast;
 use uq_core::atomic::{atomic_replace_dir, atomic_write};
-use uq_core::lua::{Layout, emit_generated, emit_workspace_rule, lua_string, workspace_selector};
+use uq_core::lua::{Layout, emit_generated, emit_workspace_rule, lua_string};
 use uq_core::paths::Paths;
 use uq_core::render::{kvantum_base, render};
 use uq_core::schedule::{Schedule, last_event, variant_at};
-use uq_core::settings::{Settings, renders_config, valid_pinned_id};
+use uq_core::settings::{Settings, renders_config, set_rule, valid_pinned_id};
 use uq_core::state::State;
 use uq_core::theme::{ThemeRegistry, Variant};
 
@@ -329,15 +329,14 @@ impl Desktop {
         if ws.trim().is_empty() {
             return Err(DesktopError::EmptyWorkspace);
         }
-        let ws = workspace_selector(ws);
-        let ws = ws.as_str();
         let layout: Layout = layout
             .parse()
             .map_err(|_| DesktopError::InvalidLayout(layout.to_string()))?;
         let mut next = self.state.clone();
-        next.layouts.insert(ws.to_string(), layout);
-        self.commit(next, Change::Layout(ws.to_string(), layout))
-            .await
+        // The `layouts` section's limits, so what SetLayout stores SetSection accepts back.
+        let ws = set_rule(&mut next.layouts, ws, layout)
+            .map_err(|e| DesktopError::InvalidSetting(e.to_string()))?;
+        self.commit(next, Change::Layout(ws, layout)).await
     }
 
     pub async fn set_schedule(&mut self, s: Schedule) -> Result<(), DesktopError> {
@@ -817,6 +816,33 @@ mod tests {
         let mut r = rig();
         let err = r.desktop.set_layout("1", "monocle").await.unwrap_err();
         assert!(matches!(err, DesktopError::InvalidLayout(ref l) if l == "monocle"));
+    }
+
+    #[tokio::test]
+    async fn set_layout_enforces_section_limits() {
+        let mut r = rig();
+        let long = "a".repeat(65);
+        assert!(matches!(
+            r.desktop.set_layout(&long, "master").await,
+            Err(DesktopError::InvalidSetting(_))
+        ));
+        assert!(matches!(
+            r.desktop.set_layout("a\u{1}b", "master").await,
+            Err(DesktopError::InvalidSetting(_))
+        ));
+        for i in 1..=64 {
+            r.desktop
+                .set_layout(&i.to_string(), "master")
+                .await
+                .unwrap();
+        }
+        let err = r.desktop.set_layout("65", "master").await.unwrap_err();
+        assert!(err.to_string().contains("64"), "{err}");
+        // Changing an existing rule at the limit is fine.
+        r.desktop.set_layout("64", "scrolling").await.unwrap();
+        assert_eq!(r.desktop.state.layouts.len(), 64);
+        let v = r.desktop.state.section("layouts").unwrap();
+        r.desktop.state.clone().set_section("layouts", v).unwrap();
     }
 
     #[tokio::test]

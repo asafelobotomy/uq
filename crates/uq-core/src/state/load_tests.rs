@@ -144,3 +144,37 @@ fn bad_pin_entries_are_dropped_not_all_pins() {
     assert_eq!(s.settings.pinned, ["firefox.desktop", "foot.desktop"]);
     assert!(p.exists());
 }
+
+#[test]
+fn stored_rules_over_the_limits_are_repaired() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path().join("state.toml");
+    let mut src = String::from("theme = \"rosewood\"\n[layouts]\n");
+    src.push_str("web = \"master\"\n\"name:web\" = \"scrolling\"\n");
+    src.push_str(&format!("\"{}\" = \"master\"\n", "a".repeat(65)));
+    src.push_str("\"a\\u0001b\" = \"master\"\n");
+    for i in 1..=63 {
+        src.push_str(&format!("\"{i}\" = \"dwindle\"\n"));
+    }
+    std::fs::write(&p, &src).unwrap();
+    let mut s = State::load(&p);
+    assert_eq!(s.theme, "rosewood");
+    assert!(p.exists());
+    assert_eq!(s.layouts.len(), 64, "63 numbered rules and name:web");
+    assert_eq!(s.layouts.get("name:web"), Some(&Layout::Scrolling));
+    assert!(!s.layouts.contains_key("web"), "keys are normalised");
+    assert!(s.layouts.keys().all(|k| k.chars().count() <= 64));
+    assert!(!s.layouts.keys().any(|k| k.contains('\u{1}')));
+    // The section stays writable: what GetSection returns, SetSection accepts.
+    let v = s.section("layouts").unwrap();
+    s.set_section("layouts", v).unwrap();
+
+    for i in 64..=70 {
+        src.push_str(&format!("\"{i}\" = \"dwindle\"\n"));
+    }
+    std::fs::write(&p, &src).unwrap();
+    let mut s = State::load(&p);
+    assert_eq!(s.layouts.len(), 64, "at most 64 rules are kept");
+    let v = s.section("layouts").unwrap();
+    s.set_section("layouts", v).unwrap();
+}

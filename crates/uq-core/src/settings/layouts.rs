@@ -223,17 +223,7 @@ impl LayoutOptions {
         }
         let mut out = BTreeMap::new();
         for (ws, layout) in obj {
-            let sel = workspace_selector(ws);
-            let n = sel.chars().count();
-            if !(1..=MAX_SELECTOR_CHARS).contains(&n) {
-                return Err(invalid(
-                    KEY,
-                    format!("selector must be 1 to {MAX_SELECTOR_CHARS} characters"),
-                ));
-            }
-            if sel.chars().any(char::is_control) {
-                return Err(invalid(KEY, "selector must not contain control characters"));
-            }
+            let sel = rule_selector(ws)?;
             let layout: Layout = serde_json::from_value(layout.clone())
                 .map_err(|_| invalid(KEY, "expected dwindle, master or scrolling"))?;
             if out.insert(sel, layout).is_some() {
@@ -242,6 +232,56 @@ impl LayoutOptions {
         }
         Ok(out)
     }
+}
+
+/// A workspace rule's key as uqd stores it: the normalised selector, 1 to 64 characters, with
+/// no control characters.
+pub fn rule_selector(ws: &str) -> Result<String, SettingError> {
+    const KEY: &str = "layouts.workspaces";
+    let sel = workspace_selector(ws);
+    if !(1..=MAX_SELECTOR_CHARS).contains(&sel.chars().count()) {
+        return Err(invalid(
+            KEY,
+            format!("selector must be 1 to {MAX_SELECTOR_CHARS} characters"),
+        ));
+    }
+    if sel.chars().any(char::is_control) {
+        return Err(invalid(KEY, "selector must not contain control characters"));
+    }
+    Ok(sel)
+}
+
+/// Add or replace one workspace rule under the section's limits (`SetLayout`); returns the
+/// stored selector. On error `rules` is unchanged.
+pub fn set_rule(
+    rules: &mut BTreeMap<String, Layout>,
+    ws: &str,
+    layout: Layout,
+) -> Result<String, SettingError> {
+    let sel = rule_selector(ws)?;
+    if !rules.contains_key(&sel) && rules.len() >= MAX_WORKSPACES {
+        return Err(invalid(
+            "layouts.workspaces",
+            format!("at most {MAX_WORKSPACES} rules"),
+        ));
+    }
+    rules.insert(sel.clone(), layout);
+    Ok(sel)
+}
+
+/// Load-time repair of stored rules (a hand edit, or a uqd that didn't enforce the limits):
+/// selectors are normalised, and rules with a bad selector, a selector already taken, or past
+/// the 64th are dropped with a log line, so the section stays writable.
+pub fn repair_rules(rules: BTreeMap<String, Layout>) -> BTreeMap<String, Layout> {
+    let mut out = BTreeMap::new();
+    for (ws, layout) in rules {
+        if out.contains_key(&workspace_selector(&ws)) {
+            tracing::warn!("state: dropping workspace rule {ws:?}: names a workspace twice");
+        } else if let Err(e) = set_rule(&mut out, &ws, layout) {
+            tracing::warn!("state: dropping workspace rule {ws:?}: {e}");
+        }
+    }
+    out
 }
 
 #[cfg(test)]
