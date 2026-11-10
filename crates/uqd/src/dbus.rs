@@ -199,6 +199,18 @@ impl DesktopIface {
         Ok(self.desktop.lock().await.restore(id).await?)
     }
 
+    /// Where each key of `domain` gets its live value, as JSON:
+    /// `{key: {source, live, stored, detail}}`.
+    async fn explain(&self, domain: &str) -> Result<String, UqError> {
+        let v = self.desktop.lock().await.explain(domain).await?;
+        Ok(v.to_string())
+    }
+
+    /// Run `domain`'s render path again; changes nothing in state or history.
+    async fn reapply(&self, domain: &str) -> Result<(), UqError> {
+        Ok(self.desktop.lock().await.reapply(domain).await?)
+    }
+
     #[zbus(signal)]
     async fn history_changed(e: &SignalEmitter<'_>) -> zbus::Result<()>;
 

@@ -490,6 +490,22 @@ mod tests {
     }
 
     #[test]
+    fn provenance_rows_name_registry_settings() {
+        let ids: HashSet<_> = core_pages()
+            .iter()
+            .flat_map(|p| p.settings.iter().map(|s| s.id))
+            .collect();
+        for row in uq_core::settings::provenance::OPTIONS {
+            assert!(
+                ids.contains(row.setting_id),
+                "{} names setting {:?}, which no page lists",
+                row.key,
+                row.setting_id
+            );
+        }
+    }
+
+    #[test]
     fn pages_json_lists_pages_in_order() {
         let v: serde_json::Value = serde_json::from_str(&pages_json(&all_pages(&[]))).unwrap();
         let ids: Vec<_> = v

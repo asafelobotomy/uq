@@ -642,4 +642,10 @@ async fn desktop_proxy_matches_the_interface() {
     assert!(points.iter().any(|p| p["id"] == point.as_str()));
     proxy.restore(&point).await.unwrap();
     proxy.delete_restore_point(&point).await.unwrap();
+
+    let explained: serde_json::Value =
+        serde_json::from_str(&proxy.explain("look").await.unwrap()).unwrap();
+    assert_eq!(explained["gaps_in"]["stored"], 7, "{explained}");
+    proxy.reapply("look").await.unwrap();
+    assert!(proxy.explain("bogus").await.is_err());
 }

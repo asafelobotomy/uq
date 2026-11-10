@@ -16,7 +16,10 @@ use uq_core::lua::{Layout, emit_generated, emit_workspace_rule, lua_string};
 use uq_core::paths::Paths;
 use uq_core::render::{kvantum_base, render};
 use uq_core::schedule::{Schedule, last_event, variant_at};
-use uq_core::settings::{SECTION_DOMAINS, Settings, renders_config, set_rule, valid_pinned_id};
+use uq_core::settings::{
+    SECTION_DOMAINS, Settings, provenance, renders_config, renders_section, set_rule,
+    valid_pinned_id,
+};
 use uq_core::state::State;
 use uq_core::theme::{ThemeRegistry, Variant};
 
@@ -105,6 +108,21 @@ pub struct Desktop {
     restore: RestoreStore,
     /// Ids of the journal entries the latest `persist` appended; empty when it journalled nothing.
     last_entry_ids: Vec<String>,
+    /// `(domain, Hyprland's message)` of the last section write that failed verification.
+    last_rejected: Option<(String, String)>,
+}
+
+/// How much of `user.lua` `explain` scans.
+const USER_LUA_SCAN_LIMIT: u64 = 1 << 20;
+
+/// How a section's write is applied live: `appearance` re-themes, `look` and `layouts` reload
+/// Hyprland, and the shell reads the rest itself.
+pub(crate) fn change_for(domain: &str) -> Change {
+    match domain {
+        "appearance" => Change::Theme,
+        d if renders_section(d) => Change::Reload,
+        _ => Change::Quiet,
+    }
 }
 
 /// How a conflict message names a journal domain.
@@ -193,6 +211,7 @@ impl Desktop {
             journal,
             restore,
             last_entry_ids: Vec::new(),
+            last_rejected: None,
         })
     }
 
@@ -534,6 +553,131 @@ impl Desktop {
         Ok(())
     }
 
+    /// Where each key of `domain` gets its live value: `{key: {source, live, stored, detail}}`,
+    /// keyed by the dotted path within the section. `source` is `theme`, `default`, `uq`,
+    /// `user_lua`, `runtime` or `error`. Without a live Hyprland every key reports from state.
+    pub async fn explain(&self, domain: &str) -> Result<serde_json::Value, DesktopError> {
+        use serde_json::{Value, json};
+        if !SECTION_DOMAINS.contains(&domain) {
+            return Err(DesktopError::InvalidArgument(format!(
+                "unknown domain {domain:?}"
+            )));
+        }
+        let section = self
+            .state
+            .section(domain)
+            .map_err(|e| DesktopError::InvalidSetting(e.to_string()))?;
+        let theme = self.themes.get(&self.state.theme, self.state.variant);
+        let rejected = self
+            .last_rejected
+            .as_ref()
+            .filter(|(d, _)| d == domain)
+            .map(|(_, m)| m.clone());
+        let mut up = self.comp.config_errors().await.is_ok();
+        let mut user_lua: Option<Option<String>> = None;
+        let mut out = serde_json::Map::new();
+        for row in provenance::options_for(domain) {
+            let stored = row.stored(&section);
+            let from_state = if stored.is_null() {
+                row.null_source.as_str()
+            } else {
+                "uq"
+            };
+            let mut live = Value::Null;
+            if up && let Some(path) = row.hypr {
+                match self.comp.get_option(path).await {
+                    Ok(v) => live = v,
+                    Err(CompositorError::Rejected(e)) => tracing::warn!("getoption {path}: {e}"),
+                    Err(e) => {
+                        tracing::warn!("getoption {path}: {e}");
+                        up = false;
+                    }
+                }
+            } else if up && let Some((schema, key)) = row.gsettings {
+                live = self.sys.read(schema, key).map_or(Value::Null, Value::from);
+            }
+            let expected = theme.and_then(|t| provenance::expected(row, &self.state, t));
+            let (source, detail) = if let Some(message) = &rejected {
+                ("error", json!({ "message": message }))
+            } else if live.is_null()
+                || expected
+                    .as_ref()
+                    .is_some_and(|e| provenance::live_matches(e, &live))
+            {
+                (from_state, Value::Null)
+            } else {
+                // A mismatch, or a value uQ leaves to base.lua: look for it in user.lua.
+                let line = row.hypr.and_then(|path| {
+                    let text = user_lua.get_or_insert_with(|| self.read_user_lua());
+                    provenance::find_in_user_lua(text.as_deref()?, path)
+                });
+                match line {
+                    Some(line) => (
+                        "user_lua",
+                        json!({ "line": line, "path": self.paths.user_lua.to_string_lossy() }),
+                    ),
+                    None if expected.is_none() => (from_state, Value::Null),
+                    None => ("runtime", Value::Null),
+                }
+            };
+            out.insert(
+                row.json_key().to_string(),
+                json!({ "source": source, "live": live, "stored": stored, "detail": detail }),
+            );
+        }
+        Ok(Value::Object(out))
+    }
+
+    /// The first [`USER_LUA_SCAN_LIMIT`] bytes of `user.lua`, decoded lossily; `None` if unreadable.
+    fn read_user_lua(&self) -> Option<String> {
+        use std::io::Read;
+        let mut buf = Vec::new();
+        std::fs::File::open(&self.paths.user_lua)
+            .and_then(|f| f.take(USER_LUA_SCAN_LIMIT).read_to_end(&mut buf))
+            .ok()?;
+        Some(String::from_utf8_lossy(&buf).into_owned())
+    }
+
+    /// Run `domain`'s normal render path again on the current state. Nothing changes, so
+    /// nothing is journalled. Never refused for a known domain.
+    pub async fn reapply(&mut self, domain: &str) -> Result<(), DesktopError> {
+        if !SECTION_DOMAINS.contains(&domain) {
+            return Err(DesktopError::InvalidArgument(format!(
+                "unknown domain {domain:?}"
+            )));
+        }
+        let res = self
+            .commit(self.state.clone(), change_for(domain), Origin::Settings)
+            .await;
+        self.note_section_commit(domain, &res);
+        res?;
+        let json = self.get_section(domain)?;
+        let _ = self.events.send(Event::SectionChanged {
+            domain: domain.to_string(),
+            json,
+        });
+        Ok(())
+    }
+
+    /// Remember a section write Hyprland rejected, so `explain` reports it; a later commit of
+    /// that domain clears it.
+    pub(crate) fn note_section_commit(&mut self, domain: &str, res: &Result<(), DesktopError>) {
+        match res {
+            Err(DesktopError::ConfigInvalid(msg)) => {
+                self.last_rejected = Some((domain.to_string(), msg.clone()));
+            }
+            Ok(())
+                if self
+                    .last_rejected
+                    .as_ref()
+                    .is_some_and(|(d, _)| d == domain) =>
+            {
+                self.last_rejected = None;
+            }
+            _ => {}
+        }
+    }
+
     /// Restore points, newest first.
     pub fn restore_points(&self) -> Vec<RestorePoint> {
         self.restore.list()
@@ -614,7 +758,7 @@ impl Desktop {
             return Ok(());
         }
         self.last_entry_ids.clear();
-        let changes = diff(&old, &self.state, &|_, _| None);
+        let changes = diff(&old, &self.state, &provenance::label_for);
         if changes.is_empty() {
             return Ok(());
         }
@@ -1723,5 +1867,179 @@ mod tests {
             .unwrap();
         assert!(!drain_all(&mut r.events).contains(&Event::HistoryChanged));
         assert!(r.desktop.last_entry_ids().is_empty());
+    }
+
+    fn user_lua(r: &Rig, text: &str) {
+        let p = &r.desktop.paths().user_lua;
+        fs::create_dir_all(p.parent().unwrap()).unwrap();
+        fs::write(p, text).unwrap();
+    }
+
+    #[tokio::test]
+    async fn explain_reports_user_lua_override_with_line() {
+        let mut r = rig();
+        r.desktop
+            .set_section("look", r#"{"gaps_in":5}"#, Origin::Settings)
+            .await
+            .unwrap();
+        user_lua(
+            &r,
+            "-- mine\nhl.config({ general = {\n    gaps_in = 2,\n} })\n",
+        );
+        r.comp
+            .set_option("general:gaps_in", serde_json::json!("2 2 2 2"));
+        let v = r.desktop.explain("look").await.unwrap();
+        let row = &v["gaps_in"];
+        assert_eq!(row["source"], "user_lua", "{v}");
+        assert_eq!(row["stored"], 5);
+        assert_eq!(row["live"], "2 2 2 2");
+        assert_eq!(row["detail"]["line"], 3);
+        assert_eq!(
+            row["detail"]["path"],
+            r.desktop.paths().user_lua.to_string_lossy().as_ref()
+        );
+    }
+
+    #[tokio::test]
+    async fn explain_reports_runtime_when_user_lua_silent() {
+        let mut r = rig();
+        r.desktop
+            .set_section("look", r#"{"gaps_in":5,"rounding":4}"#, Origin::Settings)
+            .await
+            .unwrap();
+        r.comp
+            .set_option("general:gaps_in", serde_json::json!("8 8 8 8"));
+        r.comp
+            .set_option("decoration:rounding", serde_json::json!(4));
+        r.sys
+            .set_value("org.gnome.desktop.interface", "cursor-size", "48");
+        let v = r.desktop.explain("look").await.unwrap();
+        assert_eq!(v["gaps_in"]["source"], "runtime", "{v}");
+        assert_eq!(v["gaps_in"]["detail"], serde_json::Value::Null);
+        assert_eq!(v["rounding"]["source"], "uq", "{v}");
+        assert_eq!(v["rounding"]["live"], 4);
+        // A gsettings key changed by another app is runtime too.
+        let v = r.desktop.explain("appearance").await.unwrap();
+        assert_eq!(v["cursor_size"]["source"], "runtime", "{v}");
+        assert_eq!(v["cursor_size"]["live"], "48");
+    }
+
+    #[tokio::test]
+    async fn explain_null_key_reports_theme_or_default() {
+        let r = rig();
+        // graphite's gap_out token is 12; blur is left to base.lua.
+        r.comp
+            .set_option("general:gaps_out", serde_json::json!("12 12 12 12"));
+        r.comp
+            .set_option("decoration:blur:enabled", serde_json::json!(true));
+        r.sys
+            .set_value("org.gnome.desktop.interface", "font-name", "Inter 11");
+        let v = r.desktop.explain("look").await.unwrap();
+        assert_eq!(v["gaps_out"]["source"], "theme", "{v}");
+        assert_eq!(v["gaps_out"]["stored"], serde_json::Value::Null);
+        assert_eq!(v["blur"]["source"], "default", "{v}");
+        assert_eq!(v["blur"]["live"], true);
+        assert_eq!(v["animation_speed"]["source"], "default", "{v}");
+        let v = r.desktop.explain("layouts").await.unwrap();
+        assert_eq!(v["dwindle.preserve_split"]["source"], "default", "{v}");
+        let v = r.desktop.explain("appearance").await.unwrap();
+        assert_eq!(v["ui_font"]["source"], "theme", "{v}");
+        assert_eq!(v["font_size"]["source"], "theme", "{v}");
+        // A base.lua default that user.lua sets is still found.
+        user_lua(
+            &r,
+            "hl.config({ decoration = { blur = { enabled = false } } })\n",
+        );
+        r.comp
+            .set_option("decoration:blur:enabled", serde_json::json!(false));
+        let v = r.desktop.explain("look").await.unwrap();
+        assert_eq!(v["blur"]["source"], "user_lua", "{v}");
+        assert_eq!(v["blur"]["detail"]["line"], 1);
+        assert!(matches!(
+            r.desktop.explain("bogus").await,
+            Err(DesktopError::InvalidArgument(_))
+        ));
+        assert_eq!(
+            r.desktop.explain("wallpaper").await.unwrap(),
+            serde_json::json!({})
+        );
+    }
+
+    #[tokio::test]
+    async fn explain_after_rejected_write_reports_error_then_clears() {
+        let mut r = rig();
+        r.comp
+            .set_option("general:gaps_in", serde_json::json!("5 5 5 5"));
+        *r.comp.verify_error.lock().unwrap() = Some("user.lua:3: bad".into());
+        let err = r
+            .desktop
+            .set_section("look", r#"{"gaps_in":9}"#, Origin::Settings)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, DesktopError::ConfigInvalid(_)), "{err:?}");
+        let v = r.desktop.explain("look").await.unwrap();
+        assert_eq!(v["gaps_in"]["source"], "error", "{v}");
+        assert_eq!(v["gaps_in"]["detail"]["message"], "user.lua:3: bad");
+        assert_eq!(v["rounding"]["source"], "error", "{v}");
+        let other = r.desktop.explain("layouts").await.unwrap();
+        assert_ne!(other["default"]["source"], "error", "{other}");
+        *r.comp.verify_error.lock().unwrap() = None;
+        r.desktop.reapply("look").await.unwrap();
+        let v = r.desktop.explain("look").await.unwrap();
+        assert_eq!(v["gaps_in"]["source"], "theme", "{v}");
+    }
+
+    #[tokio::test]
+    async fn explain_without_compositor_uses_state() {
+        let mut r = rig_with(false, |_| {});
+        r.desktop
+            .set_section("look", r#"{"gaps_in":9}"#, Origin::Settings)
+            .await
+            .unwrap();
+        user_lua(&r, "general.gaps_in = 2\n");
+        r.comp
+            .set_option("general:gaps_in", serde_json::json!("2 2 2 2"));
+        r.sys
+            .set_value("org.gnome.desktop.interface", "cursor-size", "48");
+        let v = r.desktop.explain("look").await.unwrap();
+        assert_eq!(v["gaps_in"]["source"], "uq", "{v}");
+        assert_eq!(v["gaps_in"]["live"], serde_json::Value::Null);
+        assert_eq!(v["gaps_out"]["source"], "theme", "{v}");
+        assert_eq!(v["blur"]["source"], "default", "{v}");
+        let v = r.desktop.explain("appearance").await.unwrap();
+        assert_eq!(v["cursor_size"]["source"], "theme", "{v}");
+    }
+
+    #[tokio::test]
+    async fn reapply_writes_no_history() {
+        let mut r = rig();
+        r.desktop
+            .set_section("look", r#"{"gaps_in":9}"#, Origin::Settings)
+            .await
+            .unwrap();
+        assert_eq!(journal_of(&r).len(), 1);
+        r.comp.calls.lock().unwrap().clear();
+        for domain in ["look", "layouts", "appearance", "wallpaper", "shell"] {
+            r.desktop.reapply(domain).await.unwrap();
+        }
+        assert_eq!(journal_of(&r).len(), 1, "{:?}", journal_of(&r));
+        assert!(r.desktop.last_entry_ids().is_empty());
+        assert!(r.comp.calls().contains(&"reload".to_string()));
+        assert_eq!(r.desktop.state().settings.look.gaps_in, Some(9));
+        assert!(matches!(
+            r.desktop.reapply("bogus").await,
+            Err(DesktopError::InvalidArgument(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn history_summary_names_settings_by_label() {
+        let mut r = rig();
+        r.desktop
+            .set_section("look", r#"{"gaps_in":9}"#, Origin::Settings)
+            .await
+            .unwrap();
+        let summary = &journal_of(&r)[0].summary;
+        assert!(summary.starts_with("Gaps between windows:"), "{summary}");
     }
 }

@@ -1,6 +1,6 @@
 //! Whole-section settings (`appearance`, `wallpaper`) for `GetSection` / `SetSection`.
 
-use crate::service::{Change, Desktop, DesktopError, Event};
+use crate::service::{Desktop, DesktopError, Event, change_for};
 use uq_core::history::Origin;
 use uq_core::settings::renders_section;
 
@@ -30,12 +30,9 @@ impl Desktop {
             .map_err(|e| DesktopError::InvalidSetting(e.to_string()))?;
         let before = (domain == "layouts").then(|| self.state.layouts.clone());
         if renders_section(domain) {
-            let change = if domain == "appearance" {
-                Change::Theme
-            } else {
-                Change::Reload
-            };
-            self.commit(next, change, origin).await?;
+            let res = self.commit(next, change_for(domain), origin).await;
+            self.note_section_commit(domain, &res);
+            res?;
         } else {
             self.persist(next, origin)?;
         }
