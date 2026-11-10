@@ -10,6 +10,10 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use uq_core::lua::{Layout, emit_generated};
 use uq_core::paths::Paths;
+use uq_core::rules::{
+    LayerEffects, LayerMatch, LayerRule, Rules, WindowEffects, WindowMatch, WindowRule,
+    WorkspaceRule,
+};
 use uq_core::settings::{
     AccelProfile, DeviceOverride, ForceSplit, KbLayout, MouseSettings, NewStatus, Orientation,
     OutputConfig, Position, Settings,
@@ -123,6 +127,165 @@ fn layouts() -> BTreeMap<String, Layout> {
         ("2".into(), Layout::Scrolling),
         ("name:web".into(), Layout::Dwindle),
     ])
+}
+
+/// One window rule using every effect (split where they contradict), one panel rule with every
+/// effect and one workspace rule with every field.
+fn rules() -> Rules {
+    let m = |class: &str| WindowMatch {
+        class: Some(class.into()),
+        ..Default::default()
+    };
+    let all_match = WindowMatch {
+        class: Some("^(a|b)$".into()),
+        title: Some("t.*".into()),
+        initial_class: Some("c".into()),
+        initial_title: Some("d".into()),
+        tag: Some("web".into()),
+        workspace: Some("2".into()),
+        xwayland: Some(false),
+        floating: Some(true),
+        fullscreen: Some(false),
+        pinned: Some(false),
+        modal: Some(false),
+    };
+    let rule = |id: &str, enabled, matches, effects| WindowRule {
+        id: id.into(),
+        name: format!("Rule {id}"),
+        enabled,
+        matches,
+        effects,
+    };
+    Rules {
+        window: vec![
+            rule(
+                "r-0001",
+                true,
+                all_match,
+                WindowEffects {
+                    float: Some(true),
+                    fullscreen: Some(false),
+                    maximize: Some(false),
+                    workspace: Some("name:web".into()),
+                    silent: Some(true),
+                    monitor: Some("DP-1".into()),
+                    size: Some([800, 600]),
+                    pin: Some(true),
+                    no_initial_focus: Some(true),
+                    opacity: Some(0.9),
+                    no_blur: Some(true),
+                    no_shadow: Some(true),
+                    no_anim: Some(true),
+                    rounding: Some(8),
+                    border_size: Some(1),
+                    idle_inhibit: Some("focus".into()),
+                    keep_aspect_ratio: Some(true),
+                    tag: Some("pinned".into()),
+                    ..Default::default()
+                },
+            ),
+            rule(
+                "r-0002",
+                false,
+                m("other"),
+                WindowEffects {
+                    tile: Some(true),
+                    position: Some([-10, 20]),
+                    ..Default::default()
+                },
+            ),
+            rule(
+                "r-0003",
+                true,
+                m("centered"),
+                WindowEffects {
+                    center: Some(true),
+                    ..Default::default()
+                },
+            ),
+        ],
+        layer: vec![LayerRule {
+            id: "r-0a1b".into(),
+            name: "Panel".into(),
+            enabled: true,
+            matches: LayerMatch {
+                namespace: "^(noti-fi)$".into(),
+            },
+            effects: LayerEffects {
+                blur: Some(true),
+                ignore_alpha: Some(0.3),
+                no_anim: Some(true),
+                animation: Some("slide".into()),
+            },
+        }],
+        workspace: vec![
+            WorkspaceRule {
+                workspace: "2".into(),
+                monitor: Some("DP-1".into()),
+                default: Some(true),
+                persistent: Some(true),
+                gaps_in: Some(3),
+                gaps_out: Some(6),
+                border_size: Some(2),
+            },
+            WorkspaceRule {
+                workspace: "name:chat".into(),
+                monitor: None,
+                default: None,
+                persistent: Some(true),
+                gaps_in: None,
+                gaps_out: None,
+                border_size: None,
+            },
+        ],
+    }
+}
+
+/// Rules whose strings try to break out of their Lua string (built directly, past validation).
+fn hostile_rules() -> Rules {
+    let bad = "a\"b\\c]]d\ne\") hl.exec_cmd(\"x";
+    Rules {
+        window: (0..3)
+            .map(|i| WindowRule {
+                id: format!("r-000{i}"),
+                name: bad.into(),
+                enabled: true,
+                matches: WindowMatch {
+                    class: Some(bad.into()),
+                    title: Some(bad.into()),
+                    ..Default::default()
+                },
+                effects: WindowEffects {
+                    monitor: Some(bad.into()),
+                    tag: Some(bad.into()),
+                    ..Default::default()
+                },
+            })
+            .collect(),
+        layer: (0..2)
+            .map(|i| LayerRule {
+                id: format!("r-001{i}"),
+                name: bad.into(),
+                enabled: true,
+                matches: LayerMatch {
+                    namespace: bad.into(),
+                },
+                effects: LayerEffects {
+                    animation: Some(bad.into()),
+                    ..Default::default()
+                },
+            })
+            .collect(),
+        workspace: vec![WorkspaceRule {
+            workspace: bad.into(),
+            monitor: Some(bad.into()),
+            default: None,
+            persistent: None,
+            gaps_in: None,
+            gaps_out: None,
+            border_size: None,
+        }],
+    }
 }
 
 /// Lay out a uQ config tree for one theme variant; returns (paths, main config file).
@@ -269,6 +432,7 @@ for _, b in ipairs(binds) do
   end
 end
 print("ok " .. #calls)
+for _, c in ipairs(calls) do print(c) end
 "#;
 
 /// Spec §2.12: the launcher binds never work over the lock screen.
@@ -365,7 +529,7 @@ fn lua_mock_runs_every_variant() {
     std::fs::write(&mock, MOCK).unwrap();
     for t in reg.iter() {
         let root = dir.path().join(format!("{}-{}", t.id, t.variant));
-        let (p, _) = tree(&root, &emit_generated(t, &layouts(), &settings()));
+        let (p, _) = tree(&root, &emit_generated(t, &layouts(), &rules(), &settings()));
         let out = Command::new(&lua)
             .arg(&mock)
             .args([&p.base_lua, &p.generated_lua, &p.user_lua])
@@ -382,6 +546,40 @@ fn lua_mock_runs_every_variant() {
     }
 }
 
+/// F19: each hostile rule is exactly one call, and the payload never runs as code.
+#[test]
+fn hostile_rules_run_as_one_call_each() {
+    let Ok(lua) = which("lua") else {
+        eprintln!("skipping: no `lua` on PATH");
+        return;
+    };
+    let reg = ThemeRegistry::load_dir(&repo().join("themes")).unwrap();
+    let t = reg.iter().next().unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let mock = dir.path().join("mock.lua");
+    std::fs::write(&mock, MOCK).unwrap();
+    let hostile = hostile_rules();
+    let gen_ = emit_generated(t, &layouts(), &hostile, &settings());
+    let (p, _) = tree(&dir.path().join("hostile"), &gen_);
+    let out = Command::new(&lua)
+        .arg(&mock)
+        .args([&p.base_lua, &p.generated_lua, &p.user_lua])
+        .output()
+        .unwrap();
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        out.status.success(),
+        "{text}{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let count = |name: &str| text.lines().filter(|l| *l == name).count();
+    assert_eq!(count("hl.window_rule"), hostile.window.len(), "{text}");
+    assert_eq!(count("hl.layer_rule"), hostile.layer.len(), "{text}");
+    // base.lua's own hl.exec_cmd calls are expected; the payload is not.
+    assert!(!text.contains("hl.exec_cmd:x"), "{text}");
+    assert!(!text.contains("hl.exec_cmd:\"x"), "{text}");
+}
+
 #[test]
 #[ignore = "needs Hyprland; CI runs it with --ignored"]
 fn all_variants_pass_hyprland_verify() {
@@ -389,7 +587,7 @@ fn all_variants_pass_hyprland_verify() {
     let dir = tempfile::tempdir().unwrap();
     for t in reg.iter() {
         let root = dir.path().join(format!("{}-{}", t.id, t.variant));
-        let (_, main) = tree(&root, &emit_generated(t, &layouts(), &settings()));
+        let (_, main) = tree(&root, &emit_generated(t, &layouts(), &rules(), &settings()));
         let out = Command::new("Hyprland")
             .arg("--verify-config")
             .arg("-c")

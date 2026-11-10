@@ -56,5 +56,5 @@ hl.env("XCURSOR_THEME", "Bibata-Modern-Classic")
 hl.env("XCURSOR_SIZE", "24")
 hl.env("HYPRCURSOR_SIZE", "24")
 
--- Per-workspace layouts
-hl.workspace_rule({ workspace = "2", layout = "scrolling" })
+-- Workspace rules
+hl.workspace_rule({ workspace = "2", layout = "scrolling", monitor = "DP-1", default = true, persistent = true, gaps_in = 4, gaps_out = 10, border_size = 2 })

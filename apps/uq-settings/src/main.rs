@@ -26,6 +26,7 @@ mod pages;
 mod plugins;
 mod profiles_model;
 mod registry;
+mod rules_model;
 mod search;
 mod session;
 mod shell_model;

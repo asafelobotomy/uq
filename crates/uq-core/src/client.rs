@@ -20,6 +20,14 @@ pub trait Desktop {
     fn set_section(&self, domain: &str, json: &str, origin: &str) -> zbus::Result<()>;
     fn list_input_devices(&self) -> zbus::Result<String>;
     fn list_outputs(&self) -> zbus::Result<String>;
+    /// JSON array of the open windows (see `rules::WindowInfo`); `[]` when Hyprland is down.
+    fn list_windows(&self) -> zbus::Result<String>;
+    /// Ask the shell to let the user click a window. Returns JSON `{status, window?}` with
+    /// status `picked`, `none`, `cancelled`, `timeout`, `no_shell` or `unavailable`; a second
+    /// call while one is pending is `Conflict`. Takes up to 20 s.
+    fn pick_window(&self) -> zbus::Result<String>;
+    /// The shell's answer for pick `token`: `shown`, `click` or `cancel`.
+    fn pick_done(&self, token: &str, outcome: &str) -> zbus::Result<()>;
     fn apply_monitors(&self, json: &str) -> zbus::Result<String>;
     fn confirm_monitors(&self, token: &str, origin: &str) -> zbus::Result<()>;
     fn revert_monitors(&self, token: &str) -> zbus::Result<()>;
@@ -65,6 +73,9 @@ pub trait Desktop {
     fn history_changed(&self) -> zbus::Result<()>;
     #[zbus(signal)]
     fn monitors_changed(&self) -> zbus::Result<()>;
+    /// A pick began; the shell shows its overlay and answers `PickDone(token, …)`.
+    #[zbus(signal)]
+    fn pick_requested(&self, token: &str) -> zbus::Result<()>;
     /// The active profile, or `""`; also sent when the list of profiles changes.
     #[zbus(signal)]
     fn profile_changed(&self, id: &str) -> zbus::Result<()>;

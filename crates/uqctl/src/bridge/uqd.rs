@@ -280,6 +280,9 @@ async fn forward(
                 .map(|(d, j)| json!({"domain": d, "value": parse_json(&j)})),
             "LaunchCountsChanged" => body.deserialize::<HashMap<String, u32>>().map(|c| json!(c)),
             "ProfileChanged" => body.deserialize::<String>().map(|id| json!({"id": id})),
+            "PickRequested" => body
+                .deserialize::<String>()
+                .map(|token| json!({"token": token})),
             _ => continue,
         };
         match parsed {
@@ -327,6 +330,7 @@ enum Request {
     ListProfiles,
     ApplyProfile(String),
     ProfileOff,
+    PickDone(String, String),
 }
 
 fn string_arg(args: &[Value], i: usize, what: &str) -> Result<String, String> {
@@ -397,6 +401,16 @@ impl Request {
                 arity(call, args, 1)?;
                 (1, Request::RecordLaunch(string_arg(args, 0, "desktop id")?))
             }
+            "PickDone" => {
+                arity(call, args, 2)?;
+                (
+                    2,
+                    Request::PickDone(
+                        string_arg(args, 0, "token")?,
+                        string_arg(args, 1, "outcome")?,
+                    ),
+                )
+            }
             "ApplyProfile" => {
                 arity(call, args, 1)?;
                 (1, Request::ApplyProfile(string_arg(args, 0, "profile id")?))
@@ -452,6 +466,7 @@ impl Request {
             Request::SetLayout(a, b) => unit(proxy.call("SetLayout", &(a, b, ORIGIN)).await),
             Request::SetSchedule(j) => unit(proxy.call("SetSchedule", &(j, ORIGIN)).await),
             Request::SetSetting(k, j) => unit(proxy.call("SetSetting", &(k, j, ORIGIN)).await),
+            Request::PickDone(t, o) => unit(proxy.call("PickDone", &(t, o)).await),
             Request::RecordLaunch(id) => unit(proxy.call("RecordLaunch", &(id,)).await),
             // Profile writes take no origin: uqd journals them as `profile:<id>`.
             Request::ListProfiles => {
@@ -514,5 +529,14 @@ mod tests {
         assert!(Request::parse("ApplyProfile", &[json!("a"), json!("b")]).is_err());
         assert!(Request::parse("ProfileOff", &[]).is_ok());
         assert!(Request::parse("ProfileOff", &[json!("x")]).is_err());
+    }
+
+    #[test]
+    fn pick_done_checks_arity() {
+        assert!(Request::parse("PickDone", &[json!("t"), json!("click")]).is_ok());
+        assert!(Request::parse("PickDone", &[]).is_err());
+        assert!(Request::parse("PickDone", &[json!("t")]).is_err());
+        assert!(Request::parse("PickDone", &[json!("t"), json!(1)]).is_err());
+        assert!(Request::parse("PickDone", &[json!("t"), json!("x"), json!("y")]).is_err());
     }
 }

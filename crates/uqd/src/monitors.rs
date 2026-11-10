@@ -32,7 +32,7 @@ pub struct Pending {
 }
 
 /// 32 hex characters from the kernel's random source.
-fn new_token() -> Result<String, DesktopError> {
+pub(crate) fn new_token() -> Result<String, DesktopError> {
     use std::io::Read;
     let mut b = [0u8; 16];
     std::fs::File::open("/dev/urandom")

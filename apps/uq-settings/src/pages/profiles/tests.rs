@@ -565,6 +565,7 @@ async fn snapshot_lists_available_keys_pages_and_icons() {
             {"id": "look", "name": "Look and layouts"},
             {"id": "wallpaper", "name": "Wallpaper"},
             {"id": "shell", "name": "Shell"},
+            {"id": "rules", "name": "Window rules"},
         ])
     );
     let available = st["available"].as_array().unwrap();
@@ -672,4 +673,214 @@ async fn uqd_down_gives_empty_state_without_an_error() {
     )
     .await;
     assert_eq!((out.state, out.error), (json!({}), None));
+}
+
+/// Window rules "Float A" (on) and "B" (off), panel rule "Blur notifications" (on), and a
+/// workspace rule, which has no switch.
+fn rules_state() -> State {
+    let mut st = state();
+    let win = |id: &str, name: &str, on: bool| {
+        json!({"id": id, "name": name, "enabled": on, "match": {"class": "a"},
+            "effects": {"float": true}})
+    };
+    st.set_section(
+        "rules",
+        json!({"window": [win("r-000a", "Float A", true), win("r-000b", "B", false)],
+            "layer": [{"id": "r-00c0", "name": "Blur notifications", "enabled": true,
+                "match": {"namespace": "n"}, "effects": {"blur": true}}],
+            "workspace": [{"workspace": "3", "persistent": true}]}),
+    )
+    .unwrap();
+    st
+}
+
+async fn rules_rig() -> (Rig, ProfilesState) {
+    let r = fake_uqd::rig(rules_state()).await;
+    let page = ProfilesState::new(r.client.clone());
+    (r, page)
+}
+
+const QUIET: &str = "format = 1\nid = \"quiet\"\nname = \"Quiet\"\n[rules]\n\"r-000a\" = false\n\"r-ffff\" = true\n";
+
+fn rule_keys_of(list: &Value) -> Vec<Value> {
+    list.as_array()
+        .unwrap()
+        .iter()
+        .filter(|k| k["domain"] == "rules")
+        .cloned()
+        .collect()
+}
+
+#[tokio::test]
+async fn rules_offered_in_add_settings() {
+    let (_r, page) = rules_rig().await;
+    let out = run(&page, Op::Refresh).await;
+    assert_eq!(out.error, None);
+    assert_eq!(
+        rule_keys_of(&out.state["available"]),
+        vec![
+            json!({"domain": "rules", "path": ["r-000a"],
+                "label": "Window rule \u{201c}Float A\u{201d}", "text": "On"}),
+            json!({"domain": "rules", "path": ["r-000b"],
+                "label": "Window rule \u{201c}B\u{201d}", "text": "Off"}),
+            json!({"domain": "rules", "path": ["r-00c0"],
+                "label": "Panel rule \u{201c}Blur notifications\u{201d}", "text": "On"}),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn create_from_rules_page() {
+    let (r, page) = rules_rig().await;
+    let out = run(&page, Op::Refresh).await;
+    let pages = out.state["pages"].as_array().unwrap();
+    assert!(pages.contains(&json!({"id": "rules", "name": "Window rules"})));
+    let out = run(
+        &page,
+        Op::CreateFromPages {
+            name: "Rules".into(),
+            icon: String::new(),
+            pages: s(&["rules"]),
+        },
+    )
+    .await;
+    assert_eq!(out.error, None);
+    let p = stored(&r, "rules").unwrap();
+    assert_eq!(p.values.len(), 1, "{:?}", p.values);
+    assert_eq!(
+        p.values["rules"],
+        json!({"r-000a": true, "r-000b": false, "r-00c0": true})
+    );
+}
+
+#[tokio::test]
+async fn create_from_history_takes_rule_toggles() {
+    let (r, page) = rules_rig().await;
+    let st = rules_state().section("rules").unwrap();
+    let mut off = st.clone();
+    off["window"][0]["enabled"] = json!(false);
+    let mut fewer = st.clone();
+    fewer["layer"] = json!([]);
+    // A turned off then on again (taken, with its value now), and the panel rule added.
+    r.history.seed(Entry::new(
+        200,
+        "settings",
+        "rules",
+        "",
+        st.clone(),
+        off.clone(),
+    ));
+    r.history
+        .seed(Entry::new(210, "settings", "rules", "", off, st.clone()));
+    r.history
+        .seed(Entry::new(220, "settings", "rules", "", fewer, st));
+    let out = run(
+        &page,
+        Op::CreateFromHistory {
+            name: "Evening".into(),
+            icon: String::new(),
+            since: 100,
+        },
+    )
+    .await;
+    assert_eq!(out.error, None);
+    let p = stored(&r, "evening").unwrap();
+    assert_eq!(p.values.len(), 1, "{:?}", p.values);
+    assert_eq!(p.values["rules"], json!({"r-000a": true}));
+    assert_eq!(
+        out.state["notice"]["text"],
+        "1 of those changes can't go in a profile"
+    );
+}
+
+#[tokio::test]
+async fn missing_rule_key_is_labelled_and_removable() {
+    let (r, page) = rules_rig().await;
+    seed(&r, QUIET);
+    let out = run(&page, Op::Refresh).await;
+    let labels: Vec<Value> = rule_keys_of(&out.state["profiles"][0]["keys"])
+        .iter()
+        .map(|k| k["label"].clone())
+        .collect();
+    assert_eq!(
+        labels,
+        [
+            json!("Window rule \u{201c}Float A\u{201d}"),
+            json!("A rule that isn't on this computer")
+        ]
+    );
+    let out = run(&page, Op::Apply { id: "quiet".into() }).await;
+    assert_eq!(out.error, None);
+    assert_eq!(
+        out.state["report"]["notices"],
+        json!(["1 rule in this profile isn't on this computer, so it was left out."])
+    );
+    assert!(!r.state.lock().unwrap().rules.window[0].enabled);
+    let out = run(
+        &page,
+        Op::RemoveKey {
+            id: "quiet".into(),
+            domain: "rules".into(),
+            path: s(&["r-ffff"]),
+        },
+    )
+    .await;
+    assert_eq!(out.error, None);
+    assert_eq!(
+        stored(&r, "quiet").unwrap().values["rules"],
+        json!({"r-000a": false})
+    );
+    let out = run(&page, Op::Off).await;
+    assert_eq!(out.error, None);
+    assert!(r.state.lock().unwrap().rules.window[0].enabled);
+}
+
+#[tokio::test]
+async fn import_and_export_rules_round_trip() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("quiet.toml");
+    let (r, page) = rules_rig().await;
+    let original = seed(&r, QUIET);
+    let out = run(
+        &page,
+        Op::Export {
+            id: "quiet".into(),
+            path: file.clone(),
+        },
+    )
+    .await;
+    assert_eq!(out.error, None);
+    let text = std::fs::read_to_string(&file).unwrap();
+    assert_eq!(Profile::parse(&text).unwrap(), original);
+    r.profiles.store.lock().unwrap().clear();
+    let out = run(
+        &page,
+        Op::Import {
+            path: file.clone(),
+            replace: false,
+        },
+    )
+    .await;
+    assert_eq!(out.error, None);
+    assert_eq!(stored(&r, "quiet").unwrap(), original);
+    for (body, message) in [
+        ("\"x\" = true\n", "A rule: isn't a rule id uQ makes"),
+        (
+            "\"r-000a\" = \"off\"\n",
+            "A rule: a profile can only turn a rule on or off",
+        ),
+    ] {
+        let hostile = format!("format = 1\nid = \"bad\"\nname = \"Bad\"\n[rules]\n{body}");
+        std::fs::write(&file, hostile).unwrap();
+        let out = run(
+            &page,
+            Op::Import {
+                path: file.clone(),
+                replace: true,
+            },
+        )
+        .await;
+        assert_eq!(out.error.as_deref(), Some(message), "{body}");
+    }
+    assert!(stored(&r, "bad").is_none());
 }

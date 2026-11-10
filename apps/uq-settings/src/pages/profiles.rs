@@ -17,8 +17,9 @@ use uq_core::client::DesktopProxy;
 use uq_core::history::Entry;
 use uq_core::profile::{
     DomainKind, Key, PROFILE_DOMAINS, Profile, ProfileError, changed_since, from_journal,
-    id_for_name, key_label, leaves, power_label, read_file, value_text,
+    id_for_name, key_label, leaves, power_label, read_file, rule_keys, rule_label, value_text,
 };
+use uq_core::rules::Rules;
 
 use crate::pages::runner::{PageLogic, parse_json};
 use crate::registry;
@@ -152,9 +153,9 @@ fn profile_error(e: ProfileError) -> zbus::Error {
     failure(e.to_string())
 }
 
-/// Whether a profile can hold keys of journal domain `domain`.
+/// Whether a profile can hold keys of journal domain `domain`. For `rules`, only the switches.
 fn holds_journal_domain(domain: &str) -> bool {
-    domain == "theme" || from_journal(domain, &[]).is_some()
+    matches!(domain, "theme" | "rules") || from_journal(domain, &[]).is_some()
 }
 
 /// The journal domains a profile's keys come from.
@@ -163,17 +164,48 @@ fn profile_journal_domains() -> Vec<&'static str> {
     out.extend(
         PROFILE_DOMAINS
             .iter()
-            .filter(|(_, k)| matches!(k, DomainKind::Section | DomainKind::Appearance))
+            .filter(|(_, k)| {
+                matches!(
+                    k,
+                    DomainKind::Section | DomainKind::Appearance | DomainKind::Rules
+                )
+            })
             .map(|(d, _)| *d),
     );
     out
 }
 
+async fn read_rules(proxy: &DesktopProxy<'_>) -> zbus::Result<Rules> {
+    serde_json::from_value(parse_json(&proxy.get_section("rules").await?)?)
+        .map_err(|_| failure("uQ's settings service sent unreadable rules"))
+}
+
 /// The current value of every set key of `journal_domains`, as profile keys. A domain a profile
 /// can't hold adds nothing.
 async fn current(proxy: &DesktopProxy<'_>, journal_domains: &[&str]) -> zbus::Result<Vec<Key>> {
+    let rules = match journal_domains.contains(&"rules") {
+        true => read_rules(proxy).await?,
+        false => Rules::default(),
+    };
+    current_with(proxy, journal_domains, &rules).await
+}
+
+/// [`current`] with the rules already read. Every window and panel rule's switch is a key.
+async fn current_with(
+    proxy: &DesktopProxy<'_>,
+    journal_domains: &[&str],
+    rules: &Rules,
+) -> zbus::Result<Vec<Key>> {
     let mut out: Vec<Key> = Vec::new();
     for &domain in journal_domains {
+        if domain == "rules" {
+            for k in rule_keys(rules) {
+                if !out.iter().any(|o| o.domain == k.domain && o.path == k.path) {
+                    out.push(k);
+                }
+            }
+            continue;
+        }
         let tree = if domain == "theme" {
             let (theme, variant) = proxy.get_theme().await?;
             json!({"theme": theme, "variant": variant})
@@ -226,12 +258,16 @@ async fn with_values(
     Ok((found, skipped))
 }
 
-/// `{domain, path, label, text}` for the page.
-fn key_json(domain: &str, path: &[String], value: &Value) -> Value {
+/// `{domain, path, label, text}` for the page. A rule switch is named from `rules`.
+fn key_json(domain: &str, path: &[String], value: &Value, rules: &Rules) -> Value {
+    let label = match (domain, path) {
+        ("rules", [id]) => rule_label(rules, id),
+        _ => key_label(domain, path),
+    };
     json!({
         "domain": domain,
         "path": path,
-        "label": key_label(domain, path),
+        "label": label,
         "text": value_text(domain, path, value),
     })
 }
@@ -452,6 +488,8 @@ impl PageLogic for ProfilesState {
     async fn snapshot(&self) -> zbus::Result<Value> {
         let proxy = DesktopProxy::new(&self.conn).await?;
         let list = parse_json(&proxy.list_profiles().await?)?;
+        // Read once: it names the rule switches and gives their current values.
+        let rules = read_rules(&proxy).await?;
         let mut profiles = Vec::new();
         let mut active = String::new();
         for summary in list.as_array().into_iter().flatten() {
@@ -469,7 +507,7 @@ impl PageLogic for ProfilesState {
             let keys: Vec<Value> = p
                 .keys()
                 .iter()
-                .map(|k| key_json(&k.domain, &k.path, &k.value))
+                .map(|k| key_json(&k.domain, &k.path, &k.value, &rules))
                 .collect();
             profiles.push(json!({
                 "id": p.id,
@@ -480,10 +518,10 @@ impl PageLogic for ProfilesState {
                 "keys": keys,
             }));
         }
-        let available: Vec<Value> = current(&proxy, &profile_journal_domains())
+        let available: Vec<Value> = current_with(&proxy, &profile_journal_domains(), &rules)
             .await?
             .iter()
-            .map(|k| key_json(&k.domain, &k.path, &k.value))
+            .map(|k| key_json(&k.domain, &k.path, &k.value, &rules))
             .collect();
         let pages: Vec<Value> = registry::core_pages()
             .iter()

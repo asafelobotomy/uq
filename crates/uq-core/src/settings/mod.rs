@@ -25,8 +25,8 @@ pub use layouts::{
 };
 pub use look::Look;
 pub use monitors::{
-    LiveOutput, Monitors, OutputConfig, Position, clean_text, parse_live, stays_visible,
-    valid_mode, valid_output_name,
+    LiveOutput, Monitors, OutputConfig, Position, clean_text, clean_text_spaced, parse_live,
+    stays_visible, valid_mode, valid_output_name,
 };
 pub use shell::{
     BUILTIN_PROVIDERS, Islands, ProviderPref, ShellSettings, provider_enabled, provider_order,
@@ -62,7 +62,7 @@ pub fn renders_config(key: &str) -> bool {
 }
 
 /// Whole-section domains handled by [`Settings::section`] / [`Settings::set_section`].
-pub const SECTION_DOMAINS: [&str; 7] = [
+pub const SECTION_DOMAINS: [&str; 8] = [
     "appearance",
     "wallpaper",
     "look",
@@ -70,13 +70,17 @@ pub const SECTION_DOMAINS: [&str; 7] = [
     "shell",
     "monitors",
     "input",
+    "rules",
 ];
 
 /// Sections that change rendered config (theme env, Kvantum, cursor, Hyprland look and
 /// layouts, input): uqd re-renders for these. `monitors` is not one: uqd applies it through
 /// `ApplyMonitors`, with a revert window, and refuses `SetSection("monitors")`.
 pub fn renders_section(domain: &str) -> bool {
-    matches!(domain, "appearance" | "look" | "layouts" | "input")
+    matches!(
+        domain,
+        "appearance" | "look" | "layouts" | "input" | "rules"
+    )
 }
 
 const MAX_PINNED: usize = 32;

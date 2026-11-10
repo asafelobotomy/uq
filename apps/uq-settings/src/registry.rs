@@ -332,6 +332,42 @@ static PROFILES_SETTINGS: [SearchEntry; 2] = [
     ),
 ];
 
+static RULES_SETTINGS: [SearchEntry; 5] = [
+    entry(
+        "window-rules",
+        "Window rules",
+        &[
+            "float",
+            "workspace",
+            "opacity",
+            "app",
+            "window",
+            "rule",
+            "pin",
+        ],
+    ),
+    entry(
+        "pick-window",
+        "Pick a window",
+        &["click", "choose", "which window"],
+    ),
+    entry(
+        "why-window",
+        "Why does this window…?",
+        &["explain", "matches", "rule"],
+    ),
+    entry(
+        "panel-rules",
+        "Panel rules",
+        &["blur", "notifications", "bar", "layer"],
+    ),
+    entry(
+        "workspace-rules",
+        "Workspace rules",
+        &["monitor", "persistent", "gaps"],
+    ),
+];
+
 static HISTORY_SETTINGS: [SearchEntry; 2] = [
     entry(
         "history",
@@ -484,7 +520,7 @@ static INPUT_SETTINGS: [SearchEntry; 14] = [
     ),
 ];
 
-static CORE_PAGES: [PageInfo; 8] = [
+static CORE_PAGES: [PageInfo; 9] = [
     PageInfo {
         id: "appearance",
         name: "Appearance",
@@ -547,6 +583,15 @@ static CORE_PAGES: [PageInfo; 8] = [
         qml: "pages/ProfilesPage.qml",
         settings: &PROFILES_SETTINGS,
         domains: &[],
+    },
+    PageInfo {
+        id: "rules",
+        name: "Window rules",
+        icon: "preferences-system-windows",
+        category: Category::Uq,
+        qml: "pages/RulesPage.qml",
+        settings: &RULES_SETTINGS,
+        domains: &["rules"],
     },
     PageInfo {
         id: "history",
@@ -774,8 +819,68 @@ mod tests {
         let at = ids.iter().position(|id| *id == "profiles").unwrap();
         assert_eq!(
             (ids[at - 1], ids[at + 1]),
-            ("shell", "history"),
-            "between Shell and History"
+            ("shell", "rules"),
+            "between Shell and Window rules"
+        );
+    }
+
+    #[test]
+    fn rules_page_registered_with_search_entries() {
+        let page = find("rules").expect("the rules page is registered");
+        assert_eq!(page.name, "Window rules");
+        assert_eq!(page.category, Category::Uq);
+        assert_eq!(page.icon, "preferences-system-windows");
+        assert_eq!(page.qml, "pages/RulesPage.qml");
+        assert_eq!(page.domains, ["rules"]);
+        let entries: Vec<_> = page
+            .settings
+            .iter()
+            .map(|s| (s.id, s.label, s.keywords))
+            .collect();
+        assert_eq!(
+            entries,
+            [
+                (
+                    "window-rules",
+                    "Window rules",
+                    &[
+                        "float",
+                        "workspace",
+                        "opacity",
+                        "app",
+                        "window",
+                        "rule",
+                        "pin"
+                    ][..]
+                ),
+                (
+                    "pick-window",
+                    "Pick a window",
+                    &["click", "choose", "which window"][..]
+                ),
+                (
+                    "why-window",
+                    "Why does this window…?",
+                    &["explain", "matches", "rule"][..]
+                ),
+                (
+                    "panel-rules",
+                    "Panel rules",
+                    &["blur", "notifications", "bar", "layer"][..]
+                ),
+                (
+                    "workspace-rules",
+                    "Workspace rules",
+                    &["monitor", "persistent", "gaps"][..]
+                ),
+            ]
+        );
+        let ids: Vec<_> = core_pages().iter().map(|p| p.id).collect();
+        let at = ids.iter().position(|id| *id == "rules").unwrap();
+        assert_eq!(
+            (ids[at - 1], ids[at + 1]),
+            ("profiles", "history"),
+            "between Profiles and History"
         );
     }
 
@@ -783,6 +888,7 @@ mod tests {
     fn every_journal_domain_has_one_page() {
         let mut domains: Vec<&str> = uq_core::settings::SECTION_DOMAINS.to_vec();
         domains.extend(["theme", "schedule", "settings"]);
+        assert!(domains.contains(&"rules"));
         for domain in domains {
             let pages: Vec<_> = core_pages()
                 .iter()
@@ -814,6 +920,7 @@ mod tests {
                 "input",
                 "shell",
                 "profiles",
+                "rules",
                 "history"
             ]
         );

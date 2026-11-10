@@ -11,6 +11,7 @@ import "notif/builtin"
 import "session"
 import "idle"
 import "power"
+import "pick"
 import "wallpaper"
 
 ShellRoot {
@@ -61,4 +62,7 @@ ShellRoot {
 
     // The polkit authentication agent and its dialog (on the focused monitor).
     PolkitAgent {}
+
+    // The full-screen "click a window" overlay for the rules editor's Pick a window.
+    PickOverlay {}
 }

@@ -2,6 +2,7 @@
 
 use crate::atomic::atomic_write;
 use crate::lua::Layout;
+use crate::rules::Rules;
 use crate::schedule::Schedule;
 use crate::settings::{LayoutOptions, SettingError, Settings};
 use crate::theme::Variant;
@@ -19,6 +20,9 @@ pub struct State {
     pub schedule: Schedule,
     #[serde(deserialize_with = "lenient_rules")]
     pub layouts: BTreeMap<String, Layout>,
+    /// Window, panel and workspace rules; each entry loads on its own.
+    #[serde(default)]
+    pub rules: Rules,
     /// The scheduled transition uqd last applied; a manual change holds until a newer one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub schedule_mark: Option<chrono::DateTime<chrono::Utc>>,
@@ -60,6 +64,7 @@ impl Default for State {
             variant: Variant::Dark,
             schedule: Schedule::Off,
             layouts: BTreeMap::new(),
+            rules: Rules::default(),
             schedule_mark: None,
             settings: Settings::default(),
             launch_counts: BTreeMap::new(),
@@ -116,6 +121,7 @@ impl State {
         }
         state.settings = valid;
         state.layouts = crate::settings::repair_rules(std::mem::take(&mut state.layouts));
+        state.rules = std::mem::take(&mut state.rules).repaired();
         Ok(state)
     }
 
@@ -144,6 +150,9 @@ impl State {
     /// One settings section as JSON. `layouts` joins the workspace rules in `self.layouts` with
     /// `settings.layout_options`; every other domain is `Settings`'.
     pub fn section(&self, domain: &str) -> Result<serde_json::Value, SettingError> {
+        if domain == "rules" {
+            return Ok(serde_json::to_value(&self.rules).expect("rules serialise"));
+        }
         if domain != "layouts" {
             return self.settings.section(domain);
         }
@@ -161,6 +170,10 @@ impl State {
         domain: &str,
         value: serde_json::Value,
     ) -> Result<(), SettingError> {
+        if domain == "rules" {
+            self.rules = Rules::from_section(&value, &self.rules)?;
+            return Ok(());
+        }
         if domain != "layouts" {
             return self.settings.set_section(domain, value);
         }
@@ -289,6 +302,7 @@ mod tests {
                 ("2".into(), Layout::Scrolling),
                 ("special:magic".into(), Layout::Master),
             ]),
+            rules: Rules::default(),
             schedule_mark: None,
             settings: Settings::default(),
             launch_counts: BTreeMap::new(),

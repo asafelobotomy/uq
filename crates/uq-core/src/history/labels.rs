@@ -47,6 +47,9 @@ pub fn label(domain: &str, key: &str) -> Option<String> {
             let ws = k.strip_prefix("workspaces.")?;
             return Some(format!("Workspace {ws} layout"));
         }
+        ("rules", "window") => "Window rules",
+        ("rules", "layer") => "Panel rules",
+        ("rules", "workspace") => "Workspace rules",
         ("wallpaper", k) => return wallpaper(k),
         ("input", k) => return input(k),
         ("monitors", k) => return monitors(k),
@@ -238,6 +241,17 @@ mod tests {
             );
         }
         st.layouts.insert("2".into(), Layout::Scrolling);
+        st.set_section(
+            "rules",
+            serde_json::json!({
+                "window": [{"name": "Float", "enabled": true,
+                    "match": {"class": "a"}, "effects": {"float": true}}],
+                "layer": [{"name": "Blur", "enabled": true,
+                    "match": {"namespace": "x"}, "effects": {"blur": true}}],
+                "workspace": [{"workspace": "3", "persistent": true}],
+            }),
+        )
+        .unwrap();
         let schedules = [
             Schedule::Off,
             Schedule::Fixed {
@@ -354,5 +368,20 @@ mod tests {
             lines.iter().any(|l| l.starts_with("Suspend on battery: ")),
             "{lines:?}"
         );
+    }
+
+    #[test]
+    fn rules_summary_uses_names() {
+        let old = State::default();
+        let mut new = old.clone();
+        new.set_section(
+            "rules",
+            serde_json::json!({"window": [{"name": "Pavucontrol floats", "enabled": true,
+                "match": {"class": "a"}, "effects": {"float": true}}]}),
+        )
+        .unwrap();
+        let changes = crate::history::diff(&old, &new, &label);
+        let lines: Vec<_> = changes.iter().map(|c| c.summary.as_str()).collect();
+        assert_eq!(lines, ["Window rule “Pavucontrol floats” added"]);
     }
 }

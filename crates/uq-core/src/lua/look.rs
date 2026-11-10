@@ -163,7 +163,7 @@ mod tests {
 
     fn render(s: &Settings) -> String {
         let t = Theme::from_toml(FIXTURE, "fixture", Variant::Dark).unwrap();
-        emit_generated(&t, &BTreeMap::new(), s)
+        emit_generated(&t, &BTreeMap::new(), &crate::rules::Rules::default(), s)
     }
 
     /// Cut from base.lua before the move, byte for byte.

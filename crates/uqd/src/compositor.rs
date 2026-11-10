@@ -32,6 +32,10 @@ pub trait Compositor: Send + Sync {
     async fn monitors(&self) -> Result<String, CompositorError>;
     /// Live input devices as JSON (`hyprctl devices -j`).
     async fn devices(&self) -> Result<String, CompositorError>;
+    /// Open windows as JSON (`hyprctl clients -j`).
+    async fn clients(&self) -> Result<String, CompositorError>;
+    /// The cursor position as JSON (`hyprctl cursorpos -j`).
+    async fn cursor_pos(&self) -> Result<String, CompositorError>;
     /// One option's live value (`hyprctl -j getoption <path>`, path like `general:gaps_in`):
     /// the reply's value field (`int`, `float`, `bool`, `str`, `custom`, `css`, …).
     async fn get_option(&self, path: &str) -> Result<serde_json::Value, CompositorError>;
@@ -161,6 +165,14 @@ impl Compositor for Hyprland {
         self.socket.request("j/devices").await
     }
 
+    async fn clients(&self) -> Result<String, CompositorError> {
+        self.socket.request("j/clients").await
+    }
+
+    async fn cursor_pos(&self) -> Result<String, CompositorError> {
+        self.socket.request("j/cursorpos").await
+    }
+
     async fn get_option(&self, path: &str) -> Result<serde_json::Value, CompositorError> {
         option_value(&self.socket.request(&format!("j/getoption {path}")).await?)
     }
@@ -184,6 +196,10 @@ pub mod fake {
         pub monitors_json: Mutex<String>,
         /// What `devices` returns (`devices -j`); empty means `{}`.
         pub devices_json: Mutex<String>,
+        /// What `clients` returns (`clients -j`); empty means `[]`.
+        pub clients_json: Mutex<String>,
+        /// What `cursor_pos` returns (`cursorpos -j`); empty means `{"x":0,"y":0}`.
+        pub cursor_json: Mutex<String>,
         /// `Some(msg)` makes the next `eval` return `Rejected(msg)`, once.
         pub eval_error: Mutex<Option<String>>,
         /// `Some(msg)` makes the next `reload` return `Rejected(msg)`, once.
@@ -261,6 +277,20 @@ pub mod fake {
             self.record("devices".into())?;
             let j = self.devices_json.lock().unwrap().clone();
             Ok(if j.is_empty() { "{}".into() } else { j })
+        }
+        async fn clients(&self) -> Result<String, CompositorError> {
+            self.record("clients".into())?;
+            let j = self.clients_json.lock().unwrap().clone();
+            Ok(if j.is_empty() { "[]".into() } else { j })
+        }
+        async fn cursor_pos(&self) -> Result<String, CompositorError> {
+            self.record("cursorpos".into())?;
+            let j = self.cursor_json.lock().unwrap().clone();
+            Ok(if j.is_empty() {
+                r#"{"x":0,"y":0}"#.into()
+            } else {
+                j
+            })
         }
         async fn get_option(&self, path: &str) -> Result<serde_json::Value, CompositorError> {
             if !*self.running.lock().unwrap() {
@@ -487,6 +517,29 @@ mod tests {
             Err(CompositorError::Rejected(m)) if m == "no such option"
         ));
         assert_eq!(server.await.unwrap()[0], "j/getoption general:gaps_in");
+    }
+
+    #[tokio::test]
+    async fn clients_and_cursorpos_requests() {
+        let dir = tempfile::tempdir().unwrap();
+        let sock_dir = dir.path().join("hypr/SIG");
+        std::fs::create_dir_all(&sock_dir).unwrap();
+        let listener = UnixListener::bind(sock_dir.join(".socket.sock")).unwrap();
+        let server = tokio::spawn(async move {
+            let mut seen = Vec::new();
+            for reply in ["[]", r#"{"x":5,"y":6}"#] {
+                let (mut s, _) = listener.accept().await.unwrap();
+                let mut buf = vec![0u8; 1024];
+                let n = s.read(&mut buf).await.unwrap();
+                seen.push(String::from_utf8_lossy(&buf[..n]).into_owned());
+                s.write_all(reply.as_bytes()).await.unwrap();
+            }
+            seen
+        });
+        let h = Hyprland::new(Some(dir.path().into()), Some("SIG".into()));
+        assert_eq!(h.clients().await.unwrap(), "[]");
+        assert_eq!(h.cursor_pos().await.unwrap(), r#"{"x":5,"y":6}"#);
+        assert_eq!(server.await.unwrap(), vec!["j/clients", "j/cursorpos"]);
     }
 
     #[tokio::test]

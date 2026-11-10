@@ -112,6 +112,9 @@ fn render(v: &Value) -> String {
 /// One line naming at most three changed leaves, then "and N more". A leaf is named by the
 /// label `labels` knows for `(domain, key)`, else by its JSON key. `null` reads "default".
 pub fn summarize(domain: &str, before: &Value, after: &Value, labels: Labels) -> String {
+    if domain == "rules" {
+        return crate::rules::summary(before, after);
+    }
     let (b, a) = (leaf_map(domain, before), leaf_map(domain, after));
     let keys: BTreeSet<&String> = b.keys().chain(a.keys()).collect();
     let changed: Vec<String> = keys
