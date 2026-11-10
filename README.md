@@ -79,6 +79,16 @@ uqctl mouse speed -0.3                 # -1..1; also: accel default|adaptive|fla
 uqctl launches clear
 ```
 
+History and restore points (uqd records every change, who made it, and what it was before):
+
+```bash
+uqctl history [--limit 20]             # id, time, origin (settings, uqctl, shell, ...), summary
+uqctl undo [<id>] [--force]            # no id: the newest change; --force if it changed again since
+uqctl restore list                     # also: restore save <name>, restore delete <id>
+uqctl restore <id>                     # bring back every setting as it was; to go back,
+                                       # restore the newest auto:before_restore point it saved
+```
+
 The shell runs as `uq-shell.service` (Quickshell, started with the session). `SUPER+CTRL+L`
 restarts the lock surface (`uq-lock.service`, else `hyprlock`) if it ever dies.
 
@@ -94,7 +104,24 @@ notification and privacy settings). Animations now come from `generated.lua`, so
 ...) opens a page directly, and a second call raises the same window. Run `uqctl setup --apps`
 once to hook Qt apps up to the uQ Kvantum theme. Other packages can add a page under Apps by
 installing `/usr/share/uq/settings/pages/<id>/page.toml` with a QML file. Settings are also
-available over D-Bus as `GetSection` / `SetSection` on `uqd`.
+available over D-Bus as `GetSection` / `SetSection` on `uqd`. Every write method there
+(`SetSection`, `SetSetting`, `SetTheme`, `SetLayout`, `SetSchedule`) takes a last `origin` string
+that the history records; `""` records as unknown.
+
+#### History page
+
+The **History** page lists your restore points and every change from the last 30 days (up to 500),
+newest first, each with where it came from (the Settings app, `uqctl`, the shell). **Undo** on a
+row puts that setting back; if it was changed again since, the app asks first. **Save** keeps a
+restore point under a name you pick, and **Restore** brings every setting back as it was, after
+saving a restore point of your current settings, so a restore can be undone too. uQ also saves
+one on its own before the first change of each day, before a restore, and when uQ is updated
+(named after the new version); it keeps the last 20 of these, and the ones you save are never
+removed. In the app, Ctrl+Z and Ctrl+Shift+Z undo and redo your own changes this session, and
+"Changed this session" lists them. Rows on the other pages say when a value comes from
+`user.lua` or was changed while running, with **Re-apply** to put uQ's value back. uQ never
+writes to `user.lua`. Manual checks are in
+[docs/notes/settings-slice-a-live-check.md](docs/notes/settings-slice-a-live-check.md).
 
 ### Launchers
 
@@ -279,6 +306,10 @@ for t in tests/shell/*.sh; do bash "$t"; done
 QT_QPA_PLATFORM=offscreen qmltestrunner -import shell -input tests/qml
 scripts/smoke-shell.sh                     # needs Hyprland, quickshell, jq, a DRM card and a seat; 77 = skipped
 ```
+
+To use the installed uQ and work on a checkout on the same machine (a nested dev desktop,
+side-by-side app runs, and installing a dev build with a rollback), see
+[docs/developing.md](docs/developing.md) and `uq-dev --help`.
 
 ## Credits
 

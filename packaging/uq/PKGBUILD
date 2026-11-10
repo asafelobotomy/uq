@@ -75,6 +75,7 @@ package() {
   cd "$srcdir/$pkgname-$_tag"
   install -Dm755 target/release/uqd "$pkgdir/usr/bin/uqd"
   install -Dm755 target/release/uqctl "$pkgdir/usr/bin/uqctl"
+  install -Dm755 scripts/uq-dev "$pkgdir/usr/bin/uq-dev"
   install -Dm644 config/hypr/base.lua "$pkgdir/usr/share/uq/hypr/base.lua"
   install -dm755 "$pkgdir/usr/share/uq"
   cp -r --no-preserve=ownership themes templates "$pkgdir/usr/share/uq/"

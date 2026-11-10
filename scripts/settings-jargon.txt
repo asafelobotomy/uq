@@ -1,0 +1,14 @@
+# Words the Settings app must not show people (spec: plain words). One per line, matched
+# case-insensitively as whole words inside quoted strings under apps/uq-settings/qml.
+# "Kvantum" and "Qt" are allowed: the Appearance row is user-facing and named so.
+# A line may keep a word with a trailing `// jargon-ok: <reason>`; components/AdvancedDetails.qml
+# is exempt.
+uqd
+generated.lua
+qt6ct
+dbus
+d-bus
+org.uq
+hyprctl
+state.toml
+gsettings

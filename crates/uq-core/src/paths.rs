@@ -18,6 +18,10 @@ pub struct Paths {
     pub theme_dir: PathBuf,
     /// `~/.local/state/uq/state.toml`
     pub state_file: PathBuf,
+    /// `~/.local/state/uq/history`: the settings journal.
+    pub history_dir: PathBuf,
+    /// `~/.local/state/uq/restore`: restore points.
+    pub restore_dir: PathBuf,
     /// `$UQ_DATA_DIR/themes`
     pub themes_dir: PathBuf,
     /// `$UQ_DATA_DIR/templates`
@@ -72,6 +76,8 @@ impl Paths {
             base_lua: data.join("hypr/base.lua"),
             theme_dir: state.join("uq/theme"),
             state_file: state.join("uq/state.toml"),
+            history_dir: state.join("uq/history"),
+            restore_dir: state.join("uq/restore"),
             themes_dir: data.join("themes"),
             templates_dir: data.join("templates"),
             hypr_default: hypr_default.to_path_buf(),
@@ -98,6 +104,8 @@ mod tests {
         assert_eq!(p.user_lua, PathBuf::from("/cfg/hypr/uq/user.lua"));
         assert_eq!(p.theme_dir, PathBuf::from("/st/uq/theme"));
         assert_eq!(p.state_file, PathBuf::from("/st/uq/state.toml"));
+        assert_eq!(p.history_dir, PathBuf::from("/st/uq/history"));
+        assert_eq!(p.restore_dir, PathBuf::from("/st/uq/restore"));
         assert_eq!(p.base_lua, PathBuf::from("/opt/uq/hypr/base.lua"));
         assert_eq!(p.themes_dir, PathBuf::from("/opt/uq/themes"));
         assert_eq!(p.templates_dir, PathBuf::from("/opt/uq/templates"));
@@ -124,6 +132,8 @@ mod tests {
             &p.base_lua,
             &p.theme_dir,
             &p.state_file,
+            &p.history_dir,
+            &p.restore_dir,
         ] {
             assert!(path.starts_with("/tmp/r"), "{path:?}");
         }

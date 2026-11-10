@@ -40,6 +40,8 @@ QQC2.ScrollView {
     readonly property var defaults: snap.defaults || {}
     readonly property var dLook: defaults.look || {}
     readonly property var dLayouts: defaults.layouts || {}
+    /// Where each row's live value comes from, by setting id (uqd's Explain); {} when unknown.
+    readonly property var sources: snap.sources || {}
     readonly property var layoutLabels: ({ dwindle: "Dwindle", master: "Master", scrolling: "Scrolling" })
     readonly property var splitLabels: ({ follow_mouse: "Follow the mouse", left: "Always left", right: "Always right" })
     /// The layouts in use, so a layout's options show only when something uses them
@@ -66,6 +68,14 @@ QQC2.ScrollView {
     }
     function setOption(group, name, value) {
         lm.setLayoutOption(group, name, JSON.stringify(value));
+    }
+    /// Where a row's live value comes from (`{source, detail}`), or null: see SettingRow.
+    function sourceOf(settingId) {
+        return page.sources[settingId] ?? null;
+    }
+    /// Read everything again; Main calls it when the window comes back to the front.
+    function refresh() {
+        lm.refresh();
     }
 
     Component.onCompleted: lm.refresh()
@@ -104,7 +114,7 @@ QQC2.ScrollView {
             objectName: "uqdDown"
             visible: !page.ready
             title: "uQ's settings service isn't running"
-            detail: "Start uqd to change these settings."
+            detail: "Start the uQ desktop service to change these settings."
             Layout.fillWidth: true
         }
         ErrorCard {
@@ -123,6 +133,8 @@ QQC2.ScrollView {
         OverrideSpin {
             busy: lm.busy
             settingId: "gaps-inner"
+            source: page.sourceOf("gaps-inner")
+            onReapply: lm.reapply("look")
             label: "Gaps between windows"
             highlight: App.highlight
             enabled: page.ready
@@ -137,6 +149,8 @@ QQC2.ScrollView {
         OverrideSpin {
             busy: lm.busy
             settingId: "gaps-outer"
+            source: page.sourceOf("gaps-outer")
+            onReapply: lm.reapply("look")
             label: "Gaps around the screen"
             highlight: App.highlight
             enabled: page.ready
@@ -151,6 +165,8 @@ QQC2.ScrollView {
         OverrideSpin {
             busy: lm.busy
             settingId: "border-width"
+            source: page.sourceOf("border-width")
+            onReapply: lm.reapply("look")
             label: "Window border width"
             highlight: App.highlight
             enabled: page.ready
@@ -165,6 +181,8 @@ QQC2.ScrollView {
         OverrideSpin {
             busy: lm.busy
             settingId: "rounding"
+            source: page.sourceOf("rounding")
+            onReapply: lm.reapply("look")
             label: "Corner rounding"
             highlight: App.highlight
             enabled: page.ready
@@ -184,6 +202,8 @@ QQC2.ScrollView {
         }
         OverrideSwitch {
             settingId: "blur"
+            source: page.sourceOf("blur")
+            onReapply: lm.reapply("look")
             label: "Blur behind windows"
             highlight: App.highlight
             enabled: page.ready
@@ -195,6 +215,8 @@ QQC2.ScrollView {
         OverrideSpin {
             busy: lm.busy
             settingId: "blur-size"
+            source: page.sourceOf("blur-size")
+            onReapply: lm.reapply("look")
             label: "Blur size"
             highlight: App.highlight
             enabled: page.ready
@@ -209,6 +231,8 @@ QQC2.ScrollView {
         OverrideSpin {
             busy: lm.busy
             settingId: "blur-passes"
+            source: page.sourceOf("blur-passes")
+            onReapply: lm.reapply("look")
             label: "Blur passes"
             highlight: App.highlight
             enabled: page.ready
@@ -222,6 +246,8 @@ QQC2.ScrollView {
         }
         OverrideSwitch {
             settingId: "shadow"
+            source: page.sourceOf("shadow")
+            onReapply: lm.reapply("look")
             label: "Window shadows"
             highlight: App.highlight
             enabled: page.ready
@@ -238,6 +264,8 @@ QQC2.ScrollView {
         }
         OverrideSwitch {
             settingId: "animations"
+            source: page.sourceOf("animations")
+            onReapply: lm.reapply("look")
             label: "Animations"
             highlight: App.highlight
             enabled: page.ready
@@ -249,6 +277,8 @@ QQC2.ScrollView {
         OverrideSlider {
             busy: lm.busy
             settingId: "animation-speed"
+            source: page.sourceOf("animation-speed")
+            onReapply: lm.reapply("look")
             label: "Animation speed"
             highlight: App.highlight
             enabled: page.ready
@@ -270,6 +300,8 @@ QQC2.ScrollView {
         }
         OverrideCombo {
             settingId: "default-layout"
+            source: page.sourceOf("default-layout")
+            onReapply: lm.reapply("layouts")
             label: "Default layout"
             highlight: App.highlight
             enabled: page.ready
@@ -295,6 +327,8 @@ QQC2.ScrollView {
         // a search hit points at them).
         OptionGroup {
             settingId: "dwindle-options"
+            source: page.sourceOf("dwindle-options")
+            onReapply: lm.reapply("layouts")
             label: "Dwindle layout options"
             highlight: App.highlight
             enabled: page.ready
@@ -329,6 +363,8 @@ QQC2.ScrollView {
         }
         OptionGroup {
             settingId: "master-options"
+            source: page.sourceOf("master-options")
+            onReapply: lm.reapply("layouts")
             label: "Master layout options"
             highlight: App.highlight
             enabled: page.ready
@@ -368,6 +404,8 @@ QQC2.ScrollView {
         }
         OptionGroup {
             settingId: "scrolling-options"
+            source: page.sourceOf("scrolling-options")
+            onReapply: lm.reapply("layouts")
             label: "Scrolling layout options"
             highlight: App.highlight
             enabled: page.ready

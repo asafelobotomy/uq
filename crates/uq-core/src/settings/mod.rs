@@ -11,6 +11,7 @@ mod layouts;
 mod load;
 mod look;
 mod monitors;
+pub mod provenance;
 mod shell;
 mod wallpaper;
 pub use appearance::{Appearance, valid_theme_name};

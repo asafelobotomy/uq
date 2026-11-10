@@ -271,3 +271,116 @@ async fn clear_launch_counts_calls_uqd() {
     assert_eq!(out.error, None);
     assert!(r.state.lock().unwrap().launch_counts.is_empty());
 }
+
+/// Every setting the page writes keeps its value: a fresh page object on the same uqd reads back
+/// what each `Op` wrote, so no control resets itself.
+#[tokio::test]
+async fn every_field_round_trips() {
+    let (r, page) = rig().await;
+    let mut writes = vec![
+        (
+            setting("pinned", json!(["c.desktop", "a.desktop"])),
+            "/settings/pinned",
+            json!(["c.desktop", "a.desktop"]),
+        ),
+        (
+            setting("idle.dim", json!(200)),
+            "/settings/idle/dim",
+            json!(200),
+        ),
+        (
+            setting("idle.lock", json!(310)),
+            "/settings/idle/lock",
+            json!(310),
+        ),
+        (
+            setting("idle.screen_off", json!(400)),
+            "/settings/idle/screen_off",
+            json!(400),
+        ),
+        (
+            setting("idle.suspend_battery", json!(1300)),
+            "/settings/idle/suspend_battery",
+            json!(1300),
+        ),
+        (
+            setting("idle.locked_screen_off", json!(45)),
+            "/settings/idle/locked_screen_off",
+            json!(45),
+        ),
+        (
+            setting("idle.media_blocks_lock", json!(true)),
+            "/settings/idle/media_blocks_lock",
+            json!(true),
+        ),
+        (
+            setting("notif.backend", json!("mako")),
+            "/settings/notif/backend",
+            json!("mako"),
+        ),
+        (
+            setting("notif.show_summary", json!(true)),
+            "/settings/notif/show_summary",
+            json!(true),
+        ),
+        (
+            setting("privacy.public_ip_lookup", json!(false)),
+            "/settings/privacy/public_ip_lookup",
+            json!(false),
+        ),
+        (
+            setting("privacy.record_launches", json!(false)),
+            "/settings/privacy/record_launches",
+            json!(false),
+        ),
+        (
+            shell("clock_24h", json!(true)),
+            "/shell/clock_24h",
+            json!(true),
+        ),
+        (
+            shell("terminal", json!("foot.desktop")),
+            "/shell/terminal",
+            json!("foot.desktop"),
+        ),
+        (
+            Op::ProviderToggle {
+                id: "run".into(),
+                on: true,
+            },
+            "/shell/providers/0",
+            json!({"id": "run", "enabled": true}),
+        ),
+    ];
+    // Every setting key, plus clock, terminal and a provider switch (the islands follow).
+    assert_eq!(
+        writes.len(),
+        SETTING_KEYS.len() + 3,
+        "a setting was added without a round trip"
+    );
+    for island in Islands::FIELDS {
+        // The rig turns `work` off; every other island starts on.
+        let on = island == "work";
+        writes.push((
+            shell(&format!("islands.{island}"), json!(on)),
+            Box::leak(format!("/shell/islands/{island}").into_boxed_str()),
+            json!(on),
+        ));
+    }
+
+    let before = run(&page, Op::Refresh).await.state;
+    for (op, pointer, want) in &writes {
+        assert_ne!(
+            before.pointer(pointer),
+            Some(want),
+            "{pointer} starts at the value"
+        );
+        let out = run(&page, op.clone()).await;
+        assert_eq!(out.error, None, "{pointer}");
+    }
+    let fresh = ShellState::with_dirs(r.client.clone(), vec![], vec![]);
+    let state = run(&fresh, Op::Refresh).await.state;
+    for (_, pointer, want) in &writes {
+        assert_eq!(state.pointer(pointer), Some(want), "{pointer} reads back");
+    }
+}

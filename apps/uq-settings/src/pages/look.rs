@@ -1,15 +1,16 @@
 //! The Look and layouts page's logic: [`LookState`] talks to uqd (`org.uq.Desktop1`) and is plain
 //! Rust, tested against the fake uqd. `crate::look_model` is the thin QML object around it.
 //!
-//! The page's state is `{look, layouts}`; the theme tokens that "Use theme" seeds come from
-//! `App.themeJson` in QML, not from here. A `layouts` write replaces the workspace rules, so
-//! every change reads the section, edits it and writes it back under the write lock.
+//! The page's state is `{look, layouts, defaults, sources}`; the theme tokens that "Use theme"
+//! seeds come from `App.themeJson` in QML, not from here. A `layouts` write replaces the
+//! workspace rules, so every change reads the section, edits it and writes it back under the
+//! write lock.
 
 use serde_json::{Map, Value, json};
 use tokio::sync::Mutex;
 use uq_core::client::DesktopProxy;
 
-use crate::pages::runner::{PageLogic, parse_json, patch_section};
+use crate::pages::runner::{PageLogic, parse_json, patch_section, sources};
 
 /// The `look` section's fields that [`Op::SetLook`] may change.
 const LOOK_FIELDS: [&str; 10] = [
@@ -201,7 +202,8 @@ impl PageLogic for LookState {
         let proxy = DesktopProxy::new(&self.conn).await?;
         let look = parse_json(&proxy.get_section("look").await?)?;
         let layouts = parse_json(&proxy.get_section("layouts").await?)?;
-        Ok(json!({ "look": look, "layouts": layouts, "defaults": defaults() }))
+        let sources = sources(&proxy, &["look", "layouts"]).await;
+        Ok(json!({ "look": look, "layouts": layouts, "defaults": defaults(), "sources": sources }))
     }
 }
 
@@ -209,7 +211,7 @@ impl PageLogic for LookState {
 mod tests {
     use super::*;
     use crate::pages::fake_uqd::{self, Rig};
-    use crate::pages::runner::run;
+    use crate::pages::runner::{reapply, run};
     use uq_core::state::State;
 
     /// The value base.lua sets for `key` inside `table = {...}`, as JSON; `None` when it sets none.
@@ -435,6 +437,71 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn look_snapshot_includes_sources() {
+        let (r, page) = rig().await;
+        r.explain.set("look.rounding", json!({"source": "runtime"}));
+        let path = "/home/u/.config/hypr/user.lua";
+        r.explain.set(
+            "layouts.dwindle.smart_split",
+            json!({"source": "user_lua", "detail": {"line": 3, "path": path}}),
+        );
+        let out = run(&page, Op::Refresh).await;
+        assert_eq!(out.error, None);
+        let s = &out.state["sources"];
+        let plain = |source: &str| json!({"source": source, "detail": null});
+        // Keyed by setting id, with only `source` and `detail`.
+        assert_eq!(s["gaps-inner"], plain("uq"));
+        assert_eq!(s["gaps-outer"], plain("theme"));
+        assert_eq!(s["blur"], plain("uq"));
+        assert_eq!(s["blur-size"], plain("default"));
+        assert_eq!(s["rounding"], plain("runtime"));
+        assert_eq!(s["default-layout"], plain("uq"));
+        // A group row shows its most telling key: user.lua over a default.
+        assert_eq!(
+            s["dwindle-options"],
+            json!({"source": "user_lua", "detail": {"line": 3, "path": path}})
+        );
+        // and a value uQ sets over the defaults beside it.
+        assert_eq!(s["master-options"], plain("uq"));
+        assert_eq!(s["scrolling-options"], plain("default"));
+        let ids: Vec<&str> = uq_core::settings::provenance::OPTIONS
+            .iter()
+            .filter(|r| ["look", "layouts"].contains(&r.domain()))
+            .map(|r| r.setting_id)
+            .collect();
+        for id in &ids {
+            assert!(s.get(id).is_some(), "{id} in {s}");
+        }
+        assert!(s.get("ui-font").is_none(), "only this page's domains: {s}");
+
+        // A write reads the sources back too.
+        let out = run(&page, look("gaps_out", json!(12))).await;
+        assert_eq!(out.state["sources"]["gaps-outer"], plain("uq"));
+    }
+
+    #[tokio::test]
+    async fn explain_failure_gives_empty_sources() {
+        let (r, page) = rig().await;
+        r.explain.fail();
+        let out = run(&page, Op::Refresh).await;
+        assert_eq!(out.error, None, "the page still works without sources");
+        assert_eq!(out.state["sources"], json!({}));
+        assert_eq!(out.state["look"]["gaps_in"], 4);
+    }
+
+    #[tokio::test]
+    async fn reapply_reruns_the_domain_and_reads_back() {
+        let (r, page) = rig().await;
+        let out = reapply(&page, &r.client, "layouts").await;
+        assert_eq!(out.error, None);
+        assert_eq!(out.state["look"]["gaps_in"], 4);
+        assert_eq!(*r.explain.reapplied.lock().unwrap(), vec!["layouts"]);
+        let out = reapply(&page, &r.client, "nope").await;
+        assert!(out.error.is_some(), "{out:?}");
+        assert_eq!(out.state["look"]["gaps_in"], 4);
+    }
+
+    #[tokio::test]
     async fn unknown_field_refused() {
         let (_r, page) = rig().await;
         let before = run(&page, Op::Refresh).await.state;
@@ -450,5 +517,88 @@ mod tests {
         }
         let out = run(&page, look("nope", json!(1))).await;
         assert_eq!(out.error.as_deref(), Some("unknown field \"nope\""));
+    }
+
+    /// Every field the page writes keeps its value: a fresh page object on the same uqd reads
+    /// back what each `Op` wrote, so no control resets itself.
+    #[tokio::test]
+    async fn every_field_round_trips() {
+        let (r, page) = rig().await;
+        let mut writes = vec![
+            (look("gaps_in", json!(7)), "/look/gaps_in", json!(7)),
+            (look("gaps_out", json!(13)), "/look/gaps_out", json!(13)),
+            (
+                look("border_width", json!(3)),
+                "/look/border_width",
+                json!(3),
+            ),
+            (look("rounding", json!(9)), "/look/rounding", json!(9)),
+            (look("blur", json!(false)), "/look/blur", json!(false)),
+            (look("blur_size", json!(5)), "/look/blur_size", json!(5)),
+            (look("blur_passes", json!(2)), "/look/blur_passes", json!(2)),
+            (look("shadow", json!(false)), "/look/shadow", json!(false)),
+            (
+                look("animations", json!(false)),
+                "/look/animations",
+                json!(false),
+            ),
+            (
+                look("animation_speed", json!(1.5)),
+                "/look/animation_speed",
+                json!(1.5),
+            ),
+            (
+                option("", "default", json!("master")),
+                "/layouts/default",
+                json!("master"),
+            ),
+        ];
+        for (group, field, value) in [
+            ("dwindle", "preserve_split", json!(false)),
+            ("dwindle", "smart_split", json!(true)),
+            ("dwindle", "force_split", json!("left")),
+            ("master", "mfact", json!(0.7)),
+            ("master", "new_status", json!("master")),
+            ("master", "orientation", json!("right")),
+            ("scrolling", "column_width", json!(0.7)),
+            ("scrolling", "fullscreen_on_one_column", json!(false)),
+        ] {
+            writes.push((
+                option(group, field, value.clone()),
+                Box::leak(format!("/layouts/{group}/{field}").into_boxed_str()),
+                value,
+            ));
+        }
+        writes.push((
+            Op::SetWorkspace {
+                selector: "5".into(),
+                layout: Some("master".into()),
+            },
+            "/layouts/workspaces/5",
+            json!("master"),
+        ));
+        // Every writable field is covered.
+        let covered = writes.len() - 2; // the default layout and the workspace rule
+        assert_eq!(
+            covered,
+            LOOK_FIELDS.len() + GROUPS.iter().map(|(_, f)| f.len()).sum::<usize>(),
+            "a field was added without a round trip"
+        );
+
+        let before = run(&page, Op::Refresh).await.state;
+        for (op, pointer, want) in &writes {
+            assert_ne!(
+                before.pointer(pointer),
+                Some(want),
+                "{pointer} starts at the value"
+            );
+            let out = run(&page, op.clone()).await;
+            assert_eq!(out.error, None, "{pointer}");
+        }
+        let fresh = LookState::new(r.client.clone());
+        let state = run(&fresh, Op::Refresh).await.state;
+        for (_, pointer, want) in &writes {
+            assert_eq!(state.pointer(pointer), Some(want), "{pointer} reads back");
+        }
     }
 }

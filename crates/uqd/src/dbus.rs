@@ -4,6 +4,7 @@ use crate::service::{Desktop, DesktopError, Event};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use uq_core::history::Origin;
 use uq_core::schedule::Schedule;
 use uq_core::theme::Variant;
 use zbus::object_server::SignalEmitter;
@@ -27,6 +28,7 @@ pub enum UqError {
     InvalidSetting(String),
     ConfigInvalid(String),
     Io(String),
+    Conflict(String),
 }
 
 impl From<DesktopError> for UqError {
@@ -40,6 +42,8 @@ impl From<DesktopError> for UqError {
             DesktopError::InvalidSetting(_) => UqError::InvalidSetting(msg),
             DesktopError::ConfigInvalid(_) => UqError::ConfigInvalid(msg),
             DesktopError::Io(_) => UqError::Io(msg),
+            DesktopError::InvalidArgument(_) => UqError::InvalidArgument(msg),
+            DesktopError::Conflict(_) => UqError::Conflict(msg),
         }
     }
 }
@@ -48,13 +52,20 @@ pub struct DesktopIface {
     desktop: SharedDesktop,
 }
 
+/// Every write takes a last `origin` argument (`settings`, `uqctl`, `shell`, …; "" is unknown),
+/// which the history journal records.
 #[zbus::interface(name = "org.uq.Desktop1")]
 impl DesktopIface {
-    async fn set_theme(&self, name: &str, variant: &str) -> Result<(), UqError> {
+    async fn set_theme(&self, name: &str, variant: &str, origin: &str) -> Result<(), UqError> {
         let v: Variant = variant
             .parse()
             .map_err(|e: uq_core::theme::ThemeError| UqError::InvalidArgument(e.to_string()))?;
-        Ok(self.desktop.lock().await.set_theme(name, v).await?)
+        Ok(self
+            .desktop
+            .lock()
+            .await
+            .set_theme(name, v, Origin::parse(origin))
+            .await?)
     }
 
     async fn get_theme(&self) -> (String, String) {
@@ -64,10 +75,15 @@ impl DesktopIface {
 
     /// `json` is a Schedule: `{"mode":"off"}`, `{"mode":"fixed","light_at":"07:00:00","dark_at":"19:00:00"}`
     /// or `{"mode":"sun","lat":51.5,"lon":-0.13}`.
-    async fn set_schedule(&self, json: &str) -> Result<(), UqError> {
+    async fn set_schedule(&self, json: &str, origin: &str) -> Result<(), UqError> {
         let s: Schedule =
             serde_json::from_str(json).map_err(|e| UqError::InvalidSchedule(e.to_string()))?;
-        Ok(self.desktop.lock().await.set_schedule(s).await?)
+        Ok(self
+            .desktop
+            .lock()
+            .await
+            .set_schedule(s, Origin::parse(origin))
+            .await?)
     }
 
     /// The stored schedule as JSON, in the format `SetSchedule` accepts.
@@ -76,12 +92,12 @@ impl DesktopIface {
         serde_json::to_string(d.schedule()).map_err(|e| UqError::InvalidSchedule(e.to_string()))
     }
 
-    async fn set_layout(&self, workspace: &str, layout: &str) -> Result<(), UqError> {
+    async fn set_layout(&self, workspace: &str, layout: &str, origin: &str) -> Result<(), UqError> {
         Ok(self
             .desktop
             .lock()
             .await
-            .set_layout(workspace, layout)
+            .set_layout(workspace, layout, Origin::parse(origin))
             .await?)
     }
 
@@ -107,10 +123,15 @@ impl DesktopIface {
             .map_err(|e| UqError::Io(e.to_string()))
     }
 
-    async fn set_setting(&self, key: &str, json: &str) -> Result<(), UqError> {
+    async fn set_setting(&self, key: &str, json: &str, origin: &str) -> Result<(), UqError> {
         let value: serde_json::Value = serde_json::from_str(json)
             .map_err(|e| UqError::InvalidSetting(format!("value is not JSON: {e}")))?;
-        Ok(self.desktop.lock().await.set_setting(key, value).await?)
+        Ok(self
+            .desktop
+            .lock()
+            .await
+            .set_setting(key, value, Origin::parse(origin))
+            .await?)
     }
 
     /// One whole settings section (`appearance`, `wallpaper`) as JSON.
@@ -119,8 +140,13 @@ impl DesktopIface {
     }
 
     /// Replace a whole section with `json`.
-    async fn set_section(&self, domain: &str, json: &str) -> Result<(), UqError> {
-        Ok(self.desktop.lock().await.set_section(domain, json).await?)
+    async fn set_section(&self, domain: &str, json: &str, origin: &str) -> Result<(), UqError> {
+        Ok(self
+            .desktop
+            .lock()
+            .await
+            .set_section(domain, json, Origin::parse(origin))
+            .await?)
     }
 
     /// Input devices Hyprland reports: `{keyboards, pointers, touch}` as JSON.
@@ -144,6 +170,55 @@ impl DesktopIface {
     async fn clear_launch_counts(&self) {
         self.desktop.lock().await.clear_launch_counts();
     }
+
+    /// The history journal as a JSON array of entries, newest first, at most `limit` (≤ 500).
+    async fn list_history(&self, limit: u32) -> Result<String, UqError> {
+        let entries = self.desktop.lock().await.history(limit as usize);
+        serde_json::to_string(&entries).map_err(|e| UqError::Io(e.to_string()))
+    }
+
+    /// Write entry `entry_id`'s `before` back. `Conflict` when its domain changed again since,
+    /// unless `force`. Returns the id of the entry the undo recorded ("" if nothing changed).
+    async fn undo(&self, entry_id: &str, force: bool) -> Result<String, UqError> {
+        let mut d = self.desktop.lock().await;
+        d.undo(entry_id, force).await?;
+        // Read under the same lock, right after the write, so no other write can replace it.
+        Ok(d.last_entry_ids().last().cloned().unwrap_or_default())
+    }
+
+    /// Restore points as a JSON array, newest first.
+    async fn list_restore_points(&self) -> Result<String, UqError> {
+        let points = self.desktop.lock().await.restore_points();
+        serde_json::to_string(&points).map_err(|e| UqError::Io(e.to_string()))
+    }
+
+    async fn save_restore_point(&self, name: &str) -> Result<String, UqError> {
+        Ok(self.desktop.lock().await.save_restore_point(name)?)
+    }
+
+    async fn delete_restore_point(&self, id: &str) -> Result<(), UqError> {
+        Ok(self.desktop.lock().await.delete_restore_point(id)?)
+    }
+
+    async fn restore(&self, id: &str) -> Result<(), UqError> {
+        Ok(self.desktop.lock().await.restore(id).await?)
+    }
+
+    /// Where each key of `domain` gets its live value, as JSON:
+    /// `{key: {source, live, stored, detail}}`.
+    async fn explain(&self, domain: &str) -> Result<String, UqError> {
+        let v = self.desktop.lock().await.explain(domain).await?;
+        Ok(v.to_string())
+    }
+
+    /// Run `domain`'s render path again; changes nothing in state or history. Emits
+    /// `SectionChanged` for `domain` afterwards, so open pages explain it again.
+    async fn reapply(&self, domain: &str) -> Result<(), UqError> {
+        Ok(self.desktop.lock().await.reapply(domain).await?)
+    }
+
+    #[zbus(signal)]
+    async fn history_changed(e: &SignalEmitter<'_>) -> zbus::Result<()>;
 
     #[zbus(signal)]
     async fn settings_changed(e: &SignalEmitter<'_>, json: &str) -> zbus::Result<()>;
@@ -233,6 +308,7 @@ pub async fn serve(
                 Event::SectionChanged { domain, json } => {
                     DesktopIface::section_changed(e, domain, json).await
                 }
+                Event::HistoryChanged => DesktopIface::history_changed(e).await,
                 Event::LaunchCountsChanged(counts) => {
                     DesktopIface::launch_counts_changed(
                         e,

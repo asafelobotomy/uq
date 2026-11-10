@@ -1,8 +1,9 @@
 //! Whole-section settings (`appearance`, `wallpaper`, `look`, `input`, ...) for
 //! `GetSection` / `SetSection`.
 
-use crate::service::{Change, Desktop, DesktopError, Event};
-use uq_core::settings::clean_text;
+use crate::service::{Desktop, DesktopError, Event, change_for};
+use uq_core::history::Origin;
+use uq_core::settings::{clean_text, renders_section};
 use uq_core::state::State;
 
 /// Entries read per device class; Hyprland's reply is untrusted.
@@ -20,7 +21,12 @@ impl Desktop {
 
     /// Replace a whole section: parse and validate, then `commit_section`. `monitors` is
     /// refused; displays change only through the apply/confirm path.
-    pub async fn set_section(&mut self, domain: &str, json: &str) -> Result<(), DesktopError> {
+    pub async fn set_section(
+        &mut self,
+        domain: &str,
+        json: &str,
+        origin: Origin,
+    ) -> Result<(), DesktopError> {
         let value: serde_json::Value = serde_json::from_str(json)
             .map_err(|e| DesktopError::InvalidSetting(format!("value is not JSON: {e}")))?;
         if domain == "monitors" {
@@ -31,7 +37,7 @@ impl Desktop {
         let mut next = self.state.clone();
         next.set_section(domain, value)
             .map_err(|e| DesktopError::InvalidSetting(e.to_string()))?;
-        self.commit_section(domain, next).await
+        self.commit_section(domain, next, origin).await
     }
 
     /// The single section save path: every section write is saved, applied and announced here.
@@ -41,22 +47,21 @@ impl Desktop {
     /// live); `wallpaper` and `shell` just save, since the shell reads them. Then the layout
     /// events, `SectionChanged` and `SettingsChanged` go out.
     ///
-    /// uq#8 slice A (Task 13): `persist(next, origin)` journals the change at the save inside
-    /// this function's commit (`install` / `save_state`), so there is exactly one place to hook.
+    /// The save is `persist(next, origin)`, reached through `commit` (`install`) or directly, so
+    /// each accepted write is journalled exactly once.
     pub(crate) async fn commit_section(
         &mut self,
         domain: &str,
         next: State,
+        origin: Origin,
     ) -> Result<(), DesktopError> {
         let before = (domain == "layouts").then(|| self.state.layouts.clone());
-        match domain {
-            "appearance" => self.commit(next, Change::Theme).await?,
-            "look" | "layouts" | "input" => self.commit(next, Change::Reload).await?,
-            "monitors" => self.commit(next, Change::Quiet).await?,
-            _ => {
-                self.save_state(&next)?;
-                self.state = next;
-            }
+        if renders_section(domain) || domain == "monitors" {
+            let res = self.commit(next, change_for(domain), origin).await;
+            self.note_section_commit(domain, &res);
+            res?;
+        } else {
+            self.persist(next, origin)?;
         }
         if let Some(before) = before {
             // The reload applied the rules; tell the shell which workspaces changed layout. A
@@ -92,7 +97,6 @@ impl Desktop {
         let _ = self.events.send(Event::SettingsChanged(Box::new(
             self.state.settings.clone(),
         )));
-        self.section_commits += 1;
         Ok(())
     }
 
@@ -144,6 +148,7 @@ mod tests {
     use std::sync::Arc;
     use std::sync::atomic::Ordering;
     use tokio::sync::broadcast;
+    use uq_core::history::Origin;
     use uq_core::paths::Paths;
     use uq_core::state::State;
 
@@ -194,6 +199,7 @@ mod tests {
             .set_section(
                 "appearance",
                 r#"{"ui_font":"Cantarell","cursor_theme":"Adwaita","cursor_size":32}"#,
+                Origin::Settings,
             )
             .await
             .unwrap();
@@ -224,7 +230,7 @@ mod tests {
         let mut r = rig();
         r.sys.fail.store(true, Ordering::SeqCst);
         r.desktop
-            .set_section("appearance", r#"{"mono_font":"Hack"}"#)
+            .set_section("appearance", r#"{"mono_font":"Hack"}"#, Origin::Settings)
             .await
             .unwrap();
         let got: serde_json::Value =
@@ -236,10 +242,13 @@ mod tests {
     #[tokio::test]
     async fn kvantum_off_removes_the_kvconfig() {
         let mut r = rig();
-        r.desktop.set_section("appearance", "{}").await.unwrap();
+        r.desktop
+            .set_section("appearance", "{}", Origin::Settings)
+            .await
+            .unwrap();
         assert!(kvconfig(&r).is_file());
         r.desktop
-            .set_section("appearance", r#"{"kvantum":false}"#)
+            .set_section("appearance", r#"{"kvantum":false}"#, Origin::Settings)
             .await
             .unwrap();
         assert!(!kvconfig(&r).exists());
@@ -254,7 +263,10 @@ mod tests {
         r.comp.calls.lock().unwrap().clear();
         drain(&mut r.events);
         let json = r#"{"outputs":{"*":{"image":"/a.png"}}}"#;
-        r.desktop.set_section("wallpaper", json).await.unwrap();
+        r.desktop
+            .set_section("wallpaper", json, Origin::Settings)
+            .await
+            .unwrap();
         assert_eq!(
             std::fs::metadata(&gen_path).unwrap().modified().unwrap(),
             before
@@ -281,7 +293,10 @@ mod tests {
         r.comp.calls.lock().unwrap().clear();
         drain(&mut r.events);
         let json = r#"{"islands":{"work":false},"clock_24h":false,"terminal":"foot.desktop","providers":[{"id":"run"},{"id":"org.x.Y","enabled":false}]}"#;
-        r.desktop.set_section("shell", json).await.unwrap();
+        r.desktop
+            .set_section("shell", json, Origin::Settings)
+            .await
+            .unwrap();
         assert_eq!(
             std::fs::metadata(&gen_path).unwrap().modified().unwrap(),
             before
@@ -304,7 +319,7 @@ mod tests {
         assert_eq!(got["providers"][1]["enabled"], false);
         for bad in [r#"{"terminal":"kitty"}"#, r#"{"nope":1}"#] {
             assert!(matches!(
-                r.desktop.set_section("shell", bad).await,
+                r.desktop.set_section("shell", bad, Origin::Settings).await,
                 Err(DesktopError::InvalidSetting(_))
             ));
         }
@@ -322,7 +337,7 @@ mod tests {
         ] {
             assert!(
                 matches!(
-                    r.desktop.set_section(d, j).await,
+                    r.desktop.set_section(d, j, Origin::Settings).await,
                     Err(DesktopError::InvalidSetting(_))
                 ),
                 "{d} {j}"
@@ -337,7 +352,7 @@ mod tests {
     async fn rejected_config_keeps_previous_appearance() {
         let mut r = rig();
         r.desktop
-            .set_section("appearance", r#"{"ui_font":"Inter"}"#)
+            .set_section("appearance", r#"{"ui_font":"Inter"}"#, Origin::Settings)
             .await
             .unwrap();
         let before = r.desktop.get_section("appearance").unwrap();
@@ -345,7 +360,7 @@ mod tests {
         *r.comp.verify_error.lock().unwrap() = Some("bad".into());
         let res = r
             .desktop
-            .set_section("appearance", r#"{"ui_font":"Other"}"#)
+            .set_section("appearance", r#"{"ui_font":"Other"}"#, Origin::Settings)
             .await;
         assert!(matches!(res, Err(DesktopError::ConfigInvalid(_))));
         assert_eq!(r.desktop.get_section("appearance").unwrap(), before);
@@ -367,7 +382,7 @@ mod tests {
         r.sys.applied.lock().unwrap().clear();
         drain(&mut r.events);
         r.desktop
-            .set_section("look", r#"{"gaps_in":9}"#)
+            .set_section("look", r#"{"gaps_in":9}"#, Origin::Settings)
             .await
             .unwrap();
         assert!(generated(&r).contains("gaps_in = 9"), "{}", generated(&r));
@@ -397,7 +412,10 @@ mod tests {
         let state_before = std::fs::read(&r.desktop.paths().state_file).unwrap();
         drain(&mut r.events);
         *r.comp.verify_error.lock().unwrap() = Some("bad option".into());
-        let res = r.desktop.set_section("look", r#"{"gaps_in":9}"#).await;
+        let res = r
+            .desktop
+            .set_section("look", r#"{"gaps_in":9}"#, Origin::Settings)
+            .await;
         assert_eq!(res, Err(DesktopError::ConfigInvalid("bad option".into())));
         assert_eq!(
             std::fs::read(&r.desktop.paths().generated_lua).unwrap(),
@@ -420,13 +438,17 @@ mod tests {
     #[tokio::test]
     async fn set_layouts_replaces_rules() {
         let mut r = rig();
-        r.desktop.set_layout("2", "scrolling").await.unwrap();
+        r.desktop
+            .set_layout("2", "scrolling", Origin::Settings)
+            .await
+            .unwrap();
         r.comp.calls.lock().unwrap().clear();
         drain(&mut r.events);
         r.desktop
             .set_section(
                 "layouts",
                 r#"{"default":"master","workspaces":{"3":"master"}}"#,
+                Origin::Settings,
             )
             .await
             .unwrap();
@@ -459,7 +481,10 @@ mod tests {
     #[tokio::test]
     async fn set_layout_emits_layouts_section() {
         let mut r = rig();
-        r.desktop.set_layout("2", "scrolling").await.unwrap();
+        r.desktop
+            .set_layout("2", "scrolling", Origin::Settings)
+            .await
+            .unwrap();
         let evs = drain(&mut r.events);
         let json = evs
             .iter()
@@ -482,6 +507,7 @@ mod tests {
             .set_section(
                 "input",
                 r#"{"keyboard":{"layouts":[{"layout":"us"},{"layout":"de"}]}}"#,
+                Origin::Settings,
             )
             .await
             .unwrap();
@@ -506,7 +532,11 @@ mod tests {
         *r.comp.verify_error.lock().unwrap() = Some("bad option".into());
         let res = r
             .desktop
-            .set_section("input", r#"{"keyboard":{"layouts":[{"layout":"de"}]}}"#)
+            .set_section(
+                "input",
+                r#"{"keyboard":{"layouts":[{"layout":"de"}]}}"#,
+                Origin::Settings,
+            )
             .await;
         assert_eq!(res, Err(DesktopError::ConfigInvalid("bad option".into())));
         assert_eq!(
@@ -533,7 +563,10 @@ mod tests {
         r.desktop.startup().await;
         let state_before = std::fs::read(&r.desktop.paths().state_file).unwrap();
         drain(&mut r.events);
-        let res = r.desktop.set_section("monitors", r#"{"outputs":{}}"#).await;
+        let res = r
+            .desktop
+            .set_section("monitors", r#"{"outputs":{}}"#, Origin::Settings)
+            .await;
         assert_eq!(
             res,
             Err(DesktopError::InvalidSetting(
@@ -545,44 +578,58 @@ mod tests {
             state_before
         );
         assert!(drain(&mut r.events).is_empty());
-        assert_eq!(r.desktop.section_commits(), 0);
+        assert!(r.desktop.history(100).is_empty());
     }
 
     #[tokio::test]
-    async fn every_section_write_counts_once() {
+    async fn every_section_write_journals_once() {
         let mut r = rig();
-        let before = r.desktop.section_commits();
+        let before = r.desktop.history(100).len();
         r.desktop
-            .set_section("appearance", r#"{"ui_font":"Cantarell"}"#)
+            .set_section("appearance", r#"{"ui_font":"Cantarell"}"#, Origin::Settings)
             .await
             .unwrap();
-        assert_eq!(r.desktop.section_commits(), before + 1);
+        assert_eq!(r.desktop.history(100).len(), before + 1);
         r.desktop
-            .set_section("look", r#"{"gaps_in":9}"#)
+            .set_section("look", r#"{"gaps_in":9}"#, Origin::Settings)
             .await
             .unwrap();
-        assert_eq!(r.desktop.section_commits(), before + 2);
+        assert_eq!(r.desktop.history(100).len(), before + 2);
         r.desktop
-            .set_section("input", r#"{"keyboard":{"layouts":[{"layout":"us"}]}}"#)
+            .set_section(
+                "input",
+                r#"{"keyboard":{"layouts":[{"layout":"us"}]}}"#,
+                Origin::Settings,
+            )
             .await
             .unwrap();
-        assert_eq!(r.desktop.section_commits(), before + 3);
+        assert_eq!(r.desktop.history(100).len(), before + 3);
         // Refused writes (bad value, monitors, failed verify) add nothing.
         assert!(
             r.desktop
-                .set_section("look", r#"{"gaps_in":999}"#)
+                .set_section("look", r#"{"gaps_in":999}"#, Origin::Settings)
                 .await
                 .is_err()
         );
-        assert!(r.desktop.set_section("monitors", "{}").await.is_err());
+        assert!(
+            r.desktop
+                .set_section("monitors", "{}", Origin::Settings)
+                .await
+                .is_err()
+        );
         *r.comp.verify_error.lock().unwrap() = Some("no".into());
         assert!(
             r.desktop
-                .set_section("look", r#"{"gaps_in":3}"#)
+                .set_section("look", r#"{"gaps_in":3}"#, Origin::Settings)
                 .await
                 .is_err()
         );
-        assert_eq!(r.desktop.section_commits(), before + 3);
+        assert_eq!(r.desktop.history(100).len(), before + 3);
+        let newest = &r.desktop.history(1)[0];
+        assert_eq!(
+            (newest.domain.as_str(), newest.origin.as_str()),
+            ("input", "settings")
+        );
     }
 
     #[tokio::test]
@@ -656,22 +703,25 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn setting_light_path_uses_the_single_save_point() {
+    async fn setting_light_path_journals_through_persist() {
         let mut r = rig();
-        let (saves, commits) = (r.desktop.state_saves(), r.desktop.section_commits());
+        let before = r.desktop.history(100).len();
         r.desktop
-            .set_setting("idle.screen_off", serde_json::json!(500))
+            .set_setting("idle.screen_off", serde_json::json!(500), Origin::Uqctl)
             .await
             .unwrap();
-        assert_eq!(r.desktop.state_saves(), saves + 1);
-        r.desktop.set_section("wallpaper", r#"{}"#).await.unwrap();
-        assert_eq!(r.desktop.state_saves(), saves + 2);
+        assert_eq!(r.desktop.history(100).len(), before + 1);
+        assert_eq!(r.desktop.history(1)[0].origin, "uqctl");
+        let json = r#"{"outputs":{"*":{"image":"/a.png"}}}"#;
         r.desktop
-            .set_setting("nope", serde_json::json!(1))
+            .set_section("wallpaper", json, Origin::Settings)
+            .await
+            .unwrap();
+        assert_eq!(r.desktop.history(100).len(), before + 2);
+        r.desktop
+            .set_setting("nope", serde_json::json!(1), Origin::Settings)
             .await
             .unwrap_err();
-        assert_eq!(r.desktop.state_saves(), saves + 2);
-        // Only section writes count as section commits.
-        assert_eq!(r.desktop.section_commits(), commits + 1);
+        assert_eq!(r.desktop.history(100).len(), before + 2);
     }
 }

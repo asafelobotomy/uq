@@ -3,6 +3,7 @@
 //! announces a change the page follows. Not a bridge file: each `*_model.rs` keeps its own bridge
 //! and implements [`PageModel`].
 
+use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
@@ -25,6 +26,8 @@ pub struct Follow {
     pub theme: bool,
     /// `SettingsChanged`.
     pub settings: bool,
+    /// `HistoryChanged`.
+    pub history: bool,
 }
 
 /// Whether a `SectionChanged(domain, …)` concerns the page.
@@ -113,6 +116,9 @@ async fn follow_uqd<M: PageModel>(
         if follow.settings {
             all.push(proxy.receive_settings_changed().await?.map(|_| ()).boxed());
         }
+        if follow.history {
+            all.push(proxy.receive_history_changed().await?.map(|_| ()).boxed());
+        }
         zbus::Result::Ok(futures_util::stream::select_all(all))
     };
     let mut changes = match streams.await {
@@ -134,19 +140,47 @@ async fn follow_uqd<M: PageModel>(
 }
 
 /// Run `op` off the Qt thread; the result comes back through [`finish`].
-pub fn start<M: PageModel>(mut m: Pin<&mut M>, op: <M::Logic as PageLogic>::Op) {
+pub fn start<M: PageModel>(m: Pin<&mut M>, op: <M::Logic as PageLogic>::Op) {
+    // A new user action replaces the old message; a refresh keeps it on show.
+    let clears_error = !M::Logic::is_refresh(&op);
+    spawn(m, clears_error, move |logic| async move {
+        runner::run(&*logic, op).await
+    });
+}
+
+/// Ask uqd to apply `domain` to the session again (a row's **Re-apply**), then read the state
+/// back. Only for a domain the page follows: its rows are the ones that show a source.
+pub fn reapply<M: PageModel>(m: Pin<&mut M>, domain: String) {
+    if !wants(&M::FOLLOW, &domain) {
+        m.show_error(QString::from(&format!("this page doesn't show {domain}")));
+        return;
+    }
+    let Some((_, conn)) = session::bus() else {
+        return;
+    };
+    spawn(m, true, move |logic| async move {
+        runner::reapply(&*logic, &conn, &domain).await
+    });
+}
+
+/// Run `job` on the runtime, marking the page busy until it is done.
+fn spawn<M, F, Fut>(mut m: Pin<&mut M>, clears_error: bool, job: F)
+where
+    M: PageModel,
+    F: FnOnce(Arc<M::Logic>) -> Fut + Send + 'static,
+    Fut: Future<Output = Outcome> + Send + 'static,
+{
     let Some((handle, logic)) = m.core().logic.clone() else {
         return;
     };
     let qt = m.qt_thread();
     m.as_mut().core_mut().in_flight += 1;
     m.as_mut().show_busy(true);
-    if !M::Logic::is_refresh(&op) {
-        // A new user action replaces the old message; a refresh keeps it on show.
+    if clears_error {
         m.as_mut().show_error(QString::default());
     }
     handle.spawn(async move {
-        let outcome = runner::run(&*logic, op).await;
+        let outcome = job(logic).await;
         let _ = qt.queue(move |m| finish(m, outcome));
     });
 }
@@ -173,6 +207,7 @@ mod tests {
             sections: &["wallpaper"],
             theme: false,
             settings: false,
+            history: false,
         };
         assert!(wants(&wallpaper, "wallpaper"));
         assert!(!wants(&wallpaper, "appearance"));
@@ -181,6 +216,7 @@ mod tests {
             sections: &["look", "layouts"],
             theme: true,
             settings: true,
+            history: false,
         };
         assert!(wants(&two, "look") && wants(&two, "layouts"));
         assert!(!wants(&two, "shell"));

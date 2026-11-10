@@ -32,6 +32,33 @@ pub trait Compositor: Send + Sync {
     async fn monitors(&self) -> Result<String, CompositorError>;
     /// Live input devices as JSON (`hyprctl devices -j`).
     async fn devices(&self) -> Result<String, CompositorError>;
+    /// One option's live value (`hyprctl -j getoption <path>`, path like `general:gaps_in`):
+    /// the reply's value field (`int`, `float`, `bool`, `str`, `custom`, `css`, …).
+    async fn get_option(&self, path: &str) -> Result<serde_json::Value, CompositorError>;
+}
+
+/// The value fields a `j/getoption` reply can carry, one per option type.
+const OPTION_VALUE_FIELDS: [&str; 9] = [
+    "int",
+    "float",
+    "bool",
+    "str",
+    "custom",
+    "css",
+    "vec2",
+    "gradient",
+    "font_weight",
+];
+
+/// The value field of a `j/getoption` reply; anything else ("no such option") is `Rejected`.
+fn option_value(reply: &str) -> Result<serde_json::Value, CompositorError> {
+    let rejected = || CompositorError::Rejected(reply.trim().to_string());
+    let v: serde_json::Value = serde_json::from_str(reply).map_err(|_| rejected())?;
+    OPTION_VALUE_FIELDS
+        .iter()
+        .find_map(|f| v.get(*f))
+        .cloned()
+        .ok_or_else(rejected)
 }
 
 /// Hyprland over its request socket, plus `Hyprland --verify-config` for validation.
@@ -133,6 +160,10 @@ impl Compositor for Hyprland {
     async fn devices(&self) -> Result<String, CompositorError> {
         self.socket.request("j/devices").await
     }
+
+    async fn get_option(&self, path: &str) -> Result<serde_json::Value, CompositorError> {
+        option_value(&self.socket.request(&format!("j/getoption {path}")).await?)
+    }
 }
 
 /// In-memory compositor for tests: records calls, returns configurable results.
@@ -157,6 +188,8 @@ pub mod fake {
         pub eval_error: Mutex<Option<String>>,
         /// `Some(msg)` makes the next `reload` return `Rejected(msg)`, once.
         pub reload_error: Mutex<Option<String>>,
+        /// What `get_option` answers per option path; a missing path is `Rejected`.
+        pub options: Mutex<std::collections::HashMap<String, serde_json::Value>>,
     }
 
     impl FakeCompositor {
@@ -165,6 +198,9 @@ pub mod fake {
                 running: Mutex::new(true),
                 ..Default::default()
             }
+        }
+        pub fn set_option(&self, path: &str, value: serde_json::Value) {
+            self.options.lock().unwrap().insert(path.to_string(), value);
         }
         pub fn calls(&self) -> Vec<String> {
             self.calls.lock().unwrap().clone()
@@ -225,6 +261,17 @@ pub mod fake {
             self.record("devices".into())?;
             let j = self.devices_json.lock().unwrap().clone();
             Ok(if j.is_empty() { "{}".into() } else { j })
+        }
+        async fn get_option(&self, path: &str) -> Result<serde_json::Value, CompositorError> {
+            if !*self.running.lock().unwrap() {
+                return Err(CompositorError::NotRunning);
+            }
+            self.options
+                .lock()
+                .unwrap()
+                .get(path)
+                .cloned()
+                .ok_or_else(|| CompositorError::Rejected("no such option".into()))
         }
     }
 }
@@ -398,6 +445,48 @@ mod tests {
             h.config_errors().await.unwrap(),
             vec!["user.lua:3: oops".to_string()]
         );
+    }
+
+    #[tokio::test]
+    async fn get_option_returns_the_value_field() {
+        let dir = tempfile::tempdir().unwrap();
+        let sock_dir = dir.path().join("hypr/SIG");
+        std::fs::create_dir_all(&sock_dir).unwrap();
+        let listener = UnixListener::bind(sock_dir.join(".socket.sock")).unwrap();
+        let server = tokio::spawn(async move {
+            let mut seen = Vec::new();
+            for reply in [
+                r#"{"option": "general:gaps_in", "css": "5 5 5 5", "set": true }"#,
+                r#"{"option": "master:mfact", "float": 0.550000, "set": false }"#,
+                r#"{"option": "decoration:blur:enabled", "bool": false, "set": true }"#,
+                "no such option",
+            ] {
+                let (mut s, _) = listener.accept().await.unwrap();
+                let mut buf = vec![0u8; 1024];
+                let n = s.read(&mut buf).await.unwrap();
+                seen.push(String::from_utf8_lossy(&buf[..n]).into_owned());
+                s.write_all(reply.as_bytes()).await.unwrap();
+            }
+            seen
+        });
+        let h = Hyprland::new(Some(dir.path().into()), Some("SIG".into()));
+        assert_eq!(
+            h.get_option("general:gaps_in").await.unwrap(),
+            serde_json::json!("5 5 5 5")
+        );
+        assert_eq!(
+            h.get_option("master:mfact").await.unwrap(),
+            serde_json::json!(0.55)
+        );
+        assert_eq!(
+            h.get_option("decoration:blur:enabled").await.unwrap(),
+            serde_json::json!(false)
+        );
+        assert!(matches!(
+            h.get_option("general:nope").await,
+            Err(CompositorError::Rejected(m)) if m == "no such option"
+        ));
+        assert_eq!(server.await.unwrap()[0], "j/getoption general:gaps_in");
     }
 
     #[tokio::test]

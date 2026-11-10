@@ -395,7 +395,7 @@ mpv_play() {
 }
 playing() { [ "$(vgh playerctl status 2>/dev/null)" = Playing ]; }
 mpv_stop() { vg systemctl --user stop uqvm-mpv.service >/dev/null 2>&1; }
-uqd_set() { vgh busctl --user call org.uq.Desktop1 /org/uq/Desktop1 org.uq.Desktop1 SetSetting ss "$1" "$2"; }
+uqd_set() { vgh busctl --user call org.uq.Desktop1 /org/uq/Desktop1 org.uq.Desktop1 SetSetting sss "$1" "$2" ""; }
 
 c_L15() {
     mpv_play || { bad "could not start a playing MPRIS player (mpv + mpv-mpris)"; mpv_stop; return; }
