@@ -24,6 +24,15 @@ All notable changes to uQ are listed here. The format follows
   from 0.2 is switched to `style=kvantum`; one you edited is left alone with a hint. Turn it
   off with `appearance.kvantum = false`.
 
+## [0.2.1] - 2026-11-10
+
+### Fixed
+
+- **`uqctl setup` on a fresh install.** An unedited copy of Hyprland's stock `hyprland.lua`
+  (written by Hyprland on first start, by hyprland-welcome, or by bindle's installer) is no
+  longer treated as the user's own config. It is moved to `hyprland.lua.stock` and replaced
+  with uQ's stub, so a fresh install starts uQ on the next login instead of exiting 3.
+
 ### Changed
 
 - **scdr alignment.** `uqd`, `uq-shell` and `uq-lock` run in `session.slice` instead of the
