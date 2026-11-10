@@ -22,7 +22,7 @@ impl Desktop {
         let mut next = self.state.clone();
         next.set_section(domain, value)
             .map_err(|e| DesktopError::InvalidSetting(e.to_string()))?;
-        let before = self.state.layouts.clone();
+        let before = (domain == "layouts").then(|| self.state.layouts.clone());
         if renders_section(domain) {
             let change = if domain == "appearance" {
                 Change::Theme
@@ -35,15 +35,28 @@ impl Desktop {
                 .map_err(io_err("saving state"))?;
             self.state = next;
         }
-        if domain == "layouts" {
-            // The reload applied the rules; tell the shell which workspaces changed layout.
-            let changed: Vec<_> = self
+        if let Some(before) = before {
+            // The reload applied the rules; tell the shell which workspaces changed layout. A
+            // removed rule falls back to the default layout.
+            let fallback = self
+                .state
+                .settings
+                .layout_options
+                .default
+                .unwrap_or(uq_core::lua::Layout::Dwindle);
+            let mut changed: Vec<_> = self
                 .state
                 .layouts
                 .iter()
                 .filter(|(ws, l)| before.get(*ws) != Some(*l))
                 .map(|(ws, l)| (ws.clone(), *l))
                 .collect();
+            changed.extend(
+                before
+                    .keys()
+                    .filter(|ws| !self.state.layouts.contains_key(*ws))
+                    .map(|ws| (ws.clone(), fallback)),
+            );
             for (workspace, layout) in changed {
                 let _ = self.events.send(Event::LayoutChanged { workspace, layout });
             }
@@ -335,6 +348,11 @@ mod tests {
             evs.iter()
                 .any(|e| matches!(e, Event::SectionChanged { domain, .. } if domain == "layouts"))
         );
+        // The removed rule "2" reports the new default.
+        assert!(evs.contains(&Event::LayoutChanged {
+            workspace: "2".into(),
+            layout: uq_core::lua::Layout::Master
+        }));
         assert!(!evs.iter().any(|e| matches!(e, Event::ThemeChanged { .. })));
     }
 
