@@ -278,7 +278,8 @@ pub fn options_for(domain: &str) -> impl Iterator<Item = &'static OptionRow> + '
     OPTIONS.iter().filter(move |r| r.domain() == domain)
 }
 
-/// The display label of `(domain, json key)`, for history summaries.
+/// The display label of `(domain, json key)` for the rows here; history summaries use
+/// [`crate::history::label`], which covers every key.
 pub fn label_for(domain: &str, json_key: &str) -> Option<&'static str> {
     options_for(domain)
         .find(|r| r.json_key() == json_key)
@@ -567,7 +568,9 @@ mod tests {
         assert_eq!(label_for("look", "nope"), None);
         assert_eq!(label_for("wallpaper", "gaps_in"), None);
         let line =
-            crate::history::summarize("look", &json!({}), &json!({"gaps_in": 3}), &label_for);
+            crate::history::summarize("look", &json!({}), &json!({"gaps_in": 3}), &|d, k| {
+                label_for(d, k).map(Into::into)
+            });
         assert!(
             line.starts_with("Gaps between windows: default → 3"),
             "{line}"

@@ -6,7 +6,7 @@ use serde_json::{Map, Value, json};
 use std::collections::BTreeSet;
 
 /// Looks up the display label for a setting: `(domain, json key)`.
-pub type Labels<'a> = &'a dyn Fn(&str, &str) -> Option<&'static str>;
+pub type Labels<'a> = &'a dyn Fn(&str, &str) -> Option<String>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct DomainChange {
@@ -20,12 +20,7 @@ const MAX_NAMED: usize = 3;
 
 /// Every domain whose content differs between `old` and `new`. `launch_counts` is not compared.
 pub fn diff(old: &State, new: &State, labels: Labels) -> Vec<DomainChange> {
-    let mut domains: Vec<&str> = SECTION_DOMAINS.to_vec();
-    if !domains.contains(&"layouts") {
-        domains.push("layouts");
-    }
-    domains.extend(["theme", "schedule", "settings"]);
-    domains
+    journal_domains()
         .into_iter()
         .filter_map(|d| {
             let (before, after) = (domain_value(old, d), domain_value(new, d));
@@ -36,6 +31,24 @@ pub fn diff(old: &State, new: &State, labels: Labels) -> Vec<DomainChange> {
                 after,
             })
         })
+        .collect()
+}
+
+/// Every domain the journal records, in summary order.
+pub(crate) fn journal_domains() -> Vec<&'static str> {
+    let mut domains: Vec<&str> = SECTION_DOMAINS.to_vec();
+    if !domains.contains(&"layouts") {
+        domains.push("layouts");
+    }
+    domains.extend(["theme", "schedule", "settings"]);
+    domains
+}
+
+/// The dotted keys a summary of `domain` can name for `st`.
+#[cfg(test)]
+pub(crate) fn leaf_keys(st: &State, domain: &str) -> Vec<String> {
+    leaf_map(domain, &domain_value(st, domain))
+        .into_keys()
         .collect()
 }
 
@@ -107,7 +120,7 @@ pub fn summarize(domain: &str, before: &Value, after: &Value, labels: Labels) ->
                 a.get(k).unwrap_or(&Value::Null),
             );
             (old != new).then(|| {
-                let name = labels(domain, k).unwrap_or(k.as_str());
+                let name = labels(domain, k).unwrap_or_else(|| k.clone());
                 format!("{name}: {} → {}", render(old), render(new))
             })
         })
@@ -218,8 +231,8 @@ pub fn revert_changed(current: &Value, before: &Value, after: &Value) -> Value {
 mod tests {
     use super::*;
 
-    fn labels(d: &str, k: &str) -> Option<&'static str> {
-        (d == "look" && k == "gaps_in").then_some("Gaps between windows")
+    fn labels(d: &str, k: &str) -> Option<String> {
+        (d == "look" && k == "gaps_in").then(|| "Gaps between windows".into())
     }
 
     #[test]

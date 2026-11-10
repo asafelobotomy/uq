@@ -755,7 +755,7 @@ impl Desktop {
             return Ok(());
         }
         self.last_entry_ids.clear();
-        let changes = diff(&old, &self.state, &provenance::label_for);
+        let changes = diff(&old, &self.state, &uq_core::history::label);
         if changes.is_empty() {
             return Ok(());
         }

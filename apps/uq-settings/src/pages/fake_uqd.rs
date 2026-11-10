@@ -104,7 +104,7 @@ impl FakeUqd {
         let mut next = s.clone();
         edit(&mut next)?;
         let origin = if origin.is_empty() { "unknown" } else { origin };
-        let entries: Vec<Entry> = diff(&s, &next, &provenance::label_for)
+        let entries: Vec<Entry> = diff(&s, &next, &uq_core::history::label)
             .into_iter()
             .map(|c| Entry::new(now(), origin, c.domain, c.summary, c.before, c.after))
             .collect();

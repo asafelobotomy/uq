@@ -2,10 +2,12 @@
 
 mod diff;
 mod journal;
+mod labels;
 mod restore;
 
 pub use diff::{DomainChange, Labels, diff, revert_changed, summarize};
 pub use journal::{Entry, Journal, MAX_AGE_DAYS, MAX_ENTRIES};
+pub use labels::label;
 pub use restore::{AutoReason, PointKind, RestorePoint, RestoreStore};
 
 /// Where a change came from. `Schedule` transitions are never journalled.
