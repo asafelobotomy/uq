@@ -21,6 +21,14 @@ QQC2.ScrollView {
     readonly property var appearance: snap.appearance || {}
     readonly property var schedule: snap.schedule || { mode: "off" }
     readonly property bool ready: App.uqdUp
+    /// The rendered theme's tokens: what "Use theme" means right now, for seeding overrides.
+    readonly property var tokens: {
+        try {
+            return JSON.parse(App.themeJson || "{}");
+        } catch (e) {
+            return {};
+        }
+    }
     function field(name, value) {
         am.setAppearance(name, JSON.stringify(value));
     }
@@ -180,7 +188,7 @@ QQC2.ScrollView {
             enabled: page.ready
             from: 6
             to: 32
-            fallback: 11
+            fallback: (page.tokens.fonts && page.tokens.fonts.size) || 11
             unit: "pt"
             value: page.appearance.font_size === undefined ? null : page.appearance.font_size
             onChosen: v => page.field("font_size", v)
@@ -210,7 +218,7 @@ QQC2.ScrollView {
             enabled: page.ready
             from: 16
             to: 96
-            fallback: 24
+            fallback: (page.tokens.icons && page.tokens.icons.cursor_size) || 24
             unit: "px"
             value: page.appearance.cursor_size === undefined ? null : page.appearance.cursor_size
             onChosen: v => page.field("cursor_size", v)

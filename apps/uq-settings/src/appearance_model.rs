@@ -111,7 +111,7 @@ impl cxx_qt::Initialize for AppearanceModel {
     }
 }
 
-/// Re-read the state whenever uqd announces a change.
+/// Re-read the state whenever uqd announces a theme, settings or `appearance` section change.
 async fn follow_uqd(
     conn: zbus::Connection,
     state: Arc<AppearanceState>,
@@ -119,7 +119,12 @@ async fn follow_uqd(
 ) {
     let streams = async {
         let proxy = DesktopProxy::new(&conn).await?;
-        let sections = proxy.receive_section_changed().await?.map(|_| ()).boxed();
+        let sections = proxy
+            .receive_section_changed()
+            .await?
+            .filter(|s| std::future::ready(s.args().is_ok_and(|a| *a.domain() == "appearance")))
+            .map(|_| ())
+            .boxed();
         let themes = proxy.receive_theme_changed().await?.map(|_| ()).boxed();
         let settings = proxy.receive_settings_changed().await?.map(|_| ()).boxed();
         zbus::Result::Ok(futures_util::stream::select_all([

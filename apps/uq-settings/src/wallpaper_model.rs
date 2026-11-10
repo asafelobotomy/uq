@@ -113,7 +113,7 @@ impl cxx_qt::Initialize for WallpaperModel {
     }
 }
 
-/// Re-read the state whenever uqd announces a change.
+/// Re-read the state whenever uqd announces a change to the `wallpaper` section.
 async fn follow_uqd(
     conn: zbus::Connection,
     state: Arc<WallpaperState>,
@@ -121,9 +121,13 @@ async fn follow_uqd(
 ) {
     let streams = async {
         let proxy = DesktopProxy::new(&conn).await?;
-        let sections = proxy.receive_section_changed().await?.map(|_| ()).boxed();
-        let settings = proxy.receive_settings_changed().await?.map(|_| ()).boxed();
-        zbus::Result::Ok(futures_util::stream::select_all([sections, settings]))
+        let sections = proxy
+            .receive_section_changed()
+            .await?
+            .filter(|s| std::future::ready(s.args().is_ok_and(|a| *a.domain() == "wallpaper")))
+            .map(|_| ())
+            .boxed();
+        zbus::Result::Ok(sections)
     };
     let mut changes = match streams.await {
         Ok(s) => s,
