@@ -363,3 +363,69 @@ async fn disabled_builtin_and_external_are_not_asked() {
     assert!(p_searches.lock().unwrap().is_empty(), "P was asked");
     assert!(!q_searches.lock().unwrap().is_empty(), "Q was not asked");
 }
+
+#[tokio::test]
+async fn rows_from_before_switch_off_cannot_act() {
+    let bus = private_bus();
+    let data = tempfile::tempdir().unwrap();
+    let state = tempfile::tempdir().unwrap();
+    provider_file(data.path(), "a.provider", "org.test.Fake", "Fakery");
+    let (_c, calls) = serve_fake(&bus, "org.test.Fake", "f", Duration::ZERO).await;
+    let _uqd = serve_uqd(&bus, state.path()).await;
+    let mut b = start(&bus, data.path());
+    b.event("Hello").await;
+
+    // A calculator row is live and activates (control).
+    b.send(1, "Search", json!(["=2+2", 1])).await;
+    b.reply(1).await;
+    assert_eq!(
+        b.call(2, "Activate", json!(["calc", "calc", "copy"])).await["ok"],
+        json!({"copy": "4"})
+    );
+    // A Run row is live; then calc, run and the fake provider are all switched off.
+    b.send(3, "Search", json!(["> ls", 2])).await;
+    b.reply(3).await;
+    b.send(4, "Search", json!(["=2+2", 3])).await;
+    b.reply(4).await;
+    b.send(5, "Search", json!(["> ls", 4])).await;
+    b.reply(5).await;
+
+    let conn = zbus::connection::Builder::address(bus.address.as_str())
+        .unwrap()
+        .build()
+        .await
+        .unwrap();
+    let proxy = uq_core::client::DesktopProxy::new(&conn).await.unwrap();
+    let mut shell: Value =
+        serde_json::from_str(&proxy.get_section("shell").await.unwrap()).unwrap();
+    shell["providers"] = json!([
+        {"id": "calc", "enabled": false},
+        {"id": "run", "enabled": false},
+        {"id": "org.test.Fake", "enabled": false}
+    ]);
+    proxy
+        .set_section("shell", &shell.to_string())
+        .await
+        .unwrap();
+    b.event("SettingsChanged").await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    let r = b.call(6, "Activate", json!(["run", "run-4", "run"])).await;
+    assert!(r["err"].as_str().unwrap().contains("switched off"), "{r}");
+    let r = b.call(7, "Launch", json!([{"run_id": "run-4"}])).await;
+    assert_eq!(r["err"], "Run is switched off", "{r}");
+    let r = b.call(8, "Activate", json!(["calc", "calc", "copy"])).await;
+    assert!(r["err"].as_str().unwrap().contains("switched off"), "{r}");
+    let r = b
+        .call(9, "Activate", json!(["org.test.Fake", "id1", "open"]))
+        .await;
+    assert!(r["err"].as_str().unwrap().contains("switched off"), "{r}");
+    assert!(calls.lock().unwrap().is_empty());
+
+    // And a fresh search with Run and calc off shows no row for them.
+    for (i, q) in ["> ls", "=2+2"].iter().enumerate() {
+        b.send(10 + i as u64, "Search", json!([q, 5 + i])).await;
+        let got = collect(&mut b, Duration::from_millis(400)).await;
+        assert!(got.is_empty(), "{q}: {got:?}");
+    }
+}

@@ -4,6 +4,7 @@
 //! `Outbound` over an mpsc channel, so concurrent replies and events never interleave mid-line.
 
 mod calc;
+mod desktop_entry;
 mod dispatch;
 mod launch;
 mod locknotify;

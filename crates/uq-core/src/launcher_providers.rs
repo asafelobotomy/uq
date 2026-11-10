@@ -99,13 +99,10 @@ pub fn load_defs(dirs: &[PathBuf]) -> Vec<ProviderDef> {
                 .and_then(|t| parse_def(&t, dir));
             match parsed {
                 Ok(d) if defs.iter().any(|x| x.bus_name == d.bus_name) => {
-                    eprintln!(
-                        "uqctl bridge: {}: duplicate BusName, skipped",
-                        path.display()
-                    );
+                    eprintln!("{}: duplicate BusName, skipped", path.display());
                 }
                 Ok(d) => defs.push(d),
-                Err(e) => eprintln!("uqctl bridge: {}: {e}, skipped", path.display()),
+                Err(e) => eprintln!("{}: {e}, skipped", path.display()),
             }
         }
     }

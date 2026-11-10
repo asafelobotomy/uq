@@ -17,7 +17,7 @@ use std::time::{Duration, Instant, SystemTime};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 use uq_core::launcher_providers::{ProviderDef, load_defs};
-use uq_core::settings::provider_enabled;
+use uq_core::settings::{ProviderPref, provider_enabled};
 use zbus::names::WellKnownName;
 use zbus::proxy::{CacheProperties, MethodFlags};
 
@@ -144,6 +144,15 @@ pub(crate) fn clamp_all(items: Vec<RawItem>) -> Vec<ProviderItem> {
         .collect()
 }
 
+/// The launcher provider preferences; with no settings yet (uqd not seen) every provider is on.
+pub(super) fn provider_prefs(link: &Link) -> Vec<ProviderPref> {
+    link.settings_rx()
+        .borrow()
+        .as_ref()
+        .map(|s| s.shell.providers.clone())
+        .unwrap_or_default()
+}
+
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|e| e.into_inner())
 }
@@ -177,7 +186,7 @@ struct State {
     calc: Option<String>,
 }
 
-pub struct Providers {
+pub(crate) struct Providers {
     tx: mpsc::Sender<Outbound>,
     stop: CancellationToken,
     state: Mutex<State>,
@@ -272,13 +281,7 @@ impl Providers {
         };
         let generation = generation.as_u64().ok_or("generation must be a u64")?;
         let query = query.trim();
-        // No settings yet (uqd not seen): every provider is on.
-        let prefs = link
-            .settings_rx()
-            .borrow()
-            .as_ref()
-            .map(|s| s.shell.providers.clone())
-            .unwrap_or_default();
+        let prefs = provider_prefs(link);
         let mut builtin: Vec<(&str, &str, ProviderItem)> = Vec::new();
         {
             let mut st = lock(&self.state);
@@ -295,7 +298,6 @@ impl Providers {
                 st.calc = Some(query.to_string());
                 builtin.push(("calc", "Calculator", it));
             }
-            // Always called, so a stale command is cleared by any later query.
             // Always called, so a stale command is cleared by any later query. With Run off it
             // sees an empty query: nothing is stored, so nothing can be activated either.
             let run_query = if provider_enabled(&prefs, "run") {
@@ -380,6 +382,16 @@ impl Providers {
         else {
             return Err("Activate takes provider, id and action strings".into());
         };
+        // Checked now, not only in `search`: a row shown before the provider was switched off
+        // must not act.
+        if !provider_enabled(&provider_prefs(link), provider) {
+            match provider.as_str() {
+                "calc" => lock(&self.state).calc = None,
+                "run" => lock(runs).forget(),
+                _ => {}
+            }
+            return Err(format!("{provider} is switched off"));
+        }
         match provider.as_str() {
             "calc" => {
                 let q = lock(&self.state).calc.clone();
