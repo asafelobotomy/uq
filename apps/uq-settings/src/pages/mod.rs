@@ -5,4 +5,5 @@ pub mod appearance;
 pub mod fake_uqd;
 pub mod look;
 pub mod runner;
+pub mod shell;
 pub mod wallpaper;

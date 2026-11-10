@@ -227,7 +227,97 @@ static LOOK_SETTINGS: [SearchEntry; 15] = [
     ),
 ];
 
-static CORE_PAGES: [PageInfo; 3] = [
+static SHELL_SETTINGS: [SearchEntry; 16] = [
+    entry(
+        "pins",
+        "Pinned apps",
+        &["favorites", "favourites", "launcher", "dock"],
+    ),
+    entry(
+        "providers",
+        "Launcher search providers",
+        &["launcher", "calculator", "run", "results", "order"],
+    ),
+    entry(
+        "islands",
+        "Bar islands",
+        &["bar", "panel", "widgets", "show", "hide"],
+    ),
+    entry(
+        "clock-24h",
+        "24-hour clock",
+        &["time", "12 hour", "am pm", "format"],
+    ),
+    entry(
+        "terminal",
+        "Terminal",
+        &["kitty", "console", "emulator", "default terminal"],
+    ),
+    entry(
+        "notif-backend",
+        "Notification service",
+        &[
+            "notifications",
+            "notifi",
+            "mako",
+            "dunst",
+            "swaync",
+            "daemon",
+        ],
+    ),
+    entry(
+        "notif-summary",
+        "Notification summary in the bar",
+        &["notifications", "count", "badge"],
+    ),
+    entry(
+        "idle-dim",
+        "Dim the screen",
+        &["idle", "brightness", "timeout"],
+    ),
+    entry(
+        "idle-lock",
+        "Lock after",
+        &["idle", "lock screen", "timeout"],
+    ),
+    entry(
+        "idle-screen-off",
+        "Turn the screen off",
+        &["idle", "display", "dpms", "timeout"],
+    ),
+    entry(
+        "idle-suspend",
+        "Suspend on battery",
+        &["idle", "sleep", "power", "timeout"],
+    ),
+    entry(
+        "idle-locked-screen-off",
+        "Screen off after locking",
+        &["idle", "lock", "display", "seconds"],
+    ),
+    entry(
+        "idle-media",
+        "Media keeps the screen from locking",
+        &["idle", "video", "inhibit", "playing"],
+    ),
+    entry(
+        "privacy-ip",
+        "Public IP lookup",
+        &["privacy", "network", "online", "address"],
+    ),
+    entry(
+        "privacy-launches",
+        "Remember launched apps",
+        &["privacy", "history", "record", "frequency"],
+    ),
+    entry(
+        "clear-launch-counts",
+        "Clear launch history",
+        &["privacy", "forget", "reset", "launcher"],
+    ),
+];
+
+static CORE_PAGES: [PageInfo; 4] = [
     PageInfo {
         id: "appearance",
         name: "Appearance",
@@ -251,6 +341,14 @@ static CORE_PAGES: [PageInfo; 3] = [
         category: Category::Personal,
         qml: "pages/WallpaperPage.qml",
         settings: &WALLPAPER_SETTINGS,
+    },
+    PageInfo {
+        id: "shell",
+        name: "Shell",
+        icon: "preferences-desktop",
+        category: Category::Uq,
+        qml: "pages/ShellPage.qml",
+        settings: &SHELL_SETTINGS,
     },
 ];
 
@@ -400,12 +498,14 @@ mod tests {
             .iter()
             .map(|p| p["id"].as_str().unwrap())
             .collect();
-        assert_eq!(ids, ["appearance", "look", "wallpaper"]);
+        assert_eq!(ids, ["appearance", "look", "wallpaper", "shell"]);
         assert_eq!(v[0]["category"], "personal");
         assert_eq!(v[0]["categoryName"], "Personal");
         assert_eq!(v[1]["qml"], "pages/LookPage.qml");
         assert_eq!(v[2]["qml"], "pages/WallpaperPage.qml");
         assert_eq!(v[2]["plugin"], false);
+        assert_eq!(v[3]["qml"], "pages/ShellPage.qml");
+        assert_eq!(v[3]["categoryName"], "uQ");
     }
 
     #[test]
@@ -421,13 +521,13 @@ mod tests {
         };
         let v: serde_json::Value =
             serde_json::from_str(&pages_json(&all_pages(&[plugin]))).unwrap();
-        assert_eq!(v.as_array().unwrap().len(), 4);
-        assert_eq!(v[3]["id"], "demo");
-        assert_eq!(v[3]["category"], "apps");
-        assert_eq!(v[3]["categoryName"], "Apps");
-        assert_eq!(v[3]["plugin"], true);
+        assert_eq!(v.as_array().unwrap().len(), 5);
+        assert_eq!(v[4]["id"], "demo");
+        assert_eq!(v[4]["category"], "apps");
+        assert_eq!(v[4]["categoryName"], "Apps");
+        assert_eq!(v[4]["plugin"], true);
         assert_eq!(
-            v[3]["qml"],
+            v[4]["qml"],
             "file:///usr/share/uq/settings/pages/demo/Page.qml"
         );
     }
