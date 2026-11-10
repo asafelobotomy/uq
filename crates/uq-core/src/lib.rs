@@ -6,6 +6,7 @@ pub mod history;
 pub mod launcher_providers;
 pub mod lua;
 pub mod paths;
+pub mod profile;
 pub mod render;
 pub mod schedule;
 pub mod settings;
