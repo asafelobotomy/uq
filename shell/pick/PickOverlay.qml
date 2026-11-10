@@ -29,6 +29,9 @@ Scope {
         target: Bridge
         function onPickRequested(token) {
             root.apply(P.start(root.pick, token, Bridge.locked));
+            // A new token while the overlay is already up must restart the 20 s clock.
+            if (root.active)
+                pickTimer.restart();
         }
         function onLockedChanged() {
             if (Bridge.locked)
@@ -43,6 +46,7 @@ Scope {
 
     // A new token restarts the clock; going idle stops it.
     Timer {
+        id: pickTimer
         interval: P.PICK_TIMEOUT_MS
         running: root.active
         repeat: false
@@ -66,7 +70,7 @@ Scope {
             exclusionMode: ExclusionMode.Ignore
             anchors { top: true; bottom: true; left: true; right: true }
 
-            onVisibleChanged: if (visible) scrim.forceActiveFocus()
+            onVisibleChanged: if (visible) Qt.callLater(scrim.forceActiveFocus)
 
             Rectangle {
                 id: scrim
