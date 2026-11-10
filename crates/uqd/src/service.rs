@@ -70,6 +70,9 @@ pub(crate) enum Change {
     /// A setting rendered into generated.lua (mouse): reload Hyprland, report SettingsChanged.
     Input,
     Layout(String, Layout),
+    /// A `look` or `layouts` section write: reload Hyprland, send no events (`set_section`
+    /// sends `SectionChanged` and `SettingsChanged` itself).
+    Reload,
     Quiet,
 }
 
@@ -472,6 +475,16 @@ impl Desktop {
                     workspace: ws,
                     layout,
                 });
+                // The Layouts page follows keybind changes through the section.
+                if let Ok(v) = self.state.section("layouts") {
+                    let _ = self.events.send(Event::SectionChanged {
+                        domain: "layouts".to_string(),
+                        json: v.to_string(),
+                    });
+                }
+            }
+            Change::Reload => {
+                let _ = self.live(self.comp.reload().await);
             }
             Change::Input => {
                 let _ = self.live(self.comp.reload().await);
@@ -707,13 +720,16 @@ mod tests {
                 .contains(r#"workspace = "2", layout = "scrolling""#)
         );
         assert_eq!(r.desktop.get_layouts().get("2"), Some(&Layout::Scrolling));
+        let evs = drain(&mut r.events);
+        assert_eq!(evs.len(), 2, "{evs:?}");
         assert_eq!(
-            drain(&mut r.events),
-            vec![Event::LayoutChanged {
+            evs[0],
+            Event::LayoutChanged {
                 workspace: "2".into(),
                 layout: Layout::Scrolling
-            }]
+            }
         );
+        assert!(matches!(&evs[1], Event::SectionChanged { domain, .. } if domain == "layouts"));
         // A layout change doesn't re-theme the session.
         assert!(r.sys.applied.lock().unwrap().is_empty());
     }

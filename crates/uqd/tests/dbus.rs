@@ -231,3 +231,60 @@ async fn section_round_trip_over_dbus() {
         .unwrap_err();
     assert!(err.to_string().contains("InvalidSetting"), "{err}");
 }
+
+#[tokio::test]
+async fn look_section_round_trip_over_dbus() {
+    let dir = tempfile::tempdir().unwrap();
+    let bus = private_bus();
+    let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut paths = uq_core::paths::Paths::under(&dir.path().join("root"));
+    paths.themes_dir = repo.join("themes");
+    paths.templates_dir = repo.join("templates");
+    let generated = paths.generated_lua.clone();
+    let desktop = Desktop::new(
+        paths,
+        Arc::new(FakeCompositor::running()),
+        Arc::new(FakeSystem::default()),
+    )
+    .unwrap();
+    let _server = serve(
+        zbus::connection::Builder::address(bus.address.as_str()).unwrap(),
+        desktop,
+    )
+    .await
+    .unwrap();
+    let client = zbus::connection::Builder::address(bus.address.as_str())
+        .unwrap()
+        .build()
+        .await
+        .unwrap();
+    let proxy = zbus::Proxy::new(&client, NAME, PATH, IFACE).await.unwrap();
+    let mut changed = proxy.receive_signal("SectionChanged").await.unwrap();
+
+    let () = proxy
+        .call("SetSection", &("look", r#"{"gaps_in":9,"blur_size":5}"#))
+        .await
+        .unwrap();
+    let got: String = proxy.call("GetSection", &("look",)).await.unwrap();
+    let got: serde_json::Value = serde_json::from_str(&got).unwrap();
+    assert_eq!(got["gaps_in"], 9);
+    assert!(
+        std::fs::read_to_string(&generated)
+            .unwrap()
+            .contains("gaps_in = 9")
+    );
+
+    let msg = tokio::time::timeout(std::time::Duration::from_secs(5), changed.next())
+        .await
+        .unwrap()
+        .unwrap();
+    let (domain, body): (String, String) = msg.body().deserialize().unwrap();
+    assert_eq!(domain, "look");
+    assert!(body.contains("\"gaps_in\":9"), "{body}");
+
+    let err = proxy
+        .call::<_, _, ()>("SetSection", &("look", r#"{"gaps_in":999}"#))
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("InvalidSetting"), "{err}");
+}
