@@ -33,7 +33,7 @@ pub enum Event {
     },
     ConfigError(String),
     /// The full settings (never the launch counts).
-    SettingsChanged(Settings),
+    SettingsChanged(Box<Settings>),
     LaunchCountsChanged(BTreeMap<String, u32>),
 }
 
@@ -224,9 +224,9 @@ impl Desktop {
         next.save(&self.paths.state_file)
             .map_err(io_err("saving state"))?;
         self.state = next;
-        let _ = self
-            .events
-            .send(Event::SettingsChanged(self.state.settings.clone()));
+        let _ = self.events.send(Event::SettingsChanged(Box::new(
+            self.state.settings.clone(),
+        )));
         Ok(())
     }
 
@@ -468,9 +468,9 @@ impl Desktop {
             }
             Change::Input => {
                 let _ = self.live(self.comp.reload().await);
-                let _ = self
-                    .events
-                    .send(Event::SettingsChanged(self.state.settings.clone()));
+                let _ = self.events.send(Event::SettingsChanged(Box::new(
+                    self.state.settings.clone(),
+                )));
             }
             Change::Theme => {
                 // gsettings are desktop-wide: only touch them while a Hyprland session is live,

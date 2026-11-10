@@ -236,4 +236,40 @@ mod tests {
         s.save(&p).unwrap();
         assert_eq!(State::load(&p), s);
     }
+
+    #[test]
+    fn old_state_loads_with_default_sections() {
+        let st = State::parse("theme = \"graphite\"\nvariant = \"dark\"\n").unwrap();
+        assert_eq!(
+            st.settings.appearance,
+            crate::settings::Appearance::default()
+        );
+        assert_eq!(st.settings.wallpaper, crate::settings::Wallpaper::default());
+    }
+
+    #[test]
+    fn null_overrides_round_trip() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("state.toml");
+        let mut st = State::default();
+        st.settings
+            .set_section(
+                "appearance",
+                serde_json::json!({"ui_font": null, "cursor_size": 32}),
+            )
+            .unwrap();
+        st.settings
+            .set_section(
+                "wallpaper",
+                serde_json::json!({"outputs": {"DP-1": {"image": null, "color": "#101010"}}}),
+            )
+            .unwrap();
+        st.save(&path).unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(
+            !text.contains("ui_font") && !text.contains("image"),
+            "{text}"
+        );
+        assert_eq!(State::load(&path), st);
+    }
 }

@@ -3,6 +3,11 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+mod appearance;
+mod wallpaper;
+pub use appearance::Appearance;
+pub use wallpaper::{Fit, Wallpaper, WallpaperEntry};
+
 /// Every key `Settings::apply` accepts; anything else is rejected.
 pub const SETTING_KEYS: [&str; 17] = [
     "pinned",
@@ -28,6 +33,14 @@ pub const SETTING_KEYS: [&str; 17] = [
 /// taking the light commit path.
 pub fn renders_config(key: &str) -> bool {
     key.starts_with("mouse.")
+}
+
+/// Whole-section domains handled by [`Settings::section`] / [`Settings::set_section`].
+pub const SECTION_DOMAINS: [&str; 2] = ["appearance", "wallpaper"];
+
+/// Sections that change rendered config (theme env, Kvantum, cursor): uqd re-renders for these.
+pub fn renders_section(domain: &str) -> bool {
+    domain == "appearance"
 }
 
 const MAX_PINNED: usize = 32;
@@ -152,9 +165,11 @@ pub struct Settings {
     pub notif: NotifSettings,
     pub privacy: PrivacySettings,
     pub mouse: MouseSettings,
+    pub appearance: Appearance,
+    pub wallpaper: Wallpaper,
 }
 
-fn invalid(key: &str, reason: impl Into<String>) -> SettingError {
+pub(crate) fn invalid(key: &str, reason: impl Into<String>) -> SettingError {
     SettingError::Invalid {
         key: key.to_string(),
         reason: reason.into(),
@@ -233,7 +248,41 @@ impl Settings {
                 .unwrap_or(Value::Null);
             out.apply(key, value)?;
         }
+        out.appearance = self.appearance.clone();
+        out.wallpaper = self.wallpaper.clone();
+        out.appearance.validate()?;
+        out.wallpaper.validate()?;
         Ok(out)
+    }
+
+    /// One whole section (`appearance` or `wallpaper`) as JSON.
+    pub fn section(&self, domain: &str) -> Result<Value, SettingError> {
+        let v = match domain {
+            "appearance" => serde_json::to_value(&self.appearance),
+            "wallpaper" => serde_json::to_value(&self.wallpaper),
+            _ => return Err(SettingError::UnknownKey(domain.to_string())),
+        };
+        Ok(v.expect("settings serialise"))
+    }
+
+    /// Replace a whole section. Unknown fields are rejected; on error `self` is unchanged.
+    pub fn set_section(&mut self, domain: &str, value: Value) -> Result<(), SettingError> {
+        match domain {
+            "appearance" => {
+                let a: Appearance =
+                    serde_json::from_value(value).map_err(|e| invalid(domain, e.to_string()))?;
+                a.validate()?;
+                self.appearance = a;
+            }
+            "wallpaper" => {
+                let w: Wallpaper =
+                    serde_json::from_value(value).map_err(|e| invalid(domain, e.to_string()))?;
+                w.validate()?;
+                self.wallpaper = w;
+            }
+            _ => return Err(SettingError::UnknownKey(domain.to_string())),
+        }
+        Ok(())
     }
 
     /// Validate and apply one setting. On error `self` is left unchanged.
@@ -533,5 +582,54 @@ mod tests {
         // A state file from before mouse settings existed loads with the defaults.
         let old: Settings = serde_json::from_value(json!({"pinned": ["a"]})).unwrap();
         assert_eq!(old.mouse, MouseSettings::default());
+    }
+
+    #[test]
+    fn section_round_trip() {
+        let mut s = Settings::default();
+        s.set_section(
+            "appearance",
+            json!({"cursor_theme": "Adwaita", "kvantum": false}),
+        )
+        .unwrap();
+        s.set_section(
+            "wallpaper",
+            json!({"outputs": {"*": {"image": "/a.png", "fit": "tile"}}}),
+        )
+        .unwrap();
+        let a = s.section("appearance").unwrap();
+        assert_eq!(a, json!({"cursor_theme": "Adwaita", "kvantum": false}));
+        let w = s.section("wallpaper").unwrap();
+        let mut t = Settings::default();
+        t.set_section("appearance", a).unwrap();
+        t.set_section("wallpaper", w).unwrap();
+        assert_eq!(t, s);
+        assert_eq!(s.validated().unwrap(), s);
+        assert!(renders_section("appearance") && !renders_section("wallpaper"));
+        assert_eq!(SECTION_DOMAINS, ["appearance", "wallpaper"]);
+    }
+
+    #[test]
+    fn unknown_domain_rejected() {
+        let mut s = Settings::default();
+        assert!(s.set_section("look", json!({})).is_err());
+        assert!(s.section("look").is_err());
+    }
+
+    #[test]
+    fn invalid_section_leaves_settings_unchanged() {
+        let mut s = Settings::default();
+        s.set_section("appearance", json!({"ui_font": "Inter"}))
+            .unwrap();
+        let before = s.clone();
+        assert!(
+            s.set_section("appearance", json!({"ui_font": "Inter", "font_size": 5}))
+                .is_err()
+        );
+        assert!(
+            s.set_section("wallpaper", json!({"outputs": {"*": {"image": "x"}}}))
+                .is_err()
+        );
+        assert_eq!(s, before);
     }
 }
