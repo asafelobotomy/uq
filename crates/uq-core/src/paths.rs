@@ -22,6 +22,9 @@ pub struct Paths {
     pub themes_dir: PathBuf,
     /// `$UQ_DATA_DIR/templates`
     pub templates_dir: PathBuf,
+    /// `/usr/share/hypr/hyprland.lua`: Hyprland's stock config. A copy of it in `main_lua` is not
+    /// the user's own work, so `uqctl setup` may replace it.
+    pub hypr_default: PathBuf,
 }
 
 impl Paths {
@@ -41,7 +44,12 @@ impl Paths {
         let data = get("UQ_DATA_DIR")
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from("/usr/share/uq"));
-        Paths::build(&config, &state, &data)
+        Paths::build(
+            &config,
+            &state,
+            &data,
+            Path::new("/usr/share/hypr/hyprland.lua"),
+        )
     }
 
     /// Everything under one root, for tests.
@@ -50,10 +58,11 @@ impl Paths {
             &root.join("config"),
             &root.join("state"),
             &root.join("share"),
+            &root.join("hypr-share/hyprland.lua"),
         )
     }
 
-    fn build(config: &Path, state: &Path, data: &Path) -> Paths {
+    fn build(config: &Path, state: &Path, data: &Path, hypr_default: &Path) -> Paths {
         let hypr_dir = config.join("hypr");
         Paths {
             main_lua: hypr_dir.join("hyprland.lua"),
@@ -65,6 +74,7 @@ impl Paths {
             state_file: state.join("uq/state.toml"),
             themes_dir: data.join("themes"),
             templates_dir: data.join("templates"),
+            hypr_default: hypr_default.to_path_buf(),
         }
     }
 }
