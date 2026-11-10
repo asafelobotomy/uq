@@ -9,6 +9,9 @@ use tokio::net::UnixStream;
 /// A hung compositor must never wedge its callers (uqd holds the desktop lock while waiting).
 pub const REQUEST_TIMEOUT: Duration = Duration::from_secs(2);
 
+/// Longest reply read from Hyprland; more is an error.
+pub const MAX_REPLY_BYTES: usize = 1 << 20;
+
 #[derive(Debug, Clone)]
 pub struct HyprSocket {
     runtime_dir: Option<PathBuf>,
@@ -65,9 +68,19 @@ impl HyprSocket {
                 Err(e) => return Err(e.into()),
             };
             s.write_all(req.as_bytes()).await?;
-            let mut reply = String::new();
-            s.read_to_string(&mut reply).await?;
-            Ok(reply)
+            let mut buf = Vec::new();
+            // Read one byte past the cap so an oversized reply is an error, not a truncation.
+            (&mut s)
+                .take(MAX_REPLY_BYTES as u64 + 1)
+                .read_to_end(&mut buf)
+                .await?;
+            if buf.len() > MAX_REPLY_BYTES {
+                return Err(CompositorError::Rejected(format!(
+                    "reply to {} is larger than {MAX_REPLY_BYTES} bytes",
+                    req.split_whitespace().next().unwrap_or(req)
+                )));
+            }
+            Ok(String::from_utf8_lossy(&buf).into_owned())
         };
         let verb = req.split_whitespace().next().unwrap_or(req).to_string();
         tokio::time::timeout(self.request_timeout, exchange)

@@ -15,7 +15,7 @@ mod live;
 pub use live::{LiveOutput, parse_live, stays_visible};
 
 const MAX_OUTPUTS: usize = 16;
-const MAX_TEXT_CHARS: usize = 200;
+pub(super) const MAX_TEXT_CHARS: usize = 200;
 
 /// `^[A-Za-z0-9._-]{1,32}$`
 pub fn valid_output_name(s: &str) -> bool {
@@ -24,12 +24,9 @@ pub fn valid_output_name(s: &str) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))
 }
 
-/// Strip control characters and cut to 200 characters: text from Hyprland is untrusted.
-pub(crate) fn clean_text(s: &str) -> String {
-    s.chars()
-        .filter(|c| !c.is_control())
-        .take(MAX_TEXT_CHARS)
-        .collect()
+/// Strip control characters and cut to `max` characters: text from Hyprland is untrusted.
+pub fn clean_text(s: &str, max: usize) -> String {
+    s.chars().filter(|c| !c.is_control()).take(max).collect()
 }
 
 fn digits(s: &str, len: std::ops::RangeInclusive<usize>) -> bool {
@@ -148,7 +145,7 @@ impl OutputConfig {
         self.scale = self.scale.map(|s| (s * 1e6).round() / 1e6);
         self.description = self
             .description
-            .map(|d| clean_text(&d))
+            .map(|d| clean_text(&d, MAX_TEXT_CHARS))
             .filter(|d| !d.is_empty());
         self
     }

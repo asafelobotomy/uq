@@ -299,6 +299,34 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn oversized_reply_is_an_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let sock_dir = dir.path().join("hypr/SIG");
+        std::fs::create_dir_all(&sock_dir).unwrap();
+        let listener = UnixListener::bind(sock_dir.join(".socket.sock")).unwrap();
+        tokio::spawn(async move {
+            for len in [
+                crate::hypr::MAX_REPLY_BYTES,
+                crate::hypr::MAX_REPLY_BYTES + 1,
+            ] {
+                let (mut s, _) = listener.accept().await.unwrap();
+                let mut buf = [0u8; 64];
+                let _ = s.read(&mut buf).await.unwrap();
+                let _ = s.write_all(&vec![b'x'; len]).await;
+            }
+        });
+        let h = Hyprland::new(Some(dir.path().into()), Some("SIG".into()));
+        assert_eq!(
+            h.devices().await.unwrap().len(),
+            crate::hypr::MAX_REPLY_BYTES
+        );
+        assert!(matches!(
+            h.devices().await,
+            Err(CompositorError::Rejected(_))
+        ));
+    }
+
+    #[tokio::test]
     async fn request_times_out_when_hyprland_hangs() {
         let dir = tempfile::tempdir().unwrap();
         let sock_dir = dir.path().join("hypr/SIG");

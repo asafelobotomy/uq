@@ -92,6 +92,7 @@ pub struct Desktop {
     launch_dirty: bool,
     launch_saves: u32,
     pub(crate) section_commits: u32,
+    state_saves: std::sync::atomic::AtomicU32,
 }
 
 /// A rendered, verified candidate config, left on disk until `install` writes it.
@@ -101,6 +102,8 @@ pub(crate) struct Candidate {
     #[allow(dead_code)]
     pub(crate) generated: String,
     pub(crate) path: PathBuf,
+    /// The theme resolved for `next`, so `install` needs no second lookup.
+    pub(crate) theme: uq_core::theme::Theme,
 }
 
 /// Launch counts stop here per app.
@@ -170,6 +173,7 @@ impl Desktop {
             launch_dirty: false,
             launch_saves: 0,
             section_commits: 0,
+            state_saves: std::sync::atomic::AtomicU32::new(0),
         })
     }
 
@@ -235,8 +239,7 @@ impl Desktop {
         if renders_config(key) {
             return self.commit(next, Change::Input).await;
         }
-        next.save(&self.paths.state_file)
-            .map_err(io_err("saving state"))?;
+        self.save_state(&next)?;
         self.state = next;
         let _ = self.events.send(Event::SettingsChanged(Box::new(
             self.state.settings.clone(),
@@ -282,6 +285,8 @@ impl Desktop {
         self.flush_launch_counts_at(Instant::now());
     }
 
+    /// Launch counts are saved on their own timer, intentionally outside the settings journal
+    /// (`save_state`): they are usage data, not a setting change.
     fn save_launch_counts(&mut self, now: Instant) {
         match self.state.save(&self.paths.state_file) {
             Ok(()) => {
@@ -471,6 +476,7 @@ impl Desktop {
             files,
             generated,
             path,
+            theme,
         })
     }
 
@@ -481,12 +487,7 @@ impl Desktop {
         next: State,
         change: Change,
     ) -> Result<(), DesktopError> {
-        let theme = self
-            .themes
-            .get(&next.theme, next.variant)
-            .ok_or_else(|| DesktopError::UnknownTheme(next.theme.clone()))?
-            .clone()
-            .with_appearance(&next.settings.appearance);
+        let theme = c.theme.clone();
         let committed = atomic_replace_dir(&self.paths.theme_dir, &c.files)
             .map_err(io_err("writing theme files"))
             .and_then(|()| {
@@ -553,8 +554,16 @@ impl Desktop {
     ///
     /// uq#8 slice A: this is where `persist(next, origin)` journals the change (Task 13).
     pub(crate) fn save_state(&self, next: &State) -> Result<(), DesktopError> {
+        self.state_saves
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         next.save(&self.paths.state_file)
             .map_err(io_err("saving state"))
+    }
+
+    /// Settings saves attempted through `save_state` (tests check the single save point).
+    #[cfg(test)]
+    pub(crate) fn state_saves(&self) -> u32 {
+        self.state_saves.load(std::sync::atomic::Ordering::Relaxed)
     }
 
     /// Section writes that succeeded since uqd started (see `commit_section`).

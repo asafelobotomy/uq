@@ -1,7 +1,11 @@
 //! Live outputs as Hyprland reports them (`hyprctl monitors all -j`), and the guard that a
 //! stored layout leaves something on screen.
 
-use super::{Monitors, clean_text, lenient};
+use super::{MAX_TEXT_CHARS, Monitors, clean_text as clean, lenient};
+
+fn clean_text(s: &str) -> String {
+    clean(s, MAX_TEXT_CHARS)
+}
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 

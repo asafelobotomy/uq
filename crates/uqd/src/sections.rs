@@ -1,7 +1,12 @@
-//! Whole-section settings (`appearance`, `wallpaper`, `look`, `input`, ...) for `GetSection` / `SetSection`.
+//! Whole-section settings (`appearance`, `wallpaper`, `look`, `input`, ...) for
+//! `GetSection` / `SetSection`.
 
 use crate::service::{Change, Desktop, DesktopError, Event};
+use uq_core::settings::clean_text;
 use uq_core::state::State;
+
+/// Entries read per device class; Hyprland's reply is untrusted.
+const MAX_DEVICES_PER_CLASS: usize = 32;
 
 impl Desktop {
     /// One settings section as JSON (`appearance` or `wallpaper`).
@@ -102,14 +107,9 @@ impl Desktop {
                 .and_then(|a| a.as_array())
                 .into_iter()
                 .flatten()
+                .take(MAX_DEVICES_PER_CLASS)
                 .filter_map(|d| {
-                    let name: String = d
-                        .get("name")?
-                        .as_str()?
-                        .chars()
-                        .filter(|c| !c.is_control())
-                        .take(128)
-                        .collect();
+                    let name = clean_text(d.get("name")?.as_str()?, 128);
                     let speed = d.get("defaultSpeed").and_then(|s| s.as_f64());
                     (!name.is_empty())
                         .then_some((name, speed.filter(|s| s.is_finite()).unwrap_or(0.0)))
@@ -614,5 +614,64 @@ mod tests {
             r.desktop.list_input_devices().await.unwrap(),
             r#"{"keyboards":[],"pointers":[],"touch":[]}"#
         );
+    }
+
+    #[tokio::test]
+    async fn hostile_device_replies_are_bounded() {
+        let r = rig();
+        let many: Vec<_> = (0..500)
+            .map(|i| serde_json::json!({"name": format!("m{i}"), "defaultSpeed": 0.0}))
+            .collect();
+        *r.comp.devices_json.lock().unwrap() =
+            serde_json::json!({"mice": many, "keyboards": [{"name": 5}, {"name": null}, 7,
+                {"name": "a\u{7}b"}], "touch": "nope"})
+            .to_string();
+        let v: serde_json::Value =
+            serde_json::from_str(&r.desktop.list_input_devices().await.unwrap()).unwrap();
+        assert_eq!(v["pointers"].as_array().unwrap().len(), 32);
+        assert_eq!(v["keyboards"], serde_json::json!([{"name": "ab"}]));
+        assert_eq!(v["touch"], serde_json::json!([]));
+        for raw in ["[1,2]", "\"str\"", "null", "not json"] {
+            *r.comp.devices_json.lock().unwrap() = raw.into();
+            assert_eq!(
+                r.desktop.list_input_devices().await.unwrap(),
+                r#"{"keyboards":[],"pointers":[],"touch":[]}"#,
+                "{raw}"
+            );
+        }
+        *r.comp.devices_json.lock().unwrap() =
+            r#"{"mice":[{"name":"a","defaultSpeed":"fast"},{"name":"b","defaultSpeed":null}]}"#
+                .into();
+        let v: serde_json::Value =
+            serde_json::from_str(&r.desktop.list_input_devices().await.unwrap()).unwrap();
+        assert_eq!(v["pointers"][0]["default_speed"], 0.0);
+        assert_eq!(v["pointers"][1]["default_speed"], 0.0);
+        // A number JSON can't hold makes the whole reply unreadable: empty lists, no panic.
+        *r.comp.devices_json.lock().unwrap() =
+            r#"{"mice":[{"name":"a","defaultSpeed":1e999}]}"#.into();
+        assert_eq!(
+            r.desktop.list_input_devices().await.unwrap(),
+            r#"{"keyboards":[],"pointers":[],"touch":[]}"#
+        );
+    }
+
+    #[tokio::test]
+    async fn setting_light_path_uses_the_single_save_point() {
+        let mut r = rig();
+        let (saves, commits) = (r.desktop.state_saves(), r.desktop.section_commits());
+        r.desktop
+            .set_setting("idle.screen_off", serde_json::json!(500))
+            .await
+            .unwrap();
+        assert_eq!(r.desktop.state_saves(), saves + 1);
+        r.desktop.set_section("wallpaper", r#"{}"#).await.unwrap();
+        assert_eq!(r.desktop.state_saves(), saves + 2);
+        r.desktop
+            .set_setting("nope", serde_json::json!(1))
+            .await
+            .unwrap_err();
+        assert_eq!(r.desktop.state_saves(), saves + 2);
+        // Only section writes count as section commits.
+        assert_eq!(r.desktop.section_commits(), commits + 1);
     }
 }
