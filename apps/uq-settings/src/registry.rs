@@ -622,4 +622,33 @@ mod tests {
             "file:///usr/share/uq/settings/pages/demo/Page.qml"
         );
     }
+
+    #[test]
+    fn every_setting_has_keywords() {
+        for p in core_pages() {
+            for s in p.settings {
+                assert!(
+                    !s.keywords.is_empty() && s.keywords.iter().all(|k| !k.trim().is_empty()),
+                    "{} on {} has no search keywords",
+                    s.id,
+                    p.id
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn no_duplicate_setting_ids() {
+        let mut seen = HashSet::new();
+        for p in core_pages() {
+            for s in p.settings {
+                assert!(
+                    seen.insert(s.id),
+                    "setting id {:?} is on more than one page (second: {})",
+                    s.id,
+                    p.id
+                );
+            }
+        }
+    }
 }

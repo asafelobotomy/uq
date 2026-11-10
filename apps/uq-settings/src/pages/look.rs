@@ -518,4 +518,87 @@ mod tests {
         let out = run(&page, look("nope", json!(1))).await;
         assert_eq!(out.error.as_deref(), Some("unknown field \"nope\""));
     }
+
+    /// Every field the page writes keeps its value: a fresh page object on the same uqd reads
+    /// back what each `Op` wrote, so no control resets itself.
+    #[tokio::test]
+    async fn every_field_round_trips() {
+        let (r, page) = rig().await;
+        let mut writes = vec![
+            (look("gaps_in", json!(7)), "/look/gaps_in", json!(7)),
+            (look("gaps_out", json!(13)), "/look/gaps_out", json!(13)),
+            (
+                look("border_width", json!(3)),
+                "/look/border_width",
+                json!(3),
+            ),
+            (look("rounding", json!(9)), "/look/rounding", json!(9)),
+            (look("blur", json!(false)), "/look/blur", json!(false)),
+            (look("blur_size", json!(5)), "/look/blur_size", json!(5)),
+            (look("blur_passes", json!(2)), "/look/blur_passes", json!(2)),
+            (look("shadow", json!(false)), "/look/shadow", json!(false)),
+            (
+                look("animations", json!(false)),
+                "/look/animations",
+                json!(false),
+            ),
+            (
+                look("animation_speed", json!(1.5)),
+                "/look/animation_speed",
+                json!(1.5),
+            ),
+            (
+                option("", "default", json!("master")),
+                "/layouts/default",
+                json!("master"),
+            ),
+        ];
+        for (group, field, value) in [
+            ("dwindle", "preserve_split", json!(false)),
+            ("dwindle", "smart_split", json!(true)),
+            ("dwindle", "force_split", json!("left")),
+            ("master", "mfact", json!(0.7)),
+            ("master", "new_status", json!("master")),
+            ("master", "orientation", json!("right")),
+            ("scrolling", "column_width", json!(0.7)),
+            ("scrolling", "fullscreen_on_one_column", json!(false)),
+        ] {
+            writes.push((
+                option(group, field, value.clone()),
+                Box::leak(format!("/layouts/{group}/{field}").into_boxed_str()),
+                value,
+            ));
+        }
+        writes.push((
+            Op::SetWorkspace {
+                selector: "5".into(),
+                layout: Some("master".into()),
+            },
+            "/layouts/workspaces/5",
+            json!("master"),
+        ));
+        // Every writable field is covered.
+        let covered = writes.len() - 2; // the default layout and the workspace rule
+        assert_eq!(
+            covered,
+            LOOK_FIELDS.len() + GROUPS.iter().map(|(_, f)| f.len()).sum::<usize>(),
+            "a field was added without a round trip"
+        );
+
+        let before = run(&page, Op::Refresh).await.state;
+        for (op, pointer, want) in &writes {
+            assert_ne!(
+                before.pointer(pointer),
+                Some(want),
+                "{pointer} starts at the value"
+            );
+            let out = run(&page, op.clone()).await;
+            assert_eq!(out.error, None, "{pointer}");
+        }
+        let fresh = LookState::new(r.client.clone());
+        let state = run(&fresh, Op::Refresh).await.state;
+        for (_, pointer, want) in &writes {
+            assert_eq!(state.pointer(pointer), Some(want), "{pointer} reads back");
+        }
+    }
 }

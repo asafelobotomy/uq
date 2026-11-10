@@ -245,4 +245,72 @@ mod tests {
             }
         );
     }
+
+    /// Every field the page writes keeps its value: a fresh page object on the same uqd reads
+    /// back what each `Op` wrote, so no control resets itself.
+    #[tokio::test]
+    async fn every_field_round_trips() {
+        let (r, page) = rig().await;
+        let mut writes = vec![
+            (
+                Op::SetTheme {
+                    id: "dracula".into(),
+                    variant: "light".into(),
+                },
+                "/theme",
+                json!("dracula"),
+            ),
+            (
+                Op::SetTheme {
+                    id: "dracula".into(),
+                    variant: "light".into(),
+                },
+                "/variant",
+                json!("light"),
+            ),
+            (
+                Op::SetSchedule(
+                    r#"{"mode":"fixed","light_at":"07:00:00","dark_at":"19:30:00"}"#.into(),
+                ),
+                "/schedule/mode",
+                json!("fixed"),
+            ),
+        ];
+        for (name, value) in [
+            ("ui_font", json!("Noto Sans")),
+            ("mono_font", json!("JetBrains Mono")),
+            ("font_size", json!(14)),
+            ("cursor_theme", json!("Adwaita")),
+            ("cursor_size", json!(32)),
+            ("icon_theme", json!("Papirus")),
+            ("kvantum", json!(false)),
+        ] {
+            writes.push((
+                field(name, value.clone()),
+                Box::leak(format!("/appearance/{name}").into_boxed_str()),
+                value,
+            ));
+        }
+        assert_eq!(
+            writes.len() - 3,
+            FIELDS.len(),
+            "a field was added without a round trip"
+        );
+
+        let before = run(&page, Op::Refresh).await.state;
+        for (op, pointer, want) in &writes {
+            assert_ne!(
+                before.pointer(pointer),
+                Some(want),
+                "{pointer} starts at the value"
+            );
+            let out = run(&page, op.clone()).await;
+            assert_eq!(out.error, None, "{pointer}");
+        }
+        let fresh = AppearanceState::new(r.client.clone(), vec![]);
+        let state = run(&fresh, Op::Refresh).await.state;
+        for (_, pointer, want) in &writes {
+            assert_eq!(state.pointer(pointer), Some(want), "{pointer} reads back");
+        }
+    }
 }

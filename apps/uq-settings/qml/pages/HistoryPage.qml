@@ -127,7 +127,7 @@ QQC2.ScrollView {
             objectName: "uqdDown"
             visible: !page.ready
             title: "uQ's settings service isn't running"
-            detail: "Start uqd to see and undo changes."
+            detail: "Start the uQ desktop service to see and undo changes."
             Layout.fillWidth: true
         }
 

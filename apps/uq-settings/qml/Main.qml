@@ -1,4 +1,5 @@
 // The Settings window: the category sidebar on the left, the current page on the right.
+import QtCore as QtCore
 import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
@@ -25,6 +26,20 @@ Kirigami.ApplicationWindow {
     /// A text field has the focus: Ctrl+Z and Ctrl+Shift+Z are its own undo and redo then.
     readonly property bool editingText: activeFocusItem !== null && activeFocusItem.cursorPosition !== undefined
 
+    /// Whether the window was maximized (saved in `windowState`).
+    property bool maximized: false
+    /// The saved state has been applied; before that, the window's first show must not overwrite it.
+    property bool stateRestored: false
+
+    /// Start on the page the window showed last time, unless `ShowPage` (or `--page`) named one.
+    function restorePage() {
+        if (App.pageRequested || App.screenshotDir !== "")
+            return;
+        const last = windowState.lastPage;
+        if (last && root.pages.some(p => p.id === last) && last !== App.page)
+            App.showPage(last, "");
+    }
+
     function showCurrent() {
         const page = root.pages.find(p => p.id === App.page);
         if (!page)
@@ -42,6 +57,22 @@ Kirigami.ApplicationWindow {
         const page = stack.currentItem;
         if (root.active && page && typeof page.refresh === "function")
             page.refresh();
+    }
+
+    // The window's size, whether it was maximized and the page it was on, kept between runs.
+    // GenericStateLocation needs Qt 6.7 or newer, which the Arch Linux target ships.
+    QtCore.Settings {
+        id: windowState
+        location: QtCore.StandardPaths.writableLocation(QtCore.StandardPaths.GenericStateLocation) + "/uq/settings-app.conf"
+        property alias width: root.width
+        property alias height: root.height
+        property alias maximized: root.maximized
+        property string lastPage
+    }
+
+    onVisibilityChanged: {
+        if (root.stateRestored && (root.visibility === Window.Maximized || root.visibility === Window.Windowed))
+            root.maximized = root.visibility === Window.Maximized;
     }
 
     title: "uQ Settings"
@@ -199,7 +230,15 @@ Kirigami.ApplicationWindow {
                 activeFocusOnTab: true
                 Accessible.role: Accessible.Pane
                 Accessible.name: "Page"
-                Component.onCompleted: root.showCurrent()
+                Component.onCompleted: {
+                    root.showCurrent();
+                    // After the first page is up: a page named on the command line or by
+                    // ShowPage has set `App.pageRequested` by now, and wins.
+                    Qt.callLater(root.restorePage);
+                    if (root.maximized && App.screenshotDir === "")
+                        root.showMaximized();
+                    root.stateRestored = true;
+                }
             }
         }
     }
@@ -208,6 +247,8 @@ Kirigami.ApplicationWindow {
         target: App
         function onPageChanged() {
             root.showCurrent();
+            if (App.screenshotDir === "")
+                windowState.lastPage = App.page;
         }
         function onUqdUpChanged() {
             if (App.uqdUp)
