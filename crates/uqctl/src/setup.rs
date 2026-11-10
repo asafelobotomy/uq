@@ -274,6 +274,29 @@ mod tests {
     }
 
     #[test]
+    fn kept_kvantum_files_do_not_change_the_exit_code() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = with_base(dir.path());
+        let kvdir = uq_core::stub::kvantum_link(&p)
+            .parent()
+            .unwrap()
+            .to_path_buf();
+        fs::create_dir_all(kvdir.join("uq")).unwrap();
+        fs::write(kvdir.join("kvantum.kvconfig"), "[General]\ntheme=KvArc\n").unwrap();
+        let r = run_setup(&p, true, true, Some(1000)).unwrap();
+        assert_eq!(r.exit_code(), EXIT_OK);
+        assert_eq!(
+            fs::read_to_string(kvdir.join("kvantum.kvconfig")).unwrap(),
+            "[General]\ntheme=KvArc\n"
+        );
+        let apps = r.apps.unwrap();
+        assert!(
+            apps.iter()
+                .any(|(f, o)| f.ends_with("kvantum.kvconfig") && *o == StubOutcome::AlreadyPresent)
+        );
+    }
+
+    #[test]
     fn root_is_refused_with_exit_2_and_writes_nothing() {
         let dir = tempfile::tempdir().unwrap();
         let p = with_base(dir.path());

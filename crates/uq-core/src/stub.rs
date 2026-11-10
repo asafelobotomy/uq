@@ -119,19 +119,32 @@ pub fn install_consumers(
     let theme = p.theme_dir.to_string_lossy().into_owned();
     let mut out = Vec::new();
     for (path, content) in consumer_files(p, kvantum) {
+        let is_kvconfig = path.ends_with("Kvantum/kvantum.kvconfig");
         let marker = content
             .lines()
             .find(|l| l.contains(&theme))
             .unwrap_or_default()
             .to_string();
+        let is_ours = |existing: &str| {
+            if is_kvconfig {
+                existing.lines().any(|l| l.trim() == "theme=uq")
+            } else {
+                !marker.is_empty() && existing.contains(&marker)
+            }
+        };
         let outcome = match std::fs::read_to_string(&path) {
-            Ok(existing) if existing.contains(&marker) => StubOutcome::Installed,
+            Ok(existing) if is_ours(&existing) => StubOutcome::Installed,
             Ok(_) => StubOutcome::AlreadyPresent,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 atomic_write(&path, &content)?;
                 StubOutcome::Installed
             }
-            Err(e) => return Err(e),
+            Err(e) => {
+                return Err(std::io::Error::new(
+                    e.kind(),
+                    format!("{}: {e}", path.display()),
+                ));
+            }
         };
         out.push((path, outcome));
     }
@@ -317,6 +330,31 @@ mod tests {
         assert_eq!(
             fs::read_link(&link).unwrap(),
             Path::new("/nonexistent/elsewhere")
+        );
+    }
+
+    #[test]
+    fn existing_foreign_kvantum_config_is_kept() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = Paths::under(dir.path());
+        let kv = p
+            .hypr_dir
+            .parent()
+            .unwrap()
+            .join("Kvantum/kvantum.kvconfig");
+        fs::create_dir_all(kv.parent().unwrap()).unwrap();
+        fs::write(&kv, "[General]\ntheme=KvArc\n").unwrap();
+        let r = install_consumers(&p, true).unwrap();
+        assert_eq!(
+            r.iter().find(|(f, _)| *f == kv).unwrap().1,
+            StubOutcome::AlreadyPresent
+        );
+        assert_eq!(fs::read_to_string(&kv).unwrap(), "[General]\ntheme=KvArc\n");
+        fs::write(&kv, "[General]\ntheme=uq\n").unwrap();
+        let r = install_consumers(&p, true).unwrap();
+        assert_eq!(
+            r.iter().find(|(f, _)| *f == kv).unwrap().1,
+            StubOutcome::Installed
         );
     }
 }
