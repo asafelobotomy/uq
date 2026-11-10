@@ -33,6 +33,9 @@ pub mod qobject {
         #[qproperty(bool, uqd_up)]
         /// `[{id, name, icon, category, categoryName, qml, plugin}]` in sidebar order.
         #[qproperty(QString, pages_json)]
+        /// The current design tokens (`tokens.json` as written by uqd), read once at startup;
+        /// `{}` when missing or invalid.
+        #[qproperty(QString, theme_json)]
         /// `--screenshots <dir>`: QML visits each page, saves it here, then quits.
         #[qproperty(QString, screenshot_dir)]
         type App = super::AppRust;
@@ -69,6 +72,7 @@ pub struct AppRust {
     uqd_up: bool,
     pages_json: QString,
     screenshot_dir: QString,
+    theme_json: QString,
 }
 
 impl Default for AppRust {
@@ -82,8 +86,22 @@ impl Default for AppRust {
             highlight: QString::default(),
             uqd_up: false,
             screenshot_dir: QString::default(),
+            theme_json: QString::from(&read_tokens()),
         }
     }
+}
+
+/// `<theme_dir>/tokens.json` when it is a JSON object under 1 MiB, else `{}`.
+fn read_tokens() -> String {
+    let path = uq_core::paths::Paths::from_env()
+        .theme_dir
+        .join("tokens.json");
+    std::fs::read(&path)
+        .ok()
+        .filter(|b| b.len() <= 1 << 20)
+        .and_then(|b| String::from_utf8(b).ok())
+        .filter(|t| matches!(serde_json::from_str::<serde_json::Value>(t), Ok(v) if v.is_object()))
+        .unwrap_or_else(|| "{}".into())
 }
 
 /// What the D-Bus side tells the window.

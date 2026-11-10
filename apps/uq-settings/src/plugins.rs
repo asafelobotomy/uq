@@ -164,14 +164,39 @@ fn parse(dir: &Path, text: &str) -> Result<PluginPage, String> {
     })
 }
 
-fn load(dir: &Path) -> Result<PluginPage, String> {
-    let manifest = dir.join("page.toml");
+/// Load one page directory. `root` is the canonical plugin directory. A page directory, its
+/// manifest or its QML file that is a symlink resolving outside it is refused, and `qml_path` is
+/// the canonical path of an existing regular file.
+///
+/// This is hygiene, not a sandbox: plugin QML can still `import "../x"` or read any file the
+/// user can.
+fn load(dir: &Path, root: &Path) -> Result<PluginPage, String> {
+    let dir = fs::canonicalize(dir).map_err(|e| format!("{e}"))?;
+    if !dir.starts_with(root) {
+        return Err("resolves outside the plugin directory".into());
+    }
+    let manifest =
+        fs::canonicalize(dir.join("page.toml")).map_err(|e| format!("page.toml: {e}"))?;
+    if !manifest.starts_with(&dir) {
+        return Err("page.toml resolves outside the page directory".into());
+    }
     let meta = fs::metadata(&manifest).map_err(|e| format!("page.toml: {e}"))?;
     if !meta.is_file() || meta.len() > MAX_MANIFEST_BYTES {
         return Err("page.toml is not a regular file under 64 KiB".into());
     }
     let text = fs::read_to_string(&manifest).map_err(|e| format!("page.toml: {e}"))?;
-    parse(dir, &text)
+    let mut page = parse(&dir, &text)?;
+    let qml = fs::canonicalize(&page.qml_path).map_err(|e| {
+        format!(
+            "qml {:?}: {e}",
+            page.qml_path.file_name().unwrap_or_default()
+        )
+    })?;
+    if !qml.starts_with(&dir) || !qml.is_file() {
+        return Err("qml resolves outside the page directory or is not a file".into());
+    }
+    page.qml_path = qml;
+    Ok(page)
 }
 
 /// Every valid plugin page under `dir`, in directory-name order, and one
@@ -189,6 +214,7 @@ pub fn scan(dir: &Path) -> (Vec<PluginPage>, Vec<String>) {
             return (pages, skipped);
         }
     };
+    let root = fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf());
     let mut names: Vec<_> = entries.filter_map(Result::ok).map(|e| e.path()).collect();
     names.sort();
     for path in names {
@@ -198,7 +224,7 @@ pub fn scan(dir: &Path) -> (Vec<PluginPage>, Vec<String>) {
         if !path.is_dir() {
             continue;
         }
-        match load(&path) {
+        match load(&path, &root) {
             Ok(page) if registry::find(&page.id).is_some() => {
                 skipped.push(format!("{name}: id {:?} is a core page", page.id));
             }
@@ -242,6 +268,7 @@ pub fn file_url(path: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::os::unix::fs::symlink;
 
     fn write(root: &Path, dir: &str, toml: &str) {
         let d = root.join(dir);
@@ -307,10 +334,48 @@ mod tests {
         );
         write(r, "z-after", &manifest("after", ""));
 
+        // Symlinks: a page directory pointing outside, a qml file pointing outside, a manifest
+        // pointing outside, and a missing qml file.
+        let outside = tempfile::tempdir().unwrap();
+        write(outside.path(), "evil", &manifest("evil", ""));
+        symlink(outside.path().join("evil"), r.join("k-dir-link")).unwrap();
+        write(r, "l-qml-link", &manifest("qmllink", ""));
+        fs::remove_file(r.join("l-qml-link/Page.qml")).unwrap();
+        fs::write(outside.path().join("Out.qml"), "import QtQuick\nItem {}\n").unwrap();
+        symlink(
+            outside.path().join("Out.qml"),
+            r.join("l-qml-link/Page.qml"),
+        )
+        .unwrap();
+        write(r, "m-toml-link", "");
+        fs::remove_file(r.join("m-toml-link/page.toml")).unwrap();
+        fs::write(outside.path().join("x.toml"), manifest("tomllink", "")).unwrap();
+        symlink(
+            outside.path().join("x.toml"),
+            r.join("m-toml-link/page.toml"),
+        )
+        .unwrap();
+        write(r, "n-no-qml", &manifest("noqml", ""));
+        fs::remove_file(r.join("n-no-qml/Page.qml")).unwrap();
+        // A link that stays inside its own page directory is fine.
+        write(r, "o-inner-link", &manifest("inner", ""));
+        fs::rename(
+            r.join("o-inner-link/Page.qml"),
+            r.join("o-inner-link/Real.qml"),
+        )
+        .unwrap();
+        symlink("Real.qml", r.join("o-inner-link/Page.qml")).unwrap();
+
         let (pages, skipped) = scan(r);
         let ids: Vec<_> = pages.iter().map(|p| p.id.as_str()).collect();
-        assert_eq!(ids, ["good", "dup", "after"], "in directory-name order");
-        assert_eq!(pages[0].qml_path, r.join("a-good/Page.qml"));
+        assert_eq!(
+            ids,
+            ["good", "dup", "inner", "after"],
+            "in directory-name order"
+        );
+        let r_canon = fs::canonicalize(r).unwrap();
+        assert_eq!(pages[0].qml_path, r_canon.join("a-good/Page.qml"));
+        assert_eq!(pages[2].qml_path, r_canon.join("o-inner-link/Real.qml"));
         assert_eq!(pages[0].icon, "folder");
         assert_eq!(pages[0].dbus_name.as_deref(), Some("org.example.Good"));
         assert_eq!(pages[0].settings[0].keywords, ["kind"]);
@@ -328,13 +393,17 @@ mod tests {
             "h-syntax",
             "i-dup-setting",
             "j-unknown-setting-key",
+            "k-dir-link",
+            "l-qml-link",
+            "m-toml-link",
+            "n-no-qml",
         ] {
             assert!(
                 skipped.iter().any(|s| s.starts_with(&format!("{dir}: "))),
                 "{dir} not skipped with a reason:\n{joined}"
             );
         }
-        assert_eq!(skipped.len(), 12, "{joined}");
+        assert_eq!(skipped.len(), 16, "{joined}");
         assert!(joined.contains("unknown field"), "{joined}");
     }
 

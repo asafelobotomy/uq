@@ -4,19 +4,27 @@ import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
-import org.uq.settings
 import "components"
 
 Kirigami.SearchField {
     id: field
 
-    /// `[{pageId, settingId, label, pageName}]` for the current text.
+    /// `function(query) -> json string` of `[{pageId, settingId, label, pageName}]`.
+    property var searchFunction: query => "[]"
+    /// The hits for the current text.
     property var hits: []
     readonly property bool open: popup.visible
+    property alias resultsPopup: popup
+    property alias emptyLabel: emptyLabel
+    signal activated(string pageId, string settingId)
 
     function refresh() {
+        if (text.length > 64) {
+            text = text.slice(0, 64); // the field has no maxLength; re-enters refresh()
+            return;
+        }
         const q = text.trim();
-        hits = q === "" ? [] : JSON.parse(App.search(q) || "[]");
+        hits = q === "" ? [] : JSON.parse(searchFunction(q) || "[]");
         results.currentIndex = hits.length > 0 ? 0 : -1;
         if (q === "")
             popup.close();
@@ -29,15 +37,21 @@ Kirigami.SearchField {
         const hit = hits[index];
         popup.close();
         clear();
-        App.showPage(hit.pageId, hit.settingId);
+        activated(hit.pageId, hit.settingId);
     }
 
+    autoAccept: false
     placeholderText: "Search settings"
     Accessible.name: "Search settings"
     onTextChanged: refresh()
     onAccepted: choose(results.currentIndex)
 
-    Keys.onDownPressed: if (hits.length > 0) results.currentIndex = Math.min(results.currentIndex + 1, hits.length - 1)
+    Keys.onDownPressed: {
+        if (!popup.visible && text.trim() !== "")
+            popup.open();
+        else if (hits.length > 0)
+            results.currentIndex = Math.min(results.currentIndex + 1, hits.length - 1);
+    }
     Keys.onUpPressed: if (hits.length > 0) results.currentIndex = Math.max(results.currentIndex - 1, 0)
     Keys.onEscapePressed: event => {
         if (popup.visible) {
@@ -52,7 +66,7 @@ Kirigami.SearchField {
 
         y: field.height + Kirigami.Units.smallSpacing
         width: Math.max(field.width, Kirigami.Units.gridUnit * 20)
-        height: Math.min(results.contentHeight, Kirigami.Units.gridUnit * 20) + topPadding + bottomPadding
+        height: Math.max(Math.min(results.contentHeight, Kirigami.Units.gridUnit * 20), field.hits.length === 0 ? Kirigami.Units.gridUnit * 2 : 0) + topPadding + bottomPadding
         padding: Kirigami.Units.smallSpacing
         focus: false
         closePolicy: QQC2.Popup.CloseOnEscape | QQC2.Popup.CloseOnPressOutsideParent
@@ -94,6 +108,7 @@ Kirigami.SearchField {
             }
 
             UqLabel {
+                id: emptyLabel
                 anchors.centerIn: parent
                 visible: field.hits.length === 0
                 text: "No matching settings"

@@ -10,6 +10,8 @@ const WORD_START: u32 = 10;
 const CONSECUTIVE: u32 = 6;
 const PER_CHAR: u32 = 1;
 pub const MAX_HITS: usize = 20;
+/// Longer queries are cut to this many characters.
+pub const MAX_QUERY: usize = 64;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -35,6 +37,9 @@ pub fn score(query: &str, text: &str) -> Option<u32> {
         return None;
     }
     let raw: Vec<char> = text.chars().collect();
+    if q.len() > raw.len() {
+        return None;
+    }
     let t: Vec<char> = raw.iter().flat_map(|c| c.to_lowercase()).collect();
     if t.len() != raw.len() {
         // A character that lowercases to several: fall back to the plain comparison.
@@ -80,6 +85,8 @@ pub fn score(query: &str, text: &str) -> Option<u32> {
 /// Hits for `query` over every page and setting: labels count over keywords, sorted by score
 /// (best first) then label, at most [`MAX_HITS`]. An empty query returns nothing.
 pub fn search(pages: &[PageEntry], query: &str) -> Vec<Hit> {
+    let query: String = query.chars().take(MAX_QUERY).collect();
+    let query = query.as_str();
     let mut hits = Vec::new();
     for page in pages {
         let mut add = |setting_id: &str, label: &str, keywords: &[String]| {
@@ -173,6 +180,17 @@ mod tests {
             ("appearance", "mono_font")
         );
         assert_eq!(hits[0].page_name, "Appearance");
+    }
+
+    #[test]
+    fn long_queries_are_cut_and_never_match_shorter_text() {
+        assert_eq!(score("abcdef", "abc"), None);
+        let pages = vec![page("p", "Page", vec![entry("s", "aaaa", &[])])];
+        let long = "a".repeat(10_000);
+        assert!(search(&pages, &long).is_empty());
+        let many = "a".repeat(64);
+        let pages = vec![page("p", "Page", vec![entry("s", &many, &[])])];
+        assert_eq!(search(&pages, &format!("{many}zzz")).len(), 1, "cut to 64");
     }
 
     #[test]
