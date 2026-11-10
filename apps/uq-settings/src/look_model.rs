@@ -88,6 +88,7 @@ impl PageModel for LookModel {
         theme: true,
         settings: false,
         history: false,
+        monitors: false,
     };
 
     fn core(&self) -> &ModelCore<LookState> {

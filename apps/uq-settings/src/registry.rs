@@ -332,7 +332,71 @@ static HISTORY_SETTINGS: [SearchEntry; 2] = [
     ),
 ];
 
-static CORE_PAGES: [PageInfo; 5] = [
+static DISPLAYS_SETTINGS: [SearchEntry; 8] = [
+    entry(
+        "display-arrangement",
+        "Display arrangement",
+        &["monitor", "screen", "position", "layout", "left", "right"],
+    ),
+    entry(
+        "display-resolution",
+        "Resolution",
+        &["monitor", "screen", "size", "pixels", "4k"],
+    ),
+    entry(
+        "display-refresh",
+        "Refresh rate",
+        &["monitor", "screen", "hz", "frame rate", "144"],
+    ),
+    entry(
+        "display-scale",
+        "Display scale",
+        &["monitor", "screen", "zoom", "hidpi", "bigger", "smaller"],
+    ),
+    entry(
+        "display-rotation",
+        "Rotation",
+        &[
+            "monitor",
+            "screen",
+            "portrait",
+            "landscape",
+            "rotate",
+            "flip",
+        ],
+    ),
+    entry(
+        "display-enabled",
+        "Use this display",
+        &["monitor", "screen", "turn off", "disable", "on"],
+    ),
+    entry(
+        "display-mirror",
+        "Mirror a display",
+        &[
+            "monitor",
+            "screen",
+            "duplicate",
+            "same picture",
+            "projector",
+        ],
+    ),
+    entry(
+        "display-vrr",
+        "Variable refresh rate",
+        &[
+            "monitor",
+            "screen",
+            "vrr",
+            "freesync",
+            "g-sync",
+            "adaptive sync",
+            "hz",
+        ],
+    ),
+];
+
+static CORE_PAGES: [PageInfo; 6] = [
     PageInfo {
         id: "appearance",
         name: "Appearance",
@@ -359,6 +423,15 @@ static CORE_PAGES: [PageInfo; 5] = [
         qml: "pages/WallpaperPage.qml",
         settings: &WALLPAPER_SETTINGS,
         domains: &["wallpaper"],
+    },
+    PageInfo {
+        id: "displays",
+        name: "Displays",
+        icon: "preferences-desktop-display",
+        category: Category::Devices,
+        qml: "pages/DisplaysPage.qml",
+        settings: &DISPLAYS_SETTINGS,
+        domains: &["monitors"],
     },
     PageInfo {
         id: "shell",
@@ -588,14 +661,26 @@ mod tests {
             .iter()
             .map(|p| p["id"].as_str().unwrap())
             .collect();
-        assert_eq!(ids, ["appearance", "look", "wallpaper", "shell", "history"]);
+        assert_eq!(
+            ids,
+            [
+                "appearance",
+                "look",
+                "wallpaper",
+                "displays",
+                "shell",
+                "history"
+            ]
+        );
         assert_eq!(v[0]["category"], "personal");
         assert_eq!(v[0]["categoryName"], "Personal");
         assert_eq!(v[1]["qml"], "pages/LookPage.qml");
         assert_eq!(v[2]["qml"], "pages/WallpaperPage.qml");
         assert_eq!(v[2]["plugin"], false);
-        assert_eq!(v[3]["qml"], "pages/ShellPage.qml");
-        assert_eq!(v[3]["categoryName"], "uQ");
+        assert_eq!(v[3]["qml"], "pages/DisplaysPage.qml");
+        assert_eq!(v[3]["categoryName"], "Devices");
+        assert_eq!(v[4]["qml"], "pages/ShellPage.qml");
+        assert_eq!(v[4]["categoryName"], "uQ");
     }
 
     #[test]
@@ -611,14 +696,16 @@ mod tests {
         };
         let v: serde_json::Value =
             serde_json::from_str(&pages_json(&all_pages(&[plugin]))).unwrap();
-        assert_eq!(v.as_array().unwrap().len(), 6);
-        assert_eq!(v[5]["id"], "demo");
-        assert_eq!(v[5]["category"], "apps");
-        assert_eq!(v[5]["categoryName"], "Apps");
-        assert_eq!(v[5]["plugin"], true);
-        assert_eq!(v[5]["domains"], serde_json::json!([]));
+        let n = v.as_array().unwrap().len();
+        assert_eq!(n, core_pages().len() + 1);
+        let last = &v[n - 1];
+        assert_eq!(last["id"], "demo");
+        assert_eq!(last["category"], "apps");
+        assert_eq!(last["categoryName"], "Apps");
+        assert_eq!(last["plugin"], true);
+        assert_eq!(last["domains"], serde_json::json!([]));
         assert_eq!(
-            v[5]["qml"],
+            last["qml"],
             "file:///usr/share/uq/settings/pages/demo/Page.qml"
         );
     }
