@@ -236,10 +236,11 @@ fn section_round_trip() {
             "look",
             "layouts",
             "shell",
-            "monitors"
+            "monitors",
+            "input"
         ]
     );
-    assert!(!renders_section("monitors"));
+    assert!(!renders_section("monitors") && renders_section("input"));
 }
 
 #[test]

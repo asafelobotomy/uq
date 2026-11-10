@@ -6,6 +6,7 @@ use serde_json::Value;
 pub(crate) use load::{check_kept, lenient};
 
 mod appearance;
+mod input;
 mod layouts;
 mod load;
 mod look;
@@ -13,6 +14,10 @@ mod monitors;
 mod shell;
 mod wallpaper;
 pub use appearance::{Appearance, valid_theme_name};
+pub use input::{
+    DeviceOverride, InputSettings, KbLayout, KeyboardSettings, TouchpadSettings, valid_device_name,
+    valid_layout, valid_switch_combo, valid_variant,
+};
 pub use layouts::{
     DwindleOptions, ForceSplit, LayoutOptions, MasterOptions, NewStatus, Orientation,
     ScrollingOptions, repair_rules, rule_selector, set_rule,
@@ -56,20 +61,21 @@ pub fn renders_config(key: &str) -> bool {
 }
 
 /// Whole-section domains handled by [`Settings::section`] / [`Settings::set_section`].
-pub const SECTION_DOMAINS: [&str; 6] = [
+pub const SECTION_DOMAINS: [&str; 7] = [
     "appearance",
     "wallpaper",
     "look",
     "layouts",
     "shell",
     "monitors",
+    "input",
 ];
 
 /// Sections that change rendered config (theme env, Kvantum, cursor, Hyprland look and
-/// layouts): uqd re-renders for these. `monitors` is not one: uqd applies it through
+/// layouts, input): uqd re-renders for these. `monitors` is not one: uqd applies it through
 /// `ApplyMonitors`, with a revert window, and refuses `SetSection("monitors")`.
 pub fn renders_section(domain: &str) -> bool {
-    matches!(domain, "appearance" | "look" | "layouts")
+    matches!(domain, "appearance" | "look" | "layouts" | "input")
 }
 
 const MAX_PINNED: usize = 32;
@@ -217,6 +223,10 @@ pub struct Settings {
     pub shell: ShellSettings,
     #[serde(deserialize_with = "lenient")]
     pub monitors: Monitors,
+    /// Keyboard, touchpad and per-device options (`[input]`). The section's `mouse` part is
+    /// `mouse` above, not stored here.
+    #[serde(deserialize_with = "lenient")]
+    pub input: InputSettings,
 }
 
 pub(crate) fn invalid(key: &str, reason: impl Into<String>) -> SettingError {
@@ -294,6 +304,7 @@ impl Settings {
             "look" => serde_json::to_value(&self.look),
             "shell" => serde_json::to_value(&self.shell),
             "monitors" => serde_json::to_value(&self.monitors),
+            "input" => Ok(self.input_section()),
             _ => return Err(SettingError::UnknownKey(domain.to_string())),
         };
         Ok(v.expect("settings serialise"))
@@ -326,6 +337,7 @@ impl Settings {
             }
             "shell" => self.shell = ShellSettings::from_section(&value)?,
             "monitors" => self.monitors = Monitors::from_section(&value)?,
+            "input" => self.set_input(&value)?,
             _ => return Err(SettingError::UnknownKey(domain.to_string())),
         }
         Ok(())
