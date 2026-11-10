@@ -3,7 +3,7 @@
 use crate::atomic::atomic_write;
 use crate::lua::Layout;
 use crate::schedule::Schedule;
-use crate::settings::Settings;
+use crate::settings::{LayoutOptions, SettingError, Settings};
 use crate::theme::Variant;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -111,6 +111,35 @@ impl State {
             "screen_off" => &mut s.idle.screen_off,
             _ => &mut s.idle.suspend_battery,
         }
+    }
+
+    /// One settings section as JSON. `layouts` joins the workspace rules in `self.layouts` with
+    /// `settings.layout_options`; every other domain is `Settings`'.
+    pub fn section(&self, domain: &str) -> Result<serde_json::Value, SettingError> {
+        if domain != "layouts" {
+            return self.settings.section(domain);
+        }
+        let mut v =
+            serde_json::to_value(&self.settings.layout_options).expect("settings serialise");
+        v["workspaces"] = serde_json::to_value(&self.layouts).expect("layouts serialise");
+        Ok(v)
+    }
+
+    /// Replace a whole section; on error `self` is unchanged. A `layouts` write replaces both
+    /// the options and every workspace rule (selectors normalised); a missing `workspaces`
+    /// clears the rules.
+    pub fn set_section(
+        &mut self,
+        domain: &str,
+        value: serde_json::Value,
+    ) -> Result<(), SettingError> {
+        if domain != "layouts" {
+            return self.settings.set_section(domain, value);
+        }
+        let (options, rules) = LayoutOptions::from_section(&value)?;
+        self.settings.layout_options = options;
+        self.layouts = rules;
+        Ok(())
     }
 
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
@@ -311,6 +340,129 @@ mod tests {
                 }}),
             )
             .unwrap();
+        st.save(&p).unwrap();
+        assert_eq!(State::load(&p), st);
+    }
+
+    #[test]
+    fn layouts_section_normalises_and_replaces_rules() {
+        let mut st = State::default();
+        st.layouts.insert("2".into(), Layout::Scrolling);
+        st.set_section(
+            "layouts",
+            serde_json::json!({"default": "master", "workspaces": {"web": "master"},
+                "master": {"mfact": 0.62}}),
+        )
+        .unwrap();
+        assert_eq!(
+            st.layouts,
+            BTreeMap::from([("name:web".into(), Layout::Master)])
+        );
+        let v = st.section("layouts").unwrap();
+        assert_eq!(v["workspaces"], serde_json::json!({"name:web": "master"}));
+        assert_eq!(v["default"], "master");
+        assert_eq!(v["master"]["mfact"], 0.62);
+        assert_eq!(v["dwindle"], serde_json::json!({}));
+        // A missing `workspaces` means none.
+        st.set_section("layouts", serde_json::json!({})).unwrap();
+        assert!(st.layouts.is_empty());
+        assert_eq!(st.settings.layout_options, LayoutOptions::default());
+    }
+
+    #[test]
+    fn layouts_section_rejects_bad_input() {
+        let mut st = State::default();
+        st.set_section(
+            "layouts",
+            serde_json::json!({"workspaces": {"2": "dwindle"}}),
+        )
+        .unwrap();
+        let before = st.clone();
+        let many: serde_json::Map<_, _> = (1..=65)
+            .map(|i| (i.to_string(), serde_json::json!("dwindle")))
+            .collect();
+        for bad in [
+            serde_json::json!({"workspaces": many}),
+            serde_json::json!({"workspaces": {"web": "monocle"}}),
+            serde_json::json!({"workspaces": {"a\nb": "dwindle"}}),
+            serde_json::json!({"workspaces": {"name:": "dwindle"}, "extra": 1}),
+            serde_json::json!({"workspaces": {"a".repeat(65): "dwindle"}}),
+            serde_json::json!({"workspaces": {"web": "master", "name:web": "dwindle"}}),
+            serde_json::json!({"master": {"mfact": 0.95}}),
+        ] {
+            assert!(st.set_section("layouts", bad.clone()).is_err(), "{bad}");
+            assert_eq!(st, before);
+        }
+        let mut many = serde_json::Map::new();
+        for i in 1..=64 {
+            many.insert(i.to_string(), serde_json::json!("dwindle"));
+        }
+        st.set_section("layouts", serde_json::json!({"workspaces": many}))
+            .unwrap();
+        assert_eq!(st.layouts.len(), 64);
+        assert!(st.set_section("bogus", serde_json::json!({})).is_err());
+    }
+
+    #[test]
+    fn old_state_keeps_workspace_rules() {
+        let st = State::parse("theme = \"graphite\"\n[layouts]\n\"2\" = \"scrolling\"\n").unwrap();
+        let v = st.section("layouts").unwrap();
+        assert_eq!(v["workspaces"]["2"], "scrolling");
+        assert_eq!(st.settings.look, crate::settings::Look::default());
+        assert_eq!(st.settings.layout_options, LayoutOptions::default());
+    }
+
+    #[test]
+    fn unknown_look_and_layout_values_keep_state() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("state.toml");
+        std::fs::write(
+            &p,
+            "theme = \"rosewood\"\npinned = [\"firefox.desktop\"]\n\
+             [look]\ngaps_in = 4\nfuture_key = 1\n\
+             [layout_options]\ndefault = \"monocle\"\nnew_key = 2\n\
+             [layout_options.dwindle]\nforce_split = \"sideways\"\npreserve_split = true\n\
+             [layout_options.master]\norientation = \"diagonal\"\nmfact = 0.6\n\
+             [layouts]\n\"2\" = \"scrolling\"\n",
+        )
+        .unwrap();
+        let s = State::load(&p);
+        assert_eq!(s.theme, "rosewood");
+        assert_eq!(s.settings.pinned, ["firefox.desktop"]);
+        assert_eq!(s.settings.look.gaps_in, Some(4));
+        let lo = &s.settings.layout_options;
+        assert_eq!(
+            (lo.default, lo.dwindle.force_split, lo.master.orientation),
+            (None, None, None)
+        );
+        assert_eq!(
+            (lo.dwindle.preserve_split, lo.master.mfact),
+            (Some(true), Some(0.6))
+        );
+        assert_eq!(s.layouts.get("2"), Some(&Layout::Scrolling));
+        assert!(
+            p.exists(),
+            "unknown keys or values do not move the file aside"
+        );
+    }
+
+    #[test]
+    fn look_and_layout_options_round_trip() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("state.toml");
+        let mut st = State::default();
+        st.set_section(
+            "look",
+            serde_json::json!({"gaps_in": 3, "blur": false, "animation_speed": 1.5}),
+        )
+        .unwrap();
+        st.set_section(
+            "layouts",
+            serde_json::json!({"default": "scrolling", "workspaces": {"2": "master"},
+                "dwindle": {"force_split": "right"}, "master": {"new_status": "slave", "orientation": "top"},
+                "scrolling": {"column_width": 0.7, "fullscreen_on_one_column": true}}),
+        )
+        .unwrap();
         st.save(&p).unwrap();
         assert_eq!(State::load(&p), st);
     }

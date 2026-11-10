@@ -219,14 +219,18 @@ fn section_round_trip() {
     assert_eq!(t, s);
     assert_eq!(s.validated().unwrap(), s);
     assert!(renders_section("appearance") && !renders_section("wallpaper"));
-    assert_eq!(SECTION_DOMAINS, ["appearance", "wallpaper"]);
+    assert!(renders_section("look") && renders_section("layouts"));
+    assert_eq!(
+        SECTION_DOMAINS,
+        ["appearance", "wallpaper", "look", "layouts", "shell"]
+    );
 }
 
 #[test]
 fn unknown_domain_rejected() {
     let mut s = Settings::default();
-    assert!(s.set_section("look", json!({})).is_err());
-    assert!(s.section("look").is_err());
+    assert!(s.set_section("bogus", json!({})).is_err());
+    assert!(s.section("bogus").is_err());
 }
 
 #[test]
@@ -244,4 +248,46 @@ fn invalid_section_leaves_settings_unchanged() {
             .is_err()
     );
     assert_eq!(s, before);
+}
+
+#[test]
+fn look_section_round_trip() {
+    let mut s = Settings::default();
+    s.set_section(
+        "look",
+        json!({"gaps_in": 4, "blur": true, "blur_passes": 2, "animation_speed": 1.5}),
+    )
+    .unwrap();
+    let l = s.section("look").unwrap();
+    assert_eq!(
+        l,
+        json!({"gaps_in": 4, "blur": true, "blur_passes": 2, "animation_speed": 1.5})
+    );
+    let mut t = Settings::default();
+    t.set_section("look", l).unwrap();
+    assert_eq!(t, s);
+    assert_eq!(s.validated().unwrap(), s);
+    // An empty write clears every override.
+    s.set_section("look", json!({})).unwrap();
+    assert_eq!(s.look, Look::default());
+}
+
+#[test]
+fn unknown_look_field_rejected() {
+    let mut s = Settings::default();
+    s.set_section("look", json!({"gaps_in": 4})).unwrap();
+    let before = s.clone();
+    assert!(
+        s.set_section("look", json!({"gaps_in": 5, "bogus": 1}))
+            .is_err()
+    );
+    assert_eq!(s, before);
+    let bad = Settings {
+        look: Look {
+            blur_passes: Some(9),
+            ..Look::default()
+        },
+        ..Settings::default()
+    };
+    assert!(bad.validated().is_err());
 }

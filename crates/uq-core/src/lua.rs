@@ -44,6 +44,22 @@ impl FromStr for Layout {
     }
 }
 
+/// The Hyprland workspace selector for a user-facing workspace name. Hyprland only matches a
+/// name through `name:<n>` (a bare `web` parses as selector syntax and never matches), so plain
+/// names get the prefix; ids, `name:`/`special` selectors and bracket selectors pass through.
+pub fn workspace_selector(ws: &str) -> String {
+    let ws = ws.trim();
+    let passthrough = ws.parse::<i64>().is_ok()
+        || ws.starts_with("name:")
+        || ws.starts_with("special")
+        || ws.contains('[');
+    if passthrough {
+        ws.to_string()
+    } else {
+        format!("name:{ws}")
+    }
+}
+
 /// A double-quoted Lua string literal. Control bytes use 3-digit `\ddd` so a following digit
 /// can't be absorbed into the escape.
 pub fn lua_string(s: &str) -> String {
@@ -280,6 +296,21 @@ mod tests {
             emit_workspace_rule("web\"x\\y", Layout::Dwindle),
             r#"hl.workspace_rule({ workspace = "web\"x\\y", layout = "dwindle" })"#
         );
+    }
+
+    #[test]
+    fn workspace_selector_normalisation() {
+        for (input, want) in [
+            ("2", "2"),
+            (" 3 ", "3"),
+            ("web", "name:web"),
+            ("name:web", "name:web"),
+            ("special:magic", "special:magic"),
+            ("special", "special"),
+            ("w[tv1]", "w[tv1]"),
+        ] {
+            assert_eq!(workspace_selector(input), want, "{input:?}");
+        }
     }
 
     #[test]

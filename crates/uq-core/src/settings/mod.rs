@@ -4,8 +4,15 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 mod appearance;
+mod layouts;
+mod look;
 mod wallpaper;
 pub use appearance::{Appearance, valid_theme_name};
+pub use layouts::{
+    DwindleOptions, ForceSplit, LayoutOptions, MasterOptions, NewStatus, Orientation,
+    ScrollingOptions,
+};
+pub use look::Look;
 pub use wallpaper::{Fit, Wallpaper, WallpaperEntry};
 
 /// Every key `Settings::apply` accepts; anything else is rejected.
@@ -36,11 +43,12 @@ pub fn renders_config(key: &str) -> bool {
 }
 
 /// Whole-section domains handled by [`Settings::section`] / [`Settings::set_section`].
-pub const SECTION_DOMAINS: [&str; 2] = ["appearance", "wallpaper"];
+pub const SECTION_DOMAINS: [&str; 5] = ["appearance", "wallpaper", "look", "layouts", "shell"];
 
-/// Sections that change rendered config (theme env, Kvantum, cursor): uqd re-renders for these.
+/// Sections that change rendered config (theme env, Kvantum, cursor, Hyprland look and
+/// layouts): uqd re-renders for these.
 pub fn renders_section(domain: &str) -> bool {
-    domain == "appearance"
+    matches!(domain, "appearance" | "look" | "layouts")
 }
 
 const MAX_PINNED: usize = 32;
@@ -167,6 +175,10 @@ pub struct Settings {
     pub mouse: MouseSettings,
     pub appearance: Appearance,
     pub wallpaper: Wallpaper,
+    pub look: Look,
+    /// Default layout and per-layout options (`[layout_options]`; `[layouts]` holds the
+    /// workspace rules in `State`).
+    pub layout_options: LayoutOptions,
 }
 
 pub(crate) fn invalid(key: &str, reason: impl Into<String>) -> SettingError {
@@ -262,14 +274,18 @@ impl Settings {
         out.wallpaper = self.wallpaper.clone();
         out.appearance.validate()?;
         out.wallpaper.validate()?;
+        out.look = self.look.clone().normalised()?;
+        out.layout_options = self.layout_options.clone().normalised()?;
         Ok(out)
     }
 
-    /// One whole section (`appearance` or `wallpaper`) as JSON.
+    /// One whole section as JSON. `layouts` also needs the workspace rules, so it goes through
+    /// `State::section`.
     pub fn section(&self, domain: &str) -> Result<Value, SettingError> {
         let v = match domain {
             "appearance" => serde_json::to_value(&self.appearance),
             "wallpaper" => serde_json::to_value(&self.wallpaper),
+            "look" => serde_json::to_value(&self.look),
             _ => return Err(SettingError::UnknownKey(domain.to_string())),
         };
         Ok(v.expect("settings serialise"))
@@ -291,6 +307,12 @@ impl Settings {
                     serde_json::from_value(value).map_err(|e| invalid(domain, e.to_string()))?;
                 w.validate()?;
                 self.wallpaper = w;
+            }
+            "look" => {
+                check_known(domain, &value, &Look::FIELDS)?;
+                let l: Look =
+                    serde_json::from_value(value).map_err(|e| invalid(domain, e.to_string()))?;
+                self.look = l.normalised()?;
             }
             _ => return Err(SettingError::UnknownKey(domain.to_string())),
         }

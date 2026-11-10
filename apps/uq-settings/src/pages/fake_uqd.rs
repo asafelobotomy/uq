@@ -81,7 +81,6 @@ impl FakeUqd {
             .state
             .lock()
             .unwrap()
-            .settings
             .section(domain)
             .map_err(invalid)?;
         // A slow read, so an unserialised read-modify-write would lose an update.
@@ -93,7 +92,7 @@ impl FakeUqd {
         let value =
             serde_json::from_str(json).map_err(|e| invalid(format!("value is not JSON: {e}")))?;
         let mut s = self.state.lock().unwrap();
-        let mut next = s.settings.clone();
+        let mut next = s.clone();
         next.set_section(domain, value).map_err(invalid)?;
         if renders_section(domain)
             && let Some(message) = self.verify_error.lock().unwrap().take()
@@ -102,7 +101,7 @@ impl FakeUqd {
                 "Hyprland rejected the new config: {message}"
             )));
         }
-        s.settings = next;
+        *s = next;
         Ok(())
     }
 

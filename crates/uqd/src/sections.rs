@@ -8,7 +8,6 @@ impl Desktop {
     pub fn get_section(&self, domain: &str) -> Result<String, DesktopError> {
         let v = self
             .state
-            .settings
             .section(domain)
             .map_err(|e| DesktopError::InvalidSetting(e.to_string()))?;
         serde_json::to_string(&v).map_err(|e| DesktopError::Io(e.to_string()))
@@ -20,8 +19,7 @@ impl Desktop {
         let value: serde_json::Value = serde_json::from_str(json)
             .map_err(|e| DesktopError::InvalidSetting(format!("value is not JSON: {e}")))?;
         let mut next = self.state.clone();
-        next.settings
-            .set_section(domain, value)
+        next.set_section(domain, value)
             .map_err(|e| DesktopError::InvalidSetting(e.to_string()))?;
         if renders_section(domain) {
             self.commit(next, Change::Theme).await?;

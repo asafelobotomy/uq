@@ -9,7 +9,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::broadcast;
 use uq_core::atomic::{atomic_replace_dir, atomic_write};
-use uq_core::lua::{Layout, emit_generated, emit_workspace_rule, lua_string};
+use uq_core::lua::{Layout, emit_generated, emit_workspace_rule, lua_string, workspace_selector};
 use uq_core::paths::Paths;
 use uq_core::render::{kvantum_base, render};
 use uq_core::schedule::{Schedule, last_event, variant_at};
@@ -62,22 +62,6 @@ pub enum DesktopError {
 
 pub(crate) fn io_err(context: &str) -> impl Fn(std::io::Error) -> DesktopError + '_ {
     move |e| DesktopError::Io(format!("{context}: {e}"))
-}
-
-/// The Hyprland workspace selector for a user-facing workspace name. Hyprland only matches a
-/// name through `name:<n>` (a bare `web` parses as selector syntax and never matches), so plain
-/// names get the prefix; ids, `name:`/`special` selectors and bracket selectors pass through.
-pub fn workspace_selector(ws: &str) -> String {
-    let ws = ws.trim();
-    let passthrough = ws.parse::<i64>().is_ok()
-        || ws.starts_with("name:")
-        || ws.starts_with("special")
-        || ws.contains('[');
-    if passthrough {
-        ws.to_string()
-    } else {
-        format!("name:{ws}")
-    }
 }
 
 /// What a commit changed, which decides how it is applied to the live session.
@@ -617,21 +601,6 @@ mod tests {
                 tokens_path: p.theme_dir.join("tokens.json")
             }]
         );
-    }
-
-    #[test]
-    fn workspace_selector_normalisation() {
-        for (input, want) in [
-            ("2", "2"),
-            (" 3 ", "3"),
-            ("web", "name:web"),
-            ("name:web", "name:web"),
-            ("special:magic", "special:magic"),
-            ("special", "special"),
-            ("w[tv1]", "w[tv1]"),
-        ] {
-            assert_eq!(workspace_selector(input), want, "{input:?}");
-        }
     }
 
     #[tokio::test]
