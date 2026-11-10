@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use uq_core::lua::{Layout, emit_generated};
+use uq_core::rules::{Rules, WorkspaceRule};
 use uq_core::settings::{
     AccelProfile, DeviceOverride, ForceSplit, KbLayout, NewStatus, Orientation, OutputConfig,
     Position, Settings,
@@ -85,11 +86,27 @@ fn golden_default_and_all_set() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let reg = ThemeRegistry::load_dir(&root.join("../../themes")).unwrap();
     let theme = reg.get("graphite", Variant::Dark).unwrap();
-    let rules = BTreeMap::from([("2".to_string(), Layout::Scrolling)]);
+    let layouts = BTreeMap::from([("2".to_string(), Layout::Scrolling)]);
     let bless = std::env::var_os("UQ_BLESS").is_some();
     let mut bad = Vec::new();
-    for (name, settings) in [("default", Settings::default()), ("all-set", all_set())] {
-        let out = emit_generated(theme, &rules, &settings);
+    // `all-set` carries a workspace rule for `2`, so the merged call is in the golden file.
+    let ws_rules = Rules {
+        workspace: vec![WorkspaceRule {
+            workspace: "2".into(),
+            monitor: Some("DP-1".into()),
+            default: Some(true),
+            persistent: Some(true),
+            gaps_in: Some(4),
+            gaps_out: Some(10),
+            border_size: Some(2),
+        }],
+        ..Rules::default()
+    };
+    for (name, settings, rules) in [
+        ("default", Settings::default(), Rules::default()),
+        ("all-set", all_set(), ws_rules),
+    ] {
+        let out = emit_generated(theme, &layouts, &rules, &settings);
         let path = root.join(format!("tests/golden/generated/{name}.lua"));
         if bless {
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();

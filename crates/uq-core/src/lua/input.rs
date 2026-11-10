@@ -123,7 +123,7 @@ mod tests {
 
     fn render(s: &Settings) -> String {
         let t = Theme::from_toml(FIXTURE, "fixture", Variant::Dark).unwrap();
-        emit_generated(&t, &BTreeMap::new(), s)
+        emit_generated(&t, &BTreeMap::new(), &crate::rules::Rules::default(), s)
     }
 
     #[test]
@@ -132,7 +132,12 @@ mod tests {
         let reg = crate::theme::ThemeRegistry::load_dir(&root.join("../../themes")).unwrap();
         let theme = reg.get("graphite", Variant::Dark).unwrap();
         let rules = BTreeMap::from([("2".to_string(), crate::lua::Layout::Scrolling)]);
-        let out = emit_generated(theme, &rules, &Settings::default());
+        let out = emit_generated(
+            theme,
+            &rules,
+            &crate::rules::Rules::default(),
+            &Settings::default(),
+        );
         let golden =
             std::fs::read_to_string(root.join("tests/golden/generated/default.lua")).unwrap();
         assert_eq!(out, golden);
