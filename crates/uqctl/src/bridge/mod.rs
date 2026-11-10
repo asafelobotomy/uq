@@ -218,8 +218,11 @@ where
     let lock_relay = tokio::spawn(relay_locks(locks, known_lock, hint_tx, out_tx.clone()));
 
     let runs = Arc::new(Mutex::new(run::RunState::default()));
-    let providers =
-        providers::Providers::new(out_tx.clone(), stop.clone(), providers::default_dirs());
+    let providers = providers::Providers::new(
+        out_tx.clone(),
+        stop.clone(),
+        uq_core::launcher_providers::default_dirs(),
+    );
     let slots = Arc::new(Semaphore::new(MAX_IN_FLIGHT));
     let mut requests = tokio::task::JoinSet::new();
     while let Some(item) = in_rx.recv().await {

@@ -122,6 +122,8 @@ struct Entry {
     exec: String,
     terminal: bool,
     try_exec: Option<String>,
+    /// `X-TerminalArgExec`: the argument a terminal takes before the command to run.
+    terminal_arg: Option<String>,
 }
 
 /// Undo the key-value escapes of the desktop-entry format (`\s \n \t \r \\`).
@@ -149,10 +151,10 @@ fn unescape_value(v: &str) -> String {
     out
 }
 
-/// Read the `[Desktop Entry]` group. Only `Exec`, `Terminal`, `TryExec`, `Type` and `Hidden` count.
+/// Read the `[Desktop Entry]` group. Only `Exec`, `Terminal`, `TryExec`, `X-TerminalArgExec`, `Type` and `Hidden` count.
 fn parse_entry(text: &str) -> Result<Entry, String> {
     let (mut in_group, mut exec, mut terminal, mut try_exec) = (false, None, false, None);
-    let (mut hidden, mut kind) = (false, None);
+    let (mut hidden, mut kind, mut terminal_arg) = (false, None, None);
     for line in text.lines() {
         let line = line.trim();
         if line.starts_with('[') {
@@ -170,6 +172,7 @@ fn parse_entry(text: &str) -> Result<Entry, String> {
             "Exec" => exec = Some(unescape_value(v)),
             "TryExec" => try_exec = Some(unescape_value(v)),
             "Terminal" => terminal = v == "true",
+            "X-TerminalArgExec" => terminal_arg = Some(unescape_value(v)),
             "Hidden" => hidden = v == "true",
             "Type" => kind = Some(v.to_string()),
             _ => {}
@@ -185,6 +188,7 @@ fn parse_entry(text: &str) -> Result<Entry, String> {
         exec: exec.ok_or("desktop entry has no Exec")?,
         terminal,
         try_exec,
+        terminal_arg,
     })
 }
 
@@ -232,11 +236,48 @@ pub struct Plan {
     pub record: Option<String>,
 }
 
+const FALLBACK_TERMINAL: [&str; 2] = ["kitty", "-e"];
+
+/// The argv that runs a command in a terminal: the chosen terminal's own `Exec` (field codes
+/// stripped) and then its `X-TerminalArgExec`, else `-e`. Anything wrong with the terminal
+/// (none chosen, not installed, hidden, `TryExec` missing, bad `Exec`, or itself a terminal
+/// app) gives `kitty -e`: a launch is never refused over the terminal. Nothing here goes
+/// through a shell.
+fn terminal_prefix(dirs: &Dirs, terminal: Option<&str>) -> Vec<String> {
+    let fallback = || FALLBACK_TERMINAL.map(String::from).to_vec();
+    let Some(id) = terminal.filter(|t| valid_pinned_id(t)) else {
+        return fallback();
+    };
+    let Some(path) = dirs.find(id) else {
+        return fallback();
+    };
+    let Ok(entry) = std::fs::read_to_string(&path)
+        .map_err(|e| e.to_string())
+        .and_then(|t| parse_entry(&t))
+    else {
+        return fallback();
+    };
+    if entry.terminal || entry.try_exec.as_deref().is_some_and(|t| !binary_exists(t)) {
+        return fallback();
+    }
+    let Ok(mut argv) = parse_exec(&entry.exec) else {
+        return fallback();
+    };
+    argv.push(
+        entry
+            .terminal_arg
+            .filter(|a| !a.is_empty())
+            .unwrap_or_else(|| "-e".into()),
+    );
+    argv
+}
+
 pub fn plan(
     arg: Option<&Value>,
     dirs: &Dirs,
     rand: u32,
     runs: &super::run::RunState,
+    terminal: Option<&str>,
 ) -> Result<Plan, String> {
     let obj = arg
         .and_then(Value::as_object)
@@ -290,7 +331,7 @@ pub fn plan(
     }
     let mut argv = parse_exec(&entry.exec).map_err(|e| format!("{id}: {e}"))?;
     if entry.terminal {
-        argv.splice(0..0, ["kitty".to_string(), "-e".to_string()]);
+        argv.splice(0..0, terminal_prefix(dirs, terminal));
     }
     Ok(Plan {
         command: scope_command(id.strip_suffix(".desktop").unwrap_or(id), &argv, rand),
@@ -328,9 +369,20 @@ pub async fn launch(
     args: &[Value],
     runs: &std::sync::Mutex<super::run::RunState>,
 ) -> Result<Value, String> {
+    let terminal = link
+        .settings_rx()
+        .borrow()
+        .as_ref()
+        .and_then(|s| s.shell.terminal.clone());
     let plan = {
         let runs = runs.lock().unwrap_or_else(|e| e.into_inner());
-        plan(args.first(), &Dirs::from_env(), random_suffix(), &runs)?
+        plan(
+            args.first(),
+            &Dirs::from_env(),
+            random_suffix(),
+            &runs,
+            terminal.as_deref(),
+        )?
     };
     dispatch(&HyprSocket::from_env(), &plan).await?;
     if let Some(id) = &plan.record {
@@ -437,6 +489,7 @@ mod tests {
             &d,
             1,
             &RunState::default(),
+            None,
         )
         .unwrap();
         assert_eq!(
@@ -446,10 +499,23 @@ mod tests {
         assert_eq!(p.record.as_deref(), Some("org.a.B"));
     }
 
+    fn htop_plan(d: &Dirs, terminal: Option<&str>) -> Plan {
+        plan(
+            Some(&json!({"desktop_id":"t.desktop"})),
+            d,
+            0,
+            &RunState::default(),
+            terminal,
+        )
+        .unwrap()
+    }
+
+    const HTOP: (&str, &str) = ("t.desktop", "[Desktop Entry]\nExec=htop\nTerminal=true\n");
+
     #[test]
-    fn terminal_apps_get_kitty_and_bad_entries_refuse() {
+    fn terminal_apps_get_kitty_by_default_and_bad_entries_refuse() {
         let (_t, d) = dirs_with(&[
-            ("t.desktop", "[Desktop Entry]\nExec=htop\nTerminal=true\n"),
+            HTOP,
             ("h.desktop", "[Desktop Entry]\nExec=h\nHidden=true\n"),
             (
                 "m.desktop",
@@ -457,13 +523,7 @@ mod tests {
             ),
             ("d.desktop", "[Desktop Entry]\nExec=d %d\n"),
         ]);
-        let p = plan(
-            Some(&json!({"desktop_id":"t.desktop"})),
-            &d,
-            0,
-            &RunState::default(),
-        )
-        .unwrap();
+        let p = htop_plan(&d, None);
         assert!(
             p.command.ends_with("-- 'kitty' '-e' 'htop'"),
             "{}",
@@ -471,15 +531,102 @@ mod tests {
         );
         for id in ["h", "m", "d", "absent"] {
             assert!(
-                plan(Some(&json!({"desktop_id":id})), &d, 0, &RunState::default()).is_err(),
+                plan(
+                    Some(&json!({"desktop_id":id})),
+                    &d,
+                    0,
+                    &RunState::default(),
+                    None
+                )
+                .is_err(),
                 "{id}"
             );
         }
         // Ids that could escape the applications folder never reach the filesystem.
         for id in ["../x", "a/b", "", "a b"] {
-            let e = plan(Some(&json!({"desktop_id":id})), &d, 0, &RunState::default()).unwrap_err();
+            let e = plan(
+                Some(&json!({"desktop_id":id})),
+                &d,
+                0,
+                &RunState::default(),
+                None,
+            )
+            .unwrap_err();
             assert!(e.starts_with("invalid desktop id"), "{e}");
         }
+    }
+
+    #[test]
+    fn terminal_uses_chosen_entry() {
+        let (_t, d) = dirs_with(&[HTOP, ("foot.desktop", "[Desktop Entry]\nExec=foot\n")]);
+        for id in ["foot", "foot.desktop"] {
+            let p = htop_plan(&d, Some(id));
+            assert!(
+                p.command.ends_with("-- 'foot' '-e' 'htop'"),
+                "{}",
+                p.command
+            );
+        }
+    }
+
+    #[test]
+    fn terminal_arg_from_x_terminal_arg_exec() {
+        let (_t, d) = dirs_with(&[
+            HTOP,
+            (
+                "gnome-terminal.desktop",
+                "[Desktop Entry]\nExec=gnome-terminal %U\nX-TerminalArgExec=--\n",
+            ),
+        ]);
+        let p = htop_plan(&d, Some("gnome-terminal"));
+        assert!(
+            p.command.ends_with("-- 'gnome-terminal' '--' 'htop'"),
+            "{}",
+            p.command
+        );
+    }
+
+    #[test]
+    fn terminal_falls_back_to_kitty() {
+        let (_t, d) = dirs_with(&[
+            HTOP,
+            ("bad.desktop", "[Desktop Entry]\nExec=bad %d\n"),
+            ("hid.desktop", "[Desktop Entry]\nExec=hid\nHidden=true\n"),
+            (
+                "gone.desktop",
+                "[Desktop Entry]\nExec=gone\nTryExec=/no/such/bin\n",
+            ),
+            ("tty.desktop", "[Desktop Entry]\nExec=tty\nTerminal=true\n"),
+            ("noexec.desktop", "[Desktop Entry]\nName=x\n"),
+        ]);
+        for t in [
+            "missing", "bad", "hid", "gone", "tty", "noexec", "../x", "a/b", "",
+        ] {
+            let p = htop_plan(&d, Some(t));
+            assert!(
+                p.command.ends_with("-- 'kitty' '-e' 'htop'"),
+                "{t}: {}",
+                p.command
+            );
+        }
+    }
+
+    #[test]
+    fn hostile_terminal_entry_stays_argv() {
+        let (_t, d) = dirs_with(&[
+            HTOP,
+            (
+                "evil.desktop",
+                "[Desktop Entry]\nExec=evil \"a; rm -rf ~\" %f\nX-TerminalArgExec=$(id)\n",
+            ),
+        ]);
+        let p = htop_plan(&d, Some("evil"));
+        assert!(
+            p.command
+                .ends_with("-- 'evil' 'a; rm -rf ~' '$(id)' 'htop'"),
+            "{}",
+            p.command
+        );
     }
 
     #[test]
@@ -490,6 +637,7 @@ mod tests {
             &d,
             2,
             &RunState::default(),
+            None,
         )
         .unwrap();
         assert_eq!(
@@ -499,17 +647,17 @@ mod tests {
         assert_eq!(p.record, None);
         let mut runs = RunState::default();
         run_item("> echo hi", 7, &mut runs).unwrap();
-        let p = plan(Some(&json!({"run_id":"run-7"})), &d, 3, &runs).unwrap();
+        let p = plan(Some(&json!({"run_id":"run-7"})), &d, 3, &runs, None).unwrap();
         assert_eq!(
             p.command,
             "systemd-run --user --scope --collect --unit=app-uq-run-00000003 -- 'sh' '-c' 'echo hi'"
         );
         assert_eq!(p.record, None);
         assert_eq!(
-            plan(Some(&json!({"run_id":"run-8"})), &d, 0, &runs).unwrap_err(),
+            plan(Some(&json!({"run_id":"run-8"})), &d, 0, &runs, None).unwrap_err(),
             "unknown run id"
         );
-        assert!(plan(Some(&json!({"run_id":5})), &d, 0, &runs).is_err());
+        assert!(plan(Some(&json!({"run_id":5})), &d, 0, &runs, None).is_err());
         for bad in [
             json!({"argv":[]}),
             json!({"argv":[1]}),
@@ -517,11 +665,11 @@ mod tests {
             json!("x"),
         ] {
             assert!(
-                plan(Some(&bad), &d, 0, &RunState::default()).is_err(),
+                plan(Some(&bad), &d, 0, &RunState::default(), None).is_err(),
                 "{bad}"
             );
         }
-        assert!(plan(None, &d, 0, &RunState::default()).is_err());
+        assert!(plan(None, &d, 0, &RunState::default(), None).is_err());
     }
 
     #[tokio::test]
