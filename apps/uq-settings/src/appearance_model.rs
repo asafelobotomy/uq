@@ -154,6 +154,10 @@ impl AppearanceModel {
         let count = self.in_flight + 1;
         self.as_mut().rust_mut().in_flight = count;
         self.as_mut().set_busy(true);
+        if !matches!(op, Op::Refresh) {
+            // A new user action replaces the old message; a refresh keeps it on show.
+            self.as_mut().set_error(QString::default());
+        }
         handle.spawn(async move {
             let outcome = state.run(op).await;
             let _ = qt.queue(move |m| m.finish(outcome));
@@ -165,8 +169,9 @@ impl AppearanceModel {
         let count = self.in_flight.saturating_sub(1);
         self.as_mut().rust_mut().in_flight = count;
         self.as_mut().set_busy(count > 0);
-        self.as_mut()
-            .set_error(QString::from(outcome.error.as_deref().unwrap_or("")));
+        if let Some(error) = &outcome.error {
+            self.as_mut().set_error(QString::from(error));
+        }
         self.set_state_json(QString::from(&outcome.state.to_string()));
     }
 

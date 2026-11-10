@@ -21,25 +21,10 @@ QQC2.ScrollView {
     readonly property var appearance: snap.appearance || {}
     readonly property var schedule: snap.schedule || { mode: "off" }
     readonly property bool ready: App.uqdUp
-    // The schedule mode on show: the saved one until the user picks another.
-    property string mode: schedule.mode || "off"
-    readonly property var modes: [
-        { id: "off", name: "Off" },
-        { id: "fixed", name: "At set times" },
-        { id: "sun", name: "Sunrise and sunset" }
-    ]
-
-    function modeIndex(id) {
-        return modes.findIndex(m => m.id === id);
-    }
     function field(name, value) {
         am.setAppearance(name, JSON.stringify(value));
     }
-    function hhmm(t, fallback) {
-        return t ? String(t).substring(0, 5) : fallback;
-    }
 
-    onScheduleChanged: mode = schedule.mode || "off"
     Component.onCompleted: am.refresh()
     Accessible.role: Accessible.Pane
     Accessible.name: "Appearance"
@@ -154,91 +139,12 @@ QQC2.ScrollView {
                 }
             }
         }
-        SettingRow {
-            settingId: "schedule"
-            label: "Switch automatically"
+        ScheduleEditor {
+            schedule: page.schedule
             highlight: App.highlight
             enabled: page.ready
+            onApply: json => am.setSchedule(json)
             Layout.fillWidth: true
-            QQC2.ComboBox {
-                id: modeBox
-                model: page.modes.map(m => m.name)
-                currentIndex: page.modeIndex(page.mode)
-                Accessible.name: "Switch automatically"
-                onActivated: index => {
-                    const id = page.modes[index].id;
-                    if (id === "off")
-                        am.setSchedule(JSON.stringify({ mode: "off" }));
-                    page.mode = id;
-                    // Until applied, the box keeps showing the saved mode.
-                    if (id === "off")
-                        modeBox.currentIndex = Qt.binding(() => page.modeIndex(page.mode));
-                }
-            }
-        }
-        SettingRow {
-            objectName: "fixedTimes"
-            label: "Light from, dark from"
-            visible: page.mode === "fixed"
-            enabled: page.ready
-            Layout.fillWidth: true
-            QQC2.TextField {
-                id: lightAt
-                text: page.hhmm(page.schedule.light_at, "07:00")
-                inputMethodHints: Qt.ImhPreferNumbers
-                validator: RegularExpressionValidator { regularExpression: /^([01]\d|2[0-3]):[0-5]\d$/ }
-                Accessible.name: "Light from (HH:MM)"
-                Layout.preferredWidth: Kirigami.Units.gridUnit * 5
-            }
-            QQC2.TextField {
-                id: darkAt
-                text: page.hhmm(page.schedule.dark_at, "19:00")
-                inputMethodHints: Qt.ImhPreferNumbers
-                validator: RegularExpressionValidator { regularExpression: /^([01]\d|2[0-3]):[0-5]\d$/ }
-                Accessible.name: "Dark from (HH:MM)"
-                Layout.preferredWidth: Kirigami.Units.gridUnit * 5
-            }
-            QQC2.Button {
-                Accessible.name: "Apply times"
-                enabled: lightAt.acceptableInput && darkAt.acceptableInput
-                contentItem: UqLabel {
-                    text: "Apply"
-                    padding: Kirigami.Units.smallSpacing
-                }
-                onClicked: am.setSchedule(JSON.stringify({ mode: "fixed", light_at: lightAt.text + ":00", dark_at: darkAt.text + ":00" }))
-            }
-        }
-        SettingRow {
-            objectName: "sunPlace"
-            label: "Latitude, longitude"
-            visible: page.mode === "sun"
-            enabled: page.ready
-            Layout.fillWidth: true
-            QQC2.TextField {
-                id: lat
-                text: page.schedule.lat !== undefined ? String(page.schedule.lat) : ""
-                placeholderText: "51.5"
-                validator: DoubleValidator { bottom: -90; top: 90; notation: DoubleValidator.StandardNotation }
-                Accessible.name: "Latitude"
-                Layout.preferredWidth: Kirigami.Units.gridUnit * 6
-            }
-            QQC2.TextField {
-                id: lon
-                text: page.schedule.lon !== undefined ? String(page.schedule.lon) : ""
-                placeholderText: "-0.13"
-                validator: DoubleValidator { bottom: -180; top: 180; notation: DoubleValidator.StandardNotation }
-                Accessible.name: "Longitude"
-                Layout.preferredWidth: Kirigami.Units.gridUnit * 6
-            }
-            QQC2.Button {
-                Accessible.name: "Apply location"
-                enabled: lat.acceptableInput && lon.acceptableInput
-                contentItem: UqLabel {
-                    text: "Apply"
-                    padding: Kirigami.Units.smallSpacing
-                }
-                onClicked: am.setSchedule(JSON.stringify({ mode: "sun", lat: Number(lat.text), lon: Number(lon.text) }))
-            }
         }
 
         UqLabel {
@@ -267,6 +173,7 @@ QQC2.ScrollView {
             Layout.fillWidth: true
         }
         OverrideSpin {
+            busy: am.busy
             settingId: "font-size"
             label: "Font size"
             highlight: App.highlight
@@ -296,6 +203,7 @@ QQC2.ScrollView {
             Layout.fillWidth: true
         }
         OverrideSpin {
+            busy: am.busy
             settingId: "cursor-size"
             label: "Cursor size"
             highlight: App.highlight

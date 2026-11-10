@@ -170,8 +170,11 @@ mod tests {
         fn get_schedule(&self) -> String {
             r#"{"mode":"off"}"#.into()
         }
-        fn get_section(&self, _domain: &str) -> String {
-            self.section.lock().unwrap().to_string()
+        async fn get_section(&self, _domain: &str) -> String {
+            let read = self.section.lock().unwrap().to_string();
+            // A slow read, so an unserialised read-modify-write would lose an update.
+            tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+            read
         }
         /// Like uqd: font_size must be 6..=32.
         fn set_section(&self, _domain: &str, json: &str) -> Result<(), FakeError> {
@@ -261,6 +264,20 @@ mod tests {
         );
         assert_eq!(out.state["themes"], json!(["gruvbox", "dracula"]));
         assert_eq!(out.state["schedule"]["mode"], "off");
+    }
+
+    #[tokio::test]
+    async fn concurrent_field_changes_both_land() {
+        let r = rig().await;
+        let (a, b) = tokio::join!(
+            r.state.run(field("mono_font", json!("Fira Code"))),
+            r.state.run(field("cursor_size", json!(32)))
+        );
+        assert_eq!((a.error, b.error), (None, None));
+        let section = r.section.lock().unwrap().clone();
+        assert_eq!(section["mono_font"], "Fira Code");
+        assert_eq!(section["cursor_size"], 32);
+        assert_eq!(section["ui_font"], "Inter");
     }
 
     #[tokio::test]

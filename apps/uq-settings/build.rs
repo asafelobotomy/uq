@@ -11,6 +11,7 @@ fn main() {
         QmlFile::from("qml/components/SettingRow.qml"),
         QmlFile::from("qml/components/OverrideCombo.qml"),
         QmlFile::from("qml/components/OverrideSpin.qml"),
+        QmlFile::from("qml/components/ScheduleEditor.qml"),
         QmlFile::from("qml/pages/AppearancePage.qml"),
         QmlFile::from("qml/pages/WallpaperPage.qml"),
     ]))

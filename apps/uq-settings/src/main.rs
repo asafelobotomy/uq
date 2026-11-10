@@ -4,7 +4,8 @@
 //! `uq-settings --page P --setting S` forwards `ShowPage(P, S)` to it and exits 0.
 //!
 //! `uq-settings --screenshots <dir>` renders every page offscreen into `<dir>/<page>.png` and
-//! exits, without touching the session bus.
+//! exits, without touching the session bus. (Test aid: with `UQ_SETTINGS_SHOTS_BUS` and an explicit
+//! `DBUS_SESSION_BUS_ADDRESS` it also follows uqd on that bus, to draw the pages with data.)
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -76,10 +77,20 @@ fn main() -> ExitCode {
         Some(dir) => {
             app::post(Event::ScreenshotDir(dir.display().to_string()));
             // Only against a private bus the caller points us at; never the real session.
-            if std::env::var_os("UQ_SETTINGS_SHOTS_BUS").is_some() {
-                runtime.block_on(session::follow_only()).ok()
-            } else {
+            if std::env::var_os("UQ_SETTINGS_SHOTS_BUS").is_none() {
                 None
+            } else if std::env::var_os("DBUS_SESSION_BUS_ADDRESS").is_none() {
+                eprintln!(
+                    "uq-settings: UQ_SETTINGS_SHOTS_BUS needs DBUS_SESSION_BUS_ADDRESS set to a private bus; not connecting"
+                );
+                None
+            } else {
+                runtime
+                    .block_on(session::follow_only())
+                    .map_err(|e| {
+                        eprintln!("uq-settings: can't follow uqd for the screenshots: {e}")
+                    })
+                    .ok()
             }
         }
         None => match runtime.block_on(session::start(&args.page, &args.setting)) {

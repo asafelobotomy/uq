@@ -13,6 +13,9 @@ SettingRow {
     property int to: 100
     property int fallback: 10
     property string unit: ""
+    /// True while a request is in flight; the spin box then keeps what the user chose, and shows
+    /// the saved value again once it is done (so a refused change snaps back).
+    property bool busy: false
     /// The new value: a number, or null for "Use theme".
     signal chosen(var value)
 
@@ -26,8 +29,11 @@ SettingRow {
         Accessible.name: root.label
         onValueModified: {
             root.chosen(spin.value);
-            spin.value = Qt.binding(() => root.value === null ? root.fallback : root.value);
         }
+    }
+    onBusyChanged: {
+        if (!busy)
+            spin.value = Qt.binding(() => root.value === null ? root.fallback : root.value);
     }
     UqLabel {
         text: root.unit
