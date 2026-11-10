@@ -3,8 +3,11 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+pub(crate) use load::{check_kept, lenient};
+
 mod appearance;
 mod layouts;
+mod load;
 mod look;
 mod shell;
 mod wallpaper;
@@ -168,29 +171,36 @@ impl Default for MouseSettings {
     }
 }
 
+/// Every domain loads leniently (a wrong-typed or newer value costs only that domain, or that
+/// field where the domain is lenient per field), so a bad value never fails the whole file.
+/// [`Settings::validated`] then repairs values that parse but break a rule, per domain.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
+    #[serde(deserialize_with = "load::lenient_pins")]
     pub pinned: Vec<String>,
+    #[serde(deserialize_with = "lenient")]
     pub weather_location: Option<Location>,
+    #[serde(deserialize_with = "lenient")]
     pub idle: IdleTimings,
+    #[serde(deserialize_with = "lenient")]
     pub notif: NotifSettings,
+    #[serde(deserialize_with = "lenient")]
     pub privacy: PrivacySettings,
+    #[serde(deserialize_with = "lenient")]
     pub mouse: MouseSettings,
+    #[serde(deserialize_with = "lenient")]
     pub appearance: Appearance,
+    #[serde(deserialize_with = "lenient")]
     pub wallpaper: Wallpaper,
+    #[serde(deserialize_with = "lenient")]
     pub look: Look,
     /// Default layout and per-layout options (`[layout_options]`; `[layouts]` holds the
     /// workspace rules in `State`).
+    #[serde(deserialize_with = "lenient")]
     pub layout_options: LayoutOptions,
-    #[serde(deserialize_with = "lenient_shell")]
+    #[serde(deserialize_with = "lenient")]
     pub shell: ShellSettings,
-}
-
-/// A wrong-typed `[shell]` loads as the defaults instead of failing the whole file.
-fn lenient_shell<'de, D: serde::Deserializer<'de>>(d: D) -> Result<ShellSettings, D::Error> {
-    let v = Value::deserialize(d)?;
-    Ok(ShellSettings::deserialize(v).unwrap_or_default())
 }
 
 pub(crate) fn invalid(key: &str, reason: impl Into<String>) -> SettingError {
@@ -259,39 +269,6 @@ pub fn round2(x: f64) -> f64 {
 }
 
 impl Settings {
-    /// Re-validate settings that came from outside (a hand-edited file): every key is replayed
-    /// through [`Settings::apply`] from a blank idle table, so the result is normalised
-    /// (de-duplicated, rounded) and holds every §2.4 invariant.
-    pub fn validated(&self) -> Result<Settings, SettingError> {
-        let json = serde_json::to_value(self).expect("settings serialise");
-        let mut out = Settings {
-            idle: IdleTimings {
-                dim: None,
-                lock: None,
-                screen_off: None,
-                suspend_battery: None,
-                ..IdleTimings::default()
-            },
-            ..Settings::default()
-        };
-        for key in SETTING_KEYS {
-            let value = key
-                .split('.')
-                .try_fold(&json, |v, part| v.get(part))
-                .cloned()
-                .unwrap_or(Value::Null);
-            out.apply(key, value)?;
-        }
-        out.appearance = self.appearance.clone();
-        out.wallpaper = self.wallpaper.clone();
-        out.appearance.validate()?;
-        out.wallpaper.validate()?;
-        out.look = self.look.clone().normalised()?;
-        out.layout_options = self.layout_options.clone().normalised()?;
-        out.shell = self.shell.clone().sanitised();
-        Ok(out)
-    }
-
     /// One whole section as JSON. `layouts` also needs the workspace rules, so it goes through
     /// `State::section`.
     pub fn section(&self, domain: &str) -> Result<Value, SettingError> {
@@ -324,8 +301,10 @@ impl Settings {
             }
             "look" => {
                 check_known(domain, &value, &Look::FIELDS)?;
-                let l: Look =
-                    serde_json::from_value(value).map_err(|e| invalid(domain, e.to_string()))?;
+                let l: Look = serde_json::from_value(value.clone())
+                    .map_err(|e| invalid(domain, e.to_string()))?;
+                let parsed = serde_json::to_value(&l).expect("settings serialise");
+                check_kept(domain, &value, Some(&parsed))?;
                 self.look = l.normalised()?;
             }
             "shell" => self.shell = ShellSettings::from_section(&value)?,

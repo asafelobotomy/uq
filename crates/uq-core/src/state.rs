@@ -17,6 +17,7 @@ pub struct State {
     pub theme: String,
     pub variant: Variant,
     pub schedule: Schedule,
+    #[serde(deserialize_with = "lenient_rules")]
     pub layouts: BTreeMap<String, Layout>,
     /// The scheduled transition uqd last applied; a manual change holds until a newer one.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -24,6 +25,29 @@ pub struct State {
     #[serde(flatten)]
     pub settings: Settings,
     pub launch_counts: BTreeMap<String, u32>,
+}
+
+/// Workspace rules load one by one: a rule whose layout this version doesn't know (a newer
+/// uQ's) is dropped with a log line, and the others are kept.
+fn lenient_rules<'de, D: serde::Deserializer<'de>>(
+    d: D,
+) -> Result<BTreeMap<String, Layout>, D::Error> {
+    let serde_json::Value::Object(obj) = serde_json::Value::deserialize(d)? else {
+        tracing::warn!("state: [layouts] is not a table; ignoring it");
+        return Ok(BTreeMap::new());
+    };
+    Ok(obj
+        .into_iter()
+        .filter_map(
+            |(ws, v)| match serde_json::from_value::<Layout>(v.clone()) {
+                Ok(l) => Some((ws, l)),
+                Err(_) => {
+                    tracing::warn!("state: dropping workspace rule {ws:?} = {v}");
+                    None
+                }
+            },
+        )
+        .collect())
 }
 
 /// TOML has no null, so a disabled idle stage (`None`) is stored as 0 in `state.toml`.
@@ -45,8 +69,9 @@ impl Default for State {
 
 impl State {
     /// Load state. A missing file yields the defaults. A file that won't parse is renamed to
-    /// `state.toml.bad-<unix_secs>` first so pins and counts are never silently lost. Settings
-    /// that parse but break a §2.4 invariant fall back to the defaults (the file is kept).
+    /// `state.toml.bad-<unix_secs>` first so pins and counts are never silently lost. A value
+    /// that is wrong-typed, or parses but breaks a rule, costs only its own field or domain
+    /// (see [`Settings::validated`]); the file is kept.
     pub fn load(path: &Path) -> State {
         let src = match std::fs::read_to_string(path) {
             Ok(src) => src,
@@ -78,16 +103,11 @@ impl State {
                 return State::default();
             }
         };
-        match state.settings.validated() {
-            Ok(valid) => state.settings = valid,
-            Err(e) => {
-                tracing::warn!(
-                    "{}: invalid settings ({e}); using default settings",
-                    path.display()
-                );
-                state.settings = Settings::default();
-            }
+        let (valid, repaired) = state.settings.validated();
+        for e in repaired {
+            tracing::warn!("{}: {e}; that setting uses its default", path.display());
         }
+        state.settings = valid;
         state
     }
 
@@ -156,6 +176,9 @@ impl State {
         atomic_write(path, &body)
     }
 }
+
+#[cfg(test)]
+mod load_tests;
 
 #[cfg(test)]
 mod tests {

@@ -2,29 +2,15 @@
 //! Per-workspace rules stay in `State::layouts`; `State::section` joins the two.
 
 use super::look::ranged_f64;
-use super::{SettingError, check_known, invalid, round2};
+use super::{SettingError, check_kept, check_known, invalid, lenient, round2};
 use crate::lua::{Layout, workspace_selector};
-use serde::de::{DeserializeOwned, IntoDeserializer};
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 
 const MAX_WORKSPACES: usize = 64;
 const MAX_SELECTOR_CHARS: usize = 64;
-
-/// Load-time leniency: a value this version doesn't know (a newer uqd's) loads as unset. The
-/// API stays strict through the `check_values` methods.
-fn lenient<'de, D, T>(d: D) -> Result<Option<T>, D::Error>
-where
-    D: Deserializer<'de>,
-    T: DeserializeOwned,
-{
-    let s = Option::<String>::deserialize(d)?;
-    Ok(s.and_then(|s| {
-        T::deserialize(IntoDeserializer::<serde::de::value::Error>::into_deserializer(s.as_str()))
-            .ok()
-    }))
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -104,9 +90,9 @@ fn check_enum<T: DeserializeOwned>(
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct DwindleOptions {
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
     pub preserve_split: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
     pub smart_split: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
     pub force_split: Option<ForceSplit>,
@@ -123,7 +109,7 @@ impl DwindleOptions {
 #[serde(default)]
 pub struct MasterOptions {
     /// Master area share, 0.1 to 0.9.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
     pub mfact: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
     pub new_status: Option<NewStatus>,
@@ -143,9 +129,9 @@ impl MasterOptions {
 #[serde(default)]
 pub struct ScrollingOptions {
     /// Column width as a share of the screen, 0.1 to 1.0.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
     pub column_width: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
     pub fullscreen_on_one_column: Option<bool>,
 }
 
@@ -160,8 +146,11 @@ impl ScrollingOptions {
 pub struct LayoutOptions {
     #[serde(skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
     pub default: Option<Layout>,
+    #[serde(deserialize_with = "lenient")]
     pub dwindle: DwindleOptions,
+    #[serde(deserialize_with = "lenient")]
     pub master: MasterOptions,
+    #[serde(deserialize_with = "lenient")]
     pub scrolling: ScrollingOptions,
 }
 
@@ -213,8 +202,11 @@ impl LayoutOptions {
         if let Some(o) = opts.as_object_mut() {
             o.remove("workspaces");
         }
-        let opts: LayoutOptions =
-            serde_json::from_value(opts).map_err(|e| invalid(KEY, e.to_string()))?;
+        let parsed: LayoutOptions =
+            serde_json::from_value(opts.clone()).map_err(|e| invalid(KEY, e.to_string()))?;
+        let back = serde_json::to_value(&parsed).expect("settings serialise");
+        check_kept(KEY, &opts, Some(&back))?;
+        let opts = parsed;
         Ok((opts.normalised()?, rules))
     }
 
@@ -308,6 +300,11 @@ mod tests {
             json!({"dwindle": {"bogus": 1}}),
             json!({"bogus": 1}),
             json!({"workspaces": []}),
+            // Wrong types are refused by the API even though load drops them.
+            json!({"master": {"mfact": "x"}}),
+            json!({"dwindle": 3}),
+            json!({"scrolling": {"fullscreen_on_one_column": 1}}),
+            json!({"dwindle": {"preserve_split": "yes"}}),
         ] {
             assert!(ok(bad.clone()).is_err(), "{bad}");
         }

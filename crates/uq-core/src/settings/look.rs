@@ -2,34 +2,34 @@
 //! overridden" (the theme's `ui` token, or base.lua's value where the theme has none).
 
 use super::appearance::ranged;
-use super::{SettingError, invalid, round2};
+use super::{SettingError, invalid, lenient, round2};
 use serde::{Deserialize, Serialize};
 
 /// Unknown keys are ignored on load and rejected by [`super::Settings::set_section`] via
-/// [`Look::FIELDS`].
+/// [`Look::FIELDS`]. A wrong-typed value loads as unset.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Look {
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
     pub gaps_in: Option<u8>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
     pub gaps_out: Option<u8>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
     pub border_width: Option<u8>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
     pub rounding: Option<u8>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
     pub blur: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
     pub blur_size: Option<u8>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
     pub blur_passes: Option<u8>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
     pub shadow: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
     pub animations: Option<bool>,
     /// 0.25 to 4.0; 2.0 is twice as fast.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
     pub animation_speed: Option<f64>,
 }
 
@@ -109,6 +109,8 @@ mod tests {
             json!({"rounding": 41}),
             json!({"rounding": -1}),
             json!({"blur": "yes"}),
+            json!({"gaps_in": 300}),
+            json!({"animation_speed": "fast"}),
         ] {
             assert!(s.set_section("look", bad.clone()).is_err(), "{bad}");
         }

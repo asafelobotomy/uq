@@ -188,10 +188,18 @@ fn validated_keeps_mouse_and_rejects_bad_files() {
     let mut s = Settings::default();
     s.apply("mouse.sensitivity", json!(0.3)).unwrap();
     s.apply("mouse.accel_profile", json!("adaptive")).unwrap();
-    assert_eq!(s.validated().unwrap(), s);
+    assert_eq!(s.validated().0, s);
     let mut bad = s.clone();
     bad.mouse.scroll_factor = 50.0;
-    assert!(bad.validated().is_err());
+    bad.pinned = vec!["a.desktop".into()];
+    let (fixed, errors) = bad.validated();
+    assert_eq!(errors.len(), 1, "{errors:?}");
+    assert_eq!(
+        fixed.mouse,
+        MouseSettings::default(),
+        "the bad domain resets"
+    );
+    assert_eq!(fixed.pinned, ["a.desktop"], "other domains are kept");
     // A state file from before mouse settings existed loads with the defaults.
     let old: Settings = serde_json::from_value(json!({"pinned": ["a"]})).unwrap();
     assert_eq!(old.mouse, MouseSettings::default());
@@ -217,7 +225,7 @@ fn section_round_trip() {
     t.set_section("appearance", a).unwrap();
     t.set_section("wallpaper", w).unwrap();
     assert_eq!(t, s);
-    assert_eq!(s.validated().unwrap(), s);
+    assert_eq!(s.validated().0, s);
     assert!(renders_section("appearance") && !renders_section("wallpaper"));
     assert!(renders_section("look") && renders_section("layouts"));
     assert_eq!(
@@ -266,7 +274,7 @@ fn look_section_round_trip() {
     let mut t = Settings::default();
     t.set_section("look", l).unwrap();
     assert_eq!(t, s);
-    assert_eq!(s.validated().unwrap(), s);
+    assert_eq!(s.validated().0, s);
     // An empty write clears every override.
     s.set_section("look", json!({})).unwrap();
     assert_eq!(s.look, Look::default());
@@ -287,7 +295,10 @@ fn unknown_look_field_rejected() {
             blur_passes: Some(9),
             ..Look::default()
         },
+        pinned: vec!["a.desktop".into()],
         ..Settings::default()
     };
-    assert!(bad.validated().is_err());
+    let (fixed, errors) = bad.validated();
+    assert_eq!(errors.len(), 1, "{errors:?}");
+    assert_eq!((fixed.look, fixed.pinned), (Look::default(), bad.pinned));
 }
