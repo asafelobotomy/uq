@@ -102,6 +102,7 @@ QQC2.ScrollView {
     function showNews() {
         const s = page.snap;
         // The editor's save has ended (busy goes false before the error and the state arrive).
+        // The editor also ends it on busy going false; finishSave runs only once.
         if (editor.saving && !rm.busy)
             editor.finishSave(rm.error);
         const pick = s.pick;
@@ -205,6 +206,8 @@ QQC2.ScrollView {
         nameLimit: page.limits.name || 100
         patternLimit: page.limits.pattern || 256
         canSave: page.idle
+        busy: rm.busy
+        errorNow: () => rm.error
         onRuleAccepted: (kind, ruleJson, replaces) => {
             rm.save(kind, ruleJson, replaces);
             // No request went out (no session bus, or the rule couldn't be read): say so here.

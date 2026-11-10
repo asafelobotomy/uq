@@ -27,6 +27,10 @@ Kirigami.Dialog {
     property int patternLimit: 256
     /// Whether Save can be pressed (the page isn't busy).
     property bool canSave: true
+    /// Whether a request to uQ is in flight (RulesModel.busy). A save ends when it goes false.
+    property bool busy: false
+    /// `() => text`: the message of the last refused request, "" for none (RulesModel.error).
+    property var errorNow: () => ""
     /// The rule has a name (or, for a workspace rule, a workspace).
     readonly property bool complete: kind === "workspace" ? selectorBox.text.trim() !== "" : nameBox.text.trim() !== ""
 
@@ -237,7 +241,8 @@ Kirigami.Dialog {
         editor.saving = true;
         editor.ruleAccepted(editor.kind, json, editor.replaces);
     }
-    /// uQ answered the save: close on success, else keep the draft and say why.
+    /// uQ answered the save: close on success, else keep the draft and say why. Only the first
+    /// call after a Save does anything, so the page may call it from more than one place.
     function finishSave(error) {
         if (!editor.saving)
             return;
@@ -247,6 +252,13 @@ Kirigami.Dialog {
             editor.close();
         else
             editor.saveError = "That wasn't saved: " + why;
+    }
+
+    // A save ends when the request does, whether or not the page's state changed (an equal
+    // state sends no change signal). Later, so the request's error has been set by then.
+    onBusyChanged: {
+        if (!editor.busy && editor.saving)
+            Qt.callLater(() => editor.finishSave(editor.errorNow()));
     }
 
     title: editor.isNew ? "New rule" : "Edit rule"

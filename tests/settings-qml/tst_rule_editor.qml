@@ -193,6 +193,40 @@ Item {
             compare(JSON.parse(e.ruleJson()).effects, { "center": true });
         }
 
+        /// The page's request: busy goes true, then false, with no change of state.
+        function request(e) {
+            e.busy = true;
+            e.canSave = false;
+            e.busy = false;
+            e.canSave = true;
+        }
+
+        function test_save_ends_on_busy_even_with_an_unchanged_state() {
+            const e = make("window");
+            floatRule(e);
+            e.errorNow = () => "<i>no</i> such thing";
+            for (let i = 0; i < 2; i++) {
+                e.save();
+                verify(e.saving, "round " + i);
+                verify(!control(e, "editorPick").enabled);
+                request(e);
+                tryCompare(e, "saving", false);
+                compare(e.saveError, "That wasn't saved: <i>no</i> such thing", "the same refusal shows again");
+                verify(control(e, "editorPick").enabled, "Pick works again");
+                verify(e.saveEnabled);
+                e.finishSave("late");
+                compare(e.saveError, "That wasn't saved: <i>no</i> such thing", "a second finish does nothing");
+            }
+            e.errorNow = () => "";
+            e.open();
+            tryVerify(() => e.opened);
+            e.save();
+            request(e);
+            tryCompare(e, "saving", false);
+            tryVerify(() => !e.opened, 3000, "a saved rule closes the editor");
+            compare(e.saveError, "");
+        }
+
         function test_pick_follows_busy() {
             const e = make("window");
             verify(control(e, "editorPick").enabled);
