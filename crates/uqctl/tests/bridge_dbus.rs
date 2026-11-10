@@ -285,3 +285,43 @@ async fn bridge_lists_applies_and_turns_off_profiles() {
     let bad = b.call(4, "ApplyProfile", json!(["nope"])).await;
     assert!(bad["err"].is_string(), "{bad}");
 }
+
+#[tokio::test]
+async fn bridge_forwards_pick_requests_and_done() {
+    let bus = private_bus();
+    let dir = tempfile::tempdir().unwrap();
+    let _uqd = serve_uqd(&bus, dir.path()).await;
+    let mut b = Bridge::start(&bus);
+    b.next().await;
+
+    let conn = zbus::connection::Builder::address(bus.address.as_str())
+        .unwrap()
+        .build()
+        .await
+        .unwrap();
+    let proxy = uq_core::client::DesktopProxy::new(&conn).await.unwrap();
+    let caller = tokio::spawn(async move { proxy.pick_window().await });
+
+    let ev = b.event("PickRequested").await;
+    let token = ev["token"].as_str().expect("a token").to_owned();
+    assert_eq!(token.len(), 32, "{ev}");
+
+    assert_eq!(
+        b.call(1, "PickDone", json!([token, "shown"])).await,
+        json!({"v":1,"id":1,"ok":null})
+    );
+    assert_eq!(
+        b.call(2, "PickDone", json!([token, "cancel"])).await,
+        json!({"v":1,"id":2,"ok":null})
+    );
+    let reply = tokio::time::timeout(Duration::from_secs(5), caller)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert!(reply.contains("cancelled"), "{reply}");
+
+    // Wrong shapes are refused before reaching uqd; an unknown outcome is uqd's refusal.
+    assert!(b.call(3, "PickDone", json!([token])).await["err"].is_string());
+    assert!(b.call(4, "PickDone", json!([token, "bogus"])).await["err"].is_string());
+}

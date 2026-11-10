@@ -9,6 +9,7 @@ TestCase {
     SignalSpy { id: themeSpy; target: Bridge; signalName: "themeChanged" }
     SignalSpy { id: layoutSpy; target: Bridge; signalName: "layoutChanged" }
     SignalSpy { id: profileSpy; target: Bridge; signalName: "profileChanged" }
+    SignalSpy { id: pickSpy; target: Bridge; signalName: "pickRequested" }
     SignalSpy { id: eventSpy; target: Bridge; signalName: "event" }
     SignalSpy { id: resultsSpy; target: Bridge; signalName: "searchResults" }
     SignalSpy { id: sleepSpy; target: Bridge; signalName: "prepareForSleep" }
@@ -19,7 +20,7 @@ TestCase {
         Bridge.reset();
         Bridge.writer = function (s) { sent.push(s); };
         Bridge.processStarted();
-        themeSpy.clear(); layoutSpy.clear(); profileSpy.clear(); eventSpy.clear(); resultsSpy.clear();
+        themeSpy.clear(); layoutSpy.clear(); profileSpy.clear(); pickSpy.clear(); eventSpy.clear(); resultsSpy.clear();
         sleepSpy.clear(); lockReqSpy.clear();
     }
 
@@ -71,6 +72,10 @@ TestCase {
         compare(profileSpy.count, 2);
         compare(profileSpy.signalArguments[0][0], "gaming");
         compare(profileSpy.signalArguments[1][0], "");
+        Bridge.feed('{"v":1,"event":"PickRequested","data":{"token":"0123456789abcdef0123456789abcdef"}}');
+        Bridge.feed('{"v":1,"event":"PickRequested","data":null}');
+        compare(pickSpy.count, 1);
+        compare(pickSpy.signalArguments[0][0], "0123456789abcdef0123456789abcdef");
         compare(Bridge.weather, null);
         Bridge.feed('{"v":1,"event":"Weather","data":{"temp_c":3,"code":1,"is_day":true,"location_name":"Oslo"}}');
         compare(Bridge.weather.location_name, "Oslo");

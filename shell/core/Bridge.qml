@@ -24,6 +24,8 @@ QtObject {
     signal layoutChanged(string ws, string layout)
     // The active profile's id, or "" (also sent when the list of profiles changes).
     signal profileChanged(string id)
+    // A window pick began (uqd's PickRequested): show the overlay and answer with PickDone.
+    signal pickRequested(string token)
     // Spotlight results: {generation, provider, provider_name, source_dir, items}.
     signal searchResults(var data)
     // logind PrepareForSleep (true before sleep, false on resume) and the session's Lock signal.
@@ -172,6 +174,7 @@ QtObject {
             if (data) layoutChanged(String(data.workspace), String(data.layout));
             break;
         case "ProfileChanged": if (data) profileChanged(String(data.id)); break;
+        case "PickRequested": if (data) pickRequested(String(data.token)); break;
         case "Weather": weather = data; break;
         case "PublicIp": publicIp = data; break;
         case "NotifOwner":
