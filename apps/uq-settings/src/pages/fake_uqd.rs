@@ -2,11 +2,14 @@
 //! [`uq_core::state::State`] on a private bus, so refusals carry uq-core's own messages.
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use serde_json::{Map, Value, json};
 use uq_core::client::DESKTOP_NAME;
 use uq_core::schedule::Schedule;
+use uq_core::settings::provenance;
 use uq_core::settings::renders_section;
 use uq_core::state::State;
 use uq_core::test_bus::{Bus, connect, private_bus};
@@ -18,6 +21,7 @@ pub enum FakeError {
     ZBus(zbus::Error),
     InvalidSetting(String),
     ConfigInvalid(String),
+    Io(String),
 }
 
 fn invalid(e: impl ToString) -> FakeError {
@@ -29,6 +33,29 @@ pub struct FakeUqd {
     /// When set, the next `SetSection` of a domain that renders config fails with
     /// `ConfigInvalid`, as uqd does when Hyprland rejects the generated config.
     pub verify_error: Arc<Mutex<Option<String>>>,
+    pub explain: Explain,
+}
+
+/// What the fake's `Explain` answers. Without overrides each key is `uq` when the section sets
+/// it, else its [`provenance::OptionRow::null_source`], as uqd says when the live value matches.
+#[derive(Clone, Default)]
+pub struct Explain {
+    /// `"<domain>.<key>"` → fields that replace the computed entry's (`source`, `detail`).
+    pub overrides: Arc<Mutex<Map<String, Value>>>,
+    /// When set, every `Explain` call fails.
+    pub fails: Arc<AtomicBool>,
+    /// The domains `Reapply` was called with, in order.
+    pub reapplied: Arc<Mutex<Vec<String>>>,
+}
+
+impl Explain {
+    pub fn set(&self, key: &str, entry: Value) {
+        self.overrides.lock().unwrap().insert(key.into(), entry);
+    }
+
+    pub fn fail(&self) {
+        self.fails.store(true, Ordering::SeqCst);
+    }
 }
 
 #[zbus::interface(name = "org.uq.Desktop1")]
@@ -109,6 +136,51 @@ impl FakeUqd {
         Ok(())
     }
 
+    fn explain(&self, domain: &str) -> Result<String, FakeError> {
+        if self.explain.fails.load(Ordering::SeqCst) {
+            return Err(FakeError::Io("can't read the live session".into()));
+        }
+        let section = self
+            .state
+            .lock()
+            .unwrap()
+            .section(domain)
+            .map_err(invalid)?;
+        let overrides = self.explain.overrides.lock().unwrap();
+        let mut out = Map::new();
+        for row in provenance::options_for(domain) {
+            let stored = row.stored(&section);
+            let source = if stored.is_null() {
+                row.null_source.as_str()
+            } else {
+                "uq"
+            };
+            let mut entry =
+                json!({"source": source, "live": null, "stored": stored, "detail": null});
+            if let Some(Value::Object(o)) = overrides.get(&format!("{domain}.{}", row.json_key())) {
+                for (k, v) in o {
+                    entry[k] = v.clone();
+                }
+            }
+            out.insert(row.json_key().to_string(), entry);
+        }
+        Ok(Value::Object(out).to_string())
+    }
+
+    fn reapply(&self, domain: &str) -> Result<(), FakeError> {
+        self.state
+            .lock()
+            .unwrap()
+            .section(domain)
+            .map_err(invalid)?;
+        self.explain
+            .reapplied
+            .lock()
+            .unwrap()
+            .push(domain.to_string());
+        Ok(())
+    }
+
     fn clear_launch_counts(&self) {
         self.state.lock().unwrap().launch_counts.clear();
     }
@@ -133,6 +205,8 @@ pub struct Rig {
     pub client: zbus::Connection,
     pub state: Arc<Mutex<State>>,
     pub verify_error: Arc<Mutex<Option<String>>>,
+    /// What `Explain` answers, and what `Reapply` was asked.
+    pub explain: Explain,
 }
 
 /// A private bus with a [`FakeUqd`] serving `state`.
@@ -140,6 +214,7 @@ pub async fn rig(state: State) -> Rig {
     let bus = private_bus();
     let state = Arc::new(Mutex::new(state));
     let verify_error = Arc::new(Mutex::new(None));
+    let explain = Explain::default();
     let uqd = connect(&bus).await;
     uqd.object_server()
         .at(
@@ -147,6 +222,7 @@ pub async fn rig(state: State) -> Rig {
             FakeUqd {
                 state: state.clone(),
                 verify_error: verify_error.clone(),
+                explain: explain.clone(),
             },
         )
         .await
@@ -159,5 +235,6 @@ pub async fn rig(state: State) -> Rig {
         client,
         state,
         verify_error,
+        explain,
     }
 }

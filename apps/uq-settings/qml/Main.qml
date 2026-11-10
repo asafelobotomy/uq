@@ -21,6 +21,14 @@ Kirigami.ApplicationWindow {
             stack.replace(null, Qt.resolvedUrl(page.qml));
     }
 
+    // Coming back to the window re-reads the page: user.lua or the live session may have changed
+    // meanwhile, and the rows' sources should say so. Pages that read from uqd have `refresh()`.
+    onActiveChanged: {
+        const page = stack.currentItem;
+        if (root.active && page && typeof page.refresh === "function")
+            page.refresh();
+    }
+
     title: "uQ Settings"
     visible: true
     width: Kirigami.Units.gridUnit * 50

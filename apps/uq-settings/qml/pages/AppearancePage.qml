@@ -20,6 +20,8 @@ QQC2.ScrollView {
     }
     readonly property var appearance: snap.appearance || {}
     readonly property var schedule: snap.schedule || { mode: "off" }
+    /// Where each row's live value comes from, by setting id (uqd's Explain); {} when unknown.
+    readonly property var sources: snap.sources || {}
     readonly property bool ready: App.uqdUp
     /// The rendered theme's tokens: what "Use theme" means right now, for seeding overrides.
     readonly property var tokens: {
@@ -31,6 +33,14 @@ QQC2.ScrollView {
     }
     function field(name, value) {
         am.setAppearance(name, JSON.stringify(value));
+    }
+    /// Where a row's live value comes from (`{source, detail}`), or null: see SettingRow.
+    function sourceOf(settingId) {
+        return page.sources[settingId] ?? null;
+    }
+    /// Read everything again; Main calls it when the window comes back to the front.
+    function refresh() {
+        am.refresh();
     }
 
     Component.onCompleted: am.refresh()
@@ -162,6 +172,8 @@ QQC2.ScrollView {
         }
         OverrideCombo {
             settingId: "ui-font"
+            source: page.sourceOf("ui-font")
+            onReapply: am.reapply("appearance")
             label: "Interface font"
             highlight: App.highlight
             enabled: page.ready
@@ -172,6 +184,8 @@ QQC2.ScrollView {
         }
         OverrideCombo {
             settingId: "mono-font"
+            source: page.sourceOf("mono-font")
+            onReapply: am.reapply("appearance")
             label: "Monospace font"
             highlight: App.highlight
             enabled: page.ready
@@ -183,6 +197,8 @@ QQC2.ScrollView {
         OverrideSpin {
             busy: am.busy
             settingId: "font-size"
+            source: page.sourceOf("font-size")
+            onReapply: am.reapply("appearance")
             label: "Font size"
             highlight: App.highlight
             enabled: page.ready
@@ -202,6 +218,8 @@ QQC2.ScrollView {
         }
         OverrideCombo {
             settingId: "cursor-theme"
+            source: page.sourceOf("cursor-theme")
+            onReapply: am.reapply("appearance")
             label: "Cursor theme"
             highlight: App.highlight
             enabled: page.ready
@@ -213,6 +231,8 @@ QQC2.ScrollView {
         OverrideSpin {
             busy: am.busy
             settingId: "cursor-size"
+            source: page.sourceOf("cursor-size")
+            onReapply: am.reapply("appearance")
             label: "Cursor size"
             highlight: App.highlight
             enabled: page.ready
@@ -226,6 +246,8 @@ QQC2.ScrollView {
         }
         OverrideCombo {
             settingId: "icon-theme"
+            source: page.sourceOf("icon-theme")
+            onReapply: am.reapply("appearance")
             label: "Icon theme"
             highlight: App.highlight
             enabled: page.ready

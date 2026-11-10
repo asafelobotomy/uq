@@ -23,8 +23,8 @@ pub mod qobject {
     unsafe extern "RustQt" {
         #[qobject]
         #[qml_element]
-        /// `{themes, theme, variant, schedule, appearance, cursorThemes, iconThemes}`; `{}` until
-        /// uqd has been read.
+        /// `{themes, theme, variant, schedule, appearance, cursorThemes, iconThemes, sources}`;
+        /// `{}` until uqd has been read.
         #[qproperty(QString, state_json)]
         /// The message of the last refused change, "" when there is none.
         #[qproperty(QString, error)]
@@ -46,6 +46,10 @@ pub mod qobject {
         /// Set one field of the `appearance` section to `json_value` (`null` = use the theme).
         #[qinvokable]
         fn set_appearance(self: Pin<&mut AppearanceModel>, field: &QString, json_value: &QString);
+
+        /// Apply `appearance` to the session again, over what changed it while running.
+        #[qinvokable]
+        fn reapply(self: Pin<&mut AppearanceModel>, domain: &QString);
     }
 
     impl cxx_qt::Threading for AppearanceModel {}
@@ -106,6 +110,10 @@ impl cxx_qt::Initialize for AppearanceModel {
 impl AppearanceModel {
     fn refresh(self: Pin<&mut Self>) {
         model_core::start(self, Op::Refresh);
+    }
+
+    fn reapply(self: Pin<&mut Self>, domain: &QString) {
+        model_core::reapply(self, domain.to_string());
     }
 
     fn set_theme(self: Pin<&mut Self>, id: &QString, variant: &QString) {

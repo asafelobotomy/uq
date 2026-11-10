@@ -13,6 +13,10 @@ ColumnLayout {
     property string label
     property string highlight
     property bool inUse: false
+    /// Where the options' live values come from, shown on the heading row (see SettingRow).
+    property var source: null
+    /// The heading row's **Re-apply** was pressed.
+    signal reapply()
     default property alias content: slot.data
     readonly property bool shown: inUse || (highlight !== "" && highlight === settingId)
 
@@ -24,6 +28,8 @@ ColumnLayout {
         label: root.label
         highlight: root.highlight
         enabled: root.enabled
+        source: root.source
+        onReapply: root.reapply()
         Layout.fillWidth: true
         UqLabel {
             objectName: "unusedNote"

@@ -7,6 +7,7 @@ use std::future::Future;
 use serde_json::{Map, Value, json};
 use tokio::sync::Mutex;
 use uq_core::client::{self, DesktopProxy};
+use uq_core::settings::provenance;
 
 /// The origin uqd's history records for every write the app makes.
 pub const ORIGIN: &str = "settings";
@@ -55,6 +56,24 @@ pub async fn run<L: PageLogic>(l: &L, op: L::Op) -> Outcome {
         let _guard = l.write_lock().lock().await;
         l.apply(op).await
     };
+    read_back(l, done).await
+}
+
+/// Ask uqd to run `domain`'s render path again (`Reapply`), then read the state back like
+/// [`run`]. It writes nothing, but waits for the page's writes so it applies the latest.
+pub async fn reapply<L: PageLogic>(l: &L, conn: &zbus::Connection, domain: &str) -> Outcome {
+    let done = {
+        let _guard = l.write_lock().lock().await;
+        match DesktopProxy::new(conn).await {
+            Ok(proxy) => proxy.reapply(domain).await,
+            Err(e) => Err(e),
+        }
+    };
+    read_back(l, done).await
+}
+
+/// The [`Outcome`] of an operation that ended with `done`.
+async fn read_back<L: PageLogic>(l: &L, done: zbus::Result<()>) -> Outcome {
     let error = done
         .err()
         .filter(|e| !client::no_owner(e))
@@ -83,6 +102,59 @@ pub async fn patch_section(
     proxy
         .set_section(domain, &section.to_string(), ORIGIN)
         .await
+}
+
+/// How much a source says about a row, for a row that shows several keys (a layout's options):
+/// the most telling one wins, and the first of equals.
+fn rank(source: &str) -> u8 {
+    match source {
+        "error" => 5,
+        "user_lua" => 4,
+        "runtime" => 3,
+        "uq" => 2,
+        "theme" | "default" => 1,
+        _ => 0,
+    }
+}
+
+/// Where the live value of each setting of `domains` comes from, as
+/// `{"<setting id>": {source, detail}}`, from uqd's `Explain`. uqd keys its answer by the path
+/// inside the domain; [`provenance::OPTIONS`] gives each path's setting id. A domain whose
+/// `Explain` fails adds nothing, so its rows show no source.
+pub async fn sources(proxy: &DesktopProxy<'_>, domains: &[&str]) -> Value {
+    let mut out = Map::new();
+    for &domain in domains {
+        let explained = match proxy.explain(domain).await.and_then(|t| parse_json(&t)) {
+            Ok(v) => v,
+            Err(e) => {
+                if !client::no_owner(&e) {
+                    eprintln!("uq-settings: can't explain {domain}: {}", message(&e));
+                }
+                continue;
+            }
+        };
+        for row in provenance::options_for(domain) {
+            let Some(entry) = explained.get(row.json_key()) else {
+                continue;
+            };
+            let Some(source) = entry.get("source").and_then(Value::as_str) else {
+                continue;
+            };
+            let shown = out
+                .get(row.setting_id)
+                .and_then(|o| o["source"].as_str())
+                .map_or(0, rank);
+            if out.contains_key(row.setting_id) && shown >= rank(source) {
+                continue;
+            }
+            let detail = entry.get("detail").cloned().unwrap_or(Value::Null);
+            out.insert(
+                row.setting_id.to_string(),
+                json!({ "source": source, "detail": detail }),
+            );
+        }
+    }
+    Value::Object(out)
 }
 
 #[cfg(test)]

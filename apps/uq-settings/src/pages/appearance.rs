@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 use tokio::sync::Mutex;
 use uq_core::client::DesktopProxy;
 
-use crate::pages::runner::{ORIGIN, PageLogic, parse_json, patch_section};
+use crate::pages::runner::{ORIGIN, PageLogic, parse_json, patch_section, sources};
 use crate::system_lists;
 
 /// The `appearance` section's fields that [`Op::SetField`] may change.
@@ -55,7 +55,8 @@ impl AppearanceState {
     }
 }
 
-/// The state is `{themes, theme, variant, schedule, appearance, cursorThemes, iconThemes}`.
+/// The state is `{themes, theme, variant, schedule, appearance, cursorThemes, iconThemes,
+/// sources}`.
 impl PageLogic for AppearanceState {
     type Op = Op;
 
@@ -96,6 +97,7 @@ impl PageLogic for AppearanceState {
         let themes = proxy.list_themes().await?;
         let schedule = parse_json(&proxy.get_schedule().await?)?;
         let appearance = parse_json(&proxy.get_section("appearance").await?)?;
+        let sources = sources(&proxy, &["appearance"]).await;
         Ok(json!({
             "themes": themes,
             "theme": theme,
@@ -104,6 +106,7 @@ impl PageLogic for AppearanceState {
             "appearance": appearance,
             "cursorThemes": system_lists::cursor_themes(&self.icon_dirs),
             "iconThemes": system_lists::icon_themes(&self.icon_dirs),
+            "sources": sources,
         }))
     }
 }
@@ -211,6 +214,22 @@ mod tests {
 
         let out = run(&page, field("nope", json!(1))).await;
         assert!(out.error.unwrap().contains("unknown field"));
+    }
+
+    #[tokio::test]
+    async fn snapshot_includes_appearance_sources() {
+        let (r, page) = rig().await;
+        r.explain
+            .set("appearance.cursor_size", json!({"source": "runtime"}));
+        let out = run(&page, Op::Refresh).await;
+        let s = &out.state["sources"];
+        assert_eq!(s["ui-font"], json!({"source": "uq", "detail": null}));
+        assert_eq!(s["mono-font"], json!({"source": "theme", "detail": null}));
+        assert_eq!(
+            s["cursor-size"],
+            json!({"source": "runtime", "detail": null})
+        );
+        assert!(s.get("gaps-inner").is_none(), "{s}");
     }
 
     #[tokio::test]
