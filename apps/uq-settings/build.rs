@@ -29,6 +29,7 @@ fn main() {
         QmlFile::from("qml/components/KeyboardLayoutList.qml"),
         QmlFile::from("qml/components/ValueSlider.qml"),
         QmlFile::from("qml/components/ProfileKeyList.qml"),
+        QmlFile::from("qml/components/ProfileMessage.qml"),
         QmlFile::from("qml/pages/AppearancePage.qml"),
         QmlFile::from("qml/pages/DisplaysPage.qml"),
         QmlFile::from("qml/pages/HistoryPage.qml"),

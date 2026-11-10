@@ -163,6 +163,11 @@ fn dialog_path(url: &QString) -> Result<PathBuf, QString> {
         .ok_or_else(|| QString::from("Choose a file on this computer."))
 }
 
+/// The error for a request from the page whose JSON argument doesn't parse (a programming error).
+fn unreadable(e: serde_json::Error) -> QString {
+    QString::from(&format!("That request couldn't be read ({e})."))
+}
+
 impl ProfilesModel {
     fn refresh(self: Pin<&mut Self>) {
         model_core::start(self, Op::Refresh);
@@ -191,7 +196,7 @@ impl ProfilesModel {
                     pages,
                 },
             ),
-            Err(e) => self.set_error(QString::from(&format!("pages: not valid JSON ({e})"))),
+            Err(e) => self.set_error(unreadable(e)),
         }
     }
 
@@ -215,7 +220,7 @@ impl ProfilesModel {
                     keys,
                 },
             ),
-            Err(e) => self.set_error(QString::from(&format!("keys: not valid JSON ({e})"))),
+            Err(e) => self.set_error(unreadable(e)),
         }
     }
 
@@ -229,7 +234,7 @@ impl ProfilesModel {
                     path,
                 },
             ),
-            Err(e) => self.set_error(QString::from(&format!("path: not valid JSON ({e})"))),
+            Err(e) => self.set_error(unreadable(e)),
         }
     }
 

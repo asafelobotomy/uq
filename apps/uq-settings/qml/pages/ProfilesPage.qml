@@ -34,6 +34,8 @@ QQC2.ScrollView {
     property int noticeSeen: 0
     property int reportSeen: 0
     property int conflictSeen: 0
+    /// The last file chosen for Import…, kept for Replace.
+    property string importUrl
     /// The "changed in" choices of the New profile dialog.
     readonly property var periods: ["the last hour", "today", "the last 7 days", "the last 30 days"]
     /// The names read out for the offered icons.
@@ -83,27 +85,22 @@ QQC2.ScrollView {
         const notice = snap.notice;
         if (notice && notice.seq > page.noticeSeen) {
             page.noticeSeen = notice.seq;
-            // A fixed phrase from pages::profiles.
-            toast.text = notice.text;
-            toast.visible = notice.text !== "";
+            toast.notices = notice.text !== "" ? [notice.text] : [];
+            toast.dismissed = false;
             toastTimer.restart();
         }
         const report = snap.report;
         if (report && report.seq > page.reportSeen) {
             page.reportSeen = report.seq;
-            // Plain setting labels and uqd's fixed notices; no profile names.
-            const lines = [];
-            if ((report.kept || []).length > 0)
-                lines.push("Kept your own value: " + report.kept.join(", "));
-            for (const n of report.notices || [])
-                lines.push(n);
-            reportMessage.text = lines.join("\n");
-            reportMessage.visible = lines.length > 0;
+            // Labels can come from an imported file: ProfileMessage shows them as plain text.
+            reportMessage.kept = report.kept || [];
+            reportMessage.notices = report.notices || [];
+            reportMessage.dismissed = false;
         }
         const conflict = snap.conflict;
         if (conflict && conflict.seq > page.conflictSeen) {
             page.conflictSeen = conflict.seq;
-            conflictDialog.path = conflict.path;
+            conflictDialog.url = page.importUrl;
             conflictMessage.text = conflict.message;
             conflictDialog.open();
         }
@@ -171,7 +168,6 @@ QQC2.ScrollView {
             period.currentIndex = 1;
             newDialog.pickedPages = [];
             newDialog.open();
-            newName.forceActiveFocus();
         }
         function create() {
             if (!newDialog.canCreate)
@@ -184,6 +180,7 @@ QQC2.ScrollView {
         }
 
         title: "New profile"
+        onOpened: newName.forceActiveFocus()
         standardButtons: Kirigami.Dialog.Cancel
         preferredWidth: Kirigami.Units.gridUnit * 26
         customFooterActions: [
@@ -294,7 +291,6 @@ QQC2.ScrollView {
             renameName.text = p.name;
             renameIcon.chosen = p.icon;
             renameDialog.open();
-            renameName.forceActiveFocus();
         }
         function save() {
             if (!page.idle || renameName.text.trim() === "")
@@ -304,6 +300,7 @@ QQC2.ScrollView {
         }
 
         title: "Rename profile"
+        onOpened: renameName.forceActiveFocus()
         standardButtons: Kirigami.Dialog.Cancel
         preferredWidth: Kirigami.Units.gridUnit * 24
         customFooterActions: [
@@ -450,6 +447,7 @@ QQC2.ScrollView {
             Kirigami.Action {
                 text: "Delete"
                 icon.name: "edit-delete"
+                enabled: page.idle
                 onTriggered: {
                     pm.deleteProfile(confirmDelete.profileId);
                     confirmDelete.close();
@@ -463,7 +461,9 @@ QQC2.ScrollView {
     Kirigami.PromptDialog {
         id: conflictDialog
 
-        property string path
+        /// The URL the file was imported from. Not the conflict's `path`: that is decoded
+        /// already and would be decoded again on the way back.
+        property string url
 
         title: "Replace this profile?"
         standardButtons: Kirigami.Dialog.Cancel
@@ -471,8 +471,9 @@ QQC2.ScrollView {
             Kirigami.Action {
                 text: "Replace"
                 icon.name: "document-replace"
+                enabled: page.idle
                 onTriggered: {
-                    pm.importFrom(conflictDialog.path, true);
+                    pm.importFrom(conflictDialog.url, true);
                     conflictDialog.close();
                 }
             }
@@ -501,7 +502,10 @@ QQC2.ScrollView {
         title: "Import a profile"
         fileMode: FileDialog.OpenFile
         nameFilters: ["Profiles (*.toml)"]
-        onAccepted: pm.importFrom(String(selectedFile), false)
+        onAccepted: {
+            page.importUrl = String(selectedFile);
+            pm.importFrom(page.importUrl, false);
+        }
     }
 
     ColumnLayout {
@@ -540,26 +544,20 @@ QQC2.ScrollView {
             Layout.fillWidth: true
         }
         // What the last Turn on or Back to normal kept and couldn't do.
-        Kirigami.InlineMessage {
+        ProfileMessage {
             id: reportMessage
             objectName: "profileReport"
-            visible: false
-            type: Kirigami.MessageType.Information
-            showCloseButton: true
             Layout.fillWidth: true
         }
-        Kirigami.InlineMessage {
+        ProfileMessage {
             id: toast
             objectName: "profilesToast"
-            visible: false
-            type: Kirigami.MessageType.Information
-            showCloseButton: true
             Layout.fillWidth: true
         }
         Timer {
             id: toastTimer
             interval: 6000
-            onTriggered: toast.visible = false
+            onTriggered: toast.dismissed = true
         }
 
         SettingRow {
