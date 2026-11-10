@@ -62,6 +62,27 @@ TestCase {
         compare(label.textFormat, Text.PlainText);
     }
 
+    function test_profile_origin_uses_name() {
+        const names = { gaming: "Gaming", tricky: "<b>Bold</b> & co" };
+        const make1 = (origin, profileNames) => createTemporaryObject(originComp, tc, { origin: origin, profileNames: profileNames });
+        compare(make1("profile:gaming", names).text, "from the Gaming profile");
+        compare(make1("profile:other", names).text, "from the profile other", "an unknown id is named as is");
+        compare(make1("profile:gaming", {}).text, "from the profile gaming");
+        const tricky = make1("profile:tricky", names);
+        compare(tricky.text, "from the <b>Bold</b> & co profile");
+        compare(tricky.textFormat, Text.PlainText, "a profile's name is never rich text");
+        // Not a name on the object's own prototype either.
+        compare(make1("profile:toString", names).text, "from the profile toString");
+    }
+
+    function test_session_sheet_passes_profile_names() {
+        const s = make();
+        s.entries = [{ id: "a", time: 1100, origin: "profile:gaming", domain: "look", summary: "Corner rounding: 4 → 8" }];
+        s.profileNames = { gaming: "Gaming" };
+        s.open();
+        compare(findChild(s.rows.itemAt(0), "originText").text, "from the Gaming profile");
+    }
+
     function test_rows_show_summary_and_origin() {
         const s = make();
         s.open();

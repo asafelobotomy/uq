@@ -480,6 +480,30 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn look_snapshot_shows_profile_source() {
+        let (r, page) = rig().await;
+        let proxy = DesktopProxy::new(&r.client).await.unwrap();
+        let toml = "format = 1\nid = \"gaming\"\nname = \"Gaming\"\n\n[look]\ngaps_in = 3\n";
+        proxy.set_profile(toml, false).await.unwrap();
+        proxy.apply_profile("gaming").await.unwrap();
+        let out = run(&page, Op::Refresh).await;
+        assert_eq!(out.error, None);
+        let s = &out.state["sources"];
+        assert_eq!(
+            s["gaps-inner"],
+            json!({"source": "profile", "detail": {"name": "Gaming"}})
+        );
+        assert_eq!(
+            s["gaps-outer"]["source"], "theme",
+            "keys it didn't set are unchanged"
+        );
+
+        // A hand change takes the key back from the profile.
+        let out = run(&page, look("gaps_in", json!(9))).await;
+        assert_eq!(out.state["sources"]["gaps-inner"]["source"], "uq");
+    }
+
+    #[tokio::test]
     async fn explain_failure_gives_empty_sources() {
         let (r, page) = rig().await;
         r.explain.fail();

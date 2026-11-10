@@ -11,6 +11,7 @@ use std::time::Duration;
 use serde_json::{Map, Value, json};
 use uq_core::client::DESKTOP_NAME;
 use uq_core::history::{AutoReason, Entry, PointKind, RestorePoint, diff, revert_changed};
+use uq_core::profile::holds;
 use uq_core::schedule::Schedule;
 use uq_core::settings::provenance;
 use uq_core::settings::renders_section;
@@ -390,8 +391,20 @@ impl FakeUqd {
             } else {
                 "uq"
             };
-            let mut entry =
-                json!({"source": source, "live": null, "stored": stored, "detail": null});
+            // Like uqd: a value the active profile set and that still stands is the profile's.
+            let path: Vec<String> = row.json_key().split('.').map(str::to_string).collect();
+            let from_profile = match &*self.profiles.active.lock().unwrap() {
+                Some(a) if source == "uq" && holds(a, domain, &path, &stored) => {
+                    Some(a.name.clone())
+                }
+                _ => None,
+            };
+            let mut entry = match from_profile {
+                Some(name) => {
+                    json!({"source": "profile", "live": null, "stored": stored, "detail": {"name": name}})
+                }
+                None => json!({"source": source, "live": null, "stored": stored, "detail": null}),
+            };
             if let Some(Value::Object(o)) = overrides.get(&format!("{domain}.{}", row.json_key())) {
                 for (k, v) in o {
                     entry[k] = v.clone();

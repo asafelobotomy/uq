@@ -25,6 +25,8 @@ Rectangle {
         switch (sourceKind) {
         case "theme":
             return "From the theme";
+        case "profile":
+            return sourceDetail.name ? "From the " + sourceDetail.name + " profile" : "From a profile";
         case "default":
             return "Default";
         case "user_lua":
@@ -114,7 +116,7 @@ Rectangle {
                     objectName: "sourceText"
                     text: row.sourceText
                     wrapMode: Text.Wrap
-                    opacity: row.sourceKind === "theme" || row.sourceKind === "default" ? 0.7 : 1
+                    opacity: row.sourceKind === "theme" || row.sourceKind === "default" || row.sourceKind === "profile" ? 0.7 : 1
                     color: row.sourceKind === "error" ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.textColor
                     Layout.fillWidth: true
                 }

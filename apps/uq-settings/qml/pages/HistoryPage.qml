@@ -294,6 +294,7 @@ QQC2.ScrollView {
                                 }
                                 OriginLabel {
                                     origin: entry.modelData.origin
+                                    profileNames: page.snap.profiles || ({})
                                     opacity: 0.7
                                 }
                             }

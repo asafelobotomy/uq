@@ -212,6 +212,23 @@ impl HistoryState {
         }
     }
 
+    /// `{"<profile id>": "<name>"}`, so an entry from `profile:<id>` can say which profile. A
+    /// profile list that can't be read gives `{}`: entries then name the id.
+    async fn profile_names(proxy: &DesktopProxy<'_>) -> Value {
+        let list = match proxy.list_profiles().await.and_then(|t| parse_json(&t)) {
+            Ok(Value::Array(list)) => list,
+            _ => return json!({}),
+        };
+        let names = list
+            .iter()
+            .filter_map(|p| Some((p["id"].as_str()?, p["name"].as_str()?)));
+        Value::Object(
+            names
+                .map(|(id, name)| (id.to_string(), json!(name)))
+                .collect(),
+        )
+    }
+
     async fn entries(proxy: &DesktopProxy<'_>) -> zbus::Result<Vec<Entry>> {
         let text = proxy.list_history(MAX_ENTRIES as u32).await?;
         serde_json::from_str(&text).map_err(|e| {
@@ -383,9 +400,11 @@ impl PageLogic for HistoryState {
             stack.sync(&entries);
             (!stack.own.is_empty(), !stack.redo.is_empty())
         };
+        let profiles = Self::profile_names(&proxy).await;
         let shown = self.shown.lock().unwrap();
         Ok(json!({
             "entries": entries,
+            "profiles": profiles,
             "points": points,
             "session_start": self.session_start,
             "canUndo": can_undo,
@@ -780,6 +799,23 @@ mod tests {
         assert_eq!(out.state["entries"][0]["domain"], "look");
         assert_eq!(out.state["notice"], json!({"seq": 0, "text": ""}));
         assert_eq!(out.state["canUndo"], false);
+    }
+
+    #[tokio::test]
+    async fn snapshot_names_profiles() {
+        let (r, page) = rig().await;
+        let proxy = DesktopProxy::new(&r.client).await.unwrap();
+        let toml = "format = 1\nid = \"gaming\"\nname = \"Gaming\"\n\n[look]\ngaps_in = 3\n";
+        proxy.set_profile(toml, false).await.unwrap();
+        let out = run(&page, Op::Refresh).await;
+        assert_eq!(out.state["profiles"], json!({"gaming": "Gaming"}));
+    }
+
+    #[tokio::test]
+    async fn snapshot_without_profiles_has_an_empty_map() {
+        let (_r, page) = rig().await;
+        let out = run(&page, Op::Refresh).await;
+        assert_eq!(out.state["profiles"], json!({}));
     }
 
     #[tokio::test]
