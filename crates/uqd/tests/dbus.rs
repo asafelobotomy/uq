@@ -823,6 +823,12 @@ async fn desktop_proxy_matches_the_interface() {
     assert_eq!(explained["gaps_in"]["stored"], 7, "{explained}");
     proxy.reapply("look").await.unwrap();
     assert!(proxy.explain("bogus").await.is_err());
+    assert_eq!(proxy.list_windows().await.unwrap(), "[]");
+    assert!(
+        serde_json::from_str::<serde_json::Value>(&proxy.explain("rules").await.unwrap())
+            .unwrap()
+            .is_object()
+    );
 
     let mut changed = proxy.receive_profile_changed().await.unwrap();
     assert_eq!(proxy.set_profile(GAMING, false).await.unwrap(), "gaming");
@@ -914,4 +920,58 @@ async fn input_section_round_trip_over_dbus() {
         .await
         .unwrap_err();
     assert!(err.to_string().contains("InvalidSetting"), "{err}");
+}
+
+#[tokio::test]
+async fn rules_section_and_list_windows_over_dbus() {
+    let dir = tempfile::tempdir().unwrap();
+    let bus = private_bus();
+    let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut paths = uq_core::paths::Paths::under(&dir.path().join("root"));
+    paths.themes_dir = repo.join("themes");
+    paths.templates_dir = repo.join("templates");
+    let generated = paths.generated_lua.clone();
+    let comp = Arc::new(FakeCompositor::running());
+    *comp.clients_json.lock().unwrap() = r#"[{"address":"0x1","pid":7,"mapped":true,
+        "class":"firefox","title":"Docs","initialClass":"firefox","initialTitle":"Docs",
+        "workspace":{"id":2,"name":"2"},"floating":false,"xwayland":false,"pinned":false,
+        "fullscreen":0,"tags":[]}]"#
+        .into();
+    let desktop = Desktop::new(paths, comp, Arc::new(FakeSystem::default())).unwrap();
+    let _server = serve(
+        zbus::connection::Builder::address(bus.address.as_str()).unwrap(),
+        desktop,
+    )
+    .await
+    .unwrap();
+    let client = zbus::connection::Builder::address(bus.address.as_str())
+        .unwrap()
+        .build()
+        .await
+        .unwrap();
+    let proxy = zbus::Proxy::new(&client, NAME, PATH, IFACE).await.unwrap();
+
+    let rules = r#"{"window":[{"name":"Floaty","enabled":true,"match":{"class":"^pavucontrol$"},
+        "effects":{"float":true}}],"layer":[],"workspace":[]}"#;
+    let () = proxy
+        .call("SetSection", &("rules", rules, "settings"))
+        .await
+        .unwrap();
+    let got: String = proxy.call("GetSection", &("rules",)).await.unwrap();
+    let got: serde_json::Value = serde_json::from_str(&got).unwrap();
+    let id = got["window"][0]["id"].as_str().unwrap().to_string();
+    assert!(
+        std::fs::read_to_string(&generated)
+            .unwrap()
+            .contains(&format!("uq:{id}"))
+    );
+    let explained: String = proxy.call("Explain", &("rules",)).await.unwrap();
+    let explained: serde_json::Value = serde_json::from_str(&explained).unwrap();
+    assert_eq!(explained[format!("window.{id}")]["source"], "uq");
+
+    let windows: String = proxy.call("ListWindows", &()).await.unwrap();
+    let windows: serde_json::Value = serde_json::from_str(&windows).unwrap();
+    assert_eq!(windows[0]["class"], "firefox");
+    assert_eq!(windows[0]["workspace_id"], 2);
+    assert!(windows[0].get("address").is_none() && windows[0].get("pid").is_none());
 }

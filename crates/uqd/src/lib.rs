@@ -5,6 +5,7 @@ pub mod hypr;
 mod monitors;
 pub mod power;
 mod profiles;
+mod rules;
 mod sections;
 pub mod service;
 pub mod system;

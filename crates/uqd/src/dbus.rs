@@ -231,6 +231,15 @@ impl DesktopIface {
             .await
     }
 
+    /// The open windows as a JSON array of `{class, title, initial_class, initial_title,
+    /// xwayland, floating, fullscreen, pinned, workspace_id, workspace_name, tags}`; `[]` when
+    /// Hyprland is down. No addresses or pids.
+    async fn list_windows(&self) -> Result<String, UqError> {
+        let comp = self.desktop.lock().await.comp.clone();
+        let windows = crate::service::Desktop::windows_of(comp.as_ref()).await;
+        serde_json::to_string(&windows).map_err(|e| UqError::Io(e.to_string()))
+    }
+
     /// Apply a whole `monitors` section live for 15 s. Returns the token `ConfirmMonitors`
     /// needs; without a confirm, uqd puts the old layout back on its own.
     async fn apply_monitors(&self, json: &str) -> Result<String, UqError> {

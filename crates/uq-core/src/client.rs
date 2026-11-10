@@ -20,6 +20,8 @@ pub trait Desktop {
     fn set_section(&self, domain: &str, json: &str, origin: &str) -> zbus::Result<()>;
     fn list_input_devices(&self) -> zbus::Result<String>;
     fn list_outputs(&self) -> zbus::Result<String>;
+    /// JSON array of the open windows (see `rules::WindowInfo`); `[]` when Hyprland is down.
+    fn list_windows(&self) -> zbus::Result<String>;
     fn apply_monitors(&self, json: &str) -> zbus::Result<String>;
     fn confirm_monitors(&self, token: &str, origin: &str) -> zbus::Result<()>;
     fn revert_monitors(&self, token: &str) -> zbus::Result<()>;

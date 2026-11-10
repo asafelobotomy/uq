@@ -116,7 +116,7 @@ pub struct Desktop {
     /// Ids of the journal entries the latest `persist` appended; empty when it journalled nothing.
     last_entry_ids: Vec<String>,
     /// `(domain, Hyprland's message)` of the last section write that failed verification.
-    last_rejected: Option<(String, String)>,
+    pub(crate) last_rejected: Option<(String, String)>,
     /// The display change waiting for `ConfirmMonitors`, if any.
     pub(crate) pending: Option<crate::monitors::Pending>,
     /// How long an unconfirmed display change stays ([`crate::monitors::REVERT_AFTER`]).
@@ -155,6 +155,7 @@ fn domain_label(domain: &str) -> &'static str {
         "appearance" => "Appearance",
         "look" => "Look",
         "layouts" => "Layouts",
+        "rules" => "Window rules",
         "wallpaper" => "Wallpaper",
         "shell" => "Shell",
         "settings" => "A setting",
@@ -663,6 +664,9 @@ impl Desktop {
                 "unknown domain {domain:?}"
             )));
         }
+        if domain == "rules" {
+            return Ok(self.explain_rules());
+        }
         let section = self
             .state
             .section(domain)
@@ -737,7 +741,7 @@ impl Desktop {
     }
 
     /// The first [`USER_LUA_SCAN_LIMIT`] bytes of `user.lua`, decoded lossily; `None` if unreadable.
-    fn read_user_lua(&self) -> Option<String> {
+    pub(crate) fn read_user_lua(&self) -> Option<String> {
         use std::io::Read;
         let mut buf = Vec::new();
         std::fs::File::open(&self.paths.user_lua)
