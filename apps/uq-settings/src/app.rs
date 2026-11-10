@@ -10,7 +10,8 @@ use std::sync::Mutex;
 use cxx_qt::{CxxQtThread, Threading};
 use cxx_qt_lib::QString;
 
-use crate::registry;
+use crate::registry::{self, PageEntry};
+use crate::{plugins, search};
 
 #[cxx_qt::bridge]
 pub mod qobject {
@@ -30,7 +31,7 @@ pub mod qobject {
         #[qproperty(QString, highlight)]
         /// Whether `org.uq.Desktop1` has an owner.
         #[qproperty(bool, uqd_up)]
-        /// `[{id, name, icon, category, categoryName}]` in sidebar order.
+        /// `[{id, name, icon, category, categoryName, qml, plugin}]` in sidebar order.
         #[qproperty(QString, pages_json)]
         /// `--screenshots <dir>`: QML visits each page, saves it here, then quits.
         #[qproperty(QString, screenshot_dir)]
@@ -39,6 +40,11 @@ pub mod qobject {
         /// Show `page` (unknown ids are logged and ignored) and highlight `setting`.
         #[qinvokable]
         fn show_page(self: Pin<&mut App>, page: &QString, setting: &QString);
+
+        /// Search the pages' labels and keywords: `[{pageId, settingId, label, pageName, score}]`,
+        /// best first; "" for an empty query.
+        #[qinvokable]
+        fn search(self: &App, query: &QString) -> QString;
 
         /// Save the window as a PNG (`--screenshots`).
         #[qinvokable]
@@ -56,6 +62,8 @@ pub mod qobject {
 use qobject::App;
 
 pub struct AppRust {
+    /// Core pages, then the plugin pages found at startup.
+    entries: Vec<PageEntry>,
     page: QString,
     highlight: QString,
     uqd_up: bool,
@@ -65,12 +73,14 @@ pub struct AppRust {
 
 impl Default for AppRust {
     fn default() -> Self {
-        let first = registry::core_pages().first().map_or("", |p| p.id);
+        let entries = registry::all_pages(&plugins::scan_configured());
+        let first = entries.first().map_or("", |p| p.id.as_str());
         Self {
             page: QString::from(first),
+            pages_json: QString::from(&registry::pages_json(&entries)),
+            entries,
             highlight: QString::default(),
             uqd_up: false,
-            pages_json: QString::from(&registry::pages_json()),
             screenshot_dir: QString::default(),
         }
     }
@@ -137,11 +147,11 @@ impl cxx_qt::Initialize for App {
 }
 
 /// What a `ShowPage(page, setting)` does to the page: `None` keeps the current one.
-pub fn target_page(page: &str) -> Option<&'static str> {
+pub fn target_page<'a>(entries: &'a [PageEntry], page: &str) -> Option<&'a str> {
     if page.is_empty() {
         return None;
     }
-    let found = registry::find(page).map(|p| p.id);
+    let found = entries.iter().find(|p| p.id == page).map(|p| p.id.as_str());
     if found.is_none() {
         eprintln!("uq-settings: no page {page:?}; staying on the current one");
     }
@@ -161,16 +171,21 @@ impl App {
     }
 
     fn show(mut self: Pin<&mut Self>, page: &str, setting: &str) {
-        let Some(id) = target_page(page) else {
+        let Some(id) = target_page(&self.entries, page).map(str::to_owned) else {
             return;
         };
-        self.as_mut().set_page(QString::from(id));
+        self.as_mut().set_page(QString::from(&id));
         self.as_mut().set_highlight(QString::default());
         self.set_highlight(QString::from(setting));
     }
 
     fn show_page(self: Pin<&mut Self>, page: &QString, setting: &QString) {
         self.show(&page.to_string(), &setting.to_string());
+    }
+
+    fn search(&self, query: &QString) -> QString {
+        let hits = search::search(&self.entries, &query.to_string());
+        QString::from(&serde_json::to_string(&hits).unwrap_or_else(|_| "[]".into()))
     }
 
     fn grab_window(&self, path: &QString) -> bool {
@@ -204,8 +219,9 @@ mod tests {
 
     #[test]
     fn target_page_keeps_current_for_empty_and_unknown() {
-        assert_eq!(target_page(""), None);
-        assert_eq!(target_page("nope"), None);
-        assert_eq!(target_page("wallpaper"), Some("wallpaper"));
+        let entries = registry::all_pages(&[]);
+        assert_eq!(target_page(&entries, ""), None);
+        assert_eq!(target_page(&entries, "nope"), None);
+        assert_eq!(target_page(&entries, "wallpaper"), Some("wallpaper"));
     }
 }

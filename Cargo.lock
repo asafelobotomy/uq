@@ -2080,6 +2080,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tokio",
+ "toml",
  "uq-core",
  "zbus",
 ]

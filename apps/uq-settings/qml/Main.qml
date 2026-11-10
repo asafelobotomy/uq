@@ -12,7 +12,12 @@ Kirigami.ApplicationWindow {
 
     function showCurrent() {
         const page = root.pages.find(p => p.id === App.page);
-        if (page)
+        if (!page)
+            return;
+        // A plugin page is loaded by PluginPage, which turns a QML error into a card.
+        if (page.plugin)
+            stack.replace(null, Qt.resolvedUrl("PluginPage.qml"), { source: page.qml, highlight: Qt.binding(() => App.highlight) });
+        else
             stack.replace(null, Qt.resolvedUrl(page.qml));
     }
 
@@ -22,6 +27,19 @@ Kirigami.ApplicationWindow {
     height: Kirigami.Units.gridUnit * 34
     minimumWidth: Kirigami.Units.gridUnit * 30
     minimumHeight: Kirigami.Units.gridUnit * 20
+
+    header: QQC2.ToolBar {
+        RowLayout {
+            anchors.fill: parent
+            Item {
+                Layout.fillWidth: true
+            }
+            Search {
+                id: search
+                Layout.preferredWidth: Kirigami.Units.gridUnit * 18
+            }
+        }
+    }
 
     pageStack.globalToolBar.style: Kirigami.ApplicationHeaderStyle.None
     pageStack.initialPage: Kirigami.Page {

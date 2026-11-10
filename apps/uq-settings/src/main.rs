@@ -14,7 +14,9 @@ use cxx_qt_lib::{QQuickStyle, QString};
 
 mod app;
 mod instance;
+mod plugins;
 mod registry;
+mod search;
 mod session;
 #[cfg(test)]
 mod test_bus;
@@ -35,10 +37,16 @@ struct Args {
     /// Render every page into this directory, then quit.
     #[arg(long, hide = true)]
     screenshots: Option<PathBuf>,
+    /// Read plugin pages from this directory instead of /usr/share/uq/settings/pages.
+    #[arg(long, hide = true, value_name = "DIR")]
+    plugin_dir: Option<PathBuf>,
 }
 
 fn main() -> ExitCode {
     let args = Args::parse();
+    if let Some(dir) = args.plugin_dir.clone() {
+        plugins::set_dir(dir);
+    }
     if args.screenshots.is_some() && std::env::var_os("QT_QPA_PLATFORM").is_none() {
         // SAFETY: single-threaded here, before Qt, tokio or any other thread starts.
         unsafe { std::env::set_var("QT_QPA_PLATFORM", "offscreen") };

@@ -3,6 +3,8 @@
 
 use serde::Serialize;
 
+use crate::plugins::PluginPage;
+
 /// The sidebar's groups (spec §2.2), in display order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -20,7 +22,10 @@ pub enum Category {
 }
 
 impl Category {
-    #[allow(dead_code, reason = "used by the plugin scan and search (Task 8)")]
+    #[allow(
+        dead_code,
+        reason = "the order the sidebar and the registry test rely on"
+    )]
     pub const ALL: [Category; 6] = [
         Category::Personal,
         Category::Devices,
@@ -91,10 +96,80 @@ pub fn find(id: &str) -> Option<&'static PageInfo> {
     core_pages().iter().find(|p| p.id == id)
 }
 
-/// The sidebar model: every page in category order, each with its category's heading and
-/// its QML file.
-pub fn pages_json() -> String {
-    let pages: Vec<_> = core_pages()
+/// A searchable setting, owned (plugin pages carry theirs from `page.toml`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OwnedSearchEntry {
+    pub id: String,
+    pub label: String,
+    pub keywords: Vec<String>,
+}
+
+/// A page as the sidebar, the loader and the search see it: core and plugin pages alike.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PageEntry {
+    pub id: String,
+    pub name: String,
+    pub icon: String,
+    pub category: Category,
+    /// Core: relative to `qml/Main.qml`. Plugin: the page file's absolute `file://` URL.
+    pub qml: String,
+    pub plugin: bool,
+    /// Page-level search keywords (plugin pages only).
+    pub keywords: Vec<String>,
+    pub settings: Vec<OwnedSearchEntry>,
+}
+
+impl From<&PageInfo> for PageEntry {
+    fn from(p: &PageInfo) -> Self {
+        PageEntry {
+            id: p.id.into(),
+            name: p.name.into(),
+            icon: p.icon.into(),
+            category: p.category,
+            qml: p.qml.into(),
+            plugin: false,
+            keywords: Vec::new(),
+            settings: p
+                .settings
+                .iter()
+                .map(|s| OwnedSearchEntry {
+                    id: s.id.into(),
+                    label: s.label.into(),
+                    keywords: s.keywords.iter().map(|k| (*k).into()).collect(),
+                })
+                .collect(),
+        }
+    }
+}
+
+impl From<&PluginPage> for PageEntry {
+    fn from(p: &PluginPage) -> Self {
+        PageEntry {
+            id: p.id.clone(),
+            name: p.name.clone(),
+            icon: p.icon.clone(),
+            category: Category::Apps,
+            qml: crate::plugins::file_url(&p.qml_path),
+            plugin: true,
+            keywords: p.keywords.clone(),
+            settings: p.settings.clone(),
+        }
+    }
+}
+
+/// Core pages first (in category order), then the plugin pages (Apps).
+pub fn all_pages(plugins: &[PluginPage]) -> Vec<PageEntry> {
+    core_pages()
+        .iter()
+        .map(PageEntry::from)
+        .chain(plugins.iter().map(PageEntry::from))
+        .collect()
+}
+
+/// The sidebar model: every page in category order, each with its category's heading, its QML
+/// file and whether it is a plugin page.
+pub fn pages_json(pages: &[PageEntry]) -> String {
+    let pages: Vec<_> = pages
         .iter()
         .map(|p| {
             serde_json::json!({
@@ -104,6 +179,7 @@ pub fn pages_json() -> String {
                 "category": p.category,
                 "categoryName": p.category.label(),
                 "qml": p.qml,
+                "plugin": p.plugin,
             })
         })
         .collect();
@@ -150,7 +226,7 @@ mod tests {
 
     #[test]
     fn pages_json_lists_pages_in_order() {
-        let v: serde_json::Value = serde_json::from_str(&pages_json()).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&pages_json(&all_pages(&[]))).unwrap();
         let ids: Vec<_> = v
             .as_array()
             .unwrap()
@@ -161,5 +237,30 @@ mod tests {
         assert_eq!(v[0]["category"], "personal");
         assert_eq!(v[0]["categoryName"], "Personal");
         assert_eq!(v[1]["qml"], "pages/WallpaperPage.qml");
+        assert_eq!(v[1]["plugin"], false);
+    }
+
+    #[test]
+    fn plugin_pages_follow_core_pages_in_apps() {
+        let plugin = PluginPage {
+            id: "demo".into(),
+            name: "Demo".into(),
+            icon: "x".into(),
+            qml_path: "/usr/share/uq/settings/pages/demo/Page.qml".into(),
+            dbus_name: None,
+            keywords: vec![],
+            settings: vec![],
+        };
+        let v: serde_json::Value =
+            serde_json::from_str(&pages_json(&all_pages(&[plugin]))).unwrap();
+        assert_eq!(v.as_array().unwrap().len(), 3);
+        assert_eq!(v[2]["id"], "demo");
+        assert_eq!(v[2]["category"], "apps");
+        assert_eq!(v[2]["categoryName"], "Apps");
+        assert_eq!(v[2]["plugin"], true);
+        assert_eq!(
+            v[2]["qml"],
+            "file:///usr/share/uq/settings/pages/demo/Page.qml"
+        );
     }
 }

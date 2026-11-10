@@ -4,6 +4,9 @@ fn main() {
     let builder = CxxQtBuilder::new_qml_module(QmlModule::new("org.uq.settings").qml_files([
         QmlFile::from("qml/Main.qml"),
         QmlFile::from("qml/Sidebar.qml"),
+        QmlFile::from("qml/Search.qml"),
+        QmlFile::from("qml/PluginPage.qml"),
+        QmlFile::from("qml/components/ErrorCard.qml"),
         QmlFile::from("qml/components/UqLabel.qml"),
         QmlFile::from("qml/components/SettingRow.qml"),
         QmlFile::from("qml/pages/AppearancePage.qml"),
