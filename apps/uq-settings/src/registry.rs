@@ -153,7 +153,171 @@ static WALLPAPER_SETTINGS: [SearchEntry; 5] = [
     ),
 ];
 
-static CORE_PAGES: [PageInfo; 2] = [
+static LOOK_SETTINGS: [SearchEntry; 15] = [
+    entry(
+        "gaps-inner",
+        "Gaps between windows",
+        &["gap", "spacing", "padding", "inner"],
+    ),
+    entry(
+        "gaps-outer",
+        "Gaps around the screen",
+        &["gap", "margin", "outer", "edge"],
+    ),
+    entry(
+        "border-width",
+        "Window border width",
+        &["outline", "frame", "thickness"],
+    ),
+    entry(
+        "rounding",
+        "Corner rounding",
+        &["radius", "round corners", "corners"],
+    ),
+    entry(
+        "blur",
+        "Blur behind windows",
+        &["frosted", "glass", "transparency"],
+    ),
+    entry(
+        "blur-size",
+        "Blur size",
+        &["blur radius", "frosted", "strength"],
+    ),
+    entry(
+        "blur-passes",
+        "Blur passes",
+        &["blur quality", "frosted", "iterations"],
+    ),
+    entry("shadow", "Window shadows", &["drop shadow", "depth"]),
+    entry(
+        "animations",
+        "Animations",
+        &["motion", "transitions", "effects"],
+    ),
+    entry(
+        "animation-speed",
+        "Animation speed",
+        &["faster", "slower", "motion", "transitions"],
+    ),
+    entry(
+        "default-layout",
+        "Default layout",
+        &["tiling", "dwindle", "master", "scrolling"],
+    ),
+    entry(
+        "workspace-layouts",
+        "Layout for each workspace",
+        &["tiling", "workspace rules", "per workspace"],
+    ),
+    entry(
+        "dwindle-options",
+        "Dwindle layout options",
+        &["split", "tiling", "preserve split"],
+    ),
+    entry(
+        "master-options",
+        "Master layout options",
+        &["master", "mfact", "orientation", "stack"],
+    ),
+    entry(
+        "scrolling-options",
+        "Scrolling layout options",
+        &["columns", "column width", "tiling"],
+    ),
+];
+
+static SHELL_SETTINGS: [SearchEntry; 16] = [
+    entry(
+        "pins",
+        "Pinned apps",
+        &["favorites", "favourites", "launcher", "dock"],
+    ),
+    entry(
+        "providers",
+        "Launcher search providers",
+        &["launcher", "calculator", "run", "results", "order"],
+    ),
+    entry(
+        "islands",
+        "Bar islands",
+        &["bar", "panel", "widgets", "show", "hide"],
+    ),
+    entry(
+        "clock-24h",
+        "24-hour clock",
+        &["time", "12 hour", "am pm", "format"],
+    ),
+    entry(
+        "terminal",
+        "Terminal",
+        &["kitty", "console", "emulator", "default terminal"],
+    ),
+    entry(
+        "notif-backend",
+        "Notification service",
+        &[
+            "notifications",
+            "notifi",
+            "mako",
+            "dunst",
+            "swaync",
+            "daemon",
+        ],
+    ),
+    entry(
+        "notif-summary",
+        "Notification summary in the bar",
+        &["notifications", "count", "badge"],
+    ),
+    entry(
+        "idle-dim",
+        "Dim the screen",
+        &["idle", "brightness", "timeout"],
+    ),
+    entry(
+        "idle-lock",
+        "Lock after",
+        &["idle", "lock screen", "timeout"],
+    ),
+    entry(
+        "idle-screen-off",
+        "Turn the screen off",
+        &["idle", "display", "dpms", "timeout"],
+    ),
+    entry(
+        "idle-suspend",
+        "Suspend on battery",
+        &["idle", "sleep", "power", "timeout"],
+    ),
+    entry(
+        "idle-locked-screen-off",
+        "Screen off after locking",
+        &["idle", "lock", "display", "seconds"],
+    ),
+    entry(
+        "idle-media",
+        "Media keeps the screen from locking",
+        &["idle", "video", "inhibit", "playing"],
+    ),
+    entry(
+        "privacy-ip",
+        "Public IP lookup",
+        &["privacy", "network", "online", "address"],
+    ),
+    entry(
+        "privacy-launches",
+        "Remember launched apps",
+        &["privacy", "history", "record", "frequency"],
+    ),
+    entry(
+        "clear-launch-counts",
+        "Clear launch history",
+        &["privacy", "forget", "reset", "launcher"],
+    ),
+];
+
+static CORE_PAGES: [PageInfo; 4] = [
     PageInfo {
         id: "appearance",
         name: "Appearance",
@@ -163,12 +327,28 @@ static CORE_PAGES: [PageInfo; 2] = [
         settings: &APPEARANCE_SETTINGS,
     },
     PageInfo {
+        id: "look",
+        name: "Look and layouts",
+        icon: "preferences-desktop-effects",
+        category: Category::Personal,
+        qml: "pages/LookPage.qml",
+        settings: &LOOK_SETTINGS,
+    },
+    PageInfo {
         id: "wallpaper",
         name: "Wallpaper",
         icon: "preferences-desktop-wallpaper",
         category: Category::Personal,
         qml: "pages/WallpaperPage.qml",
         settings: &WALLPAPER_SETTINGS,
+    },
+    PageInfo {
+        id: "shell",
+        name: "Shell",
+        icon: "preferences-desktop",
+        category: Category::Uq,
+        qml: "pages/ShellPage.qml",
+        settings: &SHELL_SETTINGS,
     },
 ];
 
@@ -281,7 +461,7 @@ mod tests {
         let pages = core_pages();
         let ids: HashSet<_> = pages.iter().map(|p| p.id).collect();
         assert_eq!(ids.len(), pages.len(), "duplicate page id");
-        assert!(ids.contains("appearance") && ids.contains("wallpaper"));
+        assert!(ids.contains("appearance") && ids.contains("look") && ids.contains("wallpaper"));
         assert!(
             pages.windows(2).all(|w| w[0].category <= w[1].category),
             "core pages out of category order"
@@ -318,11 +498,14 @@ mod tests {
             .iter()
             .map(|p| p["id"].as_str().unwrap())
             .collect();
-        assert_eq!(ids, ["appearance", "wallpaper"]);
+        assert_eq!(ids, ["appearance", "look", "wallpaper", "shell"]);
         assert_eq!(v[0]["category"], "personal");
         assert_eq!(v[0]["categoryName"], "Personal");
-        assert_eq!(v[1]["qml"], "pages/WallpaperPage.qml");
-        assert_eq!(v[1]["plugin"], false);
+        assert_eq!(v[1]["qml"], "pages/LookPage.qml");
+        assert_eq!(v[2]["qml"], "pages/WallpaperPage.qml");
+        assert_eq!(v[2]["plugin"], false);
+        assert_eq!(v[3]["qml"], "pages/ShellPage.qml");
+        assert_eq!(v[3]["categoryName"], "uQ");
     }
 
     #[test]
@@ -338,13 +521,13 @@ mod tests {
         };
         let v: serde_json::Value =
             serde_json::from_str(&pages_json(&all_pages(&[plugin]))).unwrap();
-        assert_eq!(v.as_array().unwrap().len(), 3);
-        assert_eq!(v[2]["id"], "demo");
-        assert_eq!(v[2]["category"], "apps");
-        assert_eq!(v[2]["categoryName"], "Apps");
-        assert_eq!(v[2]["plugin"], true);
+        assert_eq!(v.as_array().unwrap().len(), 5);
+        assert_eq!(v[4]["id"], "demo");
+        assert_eq!(v[4]["category"], "apps");
+        assert_eq!(v[4]["categoryName"], "Apps");
+        assert_eq!(v[4]["plugin"], true);
         assert_eq!(
-            v[2]["qml"],
+            v[4]["qml"],
             "file:///usr/share/uq/settings/pages/demo/Page.qml"
         );
     }

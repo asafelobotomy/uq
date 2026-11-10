@@ -25,6 +25,7 @@ zbus = { version = "5", default-features = false, features = ["tokio"] }
 
 [dev-dependencies]
 tempfile.workspace = true
+uq-core = { workspace = true, features = ["test-bus"] }
 
 [build-dependencies]
 cxx-qt-build = "0.10"

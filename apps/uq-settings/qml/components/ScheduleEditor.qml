@@ -53,7 +53,7 @@ ColumnLayout {
         highlight: root.highlight
         enabled: root.enabled
         Layout.fillWidth: true
-        QQC2.ComboBox {
+        UqComboBox {
             id: modeBox
             objectName: "modeBox"
             model: root.modes.map(m => m.name)

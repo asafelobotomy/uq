@@ -115,4 +115,18 @@ TestCase {
         compare(m.groups.length, 0);
         compare(m.topHit, null);
     }
+
+    function test_merge_respects_order() {
+        var pg = {
+            calc: { provider: "calc", provider_name: "Calculator", generation: 3, items: [{ id: "c", score: 1 }] },
+            run: { provider: "run", provider_name: "Run", generation: 3, items: [{ id: "r", score: 1 }] }
+        };
+        var def = Rank.merge([], pg, 3);
+        compare(def.groups[0].provider, "calc");
+        var m = Rank.merge([], pg, 3, ["run", "calc"]);
+        compare(m.groups[0].provider, "run");
+        compare(m.groups[1].provider, "calc");
+        // Empty order falls back to the built-in order.
+        compare(Rank.merge([], pg, 3, []).groups[0].provider, "calc");
+    }
 }

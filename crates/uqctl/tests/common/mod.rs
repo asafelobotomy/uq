@@ -2,80 +2,23 @@
 #![allow(dead_code)]
 
 use serde_json::{Value, json};
-use std::io::{BufRead, BufReader as StdBufReader};
-use std::process::{Child as StdChild, Command as StdCommand, Stdio};
+use std::process::Stdio;
 use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, ChildStdout, Command};
+pub use uq_core::test_bus::Bus;
+use uq_core::test_bus::private_bus_with_services;
 
-pub struct Bus {
-    child: StdChild,
-    pub address: String,
-    _dir: tempfile::TempDir,
-}
-
-impl Bus {
-    /// The directory holding the bus socket, its config and the Ghost service's marker.
-    pub fn dir(&self) -> &std::path::Path {
-        self._dir.path()
-    }
-}
-
-impl Drop for Bus {
-    fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
-    }
-}
-
-/// Unix socket paths must stay under 108 bytes, so the bus lives in a short /tmp directory.
+/// A private bus with one activatable service, `org.test.Ghost`, whose start leaves a `started`
+/// file in the bus directory: tests use it to prove the bridge never auto-starts providers.
 pub fn private_bus() -> Bus {
-    let dir = tempfile::Builder::new()
-        .prefix("uqb")
-        .tempdir_in("/tmp")
-        .unwrap();
-    // A private config with one activatable service, `org.test.Ghost`, whose start leaves a
-    // `started` file: tests use it to prove the bridge never auto-starts providers.
-    let services = dir.path().join("s");
-    std::fs::create_dir(&services).unwrap();
-    std::fs::write(
-        services.join("ghost.service"),
-        format!(
-            "[D-BUS Service]\nName=org.test.Ghost\nExec=/usr/bin/touch {}\n",
-            dir.path().join("started").display()
-        ),
-    )
-    .unwrap();
-    let conf = dir.path().join("c.conf");
-    std::fs::write(
-        &conf,
-        format!(
-            "<busconfig><type>session</type><listen>unix:path={}</listen>\
-             <servicedir>{}</servicedir>\
-             <policy context=\"default\"><allow send_destination=\"*\" eavesdrop=\"true\"/>\
-             <allow eavesdrop=\"true\"/><allow own=\"*\"/></policy></busconfig>",
-            dir.path().join("b").display(),
-            services.display()
-        ),
-    )
-    .unwrap();
-    let mut child = StdCommand::new("dbus-daemon")
-        .args(["--nofork", "--print-address"])
-        .arg(format!("--config-file={}", conf.display()))
-        .stdout(Stdio::piped())
-        .spawn()
-        .expect("dbus-daemon");
-    let mut line = String::new();
-    StdBufReader::new(child.stdout.take().unwrap())
-        .read_line(&mut line)
-        .unwrap();
-    let address = line.trim().to_string();
-    assert!(address.len() < 108, "{address}");
-    Bus {
-        child,
-        address,
-        _dir: dir,
-    }
+    let body = "[D-BUS Service]\nName=org.test.Ghost\nExec=/usr/bin/touch @DIR@/started\n";
+    // The directory is only known once the bus exists, so the service file is written after;
+    // dbus-daemon reads servicedir entries at activation time.
+    let bus = private_bus_with_services(&[]);
+    let body = body.replace("@DIR@", &bus.dir().display().to_string());
+    std::fs::write(bus.dir().join("s").join("ghost.service"), body).unwrap();
+    bus
 }
 
 pub struct Bridge {

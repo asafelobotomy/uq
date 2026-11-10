@@ -8,6 +8,7 @@ import Quickshell.Widgets
 import "../core"
 import "../logic/launcher.js" as L
 import "../logic/rank.js" as Rank
+import "../logic/shellprefs.js" as ShellPrefs
 
 // Super+Space search box: a top hit, then results grouped by source. Logic lives in
 // launcher.js and rank.js; everything shown from apps or providers goes through UqText, and
@@ -107,7 +108,8 @@ PanelWindow {
     }
 
     function rebuild(reset) {
-        sections = L.sections(Rank.merge(apps, providerResults, generation));
+        sections = L.sections(Rank.merge(apps, providerResults, generation,
+            ShellPrefs.providerOrder(Settings.values.shell)));
         selection = L.clampSelection(reset ? null : selection, sections);
     }
 

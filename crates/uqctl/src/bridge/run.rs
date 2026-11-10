@@ -15,6 +15,13 @@ pub(crate) struct RunState {
     command: Option<String>,
 }
 
+impl RunState {
+    /// Forget the stored command (the generation is kept, so ordering still holds).
+    pub(crate) fn forget(&mut self) {
+        self.command = None;
+    }
+}
+
 /// The `Run` row for a `>` query, remembering the command for `generation`. Call it once per
 /// search: every generation at least as new as the stored one advances the state and drops the
 /// old command, even when it yields no item; an older (late) generation changes nothing.

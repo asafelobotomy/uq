@@ -15,11 +15,16 @@ struct Fake {
     tag: &'static str,
     delay: Duration,
     calls: Calls,
+    searches: Calls,
 }
 
 #[zbus::interface(name = "org.uq.Launcher1.Provider")]
 impl Fake {
     async fn search(&self, query: String) -> Vec<(String, String, String, String, String, f64)> {
+        self.searches
+            .lock()
+            .unwrap()
+            .push((query.clone(), String::new()));
         if query.starts_with("slow") {
             tokio::time::sleep(self.delay).await;
         }
@@ -44,7 +49,19 @@ async fn serve_fake(
     tag: &'static str,
     delay: Duration,
 ) -> (zbus::Connection, Calls) {
+    let (conn, calls, _) = serve_fake_logged(bus, name, tag, delay).await;
+    (conn, calls)
+}
+
+/// Like `serve_fake`, also returning every `Search` query the provider received.
+async fn serve_fake_logged(
+    bus: &Bus,
+    name: &'static str,
+    tag: &'static str,
+    delay: Duration,
+) -> (zbus::Connection, Calls, Calls) {
     let calls = Calls::default();
+    let searches = Calls::default();
     let conn = zbus::connection::Builder::address(bus.address.as_str())
         .unwrap()
         .name(name)
@@ -55,13 +72,14 @@ async fn serve_fake(
                 tag,
                 delay,
                 calls: calls.clone(),
+                searches: searches.clone(),
             },
         )
         .unwrap()
         .build()
         .await
         .unwrap();
-    (conn, calls)
+    (conn, calls, searches)
 }
 
 fn provider_file(data: &Path, file: &str, bus_name: &str, name: &str) {
@@ -259,4 +277,155 @@ async fn activate_routes_to_provider() {
     b.reply(7).await;
     assert!(b.call(8, "Activate", json!(["calc", "calc", "copy"])).await["err"].is_string());
     assert!(b.call(9, "Activate", json!(["run", "run-6", "run"])).await["err"].is_string());
+}
+
+/// A real uqd on the private bus, so the bridge learns the settings.
+async fn serve_uqd(bus: &Bus, root: &Path) -> zbus::Connection {
+    use std::path::PathBuf;
+    let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut paths = uq_core::paths::Paths::under(root);
+    paths.themes_dir = repo.join("themes");
+    paths.templates_dir = repo.join("templates");
+    let desktop = uqd::service::Desktop::new(
+        paths,
+        Arc::new(uqd::compositor::fake::FakeCompositor::running()),
+        Arc::new(uqd::system::FakeSystem::default()),
+    )
+    .unwrap();
+    uqd::dbus::serve(
+        zbus::connection::Builder::address(bus.address.as_str()).unwrap(),
+        desktop,
+    )
+    .await
+    .unwrap()
+    .0
+}
+
+#[tokio::test]
+async fn disabled_builtin_and_external_are_not_asked() {
+    let bus = private_bus();
+    let data = tempfile::tempdir().unwrap();
+    let state = tempfile::tempdir().unwrap();
+    provider_file(data.path(), "a.provider", "org.test.P", "Pee");
+    provider_file(data.path(), "b.provider", "org.test.Q", "Queue");
+    let (_p, _, p_searches) = serve_fake_logged(&bus, "org.test.P", "p", Duration::ZERO).await;
+    let (_q, _, q_searches) = serve_fake_logged(&bus, "org.test.Q", "q", Duration::ZERO).await;
+    let _uqd = serve_uqd(&bus, state.path()).await;
+    let mut b = start(&bus, data.path());
+    b.event("Hello").await;
+
+    // Control: with nothing switched off, all three answer.
+    let mut got = Vec::new();
+    for (i, q) in ["=2+2", "hello"].iter().enumerate() {
+        b.send(1 + i as u64, "Search", json!([q, 1 + i])).await;
+        got.extend(collect(&mut b, Duration::from_millis(500)).await);
+    }
+    let who: Vec<&str> = got.iter().filter_map(|e| e["provider"].as_str()).collect();
+    assert!(who.contains(&"calc"), "{got:?}");
+    assert!(
+        who.contains(&"org.test.P") && who.contains(&"org.test.Q"),
+        "{got:?}"
+    );
+
+    // Switch calc and P off through the typed client; the bridge relays SettingsChanged.
+    let conn = zbus::connection::Builder::address(bus.address.as_str())
+        .unwrap()
+        .build()
+        .await
+        .unwrap();
+    let proxy = uq_core::client::DesktopProxy::new(&conn).await.unwrap();
+    let mut shell: Value =
+        serde_json::from_str(&proxy.get_section("shell").await.unwrap()).unwrap();
+    shell["providers"] = json!([
+        {"id": "calc", "enabled": false},
+        {"id": "org.test.P", "enabled": false}
+    ]);
+    proxy
+        .set_section("shell", &shell.to_string())
+        .await
+        .unwrap();
+    b.event("SettingsChanged").await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    p_searches.lock().unwrap().clear();
+    q_searches.lock().unwrap().clear();
+    // One at a time: a newer generation makes the older one's answers stale.
+    let mut got = Vec::new();
+    for (i, q) in ["=2+2", "hello", "> ls"].iter().enumerate() {
+        b.send(3 + i as u64, "Search", json!([q, 3 + i])).await;
+        got.extend(collect(&mut b, Duration::from_millis(500)).await);
+    }
+    let who: Vec<&str> = got.iter().filter_map(|e| e["provider"].as_str()).collect();
+    assert!(!who.contains(&"calc"), "{got:?}");
+    assert!(!who.contains(&"org.test.P"), "{got:?}");
+    assert!(who.contains(&"org.test.Q"), "{got:?}");
+    assert!(who.contains(&"run"), "{got:?}");
+    assert!(p_searches.lock().unwrap().is_empty(), "P was asked");
+    assert!(!q_searches.lock().unwrap().is_empty(), "Q was not asked");
+}
+
+#[tokio::test]
+async fn rows_from_before_switch_off_cannot_act() {
+    let bus = private_bus();
+    let data = tempfile::tempdir().unwrap();
+    let state = tempfile::tempdir().unwrap();
+    provider_file(data.path(), "a.provider", "org.test.Fake", "Fakery");
+    let (_c, calls) = serve_fake(&bus, "org.test.Fake", "f", Duration::ZERO).await;
+    let _uqd = serve_uqd(&bus, state.path()).await;
+    let mut b = start(&bus, data.path());
+    b.event("Hello").await;
+
+    // A calculator row is live and activates (control).
+    b.send(1, "Search", json!(["=2+2", 1])).await;
+    b.reply(1).await;
+    assert_eq!(
+        b.call(2, "Activate", json!(["calc", "calc", "copy"])).await["ok"],
+        json!({"copy": "4"})
+    );
+    // A Run row is live; then calc, run and the fake provider are all switched off.
+    b.send(3, "Search", json!(["> ls", 2])).await;
+    b.reply(3).await;
+    b.send(4, "Search", json!(["=2+2", 3])).await;
+    b.reply(4).await;
+    b.send(5, "Search", json!(["> ls", 4])).await;
+    b.reply(5).await;
+
+    let conn = zbus::connection::Builder::address(bus.address.as_str())
+        .unwrap()
+        .build()
+        .await
+        .unwrap();
+    let proxy = uq_core::client::DesktopProxy::new(&conn).await.unwrap();
+    let mut shell: Value =
+        serde_json::from_str(&proxy.get_section("shell").await.unwrap()).unwrap();
+    shell["providers"] = json!([
+        {"id": "calc", "enabled": false},
+        {"id": "run", "enabled": false},
+        {"id": "org.test.Fake", "enabled": false}
+    ]);
+    proxy
+        .set_section("shell", &shell.to_string())
+        .await
+        .unwrap();
+    b.event("SettingsChanged").await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    let r = b.call(6, "Activate", json!(["run", "run-4", "run"])).await;
+    assert!(r["err"].as_str().unwrap().contains("switched off"), "{r}");
+    let r = b.call(7, "Launch", json!([{"run_id": "run-4"}])).await;
+    assert_eq!(r["err"], "Run is switched off", "{r}");
+    let r = b.call(8, "Activate", json!(["calc", "calc", "copy"])).await;
+    assert!(r["err"].as_str().unwrap().contains("switched off"), "{r}");
+    let r = b
+        .call(9, "Activate", json!(["org.test.Fake", "id1", "open"]))
+        .await;
+    assert!(r["err"].as_str().unwrap().contains("switched off"), "{r}");
+    assert!(calls.lock().unwrap().is_empty());
+
+    // And a fresh search with Run and calc off shows no row for them.
+    for (i, q) in ["> ls", "=2+2"].iter().enumerate() {
+        b.send(10 + i as u64, "Search", json!([q, 5 + i])).await;
+        let got = collect(&mut b, Duration::from_millis(400)).await;
+        assert!(got.is_empty(), "{q}: {got:?}");
+    }
 }

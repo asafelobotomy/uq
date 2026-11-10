@@ -19,3 +19,11 @@ if [ -n "$hits" ]; then
     echo "$hits" >&2
     exit 1
 fi
+
+hits=$(awk -f scripts/lint-control-text.awk "${files[@]}" | sort -t: -k1,1 -k2,2n -u)
+if [ -n "$hits" ]; then
+    echo "lint-settings: stock controls must show data through UqLabel contentItems" >&2
+    echo "(text: may only be a string literal; a ComboBox needs contentItem: and delegate:):" >&2
+    echo "$hits" >&2
+    exit 1
+fi

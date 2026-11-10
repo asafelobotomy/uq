@@ -3,6 +3,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
 import "../core"
+import "../logic/shellprefs.js" as ShellPrefs
 
 // One bar per screen: five floating islands (System, Work, Time/weather, Notifications, Status).
 PanelWindow {
@@ -31,21 +32,28 @@ PanelWindow {
         spacing: Theme.gapIn
 
         SystemIsland {
+            visible: ShellPrefs.islandOn(Settings.values.shell, "system")
             Layout.fillHeight: true
             screen: bar.modelData
         }
         WorkIsland {
+            visible: ShellPrefs.islandOn(Settings.values.shell, "work")
             Layout.fillHeight: true
             screen: bar.modelData
             barWidth: bar.width
         }
         Item { Layout.fillWidth: true }
-        TimeIsland { Layout.fillHeight: true }
+        TimeIsland {
+            Layout.fillHeight: true
+            visible: ShellPrefs.islandOn(Settings.values.shell, "time")
+        }
         NotifIsland {
+            visible: ShellPrefs.islandOn(Settings.values.shell, "notif")
             Layout.fillHeight: true
             screen: bar.modelData
         }
         StatusIsland {
+            visible: ShellPrefs.islandOn(Settings.values.shell, "status")
             Layout.fillHeight: true
             screen: bar.modelData
         }

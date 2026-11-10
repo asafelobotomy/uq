@@ -14,6 +14,8 @@ SettingRow {
     property var value: null
     property string themeLabel: "Use theme"
     property bool editable: true
+    /// Shown names for some choices, by choice: `{ master: "Master" }`; others show as they are.
+    property var labels: ({})
     /// The new value: a string, or null for "Use theme".
     signal chosen(var value)
 
@@ -24,28 +26,21 @@ SettingRow {
         return list;
     }
 
+    function labelOf(item) {
+        return labels[item] !== undefined ? labels[item] : item;
+    }
+
     function shownIndex() {
         return value ? items.indexOf(value) : 0;
     }
 
-    QQC2.ComboBox {
+    UqComboBox {
         id: combo
-        model: root.items
+        model: root.items.map(root.labelOf)
         currentIndex: root.shownIndex()
         enabled: root.enabled
         implicitContentWidthPolicy: QQC2.ComboBox.WidestText
         Accessible.name: root.label
-        // The style paints the shown name itself, as plain text; the popup rows are ours.
-        delegate: QQC2.ItemDelegate {
-            required property int index
-            required property var modelData
-            width: combo.width
-            highlighted: combo.highlightedIndex === index
-            contentItem: UqLabel {
-                text: modelData
-                elide: Text.ElideRight
-            }
-        }
         onActivated: index => {
             root.chosen(index === 0 ? null : root.items[index]);
             combo.currentIndex = Qt.binding(() => root.shownIndex());

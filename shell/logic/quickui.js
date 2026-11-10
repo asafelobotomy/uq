@@ -215,8 +215,6 @@ function themeList(v) {
     return v.filter(function (id) { return typeof id === "string" && id !== ""; });
 }
 
-// GetLayouts' map ("<id>" or "name:<name>" -> layout) for a workspace {id, name}; dwindle when
-// unset (Hyprland's default). No workspace -> "".
 // The workspace selector uqd stores layouts under, exactly as uqctl's active_workspace_selector
 // (crates/uqctl/src/main.rs) builds it: the id when > 0 (named and special workspaces have
 // negative ids), a special workspace's own name, otherwise "name:<name>". "" when unknown.
@@ -232,10 +230,21 @@ function workspaceSelector(ws) {
     return name.indexOf("special") === 0 ? name : "name:" + name;
 }
 
-function workspaceLayout(layouts, ws) {
+// The default layout uqd renders (settings' layout_options.default), "" when unset.
+function defaultLayout(settings) {
+    var o = settings && typeof settings === "object" ? settings.layout_options : null;
+    var d = o && typeof o === "object" ? o["default"] : null;
+    return typeof d === "string" ? d : "";
+}
+
+// GetLayouts' map ("<id>" or "name:<name>" -> layout) for a workspace {id, name}. A workspace
+// without a rule has `fallback`, the default layout (defaultLayout(settings)), or dwindle
+// (Hyprland's default) when that is unset. No workspace -> "".
+function workspaceLayout(layouts, ws, fallback) {
     if (!ws)
         return "";
     var m = layouts && typeof layouts === "object" ? layouts : {};
     var sel = workspaceSelector(ws);
-    return (sel !== "" && m[sel]) || m["name:" + ws.name] || "dwindle";
+    var dflt = typeof fallback === "string" && fallback !== "" ? fallback : "dwindle";
+    return (sel !== "" && m[sel]) || m["name:" + ws.name] || dflt;
 }

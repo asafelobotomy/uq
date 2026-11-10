@@ -1,5 +1,5 @@
 //! The Wallpaper page's logic: [`WallpaperState`] talks to uqd (`org.uq.Desktop1`) and is plain
-//! Rust, tested against a fake uqd. `crate::wallpaper_model` is the thin QML object around it.
+//! Rust, tested against the fake uqd. `crate::wallpaper_model` is the thin QML object around it.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -7,8 +7,10 @@ use std::time::Duration;
 
 use serde_json::{Value, json};
 use tokio::sync::Mutex;
-use uq_core::client::{self, DesktopProxy};
+use uq_core::client::DesktopProxy;
 use uq_core::settings::Wallpaper;
+
+use crate::pages::runner::{PageLogic, parse_json, patch_section};
 
 /// The file types the shell's slideshow picks up.
 const IMAGE_EXTENSIONS: [&str; 6] = ["jpg", "jpeg", "png", "webp", "jxl", "avif"];
@@ -32,29 +34,12 @@ pub enum Op {
     ClearEntry { output: String },
 }
 
-/// The result of an [`Op`]: the state to show, and uqd's message when it was refused.
-#[derive(Debug, Clone, PartialEq)]
-pub struct Outcome {
-    /// `{outputs, problems, problemsSkipped}`, or `{}` when uqd can't be read.
-    pub state: Value,
-    pub error: Option<String>,
-}
-
 pub struct WallpaperState {
     conn: zbus::Connection,
     /// Writes read-modify-write the section, so one at a time.
     write: Mutex<()>,
     scan: fn(&Wallpaper) -> BTreeMap<String, String>,
     scan_timeout: Duration,
-}
-
-/// The text to show for a failed call: uqd's own message when it sent one.
-fn message(e: &zbus::Error) -> String {
-    match e {
-        zbus::Error::MethodError(_, Some(text), _) => text.clone(),
-        zbus::Error::FDO(inner) => inner.to_string(),
-        other => other.to_string(),
-    }
 }
 
 fn is_image(path: &Path) -> bool {
@@ -135,25 +120,22 @@ impl WallpaperState {
             scan_timeout,
         }
     }
+}
 
-    /// Do `op`, then read the state back. A refusal comes back as `error` with the state as uqd
-    /// has it, so the controls snap back to the last good value.
-    pub async fn run(&self, op: Op) -> Outcome {
-        let done = {
-            let _guard = self.write.lock().await;
-            self.apply(op).await
-        };
-        let error = done
-            .err()
-            .filter(|e| !client::no_owner(e))
-            .map(|e| message(&e));
-        match self.snapshot().await {
-            Ok(state) => Outcome { state, error },
-            Err(e) => Outcome {
-                state: json!({}),
-                error: error.or_else(|| (!client::no_owner(&e)).then(|| message(&e))),
-            },
-        }
+/// The state is `{outputs, problems, problemsSkipped}`.
+impl PageLogic for WallpaperState {
+    type Op = Op;
+
+    fn refresh() -> Op {
+        Op::Refresh
+    }
+
+    fn is_refresh(op: &Op) -> bool {
+        matches!(op, Op::Refresh)
+    }
+
+    fn write_lock(&self) -> &Mutex<()> {
+        &self.write
     }
 
     async fn apply(&self, op: Op) -> zbus::Result<()> {
@@ -165,44 +147,41 @@ impl WallpaperState {
             Op::ClearEntry { output } => (output, None),
         };
         let bad = |what: &str| zbus::Error::Failure(what.to_string());
-        let mut section: Value = serde_json::from_str(&proxy.get_section("wallpaper").await?)
-            .map_err(|e| zbus::Error::Failure(format!("uqd sent bad JSON: {e}")))?;
-        let outputs = section
-            .as_object_mut()
-            .ok_or_else(|| bad("the wallpaper section isn't an object"))?
-            .entry("outputs")
-            .or_insert_with(|| json!({}))
-            .as_object_mut()
-            .ok_or_else(|| bad("the wallpaper outputs aren't an object"))?;
-        match change {
-            Some((entry, false)) => {
-                outputs.insert(output, entry);
+        patch_section(&proxy, "wallpaper", |section| {
+            let outputs = section
+                .entry("outputs")
+                .or_insert_with(|| json!({}))
+                .as_object_mut()
+                .ok_or_else(|| bad("the wallpaper outputs aren't an object"))?;
+            match change {
+                Some((entry, false)) => {
+                    outputs.insert(output, entry);
+                }
+                Some((patch, true)) => {
+                    let mut merged = outputs
+                        .get(&output)
+                        .or_else(|| outputs.get("*"))
+                        .cloned()
+                        .unwrap_or_else(|| json!({}));
+                    let (Some(fields), Some(changes)) = (merged.as_object_mut(), patch.as_object())
+                    else {
+                        return Err(bad("a wallpaper entry must be an object"));
+                    };
+                    fields.extend(changes.iter().map(|(k, v)| (k.clone(), v.clone())));
+                    outputs.insert(output, merged);
+                }
+                None => {
+                    outputs.remove(&output);
+                }
             }
-            Some((patch, true)) => {
-                let mut merged = outputs
-                    .get(&output)
-                    .or_else(|| outputs.get("*"))
-                    .cloned()
-                    .unwrap_or_else(|| json!({}));
-                let (Some(fields), Some(changes)) = (merged.as_object_mut(), patch.as_object())
-                else {
-                    return Err(bad("a wallpaper entry must be an object"));
-                };
-                fields.extend(changes.iter().map(|(k, v)| (k.clone(), v.clone())));
-                outputs.insert(output, merged);
-            }
-            None => {
-                outputs.remove(&output);
-            }
-        }
-        proxy.set_section("wallpaper", &section.to_string()).await
+            Ok(())
+        })
+        .await
     }
 
     async fn snapshot(&self) -> zbus::Result<Value> {
         let proxy = DesktopProxy::new(&self.conn).await?;
-        let text = proxy.get_section("wallpaper").await?;
-        let section: Value = serde_json::from_str(&text)
-            .map_err(|e| zbus::Error::Failure(format!("uqd sent bad JSON: {e}")))?;
+        let section = parse_json(&proxy.get_section("wallpaper").await?)?;
         let parsed: Wallpaper = serde_json::from_value(section.clone()).unwrap_or_default();
         // Disk checks can block on a stalled mount: off the async threads, and not waited for
         // beyond the time limit (the page then shows without problems, `problemsSkipped` set).
@@ -227,78 +206,35 @@ impl WallpaperState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_bus::{connect, private_bus};
-    use std::sync::Arc;
-    use std::sync::Mutex as StdMutex;
-    use uq_core::client::DESKTOP_NAME;
+    use crate::pages::fake_uqd;
+    use crate::pages::runner::{Outcome, run};
     use uq_core::settings::WallpaperEntry;
-
-    #[derive(Debug, zbus::DBusError)]
-    #[zbus(prefix = "org.uq.Desktop1.Error")]
-    enum FakeError {
-        #[zbus(error)]
-        ZBus(zbus::Error),
-        InvalidSetting(String),
-    }
-
-    struct Fake {
-        section: Arc<StdMutex<Value>>,
-    }
-
-    #[zbus::interface(name = "org.uq.Desktop1")]
-    impl Fake {
-        async fn get_section(&self, _domain: &str) -> String {
-            let read = self.section.lock().unwrap().to_string();
-            // A slow read, so an unserialised read-modify-write would lose an update.
-            tokio::time::sleep(std::time::Duration::from_millis(30)).await;
-            read
-        }
-        /// Like uqd: the interval must be 10..=86400.
-        fn set_section(&self, _domain: &str, json: &str) -> Result<(), FakeError> {
-            let v: Value =
-                serde_json::from_str(json).map_err(|e| FakeError::InvalidSetting(e.to_string()))?;
-            for (name, e) in v["outputs"].as_object().into_iter().flatten() {
-                if let Some(i) = e["interval"].as_i64()
-                    && !(10..=86400).contains(&i)
-                {
-                    return Err(FakeError::InvalidSetting(format!(
-                        "{name}: interval {i} is outside 10 to 86400"
-                    )));
-                }
-            }
-            *self.section.lock().unwrap() = v;
-            Ok(())
-        }
-    }
+    use uq_core::state::State;
+    use uq_core::test_bus::{connect, private_bus};
 
     struct Rig {
-        _bus: crate::test_bus::Bus,
-        _uqd: zbus::Connection,
+        r: fake_uqd::Rig,
         state: WallpaperState,
-        section: Arc<StdMutex<Value>>,
+    }
+
+    impl Rig {
+        fn section(&self) -> Value {
+            self.r
+                .state
+                .lock()
+                .unwrap()
+                .settings
+                .section("wallpaper")
+                .unwrap()
+        }
     }
 
     async fn rig(section: Value) -> Rig {
-        let bus = private_bus();
-        let section = Arc::new(StdMutex::new(section));
-        let uqd = connect(&bus).await;
-        uqd.object_server()
-            .at(
-                "/org/uq/Desktop1",
-                Fake {
-                    section: section.clone(),
-                },
-            )
-            .await
-            .unwrap();
-        uqd.request_name(DESKTOP_NAME).await.unwrap();
-        let state = WallpaperState::new(connect(&bus).await);
-        Rig {
-            _bus: bus,
-            _uqd: uqd,
-            state,
-            section,
-        }
+        let mut state = State::default();
+        state.settings.set_section("wallpaper", section).unwrap();
+        let r = fake_uqd::rig(state).await;
+        let state = WallpaperState::new(r.client.clone());
+        Rig { r, state }
     }
 
     fn two_outputs() -> Value {
@@ -417,15 +353,13 @@ mod tests {
         }
         let r = rig(two_outputs()).await;
         let state =
-            WallpaperState::with_scan(r.state.conn.clone(), stall, Duration::from_millis(100));
+            WallpaperState::with_scan(r.r.client.clone(), stall, Duration::from_millis(100));
         let started = std::time::Instant::now();
-        let out = state
-            .run(set("DP-1", json!({"fit": "fill", "interval": 5})))
-            .await;
+        let out = run(&state, set("DP-1", json!({"fit": "fill", "interval": 5}))).await;
         assert!(started.elapsed() < Duration::from_secs(2));
         assert_eq!(
             out.error.as_deref(),
-            Some("DP-1: interval 5 is outside 10 to 86400"),
+            Some("invalid value for wallpaper.outputs.DP-1.interval: must be between 10 and 86400"),
             "a refused write's message still arrives"
         );
         assert_eq!(out.state["problemsSkipped"], true);
@@ -441,19 +375,21 @@ mod tests {
             patch,
         };
         let (a, b) = tokio::join!(
-            r.state
-                .run(patch("DP-1", json!({"image": "/usr/share/b.png"}))),
-            r.state.run(patch("DP-1", json!({"fit": "center"})))
+            run(
+                &r.state,
+                patch("DP-1", json!({"image": "/usr/share/b.png"}))
+            ),
+            run(&r.state, patch("DP-1", json!({"fit": "center"})))
         );
         assert_eq!((a.error, b.error), (None, None));
-        let section = r.section.lock().unwrap().clone();
+        let section = r.section();
         let dp1 = &section["outputs"]["DP-1"];
         assert_eq!(dp1["image"], "/usr/share/b.png");
         assert_eq!(dp1["fit"], "center");
         assert_eq!(dp1["folder"], "/usr/share/pics", "untouched fields stay");
 
         // A display without an entry starts from the "*" entry.
-        let out = r.state.run(patch("DP-9", json!({"fit": "tile"}))).await;
+        let out = run(&r.state, patch("DP-9", json!({"fit": "tile"}))).await;
         assert_eq!(
             out.state["outputs"]["DP-9"],
             json!({"image": "/usr/share/a.png", "fit": "tile", "interval": 300})
@@ -463,7 +399,7 @@ mod tests {
     #[tokio::test]
     async fn problems_follow_the_state() {
         let r = rig(json!({"outputs": {"*": {"image": "/nonexistent/x.png"}}})).await;
-        let out = r.state.run(Op::Refresh).await;
+        let out = run(&r.state, Op::Refresh).await;
         assert_eq!(
             out.state["problems"]["*"],
             "The image can't be read: /nonexistent/x.png"
@@ -474,19 +410,16 @@ mod tests {
     async fn set_entry_keeps_other_outputs() {
         let r = rig(two_outputs()).await;
         let entry = json!({"image": "/usr/share/b.png", "fit": "center", "interval": 300});
-        let out = r.state.run(set("DP-2", entry.clone())).await;
+        let out = run(&r.state, set("DP-2", entry.clone())).await;
         assert_eq!(out.error, None);
         let outputs = &out.state["outputs"];
         assert_eq!(outputs["DP-2"], entry);
         assert_eq!(outputs["*"], two_outputs()["outputs"]["*"]);
         assert_eq!(outputs["DP-1"], two_outputs()["outputs"]["DP-1"]);
-        assert_eq!(r.section.lock().unwrap()["outputs"], *outputs);
+        assert_eq!(r.section()["outputs"], *outputs);
 
         // Replacing an entry replaces all of it.
-        let out = r
-            .state
-            .run(set("DP-1", json!({"fit": "fit", "interval": 10})))
-            .await;
+        let out = run(&r.state, set("DP-1", json!({"fit": "fit", "interval": 10}))).await;
         assert_eq!(
             out.state["outputs"]["DP-1"],
             json!({"fit": "fit", "interval": 10})
@@ -497,24 +430,26 @@ mod tests {
     #[tokio::test]
     async fn clear_entry_removes_only_that_output() {
         let r = rig(two_outputs()).await;
-        let out = r
-            .state
-            .run(Op::ClearEntry {
+        let out = run(
+            &r.state,
+            Op::ClearEntry {
                 output: "DP-1".into(),
-            })
-            .await;
+            },
+        )
+        .await;
         assert_eq!(out.error, None);
         assert_eq!(
             out.state["outputs"],
             json!({"*": two_outputs()["outputs"]["*"]})
         );
         // Clearing an absent output is harmless.
-        let out = r
-            .state
-            .run(Op::ClearEntry {
+        let out = run(
+            &r.state,
+            Op::ClearEntry {
                 output: "HDMI-9".into(),
-            })
-            .await;
+            },
+        )
+        .await;
         assert_eq!(out.error, None);
         assert_eq!(out.state["outputs"].as_object().unwrap().len(), 1);
     }
@@ -523,27 +458,28 @@ mod tests {
     async fn concurrent_entry_changes_both_land() {
         let r = rig(json!({"outputs": {}})).await;
         let (a, b) = tokio::join!(
-            r.state
-                .run(set("DP-1", json!({"fit": "fill", "interval": 300}))),
-            r.state
-                .run(set("DP-2", json!({"fit": "tile", "interval": 300})))
+            run(
+                &r.state,
+                set("DP-1", json!({"fit": "fill", "interval": 300}))
+            ),
+            run(
+                &r.state,
+                set("DP-2", json!({"fit": "tile", "interval": 300}))
+            )
         );
         assert_eq!((a.error, b.error), (None, None));
-        let section = r.section.lock().unwrap().clone();
+        let section = r.section();
         assert_eq!(section["outputs"].as_object().unwrap().len(), 2);
     }
 
     #[tokio::test]
     async fn error_restores_state() {
         let r = rig(two_outputs()).await;
-        let before = r.state.run(Op::Refresh).await.state;
-        let out = r
-            .state
-            .run(set("DP-1", json!({"fit": "fill", "interval": 5})))
-            .await;
+        let before = run(&r.state, Op::Refresh).await.state;
+        let out = run(&r.state, set("DP-1", json!({"fit": "fill", "interval": 5}))).await;
         assert_eq!(
             out.error.as_deref(),
-            Some("DP-1: interval 5 is outside 10 to 86400")
+            Some("invalid value for wallpaper.outputs.DP-1.interval: must be between 10 and 86400")
         );
         assert_eq!(out.state, before);
     }
@@ -552,7 +488,7 @@ mod tests {
     async fn uqd_down_gives_empty_state_without_an_error() {
         let bus = private_bus();
         let state = WallpaperState::new(connect(&bus).await);
-        let out = state.run(Op::Refresh).await;
+        let out = run(&state, Op::Refresh).await;
         assert_eq!(
             out,
             Outcome {

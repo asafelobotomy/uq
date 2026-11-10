@@ -23,7 +23,7 @@ ColumnLayout {
     property var layouts: ({})
 
     readonly property var workspace: Hyprland.focusedWorkspace
-    readonly property string layout: U.workspaceLayout(layouts, workspace)
+    readonly property string layout: U.workspaceLayout(layouts, workspace, U.defaultLayout(Settings.values))
     readonly property var location: Settings.values.weather_location || null
     readonly property var nextSchedule: schedule ? Q.nextSchedule(schedule, location) : null
 

@@ -75,9 +75,9 @@ pub async fn claim(conn: &zbus::Connection, page: &str, setting: &str) -> zbus::
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_bus::{Bus, connect, private_bus};
     use std::sync::Mutex;
     use std::time::Duration;
+    use uq_core::test_bus::{Bus, connect, private_bus};
 
     type Calls = Arc<Mutex<Vec<(String, String)>>>;
 

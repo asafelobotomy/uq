@@ -91,49 +91,8 @@ pub async fn watch(conn: Connection, tx: mpsc::Sender<Outbound>, stop: Cancellat
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::{BufRead, BufReader};
-    use std::process::{Child, Command, Stdio};
     use std::time::Duration;
-
-    struct Bus(Child, String, #[allow(dead_code)] tempfile::TempDir);
-    impl Drop for Bus {
-        fn drop(&mut self) {
-            let _ = self.0.kill();
-            let _ = self.0.wait();
-        }
-    }
-
-    /// Private bus under a short /tmp path (socket paths must stay under 108 bytes).
-    fn private_bus() -> Bus {
-        let dir = tempfile::Builder::new()
-            .prefix("uqn")
-            .tempdir_in("/tmp")
-            .unwrap();
-        let mut child = Command::new("dbus-daemon")
-            .args(["--session", "--nofork", "--print-address"])
-            .arg(format!(
-                "--address=unix:path={}",
-                dir.path().join("b").display()
-            ))
-            .stdout(Stdio::piped())
-            .spawn()
-            .expect("dbus-daemon");
-        let mut line = String::new();
-        BufReader::new(child.stdout.take().unwrap())
-            .read_line(&mut line)
-            .unwrap();
-        let addr = line.trim().to_string();
-        assert!(addr.len() < 108);
-        Bus(child, addr, dir)
-    }
-
-    async fn conn(addr: &str) -> Connection {
-        zbus::connection::Builder::address(addr)
-            .unwrap()
-            .build()
-            .await
-            .unwrap()
-    }
+    use uq_core::test_bus::{connect, private_bus};
 
     async fn next(rx: &mut mpsc::Receiver<Outbound>) -> serde_json::Value {
         match tokio::time::timeout(Duration::from_secs(5), rx.recv())
@@ -177,7 +136,7 @@ mod tests {
     #[tokio::test]
     async fn notif_owner_event() {
         let bus = private_bus();
-        let watcher = conn(&bus.1).await;
+        let watcher = connect(&bus).await;
         let (tx, mut rx) = mpsc::channel(8);
         let stop = CancellationToken::new();
         let task = tokio::spawn(watch(watcher, tx, stop.clone()));
@@ -188,7 +147,7 @@ mod tests {
             json!({"owner": null, "pid": null, "name": null, "self": false})
         );
 
-        let owner = conn(&bus.1).await;
+        let owner = connect(&bus).await;
         owner.request_name(NOTIF_NAME).await.unwrap();
         let unique = owner.unique_name().unwrap().to_string();
         let got = next(&mut rx).await;

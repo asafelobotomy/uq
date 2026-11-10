@@ -13,7 +13,7 @@ use uq_core::lua::{Layout, emit_generated, emit_workspace_rule, lua_string};
 use uq_core::paths::Paths;
 use uq_core::render::{kvantum_base, render};
 use uq_core::schedule::{Schedule, last_event, variant_at};
-use uq_core::settings::{Settings, renders_config, valid_pinned_id};
+use uq_core::settings::{Settings, renders_config, set_rule, valid_pinned_id};
 use uq_core::state::State;
 use uq_core::theme::{ThemeRegistry, Variant};
 
@@ -64,28 +64,15 @@ pub(crate) fn io_err(context: &str) -> impl Fn(std::io::Error) -> DesktopError +
     move |e| DesktopError::Io(format!("{context}: {e}"))
 }
 
-/// The Hyprland workspace selector for a user-facing workspace name. Hyprland only matches a
-/// name through `name:<n>` (a bare `web` parses as selector syntax and never matches), so plain
-/// names get the prefix; ids, `name:`/`special` selectors and bracket selectors pass through.
-pub fn workspace_selector(ws: &str) -> String {
-    let ws = ws.trim();
-    let passthrough = ws.parse::<i64>().is_ok()
-        || ws.starts_with("name:")
-        || ws.starts_with("special")
-        || ws.contains('[');
-    if passthrough {
-        ws.to_string()
-    } else {
-        format!("name:{ws}")
-    }
-}
-
 /// What a commit changed, which decides how it is applied to the live session.
 pub(crate) enum Change {
     Theme,
     /// A setting rendered into generated.lua (mouse): reload Hyprland, report SettingsChanged.
     Input,
     Layout(String, Layout),
+    /// A `look` or `layouts` section write: reload Hyprland, send no events (`set_section`
+    /// sends `SectionChanged` and `SettingsChanged` itself).
+    Reload,
     Quiet,
 }
 
@@ -342,15 +329,14 @@ impl Desktop {
         if ws.trim().is_empty() {
             return Err(DesktopError::EmptyWorkspace);
         }
-        let ws = workspace_selector(ws);
-        let ws = ws.as_str();
         let layout: Layout = layout
             .parse()
             .map_err(|_| DesktopError::InvalidLayout(layout.to_string()))?;
         let mut next = self.state.clone();
-        next.layouts.insert(ws.to_string(), layout);
-        self.commit(next, Change::Layout(ws.to_string(), layout))
-            .await
+        // The `layouts` section's limits, so what SetLayout stores SetSection accepts back.
+        let ws = set_rule(&mut next.layouts, ws, layout)
+            .map_err(|e| DesktopError::InvalidSetting(e.to_string()))?;
+        self.commit(next, Change::Layout(ws, layout)).await
     }
 
     pub async fn set_schedule(&mut self, s: Schedule) -> Result<(), DesktopError> {
@@ -431,7 +417,7 @@ impl Desktop {
         };
         let files = render(&theme, &self.paths.templates_dir, base)
             .map_err(|e| DesktopError::Io(e.to_string()))?;
-        let generated = emit_generated(&theme, &next.layouts, &next.settings.mouse);
+        let generated = emit_generated(&theme, &next.layouts, &next.settings);
 
         self.ensure_user_lua()?;
         let candidate = self
@@ -488,6 +474,16 @@ impl Desktop {
                     workspace: ws,
                     layout,
                 });
+                // The Layouts page follows keybind changes through the section.
+                if let Ok(v) = self.state.section("layouts") {
+                    let _ = self.events.send(Event::SectionChanged {
+                        domain: "layouts".to_string(),
+                        json: v.to_string(),
+                    });
+                }
+            }
+            Change::Reload => {
+                let _ = self.live(self.comp.reload().await);
             }
             Change::Input => {
                 let _ = self.live(self.comp.reload().await);
@@ -619,21 +615,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn workspace_selector_normalisation() {
-        for (input, want) in [
-            ("2", "2"),
-            (" 3 ", "3"),
-            ("web", "name:web"),
-            ("name:web", "name:web"),
-            ("special:magic", "special:magic"),
-            ("special", "special"),
-            ("w[tv1]", "w[tv1]"),
-        ] {
-            assert_eq!(workspace_selector(input), want, "{input:?}");
-        }
-    }
-
     #[tokio::test]
     async fn named_workspace_layout_uses_name_selector() {
         let mut r = rig();
@@ -738,13 +719,16 @@ mod tests {
                 .contains(r#"workspace = "2", layout = "scrolling""#)
         );
         assert_eq!(r.desktop.get_layouts().get("2"), Some(&Layout::Scrolling));
+        let evs = drain(&mut r.events);
+        assert_eq!(evs.len(), 2, "{evs:?}");
         assert_eq!(
-            drain(&mut r.events),
-            vec![Event::LayoutChanged {
+            evs[0],
+            Event::LayoutChanged {
                 workspace: "2".into(),
                 layout: Layout::Scrolling
-            }]
+            }
         );
+        assert!(matches!(&evs[1], Event::SectionChanged { domain, .. } if domain == "layouts"));
         // A layout change doesn't re-theme the session.
         assert!(r.sys.applied.lock().unwrap().is_empty());
     }
@@ -832,6 +816,33 @@ mod tests {
         let mut r = rig();
         let err = r.desktop.set_layout("1", "monocle").await.unwrap_err();
         assert!(matches!(err, DesktopError::InvalidLayout(ref l) if l == "monocle"));
+    }
+
+    #[tokio::test]
+    async fn set_layout_enforces_section_limits() {
+        let mut r = rig();
+        let long = "a".repeat(65);
+        assert!(matches!(
+            r.desktop.set_layout(&long, "master").await,
+            Err(DesktopError::InvalidSetting(_))
+        ));
+        assert!(matches!(
+            r.desktop.set_layout("a\u{1}b", "master").await,
+            Err(DesktopError::InvalidSetting(_))
+        ));
+        for i in 1..=64 {
+            r.desktop
+                .set_layout(&i.to_string(), "master")
+                .await
+                .unwrap();
+        }
+        let err = r.desktop.set_layout("65", "master").await.unwrap_err();
+        assert!(err.to_string().contains("64"), "{err}");
+        // Changing an existing rule at the limit is fine.
+        r.desktop.set_layout("64", "scrolling").await.unwrap();
+        assert_eq!(r.desktop.state.layouts.len(), 64);
+        let v = r.desktop.state.section("layouts").unwrap();
+        r.desktop.state.clone().set_section("layouts", v).unwrap();
     }
 
     #[tokio::test]

@@ -17,6 +17,9 @@ pub trait Desktop {
     fn get_settings(&self) -> zbus::Result<String>;
     fn get_section(&self, domain: &str) -> zbus::Result<String>;
     fn set_section(&self, domain: &str, json: &str) -> zbus::Result<()>;
+    fn set_setting(&self, key: &str, json: &str) -> zbus::Result<()>;
+    fn get_launch_counts(&self) -> zbus::Result<HashMap<String, u32>>;
+    fn clear_launch_counts(&self) -> zbus::Result<()>;
     fn get_layouts(&self) -> zbus::Result<HashMap<String, String>>;
 
     #[zbus(signal)]

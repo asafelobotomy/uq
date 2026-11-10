@@ -10,11 +10,21 @@ fn main() {
         QmlFile::from("qml/components/UqLabel.qml"),
         QmlFile::from("qml/components/ScrollReveal.qml"),
         QmlFile::from("qml/components/SettingRow.qml"),
+        QmlFile::from("qml/components/UqComboBox.qml"),
         QmlFile::from("qml/components/OverrideCombo.qml"),
         QmlFile::from("qml/components/OverrideSpin.qml"),
+        QmlFile::from("qml/components/OverrideSwitch.qml"),
+        QmlFile::from("qml/components/OverrideSlider.qml"),
+        QmlFile::from("qml/components/OptionGroup.qml"),
+        QmlFile::from("qml/components/OrderedToggleList.qml"),
+        QmlFile::from("qml/components/IdleSettings.qml"),
+        QmlFile::from("qml/components/SwitchRow.qml"),
+        QmlFile::from("qml/components/WorkspaceRules.qml"),
         QmlFile::from("qml/components/ScheduleEditor.qml"),
         QmlFile::from("qml/components/WallpaperEntryEditor.qml"),
         QmlFile::from("qml/pages/AppearancePage.qml"),
+        QmlFile::from("qml/pages/LookPage.qml"),
+        QmlFile::from("qml/pages/ShellPage.qml"),
         QmlFile::from("qml/pages/WallpaperPage.qml"),
     ]))
     .qt_module("Gui")
@@ -25,6 +35,8 @@ fn main() {
         "src/app.rs",
         "src/window.rs",
         "src/appearance_model.rs",
+        "src/look_model.rs",
+        "src/shell_model.rs",
         "src/wallpaper_model.rs",
     ])
     .cpp_file("cpp/window.cpp");

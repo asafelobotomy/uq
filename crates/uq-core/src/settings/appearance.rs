@@ -75,7 +75,7 @@ fn theme_name(key: &str, v: &Option<String>) -> Result<(), SettingError> {
     }
 }
 
-fn ranged(key: &str, v: Option<u8>, lo: u8, hi: u8) -> Result<(), SettingError> {
+pub(super) fn ranged(key: &str, v: Option<u8>, lo: u8, hi: u8) -> Result<(), SettingError> {
     match v {
         Some(n) if !(lo..=hi).contains(&n) => {
             Err(invalid(key, format!("must be between {lo} and {hi}")))

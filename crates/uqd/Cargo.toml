@@ -21,4 +21,5 @@ tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 [dev-dependencies]
 futures-util = "0.3.34"
 tempfile.workspace = true
+uq-core = { path = "../uq-core", features = ["test-bus"] }
 uqd = { path = ".", features = ["fake"] }

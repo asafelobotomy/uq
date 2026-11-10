@@ -101,7 +101,7 @@ QQC2.ScrollView {
             enabled: page.ready
             Layout.fillWidth: true
             Layout.topMargin: Kirigami.Units.largeSpacing
-            QQC2.ComboBox {
+            UqComboBox {
                 id: displayBox
                 objectName: "displayBox"
                 model: page.displays.map(d => d.title)
