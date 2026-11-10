@@ -280,6 +280,10 @@ QT_QPA_PLATFORM=offscreen qmltestrunner -import shell -input tests/qml
 scripts/smoke-shell.sh                     # needs Hyprland, quickshell, jq, a DRM card and a seat; 77 = skipped
 ```
 
+To use the installed uQ and work on a checkout on the same machine (a nested dev desktop,
+side-by-side app runs, and installing a dev build with a rollback), see
+[docs/developing.md](docs/developing.md) and `uq-dev --help`.
+
 ## Credits
 
 - `crates/uqctl/protocols/hyprland-lock-notify-v1.xml` is vendored unchanged from
