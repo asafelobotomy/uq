@@ -465,54 +465,14 @@ fn own_uid() -> Option<u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::{BufRead, BufReader, Read};
+    use std::io::Read;
     use std::os::unix::net::UnixStream;
-    use std::process::{Child, Command, Stdio};
     use std::time::Instant;
+    use uq_core::test_bus::{Bus, connect, private_bus};
 
     const SESSION_PATH: &str = "/org/freedesktop/login1/session/_31";
     const USER_PATH: &str = "/org/freedesktop/login1/user/_1000";
     const DISPLAY_PATH: &str = "/org/freedesktop/login1/session/_32";
-
-    struct Bus(Child, String, #[allow(dead_code)] tempfile::TempDir);
-    impl Drop for Bus {
-        fn drop(&mut self) {
-            let _ = self.0.kill();
-            let _ = self.0.wait();
-        }
-    }
-
-    /// Private bus under a short /tmp path (socket paths must stay under 108 bytes).
-    fn private_bus() -> Bus {
-        let dir = tempfile::Builder::new()
-            .prefix("uql")
-            .tempdir_in("/tmp")
-            .unwrap();
-        let mut child = Command::new("dbus-daemon")
-            .args(["--session", "--nofork", "--print-address"])
-            .arg(format!(
-                "--address=unix:path={}",
-                dir.path().join("b").display()
-            ))
-            .stdout(Stdio::piped())
-            .spawn()
-            .expect("dbus-daemon");
-        let mut line = String::new();
-        BufReader::new(child.stdout.take().unwrap())
-            .read_line(&mut line)
-            .unwrap();
-        let addr = line.trim().to_string();
-        assert!(addr.len() < 108);
-        Bus(child, addr, dir)
-    }
-
-    async fn conn(addr: &str) -> Connection {
-        zbus::connection::Builder::address(addr)
-            .unwrap()
-            .build()
-            .await
-            .unwrap()
-    }
 
     struct Fake {
         /// Our end of each inhibitor handed out; it reads EOF once the bridge drops its fd.
@@ -658,7 +618,7 @@ mod tests {
 
     async fn serve_fake(bus: &Bus, fake: Fake) -> (Connection, Shared) {
         let shared = Arc::new(Mutex::new(fake));
-        let c = zbus::connection::Builder::address(bus.1.as_str())
+        let c = zbus::connection::Builder::address(bus.address.as_str())
             .unwrap()
             .name(DEST)
             .unwrap()
@@ -702,7 +662,7 @@ mod tests {
         let bus = private_bus();
         let (fake_conn, fake) = serve_fake(&bus, fake).await;
         let stop = CancellationToken::new();
-        tokio::spawn(logind.clone().run(conn(&bus.1).await, stop.clone()));
+        tokio::spawn(logind.clone().run(connect(&bus).await, stop.clone()));
         let r = Rig {
             _bus: bus,
             fake_conn,
@@ -1130,7 +1090,7 @@ mod tests {
             ..Fake::default()
         };
         let (_fake_conn, shared) = serve_fake(&bus, fake).await;
-        let c = conn(&bus.1).await;
+        let c = connect(&bus).await;
         assert_eq!(
             find_session(&c, Some(1000), Some("7".into()))
                 .await
@@ -1152,7 +1112,7 @@ mod tests {
             ..Fake::default()
         };
         let (_fake_conn, shared) = serve_fake(&bus, fake).await;
-        let c = conn(&bus.1).await;
+        let c = connect(&bus).await;
         assert_eq!(
             find_session(&c, Some(1000), Some("7".into()))
                 .await
@@ -1177,7 +1137,7 @@ mod tests {
                 ..Fake::default()
             };
             let (fake_conn, shared) = serve_fake(&bus, fake).await;
-            let c = conn(&bus.1).await;
+            let c = connect(&bus).await;
             assert_eq!(
                 find_session(&c, Some(1000), Some("7".into()))
                     .await
@@ -1209,7 +1169,7 @@ mod tests {
         let (tx, _rx) = mpsc::channel(16);
         let logind = Logind::new(tx);
         let stop = CancellationToken::new();
-        let task = tokio::spawn(logind.clone().run(conn(&bus.1).await, stop.clone()));
+        let task = tokio::spawn(logind.clone().run(connect(&bus).await, stop.clone()));
         tokio::time::sleep(Duration::from_millis(200)).await;
         logind.sleep_lock_ready();
         tokio::time::timeout(Duration::from_secs(2), logind.set_locked_hint(true))

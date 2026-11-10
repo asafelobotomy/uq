@@ -227,11 +227,11 @@ impl WallpaperState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_bus::{connect, private_bus};
     use std::sync::Arc;
     use std::sync::Mutex as StdMutex;
     use uq_core::client::DESKTOP_NAME;
     use uq_core::settings::WallpaperEntry;
+    use uq_core::test_bus::{connect, private_bus};
 
     #[derive(Debug, zbus::DBusError)]
     #[zbus(prefix = "org.uq.Desktop1.Error")]
@@ -272,7 +272,7 @@ mod tests {
     }
 
     struct Rig {
-        _bus: crate::test_bus::Bus,
+        _bus: uq_core::test_bus::Bus,
         _uqd: zbus::Connection,
         state: WallpaperState,
         section: Arc<StdMutex<Value>>,

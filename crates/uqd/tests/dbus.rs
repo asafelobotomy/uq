@@ -2,48 +2,18 @@
 
 use futures_util::StreamExt;
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
-use std::process::{Child, Command, Stdio};
 use std::sync::Arc;
+use uq_core::test_bus::private_bus;
 use uqd::compositor::fake::FakeCompositor;
 use uqd::dbus::{IFACE, NAME, PATH, serve};
 use uqd::service::Desktop;
 use uqd::system::FakeSystem;
 
-struct Bus {
-    child: Child,
-    address: String,
-}
-
-impl Drop for Bus {
-    fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
-    }
-}
-
-fn private_bus(dir: &std::path::Path) -> Bus {
-    let mut child = Command::new("dbus-daemon")
-        .args(["--session", "--nofork", "--print-address"])
-        .arg(format!("--address=unix:path={}", dir.join("bus").display()))
-        .stdout(Stdio::piped())
-        .spawn()
-        .expect("dbus-daemon");
-    let mut line = String::new();
-    BufReader::new(child.stdout.take().unwrap())
-        .read_line(&mut line)
-        .unwrap();
-    Bus {
-        child,
-        address: line.trim().to_string(),
-    }
-}
-
 #[tokio::test]
 async fn dbus_round_trip() {
     let dir = tempfile::tempdir().unwrap();
-    let bus = private_bus(dir.path());
+    let bus = private_bus();
 
     let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     let mut paths = uq_core::paths::Paths::under(&dir.path().join("root"));
@@ -162,7 +132,7 @@ async fn dbus_round_trip() {
 #[tokio::test]
 async fn get_schedule_round_trips() {
     let dir = tempfile::tempdir().unwrap();
-    let bus = private_bus(dir.path());
+    let bus = private_bus();
     let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     let mut paths = uq_core::paths::Paths::under(&dir.path().join("root"));
     paths.themes_dir = repo.join("themes");
@@ -207,7 +177,7 @@ async fn get_schedule_round_trips() {
 #[tokio::test]
 async fn section_round_trip_over_dbus() {
     let dir = tempfile::tempdir().unwrap();
-    let bus = private_bus(dir.path());
+    let bus = private_bus();
     let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     let mut paths = uq_core::paths::Paths::under(&dir.path().join("root"));
     paths.themes_dir = repo.join("themes");

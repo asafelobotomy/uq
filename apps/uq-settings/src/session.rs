@@ -100,9 +100,9 @@ pub async fn watch_owner(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_bus::{connect, private_bus};
     use std::time::Duration;
     use tokio::sync::mpsc;
+    use uq_core::test_bus::{connect, private_bus};
 
     async fn next(rx: &mut mpsc::UnboundedReceiver<bool>) -> bool {
         tokio::time::timeout(Duration::from_secs(5), rx.recv())
