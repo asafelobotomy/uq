@@ -1,0 +1,28 @@
+[package]
+name = "uq-settings"
+description = "uQ's Settings app (Kirigami)"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "uq-settings"
+path = "src/main.rs"
+
+[dependencies]
+uq-core.workspace = true
+clap = { version = "4", features = ["derive"] }
+cxx = "1.0"
+cxx-qt = "0.10"
+cxx-qt-lib = { version = "0.10", features = ["qt_gui", "qt_qml", "qt_quickcontrols"] }
+futures-util = "0.3.34"
+serde.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true }
+zbus = { version = "5", default-features = false, features = ["tokio"] }
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[build-dependencies]
+cxx-qt-build = "0.10"

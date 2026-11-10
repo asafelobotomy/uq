@@ -10,31 +10,17 @@
 set -u
 cd "$(dirname "$0")/.." || exit 2
 
-types='(Text|Label|TextEdit|TextInput)'
-qual='([A-Za-z_][A-Za-z0-9_]*\.)*'
+# shellcheck source=scripts/lib-qml-lint.sh
+. scripts/lib-qml-lint.sh
+
 dirs=()
 for d in shell lock; do [ -d "$d" ] && dirs+=("$d"); done
 [ ${#dirs[@]} = 0 ] && exit 0
-files=$(find "${dirs[@]}" -type f \( -name '*.qml' -o -name '*.js' \) ! -path 'shell/core/UqText.qml' ! -path 'shell/core/UqInput.qml' \
-    ! -path 'shell/notif/builtin/NotifBody.qml' | sort)
-[ -z "$files" ] && exit 0
+mapfile -t files < <(find "${dirs[@]}" -type f \( -name '*.qml' -o -name '*.js' \) ! -path 'shell/core/UqText.qml' \
+    ! -path 'shell/core/UqInput.qml' ! -path 'shell/notif/builtin/NotifBody.qml' | sort)
+[ ${#files[@]} = 0 ] && exit 0
 
-hits=$(
-    # shellcheck disable=SC2086
-    {
-        # Type followed by `{` on the same line, anywhere on the line.
-        grep -nHE "(^|[^A-Za-z0-9_.])${qual}${types}[[:space:]]*\{" $files
-        # Type at the end of a line with `{` opening the next non-blank line.
-        RE="(^|[^A-Za-z0-9_.])${qual}${types}[[:space:]]*\$" awk '
-            BEGIN { re = ENVIRON["RE"] }
-            FNR == 1 { prev = "" }
-            prev != "" && $0 ~ /^[[:space:]]*\{/ { print FILENAME ":" prevn ":" prev; }
-            $0 ~ /^[[:space:]]*$/ { next }
-            { prev = ""; if ($0 ~ re) { prev = $0; prevn = FNR } }
-        ' $files
-        grep -nHE 'Qt\.createQmlObject' $files
-    } | sort -t: -k1,1 -k2,2n -u
-)
+hits=$(qml_lint_hits "${files[@]}")
 if [ -n "$hits" ]; then
     echo "lint-shell: Text/Label/TextEdit/TextInput objects and Qt.createQmlObject are forbidden" >&2
     echo "in shell/ and lock/ outside shell/core/UqText.qml (and TextInput in shell/core/UqInput.qml, StyledText" >&2

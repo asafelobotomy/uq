@@ -2,25 +2,9 @@
 
 use std::os::unix::process::CommandExt;
 use std::process::{Command, ExitCode, Stdio};
-use uq_core::client::SettingsAppProxy;
+use uq_core::client::{SettingsAppProxy, no_owner};
 
 const APP: &str = "uq-settings";
-
-/// Whether the error means nobody owns `org.uq.Settings1`.
-fn not_running(err: &zbus::Error) -> bool {
-    const NAMES: [&str; 2] = [
-        "org.freedesktop.DBus.Error.ServiceUnknown",
-        "org.freedesktop.DBus.Error.NameHasNoOwner",
-    ];
-    match err {
-        zbus::Error::MethodError(name, _, _) => NAMES.contains(&name.as_str()),
-        zbus::Error::FDO(e) => matches!(
-            **e,
-            zbus::fdo::Error::ServiceUnknown(_) | zbus::fdo::Error::NameHasNoOwner(_)
-        ),
-        _ => false,
-    }
-}
 
 /// Show the page on the running instance; when there is none, call `spawn` with the argv of a
 /// fresh one.
@@ -35,7 +19,7 @@ async fn open(
         .map_err(|e| e.to_string())?;
     match proxy.show_page(page, setting).await {
         Ok(()) => Ok(()),
-        Err(e) if not_running(&e) => {
+        Err(e) if no_owner(&e) => {
             let argv: Vec<String> = [APP, "--page", page, "--setting", setting]
                 .map(String::from)
                 .into();
@@ -154,9 +138,9 @@ mod tests {
         let calls = Arc::new(Mutex::new(Vec::new()));
         let _app = zbus::connection::Builder::address(bus.address.as_str())
             .unwrap()
-            .name("org.uq.Settings1")
+            .name(uq_core::client::SETTINGS_NAME)
             .unwrap()
-            .serve_at("/org/uq/Settings1", Fake(calls.clone()))
+            .serve_at(uq_core::client::SETTINGS_PATH, Fake(calls.clone()))
             .unwrap()
             .build()
             .await
