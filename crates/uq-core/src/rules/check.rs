@@ -111,17 +111,15 @@ fn pattern_reason(p: &str) -> Result<(), &'static str> {
         })
 }
 
-fn parse_reason(kind: &ast::ErrorKind) -> &'static str {
+pub(super) fn parse_reason(kind: &ast::ErrorKind) -> &'static str {
     use ast::ErrorKind::*;
     match kind {
         GroupUnclosed | GroupUnopened | ClassUnclosed | RepetitionCountUnclosed => {
             "a bracket or group isn't closed"
         }
         RepetitionMissing => "a repeat (*, + or ?) has nothing before it",
-        UnsupportedBackreference
-        | UnsupportedLookAround
-        | FlagUnrecognized
-        | NestLimitExceeded(_) => UNSUPPORTED,
+        NestLimitExceeded(_) => "this pattern is too complex",
+        UnsupportedBackreference | UnsupportedLookAround | FlagUnrecognized => UNSUPPORTED,
         _ => "this pattern isn't valid",
     }
 }
@@ -341,6 +339,9 @@ pub fn window(i: usize, r: &mut super::WindowRule) -> Result<(), SettingError> {
     }
     if e.position.is_some() && e.center == Some(true) {
         return Err(invalid(&ek, "Position and Center can't both be used"));
+    }
+    if e.silent == Some(false) && e.workspace.is_none() {
+        e.silent = None;
     }
     if e.silent.is_some() && e.workspace.is_none() {
         return Err(invalid(&ek, "Quietly needs a workspace to open on"));

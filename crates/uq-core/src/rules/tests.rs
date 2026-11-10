@@ -223,7 +223,10 @@ fn refusals_are_plain() {
         let reason = reason_of(check_pattern("k", p));
         assert!(!reason.contains('\n'), "{reason:?}");
         assert!(!reason.to_lowercase().contains("regex"), "{reason:?}");
-        assert!(reason.starts_with("this pattern can't be used: ") || reason.contains("pattern"));
+        assert!(
+            reason.starts_with("this pattern can't be used: "),
+            "{reason:?}"
+        );
         if p.len() > 2 && !p.contains('\u{7}') {
             assert!(!reason.contains(p), "{reason:?} repeats the pattern");
         }
@@ -231,6 +234,9 @@ fn refusals_are_plain() {
     assert!(reason_of(check_pattern("k", "(")).contains("isn't closed"));
     assert!(reason_of(check_pattern("k", "*a")).contains("has nothing before it"));
     assert!(reason_of(check_pattern("k", "(?:a{1000}){1000}")).contains("too complex"));
+    // The length limit keeps nesting under the parser's, so this mapping is checked directly.
+    let deep = regex_syntax::ast::ErrorKind::NestLimitExceeded(250);
+    assert!(check::parse_reason(&deep).contains("too complex"));
 }
 
 #[test]
@@ -531,7 +537,6 @@ fn lenient_load_drops_only_the_bad_rule() {
     let src = r#"
 theme = "nord"
 
-[settings]
 pinned = ["firefox.desktop"]
 
 [[rules.window]]
@@ -559,6 +564,7 @@ effects = { float = true }
     assert_eq!(st.rules.window.len(), 1);
     assert_eq!(st.rules.window[0].id, "r-0003");
     assert_eq!(st.theme, "nord");
+    assert_eq!(st.settings.pinned, ["firefox.desktop"]);
 }
 
 #[test]
@@ -601,7 +607,11 @@ default = true
 "#;
     let st = State::parse_strict(src).unwrap();
     let names: Vec<_> = st.rules.window.iter().map(|r| r.name.as_str()).collect();
-    assert_eq!(names, ["First", "No id"]);
+    assert_eq!(names, ["First", "Same id", "No id"]);
+    let ids: BTreeSet<_> = st.rules.window.iter().map(|r| r.id.as_str()).collect();
+    assert_eq!(ids.len(), 3);
+    assert_eq!(st.rules.window[0].id, "r-0002");
+    assert!(st.rules.window.iter().all(|r| valid_id(&r.id)));
     assert_eq!(st.rules.window[0].effects.opacity, Some(0.33));
     assert!(valid_id(&st.rules.window[1].id));
     assert_eq!(st.rules.workspace.len(), 1);
@@ -630,4 +640,42 @@ fn defaults_are_empty() {
         st.section("rules").unwrap(),
         json!({"window": [], "layer": [], "workspace": []})
     );
+}
+
+#[test]
+fn load_clears_bad_ids_without_dropping_rules() {
+    let rule = |id: &str, n: &str| {
+        format!(
+            "[[rules.window]]\nid = \"{id}\"\nname = \"{n}\"\nenabled = true\n\
+             match = {{ class = \"a\" }}\neffects = {{ float = true }}\n\n"
+        )
+    };
+    let src = [
+        rule("R-7F2C", "Upper"),
+        rule("x", "Short"),
+        rule("r-0009", "Keeps"),
+    ]
+    .concat();
+    let st = State::parse_strict(&src).unwrap();
+    assert_eq!(st.rules.window.len(), 3);
+    assert_eq!(st.rules.window[2].id, "r-0009");
+    assert!(st.rules.window.iter().all(|r| valid_id(&r.id)));
+    assert_ne!(st.rules.window[0].id, st.rules.window[1].id);
+}
+
+#[test]
+fn silent_without_a_workspace() {
+    let e = |silent: bool| {
+        one(
+            json!({"class": "a"}),
+            json!({"float": true, "silent": silent}),
+        )
+    };
+    assert!(parse(e(true)).is_err());
+    assert_eq!(parse(e(false)).unwrap().window[0].effects.silent, None);
+    let src = "[[rules.window]]\nname = \"Q\"\nenabled = true\nmatch = { class = \"a\" }\n\
+               effects = { float = true, silent = true }\n";
+    let st = State::parse_strict(src).unwrap();
+    assert_eq!(st.rules.window.len(), 1);
+    assert_eq!(st.rules.window[0].effects.silent, None);
 }

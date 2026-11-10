@@ -321,15 +321,25 @@ impl Rules {
     /// limit are dropped with a log line, so the section stays writable. Values are normalised
     /// as a write would; a missing id is made.
     pub fn repaired(mut self) -> Rules {
+        for r in &mut self.window {
+            if r.effects.workspace.is_none() {
+                r.effects.silent = None;
+            }
+        }
         self.window = keep(self.window, "window", check::window);
         self.layer = keep(self.layer, "layer", check::layer);
         self.workspace = keep(self.workspace, "workspace", check::workspace);
+        // A bad or repeated id never costs the rule: it is cleared and made again below. The
+        // first holder of an id keeps it.
         let mut seen = BTreeSet::new();
-        let ok = |id: &String, seen: &mut BTreeSet<String>| {
-            id.is_empty() || (valid_id(id) && seen.insert(id.clone()))
-        };
-        self.window.retain(|r| ok(&r.id, &mut seen));
-        self.layer.retain(|r| ok(&r.id, &mut seen));
+        for (list, i, id) in self.id_slots() {
+            if !id.is_empty() && !(valid_id(id) && seen.insert(id.clone())) {
+                tracing::warn!(
+                    "state: rules.{list}[{i}] has a bad or repeated id; it gets a new one"
+                );
+                id.clear();
+            }
+        }
         let mut selectors = BTreeSet::new();
         self.workspace
             .retain(|r| selectors.insert(r.workspace.clone()));
