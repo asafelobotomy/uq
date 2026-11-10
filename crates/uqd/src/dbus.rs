@@ -261,6 +261,10 @@ impl DesktopIface {
     #[zbus(signal)]
     async fn history_changed(e: &SignalEmitter<'_>) -> zbus::Result<()>;
 
+    /// The active profile or the list of profiles changed; `id` is the active profile, or `""`.
+    #[zbus(signal)]
+    async fn profile_changed(e: &SignalEmitter<'_>, id: &str) -> zbus::Result<()>;
+
     #[zbus(signal)]
     async fn settings_changed(e: &SignalEmitter<'_>, json: &str) -> zbus::Result<()>;
 
@@ -362,6 +366,7 @@ pub async fn serve(
                 }
                 Event::HistoryChanged => DesktopIface::history_changed(e).await,
                 Event::MonitorsChanged => DesktopIface::monitors_changed(e).await,
+                Event::ProfileChanged(id) => DesktopIface::profile_changed(e, id).await,
                 Event::LaunchCountsChanged(counts) => {
                     DesktopIface::launch_counts_changed(
                         e,

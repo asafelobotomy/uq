@@ -71,17 +71,19 @@ impl SystemPowerProfiles {
         }
     }
 
+    /// No system bus to reach means no power service: `Missing`.
     async fn connect(&self) -> Result<zbus::Connection, PowerError> {
         let conn = match &self.address {
             None => zbus::Connection::system().await,
-            Some(a) => {
-                zbus::connection::Builder::address(a.as_str())
-                    .map_err(refused)?
-                    .build()
-                    .await
-            }
+            Some(a) => match zbus::connection::Builder::address(a.as_str()) {
+                Ok(b) => b.build().await,
+                Err(e) => Err(e),
+            },
         };
-        conn.map_err(refused)
+        conn.map_err(|e| {
+            tracing::debug!("system bus: {e}");
+            PowerError::Missing
+        })
     }
 
     /// Run `f` against each service in turn; only "no such service" moves on to the next one.
@@ -300,6 +302,18 @@ mod tests {
     async fn system_client_reports_missing_without_either_name() {
         let bus = private_bus();
         let client = SystemPowerProfiles::at(bus.address.clone());
+        assert_eq!(client.active().await, Err(PowerError::Missing));
+        assert_eq!(
+            client.set_active("balanced").await,
+            Err(PowerError::Missing)
+        );
+    }
+
+    #[tokio::test]
+    async fn system_client_reports_missing_without_a_bus() {
+        let dir = tempfile::tempdir().unwrap();
+        let address = format!("unix:path={}", dir.path().join("no-bus").display());
+        let client = SystemPowerProfiles::at(address);
         assert_eq!(client.active().await, Err(PowerError::Missing));
         assert_eq!(
             client.set_active("balanced").await,
