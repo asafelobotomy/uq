@@ -163,14 +163,19 @@ fn print_human(paths: &Paths, r: &Report, kvantum: bool) {
             StubOutcome::AlreadyPresent if *path == kvantum_link(paths) => {
                 println!("left alone: {} (already exists)", path.display())
             }
-            StubOutcome::AlreadyPresent => println!(
-                "left alone: {} (add this to use uQ's theme):\n  {}",
-                path.display(),
-                lines
-                    .get(Path::new(path))
-                    .map(|l| l.trim_end().replace('\n', "\n  "))
-                    .unwrap_or_default()
-            ),
+            StubOutcome::AlreadyPresent => {
+                println!(
+                    "left alone: {} (add this to use uQ's theme):\n  {}",
+                    path.display(),
+                    lines
+                        .get(Path::new(path))
+                        .map(|l| l.trim_end().replace('\n', "\n  "))
+                        .unwrap_or_default()
+                );
+                if kvantum && path.ends_with("qt6ct/qt6ct.conf") {
+                    println!("  (set style=kvantum to use it)");
+                }
+            }
         }
     }
 }

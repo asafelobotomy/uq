@@ -20,8 +20,9 @@ All notable changes to uQ are listed here. The format follows
   tile, a folder slideshow with an interval, and a fallback colour. The shell draws it on the
   background layer.
 - **Kvantum.** Qt apps follow the uQ theme through a generated Kvantum theme
-  (`uqctl setup --apps` links it in; needs the `kvantum` package). Turn it off with
-  `appearance.kvantum = false`.
+  (`uqctl setup --apps` links it in; needs the `kvantum` package). An unchanged qt6ct.conf
+  from 0.2 is switched to `style=kvantum`; one you edited is left alone with a hint. Turn it
+  off with `appearance.kvantum = false`.
 
 ### Changed
 
