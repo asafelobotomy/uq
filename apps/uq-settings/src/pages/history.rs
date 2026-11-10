@@ -556,9 +556,8 @@ mod tests {
         let look = section(&r, "look");
         assert_eq!(look["rounding"], Value::Null);
         assert_eq!(
-            look["border_width"],
-            Value::Null,
-            "forcing writes the whole section back, as uqd does"
+            look["border_width"], 3,
+            "only the undone key goes back, as uqd does; the other change stays"
         );
         assert_eq!(out.state["canRedo"], true, "a forced undo can be redone");
     }

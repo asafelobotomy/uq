@@ -11,6 +11,7 @@ use tokio::sync::broadcast;
 use uq_core::atomic::{atomic_replace_dir, atomic_write};
 use uq_core::history::{
     AutoReason, Entry, Journal, MAX_ENTRIES, Origin, PointKind, RestorePoint, RestoreStore, diff,
+    revert_changed,
 };
 use uq_core::lua::{Layout, emit_generated, emit_workspace_rule, lua_string};
 use uq_core::paths::Paths;
@@ -501,7 +502,7 @@ impl Desktop {
     }
 
     /// Write entry `id`'s `before` back through the normal write path, recorded with origin
-    /// `restore`. Refused with `Conflict` when a newer entry changed the same domain, unless
+    /// `restore`. Only the keys the entry changed are written back. Refused with `Conflict` when a newer entry changed the same domain, unless
     /// `force`. [`Self::last_entry_ids`] then holds what the undo itself journalled.
     pub async fn undo(&mut self, id: &str, force: bool) -> Result<(), DesktopError> {
         let entries = self.journal.list(usize::MAX);
@@ -545,8 +546,15 @@ impl Desktop {
                 self.set_settings(values, Origin::Restore).await?;
             }
             domain => {
+                // Only the keys this entry changed go back; later changes to other keys of the
+                // section stay.
                 let domain = domain.to_string();
-                self.set_section(&domain, &before.to_string(), Origin::Restore)
+                let current = self
+                    .state
+                    .section(&domain)
+                    .map_err(|e| DesktopError::InvalidSetting(e.to_string()))?;
+                let value = revert_changed(&current, &before, &entry.after);
+                self.set_section(&domain, &value.to_string(), Origin::Restore)
                     .await?;
             }
         }

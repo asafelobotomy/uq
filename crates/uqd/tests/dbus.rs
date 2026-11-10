@@ -455,6 +455,96 @@ async fn undo_conflict_then_force() {
     assert_eq!(s.gaps().await, before);
 }
 
+impl Served {
+    async fn set_look(&self, json: &str, origin: &str) -> String {
+        self.set_section("look", json, origin).await
+    }
+
+    /// Writes a whole section and returns the id of the entry it journalled.
+    async fn set_section(&self, domain: &str, json: &str, origin: &str) -> String {
+        let () = self
+            .proxy
+            .call("SetSection", &(domain, json, origin))
+            .await
+            .unwrap();
+        self.history().await[0]["id"].as_str().unwrap().to_string()
+    }
+
+    async fn look(&self) -> serde_json::Value {
+        let s: String = self.proxy.call("GetSection", &("look",)).await.unwrap();
+        serde_json::from_str(&s).unwrap()
+    }
+}
+
+#[tokio::test]
+async fn undo_of_a_section_entry_keeps_later_changes_to_other_keys() {
+    let s = served().await;
+    s.set_look(r#"{"gaps_in":5,"rounding":3}"#, "settings")
+        .await;
+    let a = s
+        .set_look(r#"{"gaps_in":8,"rounding":3}"#, "settings")
+        .await;
+    s.set_look(r#"{"gaps_in":8,"rounding":6}"#, "settings")
+        .await;
+
+    s.undo(&a, true).await.unwrap();
+    let look = s.look().await;
+    assert_eq!(look["gaps_in"], 5, "{look}");
+    assert_eq!(look["rounding"], 6, "{look}");
+    let entry = s.history().await[0].clone();
+    assert_eq!(entry["summary"], "Gaps between windows: 8 → 5");
+}
+
+#[tokio::test]
+async fn undone_change_does_not_come_back_when_a_later_one_is_undone() {
+    let s = served().await;
+    s.set_look(r#"{"gaps_in":5,"rounding":3}"#, "settings")
+        .await;
+    let gaps = s
+        .set_look(r#"{"gaps_in":8,"rounding":3}"#, "settings")
+        .await;
+    let rounding = s
+        .set_look(r#"{"gaps_in":8,"rounding":6}"#, "settings")
+        .await;
+
+    // Undo the gaps change from the session sheet: rounding changed since, so it asks first.
+    let err = s.undo(&gaps, false).await.unwrap_err();
+    assert_eq!(error_name(&err), "org.uq.Desktop1.Error.Conflict");
+    s.undo(&gaps, true).await.unwrap();
+    // Then Ctrl+Z, which forces through the app's own later entries, undoes rounding.
+    s.undo(&rounding, true).await.unwrap();
+
+    let look = s.look().await;
+    assert_eq!(
+        look["gaps_in"], 5,
+        "the undone gaps change came back: {look}"
+    );
+    assert_eq!(look["rounding"], 3, "{look}");
+}
+
+#[tokio::test]
+async fn undo_of_a_wallpaper_entry_keeps_other_screens() {
+    let s = served().await;
+    let all = s
+        .set_section(
+            "wallpaper",
+            r#"{"outputs":{"*":{"image":"/a.png"}}}"#,
+            "settings",
+        )
+        .await;
+    s.set_section(
+        "wallpaper",
+        r#"{"outputs":{"*":{"image":"/a.png"},"DP-1":{"image":"/b.png"}}}"#,
+        "settings",
+    )
+    .await;
+    s.undo(&all, true).await.unwrap();
+    let got: String = s.proxy.call("GetSection", &("wallpaper",)).await.unwrap();
+    let got: serde_json::Value = serde_json::from_str(&got).unwrap();
+    assert_eq!(got["outputs"]["DP-1"]["image"], "/b.png", "{got}");
+    assert!(got["outputs"].get("*").is_none(), "{got}");
+}
+
 #[tokio::test]
 async fn undo_unknown_id_is_invalid_argument() {
     let s = served().await;

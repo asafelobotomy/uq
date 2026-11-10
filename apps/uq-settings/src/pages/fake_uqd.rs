@@ -10,7 +10,7 @@ use std::time::Duration;
 
 use serde_json::{Map, Value, json};
 use uq_core::client::DESKTOP_NAME;
-use uq_core::history::{Entry, PointKind, RestorePoint, diff};
+use uq_core::history::{Entry, PointKind, RestorePoint, diff, revert_changed};
 use uq_core::schedule::Schedule;
 use uq_core::settings::provenance;
 use uq_core::settings::renders_section;
@@ -222,8 +222,8 @@ impl FakeUqd {
         serde_json::to_string(&newest_first).unwrap()
     }
 
-    /// uqd's rules: `Conflict` when a newer entry changed the same domain, unless `force`; the
-    /// undo is a write with origin `restore`; returns the last id it journalled ("" if none).
+    /// uqd's rules: `Conflict` when a newer entry changed the same domain, unless `force`; only
+    /// the keys the entry changed go back; the undo is a write with origin `restore`; returns the last id it journalled ("" if none).
     fn undo(&self, entry_id: &str, force: bool) -> Result<String, FakeError> {
         let entry = {
             let entries = self.history.entries.lock().unwrap();
@@ -260,7 +260,11 @@ impl FakeUqd {
                 }
                 Ok(())
             }
-            domain => s.set_section(domain, before).map_err(invalid),
+            domain => {
+                let current = s.section(domain).map_err(invalid)?;
+                s.set_section(domain, revert_changed(&current, &before, &entry.after))
+                    .map_err(invalid)
+            }
         })?;
         Ok(ids.last().cloned().unwrap_or_default())
     }

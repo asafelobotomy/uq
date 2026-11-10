@@ -127,6 +127,93 @@ pub fn summarize(domain: &str, before: &Value, after: &Value, labels: Labels) ->
     line
 }
 
+/// Object leaves by path segment (arrays and scalars are leaves; an empty object is none).
+fn segment_leaves(v: &Value, prefix: &mut Vec<String>, out: &mut Vec<(Vec<String>, Value)>) {
+    match v {
+        Value::Object(m) => {
+            for (k, child) in m {
+                prefix.push(k.clone());
+                segment_leaves(child, prefix, out);
+                prefix.pop();
+            }
+        }
+        _ => out.push((prefix.clone(), v.clone())),
+    }
+}
+
+fn get_path<'a>(v: &'a Value, path: &[String]) -> Option<&'a Value> {
+    path.iter().try_fold(v, |v, part| v.get(part))
+}
+
+/// Set `path` in `root` to `value`, creating objects on the way; `None` removes it and then
+/// any object on the way that this left empty.
+fn put_path(root: &mut Value, path: &[String], value: Option<Value>) {
+    let Some((last, parents)) = path.split_last() else {
+        return;
+    };
+    match value {
+        Some(value) => {
+            let mut at = root;
+            for part in parents {
+                if !at.is_object() {
+                    *at = Value::Object(Map::new());
+                }
+                at = at
+                    .as_object_mut()
+                    .expect("made an object")
+                    .entry(part.clone())
+                    .or_insert_with(|| Value::Object(Map::new()));
+            }
+            if !at.is_object() {
+                *at = Value::Object(Map::new());
+            }
+            at.as_object_mut()
+                .expect("made an object")
+                .insert(last.clone(), value);
+        }
+        None => {
+            fn remove(at: &mut Value, path: &[String]) {
+                let Some(obj) = at.as_object_mut() else {
+                    return;
+                };
+                match path {
+                    [] => {}
+                    [last] => {
+                        obj.remove(last);
+                    }
+                    [first, rest @ ..] => {
+                        if let Some(child) = obj.get_mut(first) {
+                            remove(child, rest);
+                            if child.as_object().is_some_and(Map::is_empty) {
+                                obj.remove(first);
+                            }
+                        }
+                    }
+                }
+            }
+            remove(root, path);
+        }
+    }
+}
+
+/// `current` with only the leaves that differ between a section entry's `before` and `after`
+/// set back to their `before` value (removed when `before` lacked them). Every other key keeps
+/// its current value, so undoing one change never touches later changes to other keys.
+pub fn revert_changed(current: &Value, before: &Value, after: &Value) -> Value {
+    let (mut b, mut a) = (Vec::new(), Vec::new());
+    segment_leaves(before, &mut Vec::new(), &mut b);
+    segment_leaves(after, &mut Vec::new(), &mut a);
+    let paths: BTreeSet<&Vec<String>> = b.iter().chain(a.iter()).map(|(p, _)| p).collect();
+    let mut out = current.clone();
+    for path in paths {
+        let (old, new) = (get_path(before, path), get_path(after, path));
+        if old != new {
+            put_path(&mut out, path, old.cloned());
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -182,6 +269,44 @@ mod tests {
             .map(|c| c.domain)
             .collect();
         assert_eq!(names, ["layouts", "settings"]);
+    }
+
+    #[test]
+    fn revert_changed_touches_only_the_entry_s_leaves() {
+        let before = json!({"gaps_in": 5, "rounding": 3});
+        let after = json!({"gaps_in": 8, "rounding": 3});
+        let current = json!({"gaps_in": 8, "rounding": 6, "blur": true});
+        assert_eq!(
+            revert_changed(&current, &before, &after),
+            json!({"gaps_in": 5, "rounding": 6, "blur": true})
+        );
+    }
+
+    #[test]
+    fn revert_changed_removes_added_leaves_and_empty_parents() {
+        // Output names may hold dots; paths are walked by segment, never re-split.
+        let before = json!({"outputs": {}});
+        let after = json!({"outputs": {"HDMI.A": {"image": "/a.png", "fit": "fill"}}});
+        let current = json!({"outputs": {"HDMI.A": {"image": "/a.png", "fit": "fill"}, "DP-1": {"image": "/b.png"}}});
+        assert_eq!(
+            revert_changed(&current, &before, &after),
+            json!({"outputs": {"DP-1": {"image": "/b.png"}}})
+        );
+        // Keys the entry changed go back even if they changed again since (the conflict
+        // prompt covers that); an object left empty goes too, which reads as "nothing set".
+        let current = json!({"outputs": {"HDMI.A": {"image": "/c.png", "fit": "fit"}}});
+        assert_eq!(revert_changed(&current, &before, &after), json!({}));
+    }
+
+    #[test]
+    fn revert_changed_restores_removed_leaves() {
+        let before = json!({"workspaces": {"2": "master"}, "default": "dwindle"});
+        let after = json!({"workspaces": {}, "default": "dwindle"});
+        let current = json!({"workspaces": {"3": "scrolling"}, "default": "master"});
+        assert_eq!(
+            revert_changed(&current, &before, &after),
+            json!({"workspaces": {"3": "scrolling", "2": "master"}, "default": "master"})
+        );
     }
 
     #[test]

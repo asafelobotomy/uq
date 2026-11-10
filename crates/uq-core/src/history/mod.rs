@@ -4,7 +4,7 @@ mod diff;
 mod journal;
 mod restore;
 
-pub use diff::{DomainChange, Labels, diff, summarize};
+pub use diff::{DomainChange, Labels, diff, revert_changed, summarize};
 pub use journal::{Entry, Journal, MAX_AGE_DAYS, MAX_ENTRIES};
 pub use restore::{AutoReason, PointKind, RestorePoint, RestoreStore};
 
