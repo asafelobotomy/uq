@@ -42,6 +42,19 @@ pub trait Desktop {
     /// Run the section's render path again; writes no history, then emits `SectionChanged`.
     fn reapply(&self, domain: &str) -> zbus::Result<()>;
 
+    /// JSON array of profiles (`id`, `name`, `icon`, `keys`, `power`, `active`), by name.
+    fn list_profiles(&self) -> zbus::Result<String>;
+    /// The profile's file text.
+    fn get_profile(&self, id: &str) -> zbus::Result<String>;
+    /// Save a profile from its file text; returns its id. `Conflict` if it exists and `replace`
+    /// is false.
+    fn set_profile(&self, toml: &str, replace: bool) -> zbus::Result<String>;
+    fn delete_profile(&self, id: &str) -> zbus::Result<()>;
+    /// JSON report `{active, kept, notices}`.
+    fn apply_profile(&self, id: &str) -> zbus::Result<String>;
+    /// JSON report, with `active` empty.
+    fn profile_off(&self) -> zbus::Result<String>;
+
     #[zbus(signal)]
     fn section_changed(&self, domain: &str, json: &str) -> zbus::Result<()>;
     #[zbus(signal)]
@@ -52,6 +65,9 @@ pub trait Desktop {
     fn history_changed(&self) -> zbus::Result<()>;
     #[zbus(signal)]
     fn monitors_changed(&self) -> zbus::Result<()>;
+    /// The active profile, or `""`; also sent when the list of profiles changes.
+    #[zbus(signal)]
+    fn profile_changed(&self, id: &str) -> zbus::Result<()>;
 }
 
 /// The Settings app's single-instance interface. An empty `page_id` means "just raise".

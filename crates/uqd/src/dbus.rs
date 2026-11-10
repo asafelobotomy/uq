@@ -255,6 +255,39 @@ impl DesktopIface {
         Ok(self.desktop.lock().await.revert_monitors(token).await?)
     }
 
+    /// Every profile as a JSON array of `{id, name, icon, keys, power, active}`, by name.
+    async fn list_profiles(&self) -> Result<String, UqError> {
+        let list = self.desktop.lock().await.list_profiles();
+        serde_json::to_string(&list).map_err(|e| UqError::Io(e.to_string()))
+    }
+
+    /// The profile's file text (the format export and import use).
+    async fn get_profile(&self, id: &str) -> Result<String, UqError> {
+        Ok(self.desktop.lock().await.get_profile(id)?)
+    }
+
+    /// Save a profile from its file text and return its id. `Conflict` when the id exists and
+    /// `replace` is false. Changes no setting.
+    async fn set_profile(&self, toml: &str, replace: bool) -> Result<String, UqError> {
+        Ok(self.desktop.lock().await.set_profile(toml, replace)?)
+    }
+
+    async fn delete_profile(&self, id: &str) -> Result<(), UqError> {
+        Ok(self.desktop.lock().await.delete_profile(id)?)
+    }
+
+    /// Turn a profile on. Returns the report as JSON: `{active, kept, notices}`.
+    async fn apply_profile(&self, id: &str) -> Result<String, UqError> {
+        let report = self.desktop.lock().await.apply_profile(id).await?;
+        serde_json::to_string(&report).map_err(|e| UqError::Io(e.to_string()))
+    }
+
+    /// "Back to normal". Returns the report as JSON, with `active` empty.
+    async fn profile_off(&self) -> Result<String, UqError> {
+        let report = self.desktop.lock().await.profile_off().await?;
+        serde_json::to_string(&report).map_err(|e| UqError::Io(e.to_string()))
+    }
+
     #[zbus(signal)]
     async fn monitors_changed(e: &SignalEmitter<'_>) -> zbus::Result<()>;
 
