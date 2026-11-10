@@ -122,6 +122,7 @@ impl FakeUqd {
             .map(|c| Entry::new(now(), origin, c.domain, c.summary, c.before, c.after))
             .collect();
         *s = next;
+        *self.explain.rules_rejected.lock().unwrap() = None;
         let ids = entries.iter().map(|e| e.id.clone()).collect();
         self.history.entries.lock().unwrap().extend(entries);
         Ok(ids)
@@ -234,7 +235,7 @@ impl FakeUqd {
         });
         if domain == "rules" {
             match &done {
-                Ok(_) => *self.explain.rules_rejected.lock().unwrap() = None,
+                Ok(_) => {}
                 Err(FakeError::ConfigInvalid(m)) => {
                     *self.explain.rules_rejected.lock().unwrap() = Some(m.clone());
                 }

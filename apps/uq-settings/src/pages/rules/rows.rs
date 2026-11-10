@@ -34,7 +34,7 @@ impl RulesState {
                 let now = Compiled::new(&r.matches)
                     .map(|c| windows.iter().filter(|w| c.test(w) != Verdict::No).count())
                     .unwrap_or(0);
-                json!({"id": r.id, "name": r.name, "enabled": r.enabled,
+                json!({"raw": r, "id": r.id, "name": r.name, "enabled": r.enabled,
                     "match_text": match_text(&r.matches),
                     "effects_text": effects_text(&r.effects),
                     "static": has_static(&r.effects),
@@ -46,7 +46,7 @@ impl RulesState {
             .iter()
             .map(|r| {
                 let (source, line) = source_of(explained, &format!("layer.{}", r.id));
-                json!({"id": r.id, "name": r.name, "enabled": r.enabled,
+                json!({"raw": r, "id": r.id, "name": r.name, "enabled": r.enabled,
                     "namespace": r.matches.namespace,
                     "effects_text": layer_effects_text(&r.effects),
                     "source": source, "line": line})
@@ -58,7 +58,7 @@ impl RulesState {
             .map(|r| {
                 let (source, line) = source_of(explained, &format!("workspace.{}", r.workspace));
                 let layout = layouts["workspaces"][&r.workspace].as_str().unwrap_or("");
-                json!({"workspace": r.workspace, "layout": layout,
+                json!({"raw": r, "workspace": r.workspace, "layout": layout,
                     "fields_text": workspace_text(r),
                     "source": source, "line": line})
             })

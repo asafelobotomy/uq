@@ -26,7 +26,7 @@ pub use fields::fields;
 use rows::source_of;
 
 /// How many window names a reopen note lists.
-const REOPEN_NAMES: usize = 5;
+const REOPEN_NAMES: usize = 3;
 
 #[derive(Debug, Clone)]
 pub enum Op {
@@ -119,6 +119,12 @@ fn reason(e: &SettingError) -> String {
 /// A pattern that matches exactly `text` (an app ID picked from a window).
 pub fn exact(text: &str) -> String {
     exact_pattern(text)
+}
+
+fn pick_json(p: &Pick) -> Value {
+    json!({"seq": p.seq, "purpose": p.purpose, "status": p.status,
+        "window": window_json(&p.window),
+        "class_pattern": p.window.as_ref().map(|w| exact(&w.class)).unwrap_or_default()})
 }
 
 fn verdict_name(v: Verdict) -> Value {
@@ -304,6 +310,9 @@ impl RulesState {
     /// Ask uqd for a click on a window. A failed call still records a pick (F5), so the page
     /// has a status to show, then gives the error.
     async fn pick(&self, proxy: &DesktopProxy<'_>, purpose: &str) -> zbus::Result<()> {
+        if !matches!(purpose, "match" | "why") {
+            return Err(failure("that isn't something a window can be picked for"));
+        }
         let reply = match proxy.pick_window().await {
             Ok(text) => parse_json(&text),
             Err(e) => Err(e),
@@ -379,7 +388,9 @@ impl PageLogic for RulesState {
                     list.insert(to.min(list.len()), rule);
                     Ok(())
                 })
-                .await
+                .await?;
+                self.refresh_windows(&proxy).await.ok();
+                Ok(())
             }
             Op::SetEnabled { kind, key, on } => {
                 if kind == "workspace" {
@@ -391,7 +402,9 @@ impl PageLogic for RulesState {
                     list[i]["enabled"] = json!(on);
                     Ok(())
                 })
-                .await
+                .await?;
+                self.refresh_windows(&proxy).await.ok();
+                Ok(())
             }
             Op::FromTemplate {
                 template,
@@ -413,6 +426,23 @@ impl PageLogic for RulesState {
     }
 
     async fn snapshot(&self) -> zbus::Result<Value> {
+        match self.read_all().await {
+            Err(e) if client::no_owner(&e) => Ok(self.down()),
+            other => other,
+        }
+    }
+}
+
+impl RulesState {
+    /// uqd isn't running: no rules, but the pick status (a pick that found no uqd says so) and
+    /// a plain error, so the page never fails silently.
+    fn down(&self) -> Value {
+        let shown = self.shown.lock().unwrap();
+        json!({"error": "uQ isn't running", "pick": pick_json(&shown.pick),
+            "notice": {"seq": shown.notice_seq, "text": shown.notice}})
+    }
+
+    async fn read_all(&self) -> zbus::Result<Value> {
         let proxy = DesktopProxy::new(&self.conn).await?;
         let section = parse_json(&proxy.get_section("rules").await?)?;
         let rules: Rules = serde_json::from_value(section)
@@ -454,9 +484,7 @@ impl PageLogic for RulesState {
         out["windows"] = json!(windows);
         out["why"] = json!({"seq": shown.why.seq, "window": window_json(&shown.why.window),
             "rules": why_rules});
-        out["pick"] = json!({"seq": shown.pick.seq, "purpose": shown.pick.purpose,
-            "status": shown.pick.status, "window": window_json(&shown.pick.window),
-            "class_pattern": shown.pick.window.as_ref().map(|w| exact(&w.class)).unwrap_or_default()});
+        out["pick"] = pick_json(&shown.pick);
         out["reopen"] = json!({"seq": shown.reopen.seq, "names": shown.reopen.names,
             "more": shown.reopen.more});
         out["templates"] = json!(templates);

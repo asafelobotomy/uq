@@ -452,11 +452,12 @@ async fn limits_refusal_shows_uqd_message() {
 }
 
 #[tokio::test]
-async fn uqd_down_gives_empty_state_without_an_error() {
+async fn uqd_down_shows_unavailable_not_silence() {
     let bus = private_bus();
     let page = RulesState::new(connect(&bus).await);
     let out = run(&page, Op::Refresh).await;
-    assert_eq!((out.state, out.error), (json!({}), None));
+    assert_eq!(out.error, None);
+    assert_eq!(out.state["error"], "uQ isn't running");
     let out = run(
         &page,
         Op::Pick {
@@ -464,5 +465,71 @@ async fn uqd_down_gives_empty_state_without_an_error() {
         },
     )
     .await;
-    assert_eq!((out.state, out.error), (json!({}), None));
+    assert_eq!(out.error, None);
+    assert_eq!(out.state["pick"]["status"], "unavailable");
+    assert_eq!(out.state["pick"]["seq"], 1);
+}
+
+#[tokio::test]
+async fn unknown_pick_purpose_is_refused() {
+    let (_r, page) = rig().await;
+    let out = run(
+        &page,
+        Op::Pick {
+            purpose: "x".into(),
+        },
+    )
+    .await;
+    assert!(out.error.is_some());
+}
+
+#[tokio::test]
+async fn editing_through_the_snapshot_keeps_every_other_key() {
+    let st = state_with(json!({
+        "window": [{"id": "r-0001", "name": "W", "enabled": false,
+            "match": {"class": "^a$", "title": "t", "xwayland": true},
+            "effects": {"float": true, "size": [300, 200], "opacity": 0.5, "workspace": "3", "silent": true}}],
+        "layer": [{"id": "r-0002", "name": "L", "match": {"namespace": "bar"},
+            "effects": {"blur": true, "ignore_alpha": 0.3, "animation": "fade"}}],
+        "workspace": [{"workspace": "3", "persistent": true, "gaps_in": 4, "monitor": "DP-1"}],
+    }));
+    let (r, page) = rig_with(st).await;
+    let state = run(&page, Op::Refresh).await.state;
+    for (kind, change) in [
+        ("window", "name"),
+        ("layer", "name"),
+        ("workspace", "gaps_in"),
+    ] {
+        let before = state[kind][0]["raw"].clone();
+        let mut edited = before.clone();
+        edited[change] = if change == "name" {
+            json!("Renamed")
+        } else {
+            json!(9)
+        };
+        let out = save(&page, kind, edited.clone()).await;
+        assert_eq!(out.error, None, "{kind}");
+        let after = out.state[kind][0]["raw"].clone();
+        assert_eq!(after, edited, "{kind}");
+        let mut a = after.clone();
+        a[change] = before[change].clone();
+        assert_eq!(a, before, "{kind}: only {change} changed");
+    }
+    assert_eq!(ids(&r), ["r-0001"]);
+}
+
+#[tokio::test]
+async fn reopen_lists_at_most_three_and_counts_the_rest() {
+    for (n, shown, more) in [(5usize, 3usize, 2usize), (3, 3, 0), (4, 3, 1)] {
+        let (r, page) = rig().await;
+        r.windows
+            .set((0..n).map(|i| win("app", &format!("w{i}"))).collect());
+        let out = save(&page, "window", rule("F", "^app$", json!({"float": true}))).await;
+        assert_eq!(
+            out.state["reopen"]["names"].as_array().unwrap().len(),
+            shown,
+            "{n}"
+        );
+        assert_eq!(out.state["reopen"]["more"], json!(more), "{n}");
+    }
 }
