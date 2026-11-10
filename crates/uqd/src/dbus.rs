@@ -4,6 +4,7 @@ use crate::service::{Desktop, DesktopError, Event};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use uq_core::history::Origin;
 use uq_core::schedule::Schedule;
 use uq_core::theme::Variant;
 use zbus::object_server::SignalEmitter;
@@ -54,7 +55,12 @@ impl DesktopIface {
         let v: Variant = variant
             .parse()
             .map_err(|e: uq_core::theme::ThemeError| UqError::InvalidArgument(e.to_string()))?;
-        Ok(self.desktop.lock().await.set_theme(name, v).await?)
+        Ok(self
+            .desktop
+            .lock()
+            .await
+            .set_theme(name, v, Origin::Unknown)
+            .await?)
     }
 
     async fn get_theme(&self) -> (String, String) {
@@ -67,7 +73,12 @@ impl DesktopIface {
     async fn set_schedule(&self, json: &str) -> Result<(), UqError> {
         let s: Schedule =
             serde_json::from_str(json).map_err(|e| UqError::InvalidSchedule(e.to_string()))?;
-        Ok(self.desktop.lock().await.set_schedule(s).await?)
+        Ok(self
+            .desktop
+            .lock()
+            .await
+            .set_schedule(s, Origin::Unknown)
+            .await?)
     }
 
     /// The stored schedule as JSON, in the format `SetSchedule` accepts.
@@ -81,7 +92,7 @@ impl DesktopIface {
             .desktop
             .lock()
             .await
-            .set_layout(workspace, layout)
+            .set_layout(workspace, layout, Origin::Unknown)
             .await?)
     }
 
@@ -110,7 +121,12 @@ impl DesktopIface {
     async fn set_setting(&self, key: &str, json: &str) -> Result<(), UqError> {
         let value: serde_json::Value = serde_json::from_str(json)
             .map_err(|e| UqError::InvalidSetting(format!("value is not JSON: {e}")))?;
-        Ok(self.desktop.lock().await.set_setting(key, value).await?)
+        Ok(self
+            .desktop
+            .lock()
+            .await
+            .set_setting(key, value, Origin::Unknown)
+            .await?)
     }
 
     /// One whole settings section (`appearance`, `wallpaper`) as JSON.
@@ -120,7 +136,12 @@ impl DesktopIface {
 
     /// Replace a whole section with `json`.
     async fn set_section(&self, domain: &str, json: &str) -> Result<(), UqError> {
-        Ok(self.desktop.lock().await.set_section(domain, json).await?)
+        Ok(self
+            .desktop
+            .lock()
+            .await
+            .set_section(domain, json, Origin::Unknown)
+            .await?)
     }
 
     async fn record_launch(&self, id: &str) {
@@ -228,6 +249,7 @@ pub async fn serve(
                 Event::SectionChanged { domain, json } => {
                     DesktopIface::section_changed(e, domain, json).await
                 }
+                Event::HistoryChanged => Ok(()),
                 Event::LaunchCountsChanged(counts) => {
                     DesktopIface::launch_counts_changed(
                         e,

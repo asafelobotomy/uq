@@ -9,6 +9,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::broadcast;
 use uq_core::atomic::{atomic_replace_dir, atomic_write};
+use uq_core::history::{AutoReason, Entry, Journal, Origin, PointKind, RestoreStore, diff};
 use uq_core::lua::{Layout, emit_generated, emit_workspace_rule, lua_string};
 use uq_core::paths::Paths;
 use uq_core::render::{kvantum_base, render};
@@ -40,6 +41,8 @@ pub enum Event {
         domain: String,
         json: String,
     },
+    /// The journal gained entries.
+    HistoryChanged,
 }
 
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
@@ -91,6 +94,10 @@ pub struct Desktop {
     last_launch_save: Option<Instant>,
     launch_dirty: bool,
     launch_saves: u32,
+    journal: Journal,
+    restore: RestoreStore,
+    /// Ids of the journal entries the latest `persist` appended; empty when it journalled nothing.
+    last_entry_ids: Vec<String>,
 }
 
 /// Launch counts stop here per app.
@@ -148,6 +155,8 @@ impl Desktop {
             state.theme = State::default().theme;
         }
         let (events, _) = broadcast::channel(64);
+        let journal = Journal::open(&paths.history_dir);
+        let restore = RestoreStore::open(&paths.restore_dir);
         Ok(Desktop {
             paths,
             themes,
@@ -159,6 +168,9 @@ impl Desktop {
             last_launch_save: None,
             launch_dirty: false,
             launch_saves: 0,
+            journal,
+            restore,
+            last_entry_ids: Vec::new(),
         })
     }
 
@@ -174,6 +186,12 @@ impl Desktop {
 
     pub fn paths(&self) -> &Paths {
         &self.paths
+    }
+
+    /// Ids of the entries the latest `persist` journalled (empty if none).
+    #[allow(dead_code)] // Task 4's D-Bus Undo reads it.
+    pub(crate) fn last_entry_ids(&self) -> &[String] {
+        &self.last_entry_ids
     }
 
     pub fn state(&self) -> &State {
@@ -216,17 +234,16 @@ impl Desktop {
         &mut self,
         key: &str,
         value: serde_json::Value,
+        origin: Origin,
     ) -> Result<(), DesktopError> {
         let mut next = self.state.clone();
         next.settings
             .apply(key, value)
             .map_err(|e| DesktopError::InvalidSetting(e.to_string()))?;
         if renders_config(key) {
-            return self.commit(next, Change::Input).await;
+            return self.commit(next, Change::Input, origin).await;
         }
-        next.save(&self.paths.state_file)
-            .map_err(io_err("saving state"))?;
-        self.state = next;
+        self.persist(next, origin)?;
         let _ = self.events.send(Event::SettingsChanged(Box::new(
             self.state.settings.clone(),
         )));
@@ -310,22 +327,36 @@ impl Desktop {
         if let Err(e) = self.ensure_user_lua() {
             tracing::warn!("{e}");
         }
-        if let Err(e) = self.reload().await {
+        self.save_new_version_point();
+        if let Err(e) = self
+            .commit(self.state.clone(), Change::Theme, Origin::Schedule)
+            .await
+        {
             tracing::warn!("startup render failed: {e}");
         }
     }
 
-    pub async fn set_theme(&mut self, id: &str, v: Variant) -> Result<(), DesktopError> {
+    pub async fn set_theme(
+        &mut self,
+        id: &str,
+        v: Variant,
+        origin: Origin,
+    ) -> Result<(), DesktopError> {
         if self.themes.get(id, v).is_none() {
             return Err(DesktopError::UnknownTheme(id.to_string()));
         }
         let mut next = self.state.clone();
         next.theme = id.to_string();
         next.variant = v;
-        self.commit(next, Change::Theme).await
+        self.commit(next, Change::Theme, origin).await
     }
 
-    pub async fn set_layout(&mut self, ws: &str, layout: &str) -> Result<(), DesktopError> {
+    pub async fn set_layout(
+        &mut self,
+        ws: &str,
+        layout: &str,
+        origin: Origin,
+    ) -> Result<(), DesktopError> {
         if ws.trim().is_empty() {
             return Err(DesktopError::EmptyWorkspace);
         }
@@ -336,11 +367,11 @@ impl Desktop {
         // The `layouts` section's limits, so what SetLayout stores SetSection accepts back.
         let ws = set_rule(&mut next.layouts, ws, layout)
             .map_err(|e| DesktopError::InvalidSetting(e.to_string()))?;
-        self.commit(next, Change::Layout(ws, layout)).await
+        self.commit(next, Change::Layout(ws, layout), origin).await
     }
 
-    pub async fn set_schedule(&mut self, s: Schedule) -> Result<(), DesktopError> {
-        self.set_schedule_at(s, Local::now()).await
+    pub async fn set_schedule(&mut self, s: Schedule, origin: Origin) -> Result<(), DesktopError> {
+        self.set_schedule_at(s, Local::now(), origin).await
     }
 
     /// Store a schedule and switch to the variant it wants at `now`.
@@ -348,6 +379,7 @@ impl Desktop {
         &mut self,
         s: Schedule,
         now: DateTime<Tz>,
+        origin: Origin,
     ) -> Result<(), DesktopError> {
         s.validate().map_err(DesktopError::InvalidSchedule)?;
         let mut next = self.state.clone();
@@ -361,7 +393,7 @@ impl Desktop {
             }
             _ => Change::Quiet,
         };
-        self.commit(next, change).await
+        self.commit(next, change, origin).await
     }
 
     /// Apply a scheduled transition that is newer than the last one applied. Returns whether the
@@ -381,16 +413,21 @@ impl Desktop {
         let mut next = self.state.clone();
         next.schedule_mark = Some(at);
         if v == next.variant {
-            self.commit(next, Change::Quiet).await.map(|()| false)
+            self.commit(next, Change::Quiet, Origin::Schedule)
+                .await
+                .map(|()| false)
         } else {
             next.variant = v;
-            self.commit(next, Change::Theme).await.map(|()| true)
+            self.commit(next, Change::Theme, Origin::Schedule)
+                .await
+                .map(|()| true)
         }
     }
 
     /// Re-render every file from current state and re-theme the session.
     pub async fn reload(&mut self) -> Result<(), DesktopError> {
-        self.commit(self.state.clone(), Change::Theme).await
+        self.commit(self.state.clone(), Change::Theme, Origin::Unknown)
+            .await
     }
 
     fn ensure_user_lua(&self) -> Result<(), DesktopError> {
@@ -401,8 +438,86 @@ impl Desktop {
         atomic_write(p, USER_LUA_STUB).map_err(io_err("creating user.lua"))
     }
 
+    /// The one save point: write `state.toml`, adopt `next`, and record what changed. Journal and
+    /// restore-point failures are logged and never fail the write.
+    pub(crate) fn persist(&mut self, next: State, origin: Origin) -> Result<(), DesktopError> {
+        next.save(&self.paths.state_file)
+            .map_err(io_err("saving state"))?;
+        let old = std::mem::replace(&mut self.state, next);
+        self.last_entry_ids.clear();
+        if origin == Origin::Schedule {
+            return Ok(());
+        }
+        let changes = diff(&old, &self.state, &|_, _| None);
+        if changes.is_empty() {
+            return Ok(());
+        }
+        let now = Utc::now().timestamp();
+        let today = Local
+            .timestamp_opt(now, 0)
+            .earliest()
+            .map(|t| t.date_naive());
+        let have_today = self.restore.last_auto(AutoReason::Daily).is_some_and(|p| {
+            Local
+                .timestamp_opt(p.time, 0)
+                .earliest()
+                .map(|t| t.date_naive())
+                == today
+        });
+        if !have_today
+            && let Err(e) = self.restore.save(
+                &old,
+                "Before today's changes",
+                PointKind::Auto(AutoReason::Daily),
+                now,
+            )
+        {
+            tracing::warn!("saving daily restore point: {e}");
+        }
+        let origin = origin.as_str();
+        let entries: Vec<Entry> = changes
+            .into_iter()
+            .map(|c| Entry::new(now, origin.clone(), c.domain, c.summary, c.before, c.after))
+            .collect();
+        match self.journal.append(&entries) {
+            Ok(()) => {
+                self.last_entry_ids = entries.into_iter().map(|e| e.id).collect();
+                let _ = self.events.send(Event::HistoryChanged);
+            }
+            Err(e) => tracing::warn!("writing history: {e}"),
+        }
+        self.journal.prune(now);
+        self.restore.prune();
+        Ok(())
+    }
+
+    /// Keep a restore point of the state a new uQ version found, once per version.
+    fn save_new_version_point(&self) {
+        let version = env!("CARGO_PKG_VERSION");
+        if self
+            .restore
+            .last_auto(AutoReason::NewVersion)
+            .is_some_and(|p| p.name == version)
+        {
+            return;
+        }
+        if let Err(e) = self.restore.save(
+            &self.state,
+            version,
+            PointKind::Auto(AutoReason::NewVersion),
+            Utc::now().timestamp(),
+        ) {
+            tracing::warn!("saving new-version restore point: {e}");
+        }
+    }
+
     /// Validate, then write theme dir + generated.lua + state; then apply live and notify.
-    pub(crate) async fn commit(&mut self, next: State, change: Change) -> Result<(), DesktopError> {
+    pub(crate) async fn commit(
+        &mut self,
+        next: State,
+        change: Change,
+        origin: Origin,
+    ) -> Result<(), DesktopError> {
         let theme = self
             .themes
             .get(&next.theme, next.variant)
@@ -456,15 +571,11 @@ impl Desktop {
                 std::fs::rename(&candidate, &self.paths.generated_lua)
                     .map_err(io_err("installing generated.lua"))
             })
-            .and_then(|()| {
-                next.save(&self.paths.state_file)
-                    .map_err(io_err("saving state"))
-            });
+            .and_then(|()| self.persist(next, origin));
         if let Err(e) = committed {
             let _ = std::fs::remove_file(&candidate);
             return Err(e);
         }
-        self.state = next;
 
         match change {
             Change::Quiet => {}
@@ -543,6 +654,7 @@ mod tests {
     use crate::system::FakeSystem;
     use std::fs;
     use std::path::PathBuf;
+    use uq_core::history::Origin;
     use uq_core::lua::Layout;
     use uq_core::schedule::Schedule;
 
@@ -579,15 +691,23 @@ mod tests {
         rig_with(true, |_| {})
     }
 
-    fn drain(rx: &mut broadcast::Receiver<Event>) -> Vec<Event> {
+    /// Every event so far.
+    fn drain_all(rx: &mut broadcast::Receiver<Event>) -> Vec<Event> {
         std::iter::from_fn(|| rx.try_recv().ok()).collect()
+    }
+
+    /// Events so far, leaving out `HistoryChanged`, which every journalled write adds.
+    fn drain(rx: &mut broadcast::Receiver<Event>) -> Vec<Event> {
+        let mut evs = drain_all(rx);
+        evs.retain(|e| *e != Event::HistoryChanged);
+        evs
     }
 
     #[tokio::test]
     async fn set_theme_writes_files_and_emits() {
         let mut r = rig();
         r.desktop
-            .set_theme("dracula", Variant::Light)
+            .set_theme("dracula", Variant::Light, Origin::Settings)
             .await
             .unwrap();
         let p = r.desktop.paths().clone();
@@ -618,7 +738,10 @@ mod tests {
     #[tokio::test]
     async fn named_workspace_layout_uses_name_selector() {
         let mut r = rig();
-        r.desktop.set_layout("web", "scrolling").await.unwrap();
+        r.desktop
+            .set_layout("web", "scrolling", Origin::Settings)
+            .await
+            .unwrap();
         assert_eq!(
             r.desktop.get_layouts().get("name:web"),
             Some(&Layout::Scrolling)
@@ -636,7 +759,10 @@ mod tests {
     #[tokio::test]
     async fn verify_main_lives_in_hypr_dir_with_relative_requires() {
         let mut r = rig();
-        r.desktop.set_layout("1", "master").await.unwrap();
+        r.desktop
+            .set_layout("1", "master", Origin::Settings)
+            .await
+            .unwrap();
         let (path, src) = r.comp.verified.lock().unwrap()[0].clone();
         assert_eq!(path.parent(), Some(r.desktop.paths().hypr_dir.as_path()));
         assert!(
@@ -649,7 +775,10 @@ mod tests {
     #[tokio::test]
     async fn no_system_settings_without_hyprland() {
         let mut r = rig_with(false, |_| {});
-        r.desktop.set_theme("matcha", Variant::Light).await.unwrap();
+        r.desktop
+            .set_theme("matcha", Variant::Light, Origin::Settings)
+            .await
+            .unwrap();
         assert!(
             r.sys.applied.lock().unwrap().is_empty(),
             "gsettings touched outside Hyprland"
@@ -671,10 +800,13 @@ mod tests {
             light_at: chrono::NaiveTime::from_hms_opt(7, 0, 0).unwrap(),
             dark_at: chrono::NaiveTime::from_hms_opt(19, 0, 0).unwrap(),
         };
-        r.desktop.set_schedule_at(s, at(day, 20, 0)).await.unwrap();
+        r.desktop
+            .set_schedule_at(s, at(day, 20, 0), Origin::Settings)
+            .await
+            .unwrap();
         assert_eq!(r.desktop.get_theme().1, Variant::Dark);
         r.desktop
-            .set_theme("graphite", Variant::Light)
+            .set_theme("graphite", Variant::Light, Origin::Settings)
             .await
             .unwrap();
         assert!(
@@ -700,7 +832,10 @@ mod tests {
     #[tokio::test]
     async fn set_layout_persists_and_evals() {
         let mut r = rig();
-        r.desktop.set_layout("2", "scrolling").await.unwrap();
+        r.desktop
+            .set_layout("2", "scrolling", Origin::Settings)
+            .await
+            .unwrap();
         let p = r.desktop.paths().clone();
         assert!(
             r.comp.calls().contains(
@@ -736,7 +871,10 @@ mod tests {
     #[tokio::test]
     async fn failed_verify_keeps_last_good_and_reports() {
         let mut r = rig();
-        r.desktop.set_theme("forest", Variant::Dark).await.unwrap();
+        r.desktop
+            .set_theme("forest", Variant::Dark, Origin::Settings)
+            .await
+            .unwrap();
         let p = r.desktop.paths().clone();
         let before = fs::read(&p.generated_lua).unwrap();
         let tokens_before = fs::read(p.theme_dir.join("tokens.json")).unwrap();
@@ -745,7 +883,7 @@ mod tests {
 
         let err = r
             .desktop
-            .set_theme("velvet", Variant::Light)
+            .set_theme("velvet", Variant::Light, Origin::Settings)
             .await
             .unwrap_err();
         assert!(
@@ -775,7 +913,10 @@ mod tests {
     #[tokio::test]
     async fn verify_sees_candidate_and_user_files() {
         let mut r = rig();
-        r.desktop.set_layout("1", "master").await.unwrap();
+        r.desktop
+            .set_layout("1", "master", Origin::Settings)
+            .await
+            .unwrap();
         let verify = r
             .comp
             .calls()
@@ -789,8 +930,14 @@ mod tests {
     #[tokio::test]
     async fn compositor_down_still_persists() {
         let mut r = rig_with(false, |_| {});
-        r.desktop.set_layout("web", "dwindle").await.unwrap();
-        r.desktop.set_theme("matcha", Variant::Light).await.unwrap();
+        r.desktop
+            .set_layout("web", "dwindle", Origin::Settings)
+            .await
+            .unwrap();
+        r.desktop
+            .set_theme("matcha", Variant::Light, Origin::Settings)
+            .await
+            .unwrap();
         let p = r.desktop.paths().clone();
         let s = State::load(&p.state_file);
         assert_eq!(
@@ -805,7 +952,7 @@ mod tests {
         let mut r = rig();
         let err = r
             .desktop
-            .set_theme("solarized", Variant::Dark)
+            .set_theme("solarized", Variant::Dark, Origin::Settings)
             .await
             .unwrap_err();
         assert!(matches!(err, DesktopError::UnknownTheme(ref id) if id == "solarized"));
@@ -814,7 +961,11 @@ mod tests {
     #[tokio::test]
     async fn invalid_layout_rejected() {
         let mut r = rig();
-        let err = r.desktop.set_layout("1", "monocle").await.unwrap_err();
+        let err = r
+            .desktop
+            .set_layout("1", "monocle", Origin::Settings)
+            .await
+            .unwrap_err();
         assert!(matches!(err, DesktopError::InvalidLayout(ref l) if l == "monocle"));
     }
 
@@ -823,23 +974,34 @@ mod tests {
         let mut r = rig();
         let long = "a".repeat(65);
         assert!(matches!(
-            r.desktop.set_layout(&long, "master").await,
+            r.desktop
+                .set_layout(&long, "master", Origin::Settings)
+                .await,
             Err(DesktopError::InvalidSetting(_))
         ));
         assert!(matches!(
-            r.desktop.set_layout("a\u{1}b", "master").await,
+            r.desktop
+                .set_layout("a\u{1}b", "master", Origin::Settings)
+                .await,
             Err(DesktopError::InvalidSetting(_))
         ));
         for i in 1..=64 {
             r.desktop
-                .set_layout(&i.to_string(), "master")
+                .set_layout(&i.to_string(), "master", Origin::Settings)
                 .await
                 .unwrap();
         }
-        let err = r.desktop.set_layout("65", "master").await.unwrap_err();
+        let err = r
+            .desktop
+            .set_layout("65", "master", Origin::Settings)
+            .await
+            .unwrap_err();
         assert!(err.to_string().contains("64"), "{err}");
         // Changing an existing rule at the limit is fine.
-        r.desktop.set_layout("64", "scrolling").await.unwrap();
+        r.desktop
+            .set_layout("64", "scrolling", Origin::Settings)
+            .await
+            .unwrap();
         assert_eq!(r.desktop.state.layouts.len(), 64);
         let v = r.desktop.state.section("layouts").unwrap();
         r.desktop.state.clone().set_section("layouts", v).unwrap();
@@ -849,7 +1011,7 @@ mod tests {
     async fn empty_workspace_rejected() {
         let mut r = rig();
         assert!(matches!(
-            r.desktop.set_layout("  ", "master").await,
+            r.desktop.set_layout("  ", "master", Origin::Settings).await,
             Err(DesktopError::EmptyWorkspace)
         ));
     }
@@ -858,7 +1020,7 @@ mod tests {
     async fn set_schedule_applies_current_variant() {
         let mut r = rig();
         r.desktop
-            .set_theme("graphite", Variant::Dark)
+            .set_theme("graphite", Variant::Dark, Origin::Settings)
             .await
             .unwrap();
         let noon = chrono::Local::now()
@@ -870,7 +1032,10 @@ mod tests {
             light_at: chrono::NaiveTime::from_hms_opt(7, 0, 0).unwrap(),
             dark_at: chrono::NaiveTime::from_hms_opt(19, 0, 0).unwrap(),
         };
-        r.desktop.set_schedule_at(s.clone(), now).await.unwrap();
+        r.desktop
+            .set_schedule_at(s.clone(), now, Origin::Settings)
+            .await
+            .unwrap();
         assert_eq!(
             r.desktop.get_theme(),
             ("graphite".to_string(), Variant::Light)
@@ -894,7 +1059,10 @@ mod tests {
             light_at: chrono::NaiveTime::from_hms_opt(7, 0, 0).unwrap(),
             dark_at: chrono::NaiveTime::from_hms_opt(19, 0, 0).unwrap(),
         };
-        r.desktop.set_schedule_at(s, at(12)).await.unwrap();
+        r.desktop
+            .set_schedule_at(s, at(12), Origin::Settings)
+            .await
+            .unwrap();
         assert_eq!(r.desktop.get_theme().1, Variant::Light);
         drain(&mut r.events);
         assert!(
@@ -926,10 +1094,13 @@ mod tests {
         let t = chrono::NaiveTime::from_hms_opt(7, 0, 0).unwrap();
         let err = r
             .desktop
-            .set_schedule(Schedule::Fixed {
-                light_at: t,
-                dark_at: t,
-            })
+            .set_schedule(
+                Schedule::Fixed {
+                    light_at: t,
+                    dark_at: t,
+                },
+                Origin::Settings,
+            )
             .await
             .unwrap_err();
         assert!(matches!(err, DesktopError::InvalidSchedule(_)));
@@ -986,12 +1157,12 @@ mod tests {
         let mut r = rig();
         // Defaults are 240/300/360/1200, so lock = 400 needs screen_off moved up first.
         r.desktop
-            .set_setting("idle.screen_off", serde_json::json!(500))
+            .set_setting("idle.screen_off", serde_json::json!(500), Origin::Settings)
             .await
             .unwrap();
         drain(&mut r.events);
         r.desktop
-            .set_setting("idle.lock", serde_json::json!(400))
+            .set_setting("idle.lock", serde_json::json!(400), Origin::Settings)
             .await
             .unwrap();
         assert_eq!(
@@ -1020,13 +1191,13 @@ mod tests {
         let before = r.desktop.state().clone();
         let err = r
             .desktop
-            .set_setting("idle.lock", serde_json::json!(1))
+            .set_setting("idle.lock", serde_json::json!(1), Origin::Settings)
             .await
             .unwrap_err();
         assert!(matches!(err, DesktopError::InvalidSetting(_)), "{err:?}");
         let err = r
             .desktop
-            .set_setting("nope", serde_json::json!(1))
+            .set_setting("nope", serde_json::json!(1), Origin::Settings)
             .await
             .unwrap_err();
         assert!(matches!(err, DesktopError::InvalidSetting(_)), "{err:?}");
@@ -1039,7 +1210,11 @@ mod tests {
     async fn mouse_setting_renders_verifies_and_reloads() {
         let mut r = rig();
         r.desktop
-            .set_setting("mouse.sensitivity", serde_json::json!(-0.5))
+            .set_setting(
+                "mouse.sensitivity",
+                serde_json::json!(-0.5),
+                Origin::Settings,
+            )
             .await
             .unwrap();
         let p = r.desktop.paths().clone();
@@ -1065,7 +1240,11 @@ mod tests {
         *r.comp.verify_error.lock().unwrap() = Some("input: bad value".into());
         let err = r
             .desktop
-            .set_setting("mouse.left_handed", serde_json::json!(true))
+            .set_setting(
+                "mouse.left_handed",
+                serde_json::json!(true),
+                Origin::Settings,
+            )
             .await
             .unwrap_err();
         assert!(matches!(err, DesktopError::ConfigInvalid(_)), "{err:?}");
@@ -1082,7 +1261,11 @@ mod tests {
         let mut r = rig();
         let err = r
             .desktop
-            .set_setting("mouse.scroll_factor", serde_json::json!(99))
+            .set_setting(
+                "mouse.scroll_factor",
+                serde_json::json!(99),
+                Origin::Settings,
+            )
             .await
             .unwrap_err();
         assert!(matches!(err, DesktopError::InvalidSetting(_)), "{err:?}");
@@ -1131,7 +1314,11 @@ mod tests {
     async fn record_launch_opt_out() {
         let mut r = rig();
         r.desktop
-            .set_setting("privacy.record_launches", serde_json::json!(false))
+            .set_setting(
+                "privacy.record_launches",
+                serde_json::json!(false),
+                Origin::Settings,
+            )
             .await
             .unwrap();
         drain(&mut r.events);
@@ -1204,5 +1391,140 @@ mod tests {
         assert!(desktop_file_installed("foo", &dirs));
         assert!(!desktop_file_installed("bar.desktop", &dirs));
         assert!(!desktop_file_installed("../foo", &dirs));
+    }
+
+    fn journal_of(r: &Rig) -> Vec<uq_core::history::Entry> {
+        Journal::open(&r.desktop.paths().history_dir).list(100)
+    }
+
+    #[tokio::test]
+    async fn section_write_appends_one_history_entry() {
+        let mut r = rig();
+        r.desktop
+            .set_section("look", r#"{"gaps_in":9}"#, Origin::Settings)
+            .await
+            .unwrap();
+        let entries = journal_of(&r);
+        assert_eq!(entries.len(), 1, "{entries:?}");
+        assert_eq!(entries[0].origin, "settings");
+        assert_eq!(entries[0].domain, "look");
+        assert_eq!(r.desktop.last_entry_ids(), [entries[0].id.clone()]);
+    }
+
+    #[tokio::test]
+    async fn light_setting_write_is_journalled() {
+        let mut r = rig();
+        r.desktop
+            .set_setting("idle.dim", serde_json::json!(200), Origin::Uqctl)
+            .await
+            .unwrap();
+        let entries = journal_of(&r);
+        assert_eq!(entries.len(), 1, "{entries:?}");
+        assert_eq!(entries[0].origin, "uqctl");
+        assert_eq!(entries[0].domain, "settings");
+    }
+
+    #[tokio::test]
+    async fn schedule_tick_is_not_journalled() {
+        let mut r = rig();
+        let day = chrono::Local::now().date_naive();
+        let at = |h, m| {
+            day.and_hms_opt(h, m, 0)
+                .unwrap()
+                .and_local_timezone(chrono::Local)
+                .earliest()
+                .unwrap()
+        };
+        let s = Schedule::Fixed {
+            light_at: chrono::NaiveTime::from_hms_opt(7, 0, 0).unwrap(),
+            dark_at: chrono::NaiveTime::from_hms_opt(19, 0, 0).unwrap(),
+        };
+        r.desktop
+            .set_schedule_at(s, at(12, 0), Origin::Schedule)
+            .await
+            .unwrap();
+        let _ = r.desktop.tick_schedule_at(at(23, 0)).await.unwrap();
+        assert!(journal_of(&r).is_empty());
+        assert!(r.desktop.last_entry_ids().is_empty());
+        assert!(r.desktop.restore.list().is_empty());
+    }
+
+    #[tokio::test]
+    async fn rejected_verify_writes_no_entry() {
+        let mut r = rig();
+        *r.comp.verify_error.lock().unwrap() = Some("bad".into());
+        let res = r.desktop.set_layout("1", "master", Origin::Settings).await;
+        assert!(matches!(res, Err(DesktopError::ConfigInvalid(_))));
+        assert!(journal_of(&r).is_empty());
+        assert!(r.desktop.restore.list().is_empty());
+    }
+
+    #[tokio::test]
+    async fn first_change_of_the_day_saves_a_daily_point() {
+        let mut r = rig();
+        r.desktop
+            .set_setting("idle.dim", serde_json::json!(200), Origin::Settings)
+            .await
+            .unwrap();
+        let points = r.desktop.restore.list();
+        assert_eq!(points.len(), 1, "{points:?}");
+        assert_eq!(points[0].kind, PointKind::Auto(AutoReason::Daily));
+        // The point holds the state from before the change.
+        let saved = r.desktop.restore.load(&points[0].id).unwrap();
+        assert_ne!(saved.settings.idle.dim, Some(200));
+        r.desktop
+            .set_setting("idle.dim", serde_json::json!(100), Origin::Settings)
+            .await
+            .unwrap();
+        assert_eq!(r.desktop.restore.list().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn journal_failure_does_not_fail_the_write() {
+        let mut r = rig_with(true, |p| {
+            fs::create_dir_all(p.history_dir.parent().unwrap()).unwrap();
+            fs::write(&p.history_dir, "not a directory").unwrap();
+        });
+        r.desktop
+            .set_setting("idle.dim", serde_json::json!(200), Origin::Settings)
+            .await
+            .unwrap();
+        let p = r.desktop.paths().clone();
+        assert_eq!(State::load(&p.state_file).settings.idle.dim, Some(200));
+        assert!(r.desktop.last_entry_ids().is_empty());
+    }
+
+    #[tokio::test]
+    async fn startup_saves_new_version_point_once() {
+        let mut r = rig();
+        r.desktop.startup().await;
+        r.desktop.startup().await;
+        let points: Vec<_> = r
+            .desktop
+            .restore
+            .list()
+            .into_iter()
+            .filter(|p| p.kind == PointKind::Auto(AutoReason::NewVersion))
+            .collect();
+        assert_eq!(points.len(), 1, "{points:?}");
+        assert_eq!(points[0].name, env!("CARGO_PKG_VERSION"));
+        assert!(journal_of(&r).is_empty());
+    }
+
+    #[tokio::test]
+    async fn history_changed_event_sent() {
+        let mut r = rig();
+        r.desktop
+            .set_setting("idle.dim", serde_json::json!(200), Origin::Settings)
+            .await
+            .unwrap();
+        assert!(drain_all(&mut r.events).contains(&Event::HistoryChanged));
+        // A no-op write journals nothing and sends nothing.
+        r.desktop
+            .set_setting("idle.dim", serde_json::json!(200), Origin::Settings)
+            .await
+            .unwrap();
+        assert!(!drain_all(&mut r.events).contains(&Event::HistoryChanged));
+        assert!(r.desktop.last_entry_ids().is_empty());
     }
 }

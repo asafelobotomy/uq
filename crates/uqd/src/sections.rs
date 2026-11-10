@@ -1,6 +1,7 @@
 //! Whole-section settings (`appearance`, `wallpaper`) for `GetSection` / `SetSection`.
 
-use crate::service::{Change, Desktop, DesktopError, Event, io_err};
+use crate::service::{Change, Desktop, DesktopError, Event};
+use uq_core::history::Origin;
 use uq_core::settings::renders_section;
 
 impl Desktop {
@@ -16,7 +17,12 @@ impl Desktop {
     /// Replace a whole section. `appearance` re-renders through the normal commit (verify,
     /// reload, theme events); `look` and `layouts` render, verify and reload Hyprland only;
     /// `wallpaper` and `shell` just save, since the shell reads them.
-    pub async fn set_section(&mut self, domain: &str, json: &str) -> Result<(), DesktopError> {
+    pub async fn set_section(
+        &mut self,
+        domain: &str,
+        json: &str,
+        origin: Origin,
+    ) -> Result<(), DesktopError> {
         let value: serde_json::Value = serde_json::from_str(json)
             .map_err(|e| DesktopError::InvalidSetting(format!("value is not JSON: {e}")))?;
         let mut next = self.state.clone();
@@ -29,11 +35,9 @@ impl Desktop {
             } else {
                 Change::Reload
             };
-            self.commit(next, change).await?;
+            self.commit(next, change, origin).await?;
         } else {
-            next.save(&self.paths.state_file)
-                .map_err(io_err("saving state"))?;
-            self.state = next;
+            self.persist(next, origin)?;
         }
         if let Some(before) = before {
             // The reload applied the rules; tell the shell which workspaces changed layout. A
@@ -82,6 +86,7 @@ mod tests {
     use std::sync::Arc;
     use std::sync::atomic::Ordering;
     use tokio::sync::broadcast;
+    use uq_core::history::Origin;
     use uq_core::paths::Paths;
     use uq_core::state::State;
 
@@ -132,6 +137,7 @@ mod tests {
             .set_section(
                 "appearance",
                 r#"{"ui_font":"Cantarell","cursor_theme":"Adwaita","cursor_size":32}"#,
+                Origin::Settings,
             )
             .await
             .unwrap();
@@ -162,7 +168,7 @@ mod tests {
         let mut r = rig();
         r.sys.fail.store(true, Ordering::SeqCst);
         r.desktop
-            .set_section("appearance", r#"{"mono_font":"Hack"}"#)
+            .set_section("appearance", r#"{"mono_font":"Hack"}"#, Origin::Settings)
             .await
             .unwrap();
         let got: serde_json::Value =
@@ -174,10 +180,13 @@ mod tests {
     #[tokio::test]
     async fn kvantum_off_removes_the_kvconfig() {
         let mut r = rig();
-        r.desktop.set_section("appearance", "{}").await.unwrap();
+        r.desktop
+            .set_section("appearance", "{}", Origin::Settings)
+            .await
+            .unwrap();
         assert!(kvconfig(&r).is_file());
         r.desktop
-            .set_section("appearance", r#"{"kvantum":false}"#)
+            .set_section("appearance", r#"{"kvantum":false}"#, Origin::Settings)
             .await
             .unwrap();
         assert!(!kvconfig(&r).exists());
@@ -192,7 +201,10 @@ mod tests {
         r.comp.calls.lock().unwrap().clear();
         drain(&mut r.events);
         let json = r#"{"outputs":{"*":{"image":"/a.png"}}}"#;
-        r.desktop.set_section("wallpaper", json).await.unwrap();
+        r.desktop
+            .set_section("wallpaper", json, Origin::Settings)
+            .await
+            .unwrap();
         assert_eq!(
             std::fs::metadata(&gen_path).unwrap().modified().unwrap(),
             before
@@ -219,7 +231,10 @@ mod tests {
         r.comp.calls.lock().unwrap().clear();
         drain(&mut r.events);
         let json = r#"{"islands":{"work":false},"clock_24h":false,"terminal":"foot.desktop","providers":[{"id":"run"},{"id":"org.x.Y","enabled":false}]}"#;
-        r.desktop.set_section("shell", json).await.unwrap();
+        r.desktop
+            .set_section("shell", json, Origin::Settings)
+            .await
+            .unwrap();
         assert_eq!(
             std::fs::metadata(&gen_path).unwrap().modified().unwrap(),
             before
@@ -242,7 +257,7 @@ mod tests {
         assert_eq!(got["providers"][1]["enabled"], false);
         for bad in [r#"{"terminal":"kitty"}"#, r#"{"nope":1}"#] {
             assert!(matches!(
-                r.desktop.set_section("shell", bad).await,
+                r.desktop.set_section("shell", bad, Origin::Settings).await,
                 Err(DesktopError::InvalidSetting(_))
             ));
         }
@@ -260,7 +275,7 @@ mod tests {
         ] {
             assert!(
                 matches!(
-                    r.desktop.set_section(d, j).await,
+                    r.desktop.set_section(d, j, Origin::Settings).await,
                     Err(DesktopError::InvalidSetting(_))
                 ),
                 "{d} {j}"
@@ -275,7 +290,7 @@ mod tests {
     async fn rejected_config_keeps_previous_appearance() {
         let mut r = rig();
         r.desktop
-            .set_section("appearance", r#"{"ui_font":"Inter"}"#)
+            .set_section("appearance", r#"{"ui_font":"Inter"}"#, Origin::Settings)
             .await
             .unwrap();
         let before = r.desktop.get_section("appearance").unwrap();
@@ -283,7 +298,7 @@ mod tests {
         *r.comp.verify_error.lock().unwrap() = Some("bad".into());
         let res = r
             .desktop
-            .set_section("appearance", r#"{"ui_font":"Other"}"#)
+            .set_section("appearance", r#"{"ui_font":"Other"}"#, Origin::Settings)
             .await;
         assert!(matches!(res, Err(DesktopError::ConfigInvalid(_))));
         assert_eq!(r.desktop.get_section("appearance").unwrap(), before);
@@ -305,7 +320,7 @@ mod tests {
         r.sys.applied.lock().unwrap().clear();
         drain(&mut r.events);
         r.desktop
-            .set_section("look", r#"{"gaps_in":9}"#)
+            .set_section("look", r#"{"gaps_in":9}"#, Origin::Settings)
             .await
             .unwrap();
         assert!(generated(&r).contains("gaps_in = 9"), "{}", generated(&r));
@@ -335,7 +350,10 @@ mod tests {
         let state_before = std::fs::read(&r.desktop.paths().state_file).unwrap();
         drain(&mut r.events);
         *r.comp.verify_error.lock().unwrap() = Some("bad option".into());
-        let res = r.desktop.set_section("look", r#"{"gaps_in":9}"#).await;
+        let res = r
+            .desktop
+            .set_section("look", r#"{"gaps_in":9}"#, Origin::Settings)
+            .await;
         assert_eq!(res, Err(DesktopError::ConfigInvalid("bad option".into())));
         assert_eq!(
             std::fs::read(&r.desktop.paths().generated_lua).unwrap(),
@@ -358,13 +376,17 @@ mod tests {
     #[tokio::test]
     async fn set_layouts_replaces_rules() {
         let mut r = rig();
-        r.desktop.set_layout("2", "scrolling").await.unwrap();
+        r.desktop
+            .set_layout("2", "scrolling", Origin::Settings)
+            .await
+            .unwrap();
         r.comp.calls.lock().unwrap().clear();
         drain(&mut r.events);
         r.desktop
             .set_section(
                 "layouts",
                 r#"{"default":"master","workspaces":{"3":"master"}}"#,
+                Origin::Settings,
             )
             .await
             .unwrap();
@@ -397,7 +419,10 @@ mod tests {
     #[tokio::test]
     async fn set_layout_emits_layouts_section() {
         let mut r = rig();
-        r.desktop.set_layout("2", "scrolling").await.unwrap();
+        r.desktop
+            .set_layout("2", "scrolling", Origin::Settings)
+            .await
+            .unwrap();
         let evs = drain(&mut r.events);
         let json = evs
             .iter()
