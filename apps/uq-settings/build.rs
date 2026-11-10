@@ -8,6 +8,7 @@ fn main() {
         QmlFile::from("qml/PluginPage.qml"),
         QmlFile::from("qml/components/ErrorCard.qml"),
         QmlFile::from("qml/components/UqLabel.qml"),
+        QmlFile::from("qml/components/ScrollReveal.qml"),
         QmlFile::from("qml/components/SettingRow.qml"),
         QmlFile::from("qml/components/OverrideCombo.qml"),
         QmlFile::from("qml/components/OverrideSpin.qml"),

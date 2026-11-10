@@ -1,5 +1,6 @@
 // One setting: a label on the left, its control(s) on the right. When `highlight` (bound to
-// App.highlight by the page) becomes this row's `settingId`, the row flashes for 2 s.
+// App.highlight by the page) becomes this row's `settingId`, the row scrolls into view and
+// flashes for 2 s.
 import QtQuick
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
@@ -15,6 +16,7 @@ Rectangle {
 
     function flashNow() {
         flash.restart();
+        revealer.reveal(row, Kirigami.Units.largeSpacing);
     }
     function check() {
         if (highlight !== "" && highlight === settingId)
@@ -35,6 +37,12 @@ Rectangle {
 
     onHighlightChanged: check()
     Component.onCompleted: check()
+    // Layout may place the row after the highlight arrives (a page that just loaded); follow it.
+    onYChanged: if (flashing) revealer.reveal(row, Kirigami.Units.largeSpacing)
+
+    ScrollReveal {
+        id: revealer
+    }
 
     Timer {
         id: flash
