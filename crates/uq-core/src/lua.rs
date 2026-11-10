@@ -199,7 +199,7 @@ mod tests {
         assert!(out.contains(r#"hl.env("XCURSOR_SIZE", "24")"#), "{out}");
         assert!(out.contains(r#"hl.env("HYPRCURSOR_SIZE", "24")"#), "{out}");
         let a = crate::settings::Appearance {
-            cursor_theme: Some("Bibata-Modern-Classic".into()),
+            cursor_theme: Some("Breeze_Snow".into()),
             cursor_size: Some(40),
             ..Default::default()
         };
@@ -209,7 +209,7 @@ mod tests {
             &MouseSettings::default(),
         );
         assert!(
-            out.contains(r#"hl.env("XCURSOR_THEME", "Bibata-Modern-Classic")"#),
+            out.contains(r#"hl.env("XCURSOR_THEME", "Breeze_Snow")"#),
             "{out}"
         );
         assert!(out.contains(r#"hl.env("XCURSOR_SIZE", "40")"#), "{out}");

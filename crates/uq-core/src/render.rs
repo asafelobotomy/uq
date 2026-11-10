@@ -16,6 +16,8 @@ pub enum RenderError {
         name: String,
         source: std::io::Error,
     },
+    #[error("unknown Kvantum base {0:?}")]
+    BadKvantumBase(String),
     #[error("template {name}: {message}")]
     Template { name: String, message: String },
 }
@@ -56,8 +58,13 @@ pub fn kvantum_base(dir: &Path) -> Option<&'static str> {
 pub fn render(
     theme: &Theme,
     templates_dir: &Path,
-    kvantum_base: Option<&str>,
+    kvantum_base: Option<&'static str>,
 ) -> Result<RenderedFiles, RenderError> {
+    if let Some(b) = kvantum_base
+        && !KVANTUM_BASES.contains(&b)
+    {
+        return Err(RenderError::BadKvantumBase(b.to_string()));
+    }
     let mut env = Environment::new();
     env.set_undefined_behavior(UndefinedBehavior::Strict);
     env.set_keep_trailing_newline(true);
@@ -107,6 +114,12 @@ mod tests {
         assert!(body.contains("window.color=#282828"), "{body}");
         assert!(body.contains("highlight.color=#d79921"), "{body}");
         assert!(body.contains("disabled.text.color=#bdae93"), "{body}");
+    }
+
+    #[test]
+    fn kvantum_base_outside_list_is_rejected() {
+        let err = render(&theme(), &templates(), Some("Evil\n[x]")).unwrap_err();
+        assert!(matches!(err, RenderError::BadKvantumBase(_)), "{err:?}");
     }
 
     #[test]
