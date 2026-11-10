@@ -6,9 +6,9 @@ import "../logic/quickui.js" as U
 
 // Quick settings: switch profiles. "Normal" (Back to normal) first, then one chip per profile.
 // The list lives in uqd, reached through the bridge; it refetches when the panel opens, on
-// ProfileChanged and when uqd comes back. Hidden when there are no profiles, greyed out while
-// uqd is down, and failures are ignored quietly. Profile names are untrusted: UqText only, one
-// line, elided.
+// ProfileChanged and when uqd comes back. Hidden when there are no profiles and greyed out while
+// uqd is down. A failed refetch is ignored quietly; a failed switch says why in the report line.
+// Profile names are untrusted: UqText only, one line, elided.
 ColumnLayout {
     id: root
 
@@ -17,7 +17,8 @@ ColumnLayout {
 
     property var profiles: []
     readonly property string current: U.activeProfile(profiles)
-    // What the last switch reported (kept keys, notices); cleared when the panel closes.
+    // What the last switch reported (kept keys, notices, or why it failed); cleared when the
+    // panel closes.
     property string report: ""
 
     visible: profiles.length > 0
@@ -27,7 +28,10 @@ ColumnLayout {
 
     function refresh() {
         Bridge.call("ListProfiles", []).then(function (v) {
-            root.profiles = U.profileList(v);
+            // Reassigning rebuilds every chip and drops keyboard focus, so only on a real change.
+            var next = U.profileList(v);
+            if (!U.sameProfiles(next, root.profiles))
+                root.profiles = next;
         }).catch(function () {});
     }
 
@@ -39,7 +43,9 @@ ColumnLayout {
         call.then(function (r) {
             root.report = U.profileReportText(r);
             root.refresh();
-        }).catch(function () {});
+        }).catch(function (e) {
+            root.report = U.profileErrorText(e);
+        });
     }
 
     onActiveChanged: {

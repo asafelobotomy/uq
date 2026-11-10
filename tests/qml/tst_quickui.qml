@@ -304,4 +304,36 @@ TestCase {
         compare(U.profileReportText({ active: "", kept: "Blur", notices: [] }), "");
         compare(U.profileReportText({ active: "", kept: [], notices: "x" }), "");
     }
+
+    function test_same_profiles() {
+        var a = [{ id: "gaming", name: "Gaming", active: true }, { id: "work", name: "Work", active: false }];
+        var b = [{ id: "gaming", name: "Gaming", active: true }, { id: "work", name: "Work", active: false }];
+        verify(U.sameProfiles(a, b));
+        verify(U.sameProfiles([], []));
+        verify(!U.sameProfiles(a, [b[0]]));
+        verify(!U.sameProfiles(a, [b[1], b[0]]));
+        verify(!U.sameProfiles(a, [{ id: "gaming", name: "Games", active: true }, b[1]]));
+        verify(!U.sameProfiles(a, [{ id: "gaming", name: "Gaming", active: false }, b[1]]));
+        verify(!U.sameProfiles(a, [{ id: "other", name: "Gaming", active: true }, b[1]]));
+        verify(!U.sameProfiles(a, null));
+        verify(!U.sameProfiles(undefined, []));
+        verify(!U.sameProfiles([null], [null]));
+    }
+
+    function test_profile_error_text() {
+        // uqd's own refusal is plain words: shown as it is.
+        compare(U.profileErrorText("The theme nord isn't installed."), "The theme nord isn't installed.");
+        // Transport errors never name uqd or the bridge.
+        var reach = "Couldn't reach uQ's settings service. Is it running?";
+        compare(U.profileErrorText("uqd is not running"), reach);
+        compare(U.profileErrorText("uqd did not answer within 20 s"), reach);
+        compare(U.profileErrorText("bridge not running"), reach);
+        compare(U.profileErrorText("bridge exited"), reach);
+        compare(U.profileErrorText("reset"), reach);
+        compare(U.profileErrorText("bad profile report: expected value"), "Couldn't switch profiles.");
+        compare(U.profileErrorText(""), "Couldn't switch profiles.");
+        compare(U.profileErrorText(null), "Couldn't switch profiles.");
+        compare(U.profileErrorText(undefined), "Couldn't switch profiles.");
+        compare(U.profileErrorText(3), "Couldn't switch profiles.");
+    }
 }

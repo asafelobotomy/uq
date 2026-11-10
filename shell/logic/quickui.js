@@ -297,3 +297,29 @@ function profileReportText(r) {
     });
     return parts.join(" ");
 }
+
+// Whether two profileList results show the same chips (id, name and active, in order), so the
+// row keeps its chips, and keyboard focus, when a refetch brings nothing new.
+function sameProfiles(a, b) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length)
+        return false;
+    for (var i = 0; i < a.length; i++) {
+        var x = a[i], y = b[i];
+        if (!x || !y || x.id !== y.id || x.name !== y.name || x.active !== y.active)
+            return false;
+    }
+    return true;
+}
+
+// The line a failed ApplyProfile / ProfileOff shows. uqd's own refusals are plain words and
+// shown as they are; the bridge's transport errors (they name uqd or the bridge) become one
+// plain line, and anything else that isn't a usable string becomes a generic one.
+function profileErrorText(e) {
+    if (typeof e !== "string" || e.trim() === "")
+        return "Couldn't switch profiles.";
+    if (/uqd|bridge|d-?bus/i.test(e) || e === "reset")
+        return "Couldn't reach uQ's settings service. Is it running?";
+    if (/^(bad profile|unknown call)/.test(e))
+        return "Couldn't switch profiles.";
+    return e;
+}
