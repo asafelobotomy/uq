@@ -227,4 +227,81 @@ TestCase {
         compare(U.workspaceSelector({ id: 0, name: "" }), "");
         compare(U.workspaceSelector(null), "");
     }
+
+    function test_profile_list() {
+        compare(U.profileList([
+            { id: "gaming", name: "Gaming", active: true, keys: 3 },
+            { id: "work", name: "Work", active: false }
+        ]), [
+            { id: "gaming", name: "Gaming", active: true },
+            { id: "work", name: "Work", active: false }
+        ]);
+        // Only a literal true is active.
+        compare(U.profileList([{ id: "a", name: "A", active: "true" }])[0].active, false);
+        compare(U.profileList([{ id: "a", name: "A", active: 1 }])[0].active, false);
+        compare(U.profileList([{ id: "a", name: "A" }])[0].active, false);
+        // Rows without a non-empty string id and name are dropped.
+        compare(U.profileList([
+            { id: 7, name: "Seven" },
+            { id: "", name: "Empty" },
+            { id: "x", name: "" },
+            { id: "y", name: null },
+            { name: "No id" },
+            null,
+            "gaming",
+            { id: "ok", name: "Ok" }
+        ]), [{ id: "ok", name: "Ok", active: false }]);
+        // Untrusted names pass through untouched (UqText shows them as plain text).
+        compare(U.profileList([{ id: "h", name: "<b>x</b>" }])[0].name, "<b>x</b>");
+        // At most 50 rows.
+        var many = [];
+        for (var i = 0; i < 80; i++)
+            many.push({ id: "p" + i, name: "P" + i });
+        var rows = U.profileList(many);
+        compare(rows.length, 50);
+        compare(rows[49].id, "p49");
+        // Malformed replies.
+        compare(U.profileList(null), []);
+        compare(U.profileList(undefined), []);
+        compare(U.profileList("[]"), []);
+        compare(U.profileList({ id: "gaming", name: "Gaming" }), []);
+    }
+
+    function test_active_profile() {
+        compare(U.activeProfile([
+            { id: "work", name: "Work", active: false },
+            { id: "gaming", name: "Gaming", active: true }
+        ]), "gaming");
+        compare(U.activeProfile([{ id: "work", name: "Work", active: false }]), "");
+        compare(U.activeProfile([]), "");
+        compare(U.activeProfile(null), "");
+        compare(U.activeProfile([{ id: "x", name: "X", active: "true" }]), "");
+    }
+
+    function test_profile_report_text() {
+        compare(U.profileReportText({ active: "gaming", kept: [], notices: [] }), "");
+        compare(U.profileReportText({
+            active: "",
+            kept: [{ domain: "look", path: ["gaps_in"], label: "Inner gaps" },
+                   { domain: "look", path: ["blur"], label: "Blur" }],
+            notices: []
+        }), "Kept your own value: Inner gaps, Blur");
+        compare(U.profileReportText({
+            active: "gaming",
+            kept: [],
+            notices: ["Couldn't change the power mode.", "Another notice."]
+        }), "Couldn't change the power mode. Another notice.");
+        compare(U.profileReportText({
+            active: "",
+            kept: [{ label: "Blur" }, { label: "" }, null, { label: 3 }],
+            notices: ["Couldn't change the power mode.", 5, ""]
+        }), "Kept your own value: Blur Couldn't change the power mode.");
+        // Malformed reports.
+        compare(U.profileReportText(null), "");
+        compare(U.profileReportText(undefined), "");
+        compare(U.profileReportText("gaming"), "");
+        compare(U.profileReportText({ active: "gaming" }), "");
+        compare(U.profileReportText({ active: "", kept: "Blur", notices: [] }), "");
+        compare(U.profileReportText({ active: "", kept: [], notices: "x" }), "");
+    }
 }

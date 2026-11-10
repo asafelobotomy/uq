@@ -245,3 +245,43 @@ async fn signals_survive_uqd_restart_on_new_connection() {
     let ev = b.event("LayoutChanged").await;
     assert_eq!(ev["layout"], "scrolling", "{ev}");
 }
+
+#[tokio::test]
+async fn bridge_lists_applies_and_turns_off_profiles() {
+    let bus = private_bus();
+    let dir = tempfile::tempdir().unwrap();
+    let _uqd = serve_uqd(&bus, dir.path()).await;
+    let mut b = Bridge::start(&bus);
+    b.next().await;
+
+    let conn = zbus::connection::Builder::address(bus.address.as_str())
+        .unwrap()
+        .build()
+        .await
+        .unwrap();
+    let proxy = uq_core::client::DesktopProxy::new(&conn).await.unwrap();
+    let gaming = "format = 1\nid = \"gaming\"\nname = \"Gaming\"\n[look]\ngaps_in = 0\n";
+    assert_eq!(proxy.set_profile(gaming, false).await.unwrap(), "gaming");
+
+    let list = b.call(1, "ListProfiles", json!([])).await;
+    let rows = list["ok"].as_array().expect("an array");
+    assert!(rows.iter().any(|p| p["id"] == "gaming"), "{list}");
+
+    let applied = b.call(2, "ApplyProfile", json!(["gaming"])).await;
+    assert_eq!(applied["ok"]["active"], "gaming", "{applied}");
+    // Saving the profile sends ProfileChanged("") first; wait for the one the apply sent.
+    loop {
+        let ev = b.event("ProfileChanged").await;
+        if ev == json!({"id": "gaming"}) {
+            break;
+        }
+        assert_eq!(ev, json!({"id": ""}));
+    }
+
+    let off = b.call(3, "ProfileOff", json!([])).await;
+    assert_eq!(off["ok"]["active"], "", "{off}");
+    assert!(off["ok"]["kept"].is_array(), "{off}");
+
+    let bad = b.call(4, "ApplyProfile", json!(["nope"])).await;
+    assert!(bad["err"].is_string(), "{bad}");
+}

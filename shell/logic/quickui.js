@@ -248,3 +248,52 @@ function workspaceLayout(layouts, ws, fallback) {
     var dflt = typeof fallback === "string" && fallback !== "" ? fallback : "dwindle";
     return (sel !== "" && m[sel]) || m["name:" + ws.name] || dflt;
 }
+
+// --- profiles ---
+
+// ListProfiles' reply -> [{id, name, active}], at most 50 rows. A row needs a non-empty string
+// id and name; `active` is true only for a literal true. Names are untrusted text for UqText.
+// Anything that isn't an array -> [].
+function profileList(v) {
+    if (!Array.isArray(v))
+        return [];
+    var out = [];
+    for (var i = 0; i < v.length && out.length < 50; i++) {
+        var p = v[i];
+        if (!p || typeof p !== "object")
+            continue;
+        if (typeof p.id !== "string" || p.id === "" || typeof p.name !== "string" || p.name === "")
+            continue;
+        out.push({ id: p.id, name: p.name, active: p.active === true });
+    }
+    return out;
+}
+
+// The active row's id from profileList's rows, or "" when none is on.
+function activeProfile(list) {
+    if (!Array.isArray(list))
+        return "";
+    for (var i = 0; i < list.length; i++)
+        if (list[i] && list[i].active === true && typeof list[i].id === "string")
+            return list[i].id;
+    return "";
+}
+
+// One line from an ApplyProfile / ProfileOff report {active, kept: [{label}], notices}:
+// "Kept your own value: A, B" when Back to normal kept hand-changed keys, then each notice,
+// joined with a space. A malformed report -> "".
+function profileReportText(r) {
+    if (!r || typeof r !== "object" || !Array.isArray(r.kept) || !Array.isArray(r.notices))
+        return "";
+    var parts = [];
+    var labels = r.kept.filter(function (k) {
+        return k && typeof k.label === "string" && k.label !== "";
+    }).map(function (k) { return k.label; });
+    if (labels.length > 0)
+        parts.push("Kept your own value: " + labels.join(", "));
+    r.notices.forEach(function (n) {
+        if (typeof n === "string" && n !== "")
+            parts.push(n);
+    });
+    return parts.join(" ");
+}
