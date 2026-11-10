@@ -43,8 +43,9 @@ if run promote uq >"$tmp/promote.log" 2>&1; then
     grep -qx "uq-$tag/" "$UQ_DEV_TEST_OUT/top" || no "promote: tarball top folder is $(cat "$UQ_DEV_TEST_OUT/top")"
     grep -qx -- "-si" "$UQ_DEV_TEST_OUT/args" || no "promote: makepkg was not run with -si"
     # The rest of the PKGBUILD is untouched.
-    diff <(grep -v -e '^pkgrel=' -e '^source=' -e '^sha256sums=' "$root/packaging/uq/PKGBUILD") \
-         <(grep -v -e '^pkgrel=' -e '^source=' -e '^sha256sums=' "$UQ_DEV_TEST_OUT/PKGBUILD") >/dev/null ||
+    # (No diff: CI's container has no diffutils.)
+    rest() { grep -v -e '^pkgrel=' -e '^source=' -e '^sha256sums=' "$1"; }
+    [ "$(rest "$root/packaging/uq/PKGBUILD")" = "$(rest "$UQ_DEV_TEST_OUT/PKGBUILD")" ] ||
         no "promote: changed more than pkgrel, source and sha256sums"
 else
     no "promote failed: $(cat "$tmp/promote.log")"
