@@ -415,7 +415,7 @@ impl Desktop {
         };
         let files = render(&theme, &self.paths.templates_dir, base)
             .map_err(|e| DesktopError::Io(e.to_string()))?;
-        let generated = emit_generated(&theme, &next.layouts, &next.settings.mouse);
+        let generated = emit_generated(&theme, &next.layouts, &next.settings);
 
         self.ensure_user_lua()?;
         let candidate = self

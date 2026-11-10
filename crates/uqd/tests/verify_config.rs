@@ -10,7 +10,9 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use uq_core::lua::{Layout, emit_generated};
 use uq_core::paths::Paths;
-use uq_core::settings::{AccelProfile, MouseSettings};
+use uq_core::settings::{
+    AccelProfile, ForceSplit, MouseSettings, NewStatus, Orientation, Settings,
+};
 use uq_core::stub::stub_contents;
 use uq_core::theme::ThemeRegistry;
 
@@ -27,6 +29,35 @@ fn mouse() -> MouseSettings {
         left_handed: true,
         scroll_factor: 1.5,
     }
+}
+
+/// Every look and layout option away from "unset", so CI's `--verify-config` checks each name.
+fn settings() -> Settings {
+    let mut s = Settings {
+        mouse: mouse(),
+        ..Settings::default()
+    };
+    s.look.gaps_in = Some(7);
+    s.look.gaps_out = Some(18);
+    s.look.border_width = Some(3);
+    s.look.rounding = Some(12);
+    s.look.blur = Some(true);
+    s.look.blur_size = Some(5);
+    s.look.blur_passes = Some(3);
+    s.look.shadow = Some(false);
+    s.look.animations = Some(true);
+    s.look.animation_speed = Some(1.5);
+    let lo = &mut s.layout_options;
+    lo.default = Some(Layout::Scrolling);
+    lo.dwindle.preserve_split = Some(true);
+    lo.dwindle.smart_split = Some(true);
+    lo.dwindle.force_split = Some(ForceSplit::Left);
+    lo.master.mfact = Some(0.65);
+    lo.master.new_status = Some(NewStatus::Slave);
+    lo.master.orientation = Some(Orientation::Right);
+    lo.scrolling.column_width = Some(0.6);
+    lo.scrolling.fullscreen_on_one_column = Some(true);
+    s
 }
 
 fn layouts() -> BTreeMap<String, Layout> {
@@ -243,6 +274,14 @@ fn base_lua_osd_binds_are_locked() {
 }
 
 #[test]
+fn base_lua_has_no_animation_lines() {
+    let base = std::fs::read_to_string(repo().join("config/hypr/base.lua")).unwrap();
+    for needle in ["hl.animation(", "hl.curve("] {
+        assert!(!base.contains(needle), "base.lua still has {needle}");
+    }
+}
+
+#[test]
 fn base_lua_enables_session_lock_restore() {
     let base = std::fs::read_to_string(repo().join("config/hypr/base.lua")).unwrap();
     for needle in [
@@ -267,7 +306,7 @@ fn lua_mock_runs_every_variant() {
     std::fs::write(&mock, MOCK).unwrap();
     for t in reg.iter() {
         let root = dir.path().join(format!("{}-{}", t.id, t.variant));
-        let (p, _) = tree(&root, &emit_generated(t, &layouts(), &mouse()));
+        let (p, _) = tree(&root, &emit_generated(t, &layouts(), &settings()));
         let out = Command::new(&lua)
             .arg(&mock)
             .args([&p.base_lua, &p.generated_lua, &p.user_lua])
@@ -291,7 +330,7 @@ fn all_variants_pass_hyprland_verify() {
     let dir = tempfile::tempdir().unwrap();
     for t in reg.iter() {
         let root = dir.path().join(format!("{}-{}", t.id, t.variant));
-        let (_, main) = tree(&root, &emit_generated(t, &layouts(), &mouse()));
+        let (_, main) = tree(&root, &emit_generated(t, &layouts(), &settings()));
         let out = Command::new("Hyprland")
             .arg("--verify-config")
             .arg("-c")
