@@ -34,7 +34,7 @@ pub trait Desktop {
     fn restore(&self, id: &str) -> zbus::Result<()>;
     /// JSON `{key: {source, live, stored, detail}}` for one section (see `settings::provenance`).
     fn explain(&self, domain: &str) -> zbus::Result<String>;
-    /// Run the section's render path again; writes no history.
+    /// Run the section's render path again; writes no history, then emits `SectionChanged`.
     fn reapply(&self, domain: &str) -> zbus::Result<()>;
 
     #[zbus(signal)]

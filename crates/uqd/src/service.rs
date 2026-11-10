@@ -659,22 +659,11 @@ impl Desktop {
         Ok(())
     }
 
-    /// Remember a section write Hyprland rejected, so `explain` reports it; a later commit of
-    /// that domain clears it.
+    /// Remember a section write Hyprland rejected, so `explain` reports it. Any later commit
+    /// that installs a verified config clears it (see `commit`).
     pub(crate) fn note_section_commit(&mut self, domain: &str, res: &Result<(), DesktopError>) {
-        match res {
-            Err(DesktopError::ConfigInvalid(msg)) => {
-                self.last_rejected = Some((domain.to_string(), msg.clone()));
-            }
-            Ok(())
-                if self
-                    .last_rejected
-                    .as_ref()
-                    .is_some_and(|(d, _)| d == domain) =>
-            {
-                self.last_rejected = None;
-            }
-            _ => {}
+        if let Err(DesktopError::ConfigInvalid(msg)) = res {
+            self.last_rejected = Some((domain.to_string(), msg.clone()));
         }
     }
 
@@ -886,6 +875,8 @@ impl Desktop {
             let _ = std::fs::remove_file(&candidate);
             return Err(e);
         }
+        // Every section is rendered into the config just installed, so no rejection is pending.
+        self.last_rejected = None;
 
         match change {
             Change::Quiet => {}
@@ -1987,6 +1978,42 @@ mod tests {
         r.desktop.reapply("look").await.unwrap();
         let v = r.desktop.explain("look").await.unwrap();
         assert_eq!(v["gaps_in"]["source"], "theme", "{v}");
+    }
+
+    #[tokio::test]
+    async fn restore_after_rejected_write_clears_error() {
+        let mut r = rig();
+        let id = r.desktop.save_restore_point("before").unwrap();
+        *r.comp.verify_error.lock().unwrap() = Some("user.lua:3: bad".into());
+        r.desktop
+            .set_section("look", r#"{"gaps_in":9}"#, Origin::Settings)
+            .await
+            .unwrap_err();
+        let v = r.desktop.explain("look").await.unwrap();
+        assert_eq!(v["gaps_in"]["source"], "error", "{v}");
+        *r.comp.verify_error.lock().unwrap() = None;
+        r.desktop.restore(&id).await.unwrap();
+        let v = r.desktop.explain("look").await.unwrap();
+        assert!(
+            v.as_object()
+                .unwrap()
+                .values()
+                .all(|k| k["source"] != "error"),
+            "{v}"
+        );
+        // A theme change re-renders and verifies every section too.
+        *r.comp.verify_error.lock().unwrap() = Some("user.lua:3: bad".into());
+        r.desktop
+            .set_section("layouts", r#"{"default":"master"}"#, Origin::Settings)
+            .await
+            .unwrap_err();
+        *r.comp.verify_error.lock().unwrap() = None;
+        r.desktop
+            .set_theme("forest", Variant::Dark, Origin::Settings)
+            .await
+            .unwrap();
+        let v = r.desktop.explain("layouts").await.unwrap();
+        assert_ne!(v["default"]["source"], "error", "{v}");
     }
 
     #[tokio::test]

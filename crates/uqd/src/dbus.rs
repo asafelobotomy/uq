@@ -206,7 +206,8 @@ impl DesktopIface {
         Ok(v.to_string())
     }
 
-    /// Run `domain`'s render path again; changes nothing in state or history.
+    /// Run `domain`'s render path again; changes nothing in state or history. Emits
+    /// `SectionChanged` for `domain` afterwards, so open pages explain it again.
     async fn reapply(&self, domain: &str) -> Result<(), UqError> {
         Ok(self.desktop.lock().await.reapply(domain).await?)
     }

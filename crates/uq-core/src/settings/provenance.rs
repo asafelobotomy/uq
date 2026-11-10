@@ -380,7 +380,9 @@ const MAX_TABLE_DEPTH: usize = 64;
 /// a parser; the first hit wins. A line hits when it has the path in dotted form
 /// (`general.gaps_in`) or colon form (`general:gaps_in`), or has `gaps_in =` inside a
 /// `general = {` table (tables are tracked by brace depth, so `blur = { enabled = … }` inside
-/// `decoration = {` finds `decoration:blur:enabled`). Comments and strings are not skipped.
+/// `decoration = {` finds `decoration:blur:enabled`). Lua `--` comments are ignored (a `--[[`
+/// block comment only on its first line); strings are not parsed, so `--` inside one also ends
+/// the scanned part of that line.
 pub fn find_in_user_lua(text: &str, hypr_path: &str) -> Option<u32> {
     let (section, leaf) = hypr_path.rsplit_once(':')?;
     let sections: Vec<&str> = section.split(':').collect();
@@ -390,6 +392,7 @@ pub fn find_in_user_lua(text: &str, hypr_path: &str) -> Option<u32> {
     let mut deep = 0usize;
     for (n, line) in text.lines().enumerate() {
         let lineno = u32::try_from(n + 1).unwrap_or(u32::MAX);
+        let line = line.find("--").map_or(line, |i| &line[..i]);
         if contains_word(line, &dotted) || contains_word(line, hypr_path) {
             return Some(lineno);
         }
@@ -481,10 +484,12 @@ mod tests {
     }
 
     #[test]
-    fn commented_match_still_counts() {
-        // A heuristic, not a parser: a commented-out setting is still reported.
-        let text = "-- general.gaps_in = 3 (old)\n";
-        assert_eq!(find_in_user_lua(text, "general:gaps_in"), Some(1));
+    fn commented_lines_are_ignored() {
+        let text = "-- general.gaps_in = 3 (old)\n-- hl.config({ general = { gaps_in = 1 } })\n\
+            general = { -- gaps_in = 4\n  border_size = 1, -- general:gaps_in\n  gaps_in = 2,\n}\n";
+        assert_eq!(find_in_user_lua(text, "general:gaps_in"), Some(5));
+        let only = "--decoration = { blur = { enabled = false } }\n";
+        assert_eq!(find_in_user_lua(only, "decoration:blur:enabled"), None);
     }
 
     #[test]
