@@ -1,5 +1,7 @@
 //! One fake uqd for every page model's tests: `org.uq.Desktop1` over a real
-//! [`uq_core::state::State`] on a private bus, so refusals carry uq-core's own messages.
+//! [`uq_core::state::State`] on a private bus, so refusals carry uq-core's own messages. Writes
+//! are journalled like uqd does (one entry per changed domain, with the write's origin), and
+//! `Undo` and the restore points follow uqd's rules.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -8,6 +10,7 @@ use std::time::Duration;
 
 use serde_json::{Map, Value, json};
 use uq_core::client::DESKTOP_NAME;
+use uq_core::history::{Entry, PointKind, RestorePoint, diff};
 use uq_core::schedule::Schedule;
 use uq_core::settings::provenance;
 use uq_core::settings::renders_section;
@@ -20,8 +23,10 @@ pub enum FakeError {
     #[zbus(error)]
     ZBus(zbus::Error),
     InvalidSetting(String),
+    InvalidArgument(String),
     ConfigInvalid(String),
     Io(String),
+    Conflict(String),
 }
 
 fn invalid(e: impl ToString) -> FakeError {
@@ -34,6 +39,80 @@ pub struct FakeUqd {
     /// `ConfigInvalid`, as uqd does when Hyprland rejects the generated config.
     pub verify_error: Arc<Mutex<Option<String>>>,
     pub explain: Explain,
+    pub history: History,
+}
+
+/// The fake's journal and restore points.
+#[derive(Clone, Default)]
+pub struct History {
+    /// Oldest first (`ListHistory` answers newest first).
+    pub entries: Arc<Mutex<Vec<Entry>>>,
+    /// Oldest first, each with the state it brings back.
+    pub points: Arc<Mutex<Vec<(RestorePoint, State)>>>,
+}
+
+impl History {
+    /// Add an entry as if some writer had journalled it (it changes no state).
+    pub fn seed(&self, entry: Entry) -> String {
+        let id = entry.id.clone();
+        self.entries.lock().unwrap().push(entry);
+        id
+    }
+
+    /// Add a restore point of `state`; returns its id.
+    pub fn add_point(&self, name: &str, kind: PointKind, state: State) -> String {
+        let mut points = self.points.lock().unwrap();
+        let id = format!("{:010}-{:06x}", now(), points.len() + 1);
+        let point = RestorePoint {
+            id: id.clone(),
+            name: name.chars().filter(|c| !c.is_control()).take(100).collect(),
+            time: now(),
+            kind,
+        };
+        points.push((point, state));
+        id
+    }
+
+    /// The origins of the journal, oldest first.
+    pub fn origins(&self) -> Vec<String> {
+        let entries = self.entries.lock().unwrap();
+        entries.iter().map(|e| e.origin.clone()).collect()
+    }
+
+    pub fn last_id(&self) -> String {
+        let entries = self.entries.lock().unwrap();
+        entries.last().map(|e| e.id.clone()).unwrap_or_default()
+    }
+}
+
+/// Unix seconds now.
+pub fn now() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs() as i64)
+}
+
+impl FakeUqd {
+    /// Change the state through `edit` and journal what changed under `origin`, as uqd's one
+    /// save point does. Returns the ids journalled.
+    fn write(
+        &self,
+        origin: &str,
+        edit: impl FnOnce(&mut State) -> Result<(), FakeError>,
+    ) -> Result<Vec<String>, FakeError> {
+        let mut s = self.state.lock().unwrap();
+        let mut next = s.clone();
+        edit(&mut next)?;
+        let origin = if origin.is_empty() { "unknown" } else { origin };
+        let entries: Vec<Entry> = diff(&s, &next, &provenance::label_for)
+            .into_iter()
+            .map(|c| Entry::new(now(), origin, c.domain, c.summary, c.before, c.after))
+            .collect();
+        *s = next;
+        let ids = entries.iter().map(|e| e.id.clone()).collect();
+        self.history.entries.lock().unwrap().extend(entries);
+        Ok(ids)
+    }
 }
 
 /// What the fake's `Explain` answers. Without overrides each key is `uq` when the section sets
@@ -65,12 +144,14 @@ impl FakeUqd {
         (s.theme.clone(), s.variant.to_string())
     }
 
-    // Writes take uqd's last `origin` argument; the fake keeps no history, so ignores it.
-    fn set_theme(&self, name: &str, variant: &str, _origin: &str) -> Result<(), FakeError> {
+    // Writes take uqd's last `origin` argument, and journal what they change under it.
+    fn set_theme(&self, name: &str, variant: &str, origin: &str) -> Result<(), FakeError> {
         let variant = variant.parse().map_err(invalid)?;
-        let mut s = self.state.lock().unwrap();
-        s.theme = name.to_string();
-        s.variant = variant;
+        self.write(origin, |s| {
+            s.theme = name.to_string();
+            s.variant = variant;
+            Ok(())
+        })?;
         Ok(())
     }
 
@@ -82,10 +163,13 @@ impl FakeUqd {
         serde_json::to_string(&self.state.lock().unwrap().schedule).unwrap()
     }
 
-    fn set_schedule(&self, json: &str, _origin: &str) -> Result<(), FakeError> {
+    fn set_schedule(&self, json: &str, origin: &str) -> Result<(), FakeError> {
         let schedule: Schedule = serde_json::from_str(json).map_err(invalid)?;
         schedule.validate().map_err(invalid)?;
-        self.state.lock().unwrap().schedule = schedule;
+        self.write(origin, |s| {
+            s.schedule = schedule;
+            Ok(())
+        })?;
         Ok(())
     }
 
@@ -96,15 +180,11 @@ impl FakeUqd {
         read
     }
 
-    fn set_setting(&self, key: &str, json: &str, _origin: &str) -> Result<(), FakeError> {
+    fn set_setting(&self, key: &str, json: &str, origin: &str) -> Result<(), FakeError> {
         let value =
             serde_json::from_str(json).map_err(|e| invalid(format!("value is not JSON: {e}")))?;
-        self.state
-            .lock()
-            .unwrap()
-            .settings
-            .apply(key, value)
-            .map_err(invalid)
+        self.write(origin, |s| s.settings.apply(key, value).map_err(invalid))?;
+        Ok(())
     }
 
     async fn get_section(&self, domain: &str) -> Result<String, FakeError> {
@@ -119,20 +199,105 @@ impl FakeUqd {
         Ok(read.to_string())
     }
 
-    fn set_section(&self, domain: &str, json: &str, _origin: &str) -> Result<(), FakeError> {
+    fn set_section(&self, domain: &str, json: &str, origin: &str) -> Result<(), FakeError> {
         let value =
             serde_json::from_str(json).map_err(|e| invalid(format!("value is not JSON: {e}")))?;
-        let mut s = self.state.lock().unwrap();
-        let mut next = s.clone();
-        next.set_section(domain, value).map_err(invalid)?;
-        if renders_section(domain)
-            && let Some(message) = self.verify_error.lock().unwrap().take()
-        {
-            return Err(FakeError::ConfigInvalid(format!(
-                "Hyprland rejected the new config: {message}"
-            )));
-        }
-        *s = next;
+        self.write(origin, |next| {
+            next.set_section(domain, value).map_err(invalid)?;
+            if renders_section(domain)
+                && let Some(message) = self.verify_error.lock().unwrap().take()
+            {
+                return Err(FakeError::ConfigInvalid(format!(
+                    "Hyprland rejected the new config: {message}"
+                )));
+            }
+            Ok(())
+        })?;
+        Ok(())
+    }
+
+    fn list_history(&self, limit: u32) -> String {
+        let entries = self.history.entries.lock().unwrap();
+        let newest_first: Vec<&Entry> = entries.iter().rev().take(limit as usize).collect();
+        serde_json::to_string(&newest_first).unwrap()
+    }
+
+    /// uqd's rules: `Conflict` when a newer entry changed the same domain, unless `force`; the
+    /// undo is a write with origin `restore`; returns the last id it journalled ("" if none).
+    fn undo(&self, entry_id: &str, force: bool) -> Result<String, FakeError> {
+        let entry = {
+            let entries = self.history.entries.lock().unwrap();
+            let Some(pos) = entries.iter().position(|e| e.id == entry_id) else {
+                return Err(FakeError::InvalidArgument(format!(
+                    "no history entry {entry_id:?}"
+                )));
+            };
+            let entry = entries[pos].clone();
+            if !force && entries[pos + 1..].iter().any(|e| e.domain == entry.domain) {
+                return Err(FakeError::Conflict(format!(
+                    "{} was changed again after this. Undo anyway?",
+                    entry.domain
+                )));
+            }
+            entry
+        };
+        let before = entry.before.clone();
+        let ids = self.write("restore", |s| match entry.domain.as_str() {
+            "theme" => {
+                s.theme = serde_json::from_value(before["theme"].clone()).map_err(invalid)?;
+                s.variant = serde_json::from_value(before["variant"].clone()).map_err(invalid)?;
+                Ok(())
+            }
+            "schedule" => {
+                s.schedule = serde_json::from_value(before).map_err(invalid)?;
+                Ok(())
+            }
+            "settings" => {
+                for (k, v) in before.as_object().into_iter().flatten() {
+                    if entry.after.get(k) != Some(v) {
+                        s.settings.apply(k, v.clone()).map_err(invalid)?;
+                    }
+                }
+                Ok(())
+            }
+            domain => s.set_section(domain, before).map_err(invalid),
+        })?;
+        Ok(ids.last().cloned().unwrap_or_default())
+    }
+
+    fn list_restore_points(&self) -> String {
+        let points = self.history.points.lock().unwrap();
+        let newest_first: Vec<&RestorePoint> = points.iter().rev().map(|(p, _)| p).collect();
+        serde_json::to_string(&newest_first).unwrap()
+    }
+
+    fn save_restore_point(&self, name: &str) -> String {
+        let state = self.state.lock().unwrap().clone();
+        self.history.add_point(name, PointKind::Manual, state)
+    }
+
+    fn delete_restore_point(&self, id: &str) {
+        self.history
+            .points
+            .lock()
+            .unwrap()
+            .retain(|(p, _)| p.id != id);
+    }
+
+    fn restore(&self, id: &str) -> Result<(), FakeError> {
+        let next = {
+            let points = self.history.points.lock().unwrap();
+            let Some((_, state)) = points.iter().find(|(p, _)| p.id == id) else {
+                return Err(FakeError::InvalidArgument(format!("no restore point {id}")));
+            };
+            state.clone()
+        };
+        self.write("restore", |s| {
+            let launch_counts = std::mem::take(&mut s.launch_counts);
+            *s = next;
+            s.launch_counts = launch_counts;
+            Ok(())
+        })?;
         Ok(())
     }
 
@@ -207,6 +372,8 @@ pub struct Rig {
     pub verify_error: Arc<Mutex<Option<String>>>,
     /// What `Explain` answers, and what `Reapply` was asked.
     pub explain: Explain,
+    /// The journal and the restore points.
+    pub history: History,
 }
 
 /// A private bus with a [`FakeUqd`] serving `state`.
@@ -215,6 +382,7 @@ pub async fn rig(state: State) -> Rig {
     let state = Arc::new(Mutex::new(state));
     let verify_error = Arc::new(Mutex::new(None));
     let explain = Explain::default();
+    let history = History::default();
     let uqd = connect(&bus).await;
     uqd.object_server()
         .at(
@@ -223,6 +391,7 @@ pub async fn rig(state: State) -> Rig {
                 state: state.clone(),
                 verify_error: verify_error.clone(),
                 explain: explain.clone(),
+                history: history.clone(),
             },
         )
         .await
@@ -236,5 +405,6 @@ pub async fn rig(state: State) -> Rig {
         state,
         verify_error,
         explain,
+        history,
     }
 }

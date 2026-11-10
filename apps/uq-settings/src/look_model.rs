@@ -87,6 +87,7 @@ impl PageModel for LookModel {
         sections: &["look", "layouts"],
         theme: true,
         settings: false,
+        history: false,
     };
 
     fn core(&self) -> &ModelCore<LookState> {

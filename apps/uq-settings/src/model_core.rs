@@ -26,6 +26,8 @@ pub struct Follow {
     pub theme: bool,
     /// `SettingsChanged`.
     pub settings: bool,
+    /// `HistoryChanged`.
+    pub history: bool,
 }
 
 /// Whether a `SectionChanged(domain, …)` concerns the page.
@@ -113,6 +115,9 @@ async fn follow_uqd<M: PageModel>(
         }
         if follow.settings {
             all.push(proxy.receive_settings_changed().await?.map(|_| ()).boxed());
+        }
+        if follow.history {
+            all.push(proxy.receive_history_changed().await?.map(|_| ()).boxed());
         }
         zbus::Result::Ok(futures_util::stream::select_all(all))
     };
@@ -202,6 +207,7 @@ mod tests {
             sections: &["wallpaper"],
             theme: false,
             settings: false,
+            history: false,
         };
         assert!(wants(&wallpaper, "wallpaper"));
         assert!(!wants(&wallpaper, "appearance"));
@@ -210,6 +216,7 @@ mod tests {
             sections: &["look", "layouts"],
             theme: true,
             settings: true,
+            history: false,
         };
         assert!(wants(&two, "look") && wants(&two, "layouts"));
         assert!(!wants(&two, "shell"));
