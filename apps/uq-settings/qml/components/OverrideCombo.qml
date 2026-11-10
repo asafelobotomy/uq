@@ -28,24 +28,13 @@ SettingRow {
         return value ? items.indexOf(value) : 0;
     }
 
-    QQC2.ComboBox {
+    UqComboBox {
         id: combo
         model: root.items
         currentIndex: root.shownIndex()
         enabled: root.enabled
         implicitContentWidthPolicy: QQC2.ComboBox.WidestText
         Accessible.name: root.label
-        // The style paints the shown name itself, as plain text; the popup rows are ours.
-        delegate: QQC2.ItemDelegate {
-            required property int index
-            required property var modelData
-            width: combo.width
-            highlighted: combo.highlightedIndex === index
-            contentItem: UqLabel {
-                text: modelData
-                elide: Text.ElideRight
-            }
-        }
         onActivated: index => {
             root.chosen(index === 0 ? null : root.items[index]);
             combo.currentIndex = Qt.binding(() => root.shownIndex());

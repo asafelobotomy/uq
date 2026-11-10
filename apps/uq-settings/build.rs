@@ -10,6 +10,7 @@ fn main() {
         QmlFile::from("qml/components/UqLabel.qml"),
         QmlFile::from("qml/components/ScrollReveal.qml"),
         QmlFile::from("qml/components/SettingRow.qml"),
+        QmlFile::from("qml/components/UqComboBox.qml"),
         QmlFile::from("qml/components/OverrideCombo.qml"),
         QmlFile::from("qml/components/OverrideSpin.qml"),
         QmlFile::from("qml/components/ScheduleEditor.qml"),

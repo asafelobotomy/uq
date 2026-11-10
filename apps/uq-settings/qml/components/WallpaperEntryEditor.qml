@@ -145,7 +145,7 @@ ColumnLayout {
         highlight: root.highlight
         enabled: root.enabled
         Layout.fillWidth: true
-        QQC2.ComboBox {
+        UqComboBox {
             id: fitBox
             objectName: "fitBox"
             model: root.fits.map(f => f.name)

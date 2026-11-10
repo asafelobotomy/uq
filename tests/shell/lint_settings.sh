@@ -7,7 +7,7 @@ tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 qml="$tmp/apps/uq-settings/qml"
 mkdir -p "$tmp/scripts" "$qml/components" "$qml/pages"
-cp "$root/scripts/lint-settings.sh" "$root/scripts/lib-qml-lint.sh" "$tmp/scripts/" || exit 1
+cp "$root/scripts/lint-settings.sh" "$root/scripts/lib-qml-lint.sh" "$root/scripts/lint-control-text.awk" "$tmp/scripts/" || exit 1
 printf 'import QtQuick.Controls as Controls\nControls.Label {\n  textFormat: Text.PlainText\n}\n' > "$qml/components/UqLabel.qml"
 fail=0
 
@@ -38,6 +38,13 @@ bad createqml Case.qml 'Item {\n    Component.onCompleted: Qt.createQmlObject("x
 
 # Only components/UqLabel.qml is exempt, not a file of that name elsewhere.
 bad elsewhere pages/UqLabel.qml 'Text {\n}\n' 1
+
+# Stock controls: own `text:` is a literal only; data goes through a UqLabel contentItem.
+bad control_bound_text Case.qml 'Item {\n  QQC2.CheckBox {\n    text: modelData.name\n  }\n}\n' 3
+bad combo_without_contentitem Case.qml 'Item {\n  QQC2.ComboBox {\n    model: m\n    delegate: D {}\n  }\n}\n' 2
+good control_literal 'Item {\n  QQC2.CheckBox { text: "Show seconds" }\n}\n'
+good combo_full 'Item {\n  QQC2.ComboBox {\n    id: c\n    model: m\n    contentItem: UqLabel { text: c.displayText }\n    delegate: D {}\n  }\n}\n'
+good nested_uqlabel_text 'Item {\n  QQC2.Button {\n    contentItem: UqLabel {\n      text: modelData\n    }\n  }\n}\n'
 
 [ $fail = 0 ] && echo "lint_settings ok"
 exit $fail
