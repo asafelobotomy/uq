@@ -56,6 +56,8 @@ bad jargon_dotted Case.qml 'Item {\n  UqLabel { text: "see state.toml now" }\n}\
 bad jargon_hyphen Case.qml 'Item {\n  UqLabel { text: "the D-Bus name" }\n}\n' 2
 bad jargon_single_quote Case.qml "Item {\\n  UqLabel { text: 'uqd' }\\n}\\n" 2
 bad jargon_after_comment_text Case.qml 'Item {\n  UqLabel { text: "uqd" } // not an exemption\n}\n' 2
+bad jargon_ok_no_reason Case.qml 'Item {\n  UqLabel { text: "uqd" } // jargon-ok:\n}\n' 2
+bad jargon_ok_blank_reason Case.qml 'Item {\n  UqLabel { text: "uqd" } // jargon-ok:   \n}\n' 2
 good jargon_ok 'Item {\n  UqLabel { text: "Restart uqd" } // jargon-ok: test\n}\n'
 good jargon_in_comment 'Item {\n  // uqd is the service\n}\n'
 good jargon_identifier 'Item {\n  objectName: "uqdDown"\n  visible: App.uqdUp\n}\n'

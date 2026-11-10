@@ -32,7 +32,8 @@ FILENAME ~ /(^|\/)components\/AdvancedDetails\.qml$/ { next }
             else cur = cur c
         } else if (c == "\"" || c == "'" || c == "`") quote = c
         else if (c == "/" && substr(line, i + 1, 1) == "/") {
-            if (substr(line, i) ~ /^\/\/[[:space:]]*jargon-ok:/) { strs = "" }
+            # The reason after the colon is required.
+            if (substr(line, i) ~ /^\/\/[[:space:]]*jargon-ok:[[:space:]]*[^[:space:]]/) { strs = "" }
             break
         }
     }

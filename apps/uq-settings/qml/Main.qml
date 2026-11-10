@@ -32,12 +32,32 @@ Kirigami.ApplicationWindow {
     property bool stateRestored: false
 
     /// Start on the page the window showed last time, unless `ShowPage` (or `--page`) named one.
+    /// Returns true when it switched page (which shows it).
     function restorePage() {
         if (App.pageRequested || App.screenshotDir !== "")
-            return;
+            return false;
         const last = windowState.lastPage;
-        if (last && root.pages.some(p => p.id === last) && last !== App.page)
-            App.showPage(last, "");
+        if (!last || last === App.page || !root.pages.some(p => p.id === last))
+            return false;
+        App.showPage(last, "");
+        return true;
+    }
+
+    /// The saved size (when the window was windowed), then maximized if it was. Not for
+    /// `--screenshots`, which must not depend on the user's saved state.
+    function restoreWindow() {
+        if (App.screenshotDir !== "")
+            return;
+        if (windowState.width > 0 && windowState.height > 0) {
+            root.width = Math.max(windowState.width, root.minimumWidth);
+            root.height = Math.max(windowState.height, root.minimumHeight);
+        }
+        // Maximizing resizes the window: saving starts once it is maximized (see
+        // onVisibilityChanged), so the screen's size is never taken for the normal size.
+        if (root.maximized)
+            root.showMaximized();
+        else
+            root.stateRestored = true;
     }
 
     function showCurrent() {
@@ -64,13 +84,24 @@ Kirigami.ApplicationWindow {
     QtCore.Settings {
         id: windowState
         location: QtCore.StandardPaths.writableLocation(QtCore.StandardPaths.GenericStateLocation) + "/uq/settings-app.conf"
-        property alias width: root.width
-        property alias height: root.height
+        // The normal (windowed) size only: a maximized window would save the screen's size.
+        property int width: 0
+        property int height: 0
         property alias maximized: root.maximized
         property string lastPage
     }
 
+    onWidthChanged: {
+        if (root.stateRestored && root.visibility === Window.Windowed)
+            windowState.width = root.width;
+    }
+    onHeightChanged: {
+        if (root.stateRestored && root.visibility === Window.Windowed)
+            windowState.height = root.height;
+    }
     onVisibilityChanged: {
+        if (!root.stateRestored && root.maximized && root.visibility === Window.Maximized && App.screenshotDir === "")
+            root.stateRestored = true;
         if (root.stateRestored && (root.visibility === Window.Maximized || root.visibility === Window.Windowed))
             root.maximized = root.visibility === Window.Maximized;
     }
@@ -231,13 +262,11 @@ Kirigami.ApplicationWindow {
                 Accessible.role: Accessible.Pane
                 Accessible.name: "Page"
                 Component.onCompleted: {
-                    root.showCurrent();
-                    // After the first page is up: a page named on the command line or by
-                    // ShowPage has set `App.pageRequested` by now, and wins.
-                    Qt.callLater(root.restorePage);
-                    if (root.maximized && App.screenshotDir === "")
-                        root.showMaximized();
-                    root.stateRestored = true;
+                    // A page named on the command line or by ShowPage has set
+                    // `App.pageRequested` by now, and wins over the remembered one.
+                    root.restoreWindow();
+                    if (!root.restorePage())
+                        root.showCurrent();
                 }
             }
         }
