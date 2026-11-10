@@ -57,3 +57,23 @@ pub fn fields() -> Value {
         "workspace": plain(&hypr::WORKSPACE_FIELDS),
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The settings QML tests feed the rule editor a copy of the catalogue; it must not drift.
+    #[test]
+    fn fixture_matches_the_fields_catalogue() {
+        let file = include_str!("../../../../../tests/settings-qml/fixtures/rule_fields.js");
+        let lead = "var fields = ";
+        let start = file.find(lead).expect("the fixture sets `fields`") + lead.len();
+        let body = file[start..].trim_end().trim_end_matches(';');
+        let fixture: Value = serde_json::from_str(body).expect("the fixture is JSON");
+        assert_eq!(
+            fixture,
+            fields(),
+            "update tests/settings-qml/fixtures/rule_fields.js"
+        );
+    }
+}

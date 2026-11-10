@@ -13,3 +13,8 @@ hyprctl
 state.toml
 gsettings
 power-profiles-daemon
+regex
+xwayland
+namespace
+hl.window_rule
+layerrule

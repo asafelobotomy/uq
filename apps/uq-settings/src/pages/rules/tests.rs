@@ -265,7 +265,7 @@ async fn why_lists_matching_rules_in_order_with_override_flag() {
     let (r, page) = rig_with(st).await;
     r.explain.set(
         "rules.window.r-0003",
-        json!({"source": "user_lua", "detail": {"line": 4}}),
+        json!({"source": "user_lua", "detail": {"line": 4, "path": "/home/u/user.lua"}}),
     );
     r.windows
         .script_picked(&win("org.pulseaudio.pavucontrol", "Volume Control"));
@@ -283,6 +283,7 @@ async fn why_lists_matching_rules_in_order_with_override_flag() {
         .collect();
     assert_eq!(got, [("r-0001", "uq"), ("r-0003", "user_lua")]);
     assert_eq!(rules[1]["line"], json!(4));
+    assert_eq!(rules[1]["path"], "/home/u/user.lua");
     assert_eq!(rules[0]["line"], Value::Null);
 }
 

@@ -468,11 +468,11 @@ impl RulesState {
                 .into_iter()
                 .map(|(i, v)| {
                     let r = &rules.window[i];
-                    let (source, line) = source_of(&explained, &format!("window.{}", r.id));
+                    let (source, line, path) = source_of(&explained, &format!("window.{}", r.id));
                     json!({"id": r.id, "name": r.name, "enabled": r.enabled,
                         "verdict": verdict_name(v),
                         "effects_text": effects_text(&r.effects),
-                        "source": source, "line": line})
+                        "source": source, "line": line, "path": path})
                 })
                 .collect(),
             None => Vec::new(),

@@ -55,6 +55,12 @@ impl<L: PageLogic> ModelCore<L> {
             watcher: None,
         }
     }
+
+    /// The page's logic, for a synchronous call that doesn't talk to uqd (the Window rules
+    /// preview); `None` without a session bus.
+    pub fn logic(&self) -> Option<&L> {
+        self.logic.as_ref().map(|(_, logic)| &**logic)
+    }
 }
 
 impl<L: PageLogic> Drop for ModelCore<L> {

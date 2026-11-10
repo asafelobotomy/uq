@@ -9,14 +9,13 @@ use uq_core::rules::{
 
 use super::RulesState;
 
-/// `{source, line}` of a row of `Explain("rules")`.
-pub(super) fn source_of(explained: &Value, key: &str) -> (String, Value) {
+/// `{source, line, path}` of a row of `Explain("rules")`: the path is `user.lua`'s, for the
+/// page's **Open user.lua**.
+pub(super) fn source_of(explained: &Value, key: &str) -> (String, Value, Value) {
     let row = &explained[key];
     let source = row["source"].as_str().unwrap_or("uq").to_string();
-    (
-        source,
-        row["detail"].get("line").cloned().unwrap_or(Value::Null),
-    )
+    let detail = |k: &str| row["detail"].get(k).cloned().unwrap_or(Value::Null);
+    (source, detail("line"), detail("path"))
 }
 
 impl RulesState {
@@ -30,7 +29,7 @@ impl RulesState {
             .window
             .iter()
             .map(|r| {
-                let (source, line) = source_of(explained, &format!("window.{}", r.id));
+                let (source, line, path) = source_of(explained, &format!("window.{}", r.id));
                 let now = Compiled::new(&r.matches)
                     .map(|c| windows.iter().filter(|w| c.test(w) != Verdict::No).count())
                     .unwrap_or(0);
@@ -38,29 +37,30 @@ impl RulesState {
                     "match_text": match_text(&r.matches),
                     "effects_text": effects_text(&r.effects),
                     "static": has_static(&r.effects),
-                    "source": source, "line": line, "matches_now": now})
+                    "source": source, "line": line, "path": path, "matches_now": now})
             })
             .collect();
         let layer: Vec<Value> = rules
             .layer
             .iter()
             .map(|r| {
-                let (source, line) = source_of(explained, &format!("layer.{}", r.id));
+                let (source, line, path) = source_of(explained, &format!("layer.{}", r.id));
                 json!({"raw": r, "id": r.id, "name": r.name, "enabled": r.enabled,
                     "namespace": r.matches.namespace,
                     "effects_text": layer_effects_text(&r.effects),
-                    "source": source, "line": line})
+                    "source": source, "line": line, "path": path})
             })
             .collect();
         let workspace: Vec<Value> = rules
             .workspace
             .iter()
             .map(|r| {
-                let (source, line) = source_of(explained, &format!("workspace.{}", r.workspace));
+                let (source, line, path) =
+                    source_of(explained, &format!("workspace.{}", r.workspace));
                 let layout = layouts["workspaces"][&r.workspace].as_str().unwrap_or("");
                 json!({"raw": r, "workspace": r.workspace, "layout": layout,
                     "fields_text": workspace_text(r),
-                    "source": source, "line": line})
+                    "source": source, "line": line, "path": path})
             })
             .collect();
         json!({"window": window, "layer": layer, "workspace": workspace})
