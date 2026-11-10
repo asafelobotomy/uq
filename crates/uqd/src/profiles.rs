@@ -13,6 +13,7 @@ use uq_core::profile::{
     self, ActiveProfile, Kept, MAX_PROFILES, PowerMemo, Profile, ProfileError, clear_active,
     key_label, power_notice, save_active, turn_off,
 };
+use uq_core::state::State;
 
 /// One profile as `ListProfiles` shows it.
 #[derive(Debug, Serialize)]
@@ -42,6 +43,9 @@ fn refused(e: ProfileError) -> DesktopError {
 fn no_profile(id: &str) -> DesktopError {
     DesktopError::InvalidArgument(format!("no profile {id:?}"))
 }
+
+/// Said when "Back to normal" can't put back a theme that's been uninstalled since.
+pub(crate) const THEME_GONE: &str = "The theme you used before this profile isn't installed any more, so uQ's default theme is used.";
 
 /// The power mode, reported as kept when it was changed by hand.
 fn power_kept() -> Kept {
@@ -204,25 +208,19 @@ impl Desktop {
         let Some(a) = self.active.clone() else {
             return Ok(ProfileReport::default());
         };
-        let (next, mut kept) = turn_off(&self.state, &a).map_err(refused)?;
+        let (mut next, mut kept) = turn_off(&self.state, &a).map_err(refused)?;
+        let mut notices = Vec::new();
+        if self.themes.get(&next.theme, next.variant).is_none() {
+            next.theme = State::default().theme;
+            notices.push(THEME_GONE.to_string());
+        }
         if next != self.state {
             self.commit(next, Change::Theme, Origin::Profile(a.id.clone()))
                 .await?;
             self.announce_all();
         }
-        let mut notices = Vec::new();
         if let Some(pm) = &a.power {
-            // A set that timed out may have landed since, so read the mode rather than assume.
-            match self.power_active().await {
-                Ok(cur) if cur == pm.set && cur != pm.before => {
-                    if let Err(e) = self.power_set(&pm.before).await {
-                        notices.push(power_notice(&e.to_string()));
-                    }
-                }
-                Ok(cur) if cur == pm.set || cur == pm.before => {}
-                Ok(_) => kept.push(power_kept()),
-                Err(e) => notices.push(power_notice(&e.to_string())),
-            }
+            self.power_back(pm, &mut kept, &mut notices).await;
         }
         self.active = None;
         self.forget_active();
@@ -231,6 +229,27 @@ impl Desktop {
             kept,
             notices,
         })
+    }
+
+    /// Put the power mode from before the profile back (K3), if it still holds what the profile
+    /// set. One changed by hand is kept; a failure is a notice and never an error (K2).
+    pub(crate) async fn power_back(
+        &self,
+        pm: &PowerMemo,
+        kept: &mut Vec<Kept>,
+        notices: &mut Vec<String>,
+    ) {
+        // A set that timed out may have landed since, so read the mode rather than assume.
+        match self.power_active().await {
+            Ok(cur) if cur == pm.set && cur != pm.before => {
+                if let Err(e) = self.power_set(&pm.before).await {
+                    notices.push(power_notice(&e.to_string()));
+                }
+            }
+            Ok(cur) if cur == pm.set || cur == pm.before => {}
+            Ok(_) => kept.push(power_kept()),
+            Err(e) => notices.push(power_notice(&e.to_string())),
+        }
     }
 
     /// Whether the active profile sets the light/dark variant, which holds the schedule.

@@ -42,8 +42,12 @@ Have `power-profiles-daemon` running and a laptop or machine that offers a Perfo
   ```
 - [ ] **7. Restore ends a profile.** With Gaming on, restore the "Before the Gaming profile" point
   from **History** (or `uqctl restore <id>`). The settings come back and no profile shows as on.
+  If the profile set a power mode, the one from before comes back too (unless you changed it by
+  hand while the profile was on).
 - [ ] **8. Light or dark hold.** Make a profile that holds "Light or dark" (add it with **Add
   settings**) and set a schedule whose next change falls within a few minutes
   (for example `uqctl schedule fixed 07:00 HH:MM`, with HH:MM a few minutes from now). While the profile is on,
-  the schedule doesn't switch light or dark. After **Back to normal**, the schedule works again and
-  moves to the right variant at its next change.
+  the schedule doesn't switch light or dark, even after HH:MM passes. Click **Back to normal** after
+  HH:MM: the variant from before the profile comes back, and within a minute (the schedule checks
+  once a minute) it switches to the variant that's due now. Had no change come due while the
+  profile was on, nothing would switch until the next one.

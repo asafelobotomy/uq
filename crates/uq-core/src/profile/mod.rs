@@ -94,11 +94,11 @@ pub enum ProfileError {
     BadName,
     #[error("The profile's icon name isn't valid.")]
     BadIcon,
-    #[error("This profile has settings uQ doesn't know: {0}.")]
+    #[error("This profile has settings uQ doesn't know: {}.", plain(.0))]
     UnknownDomain(String),
     #[error("{}", needs_newer(.0))]
     NeedsNewer(String),
-    #[error("{}: {reason}", invalid_label(.key))]
+    #[error("{}: {}", plain(&invalid_label(.key)), plain(.reason))]
     Invalid { key: String, reason: String },
     #[error("A profile needs at least one setting.")]
     Empty,
@@ -113,6 +113,12 @@ fn needs_newer(domain: &str) -> String {
         "keyboard shortcuts"
     };
     format!("This profile turns {what} on or off, which this version of uQ can't do yet.")
+}
+
+/// Text from an imported file with its control characters left out, so an error can't carry a
+/// terminal escape sequence to `uqctl`'s output.
+fn plain(text: &str) -> String {
+    text.chars().filter(|c| !c.is_control()).collect()
 }
 
 /// The plain label of a dotted `domain.path` key, for the text of an `Invalid` error.
@@ -722,6 +728,23 @@ profile = "performance"
         assert!(Profile::parse(&with(&format!("[look]\ngaps_in = {inline}\n"))).is_err());
         let arrays = format!("{}{}", "[".repeat(5000), "]".repeat(5000));
         assert!(Profile::parse(&with(&format!("[look]\ngaps_in = {arrays}\n"))).is_err());
+    }
+
+    #[test]
+    fn errors_never_repeat_control_characters_from_the_file() {
+        for body in [
+            "[\"\\u001b[31mx\"]\na = 1\n",
+            "[look]\n\"\\u001b]0;pwn\\u0007\" = 1\n",
+            "[look]\ngaps_in = \"\\u001b[2J\"\n",
+            "[shell.\"\\u009b6n\"]\na = 1\n",
+        ] {
+            let text = err(&with(body)).to_string();
+            assert!(
+                !text.chars().any(char::is_control),
+                "{body:?} gave {text:?}"
+            );
+            assert!(text.len() > 10, "{text:?}");
+        }
     }
 
     #[test]

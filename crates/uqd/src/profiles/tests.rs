@@ -183,6 +183,30 @@ async fn off_restores_untouched_and_reports_hand_changed() {
 }
 
 #[tokio::test]
+async fn off_removes_a_display_entry_the_profile_created() {
+    let mut r = rig().await;
+    r.desktop
+        .set_section(
+            "wallpaper",
+            r#"{"outputs":{"*":{"image":"/w/a.png"}}}"#,
+            Origin::Settings,
+        )
+        .await
+        .unwrap();
+    let before = r.desktop.get_section("wallpaper").unwrap();
+    add(
+        &mut r,
+        "format = 1\nid = \"hdmi\"\nname = \"HDMI\"\n[wallpaper.outputs.HDMI-A-1]\nimage = \"/w/b.png\"\n",
+    )
+    .await;
+    r.desktop.apply_profile("hdmi").await.unwrap();
+    assert_ne!(r.desktop.get_section("wallpaper").unwrap(), before);
+    let report = r.desktop.profile_off().await.unwrap();
+    assert!(report.kept.is_empty(), "{report:?}");
+    assert_eq!(r.desktop.get_section("wallpaper").unwrap(), before);
+}
+
+#[tokio::test]
 async fn switching_profiles_returns_untouched_keys_then_applies_next() {
     let mut r = rig().await;
     add(&mut r, GAMING).await;
@@ -288,6 +312,31 @@ async fn apply_with_uninstalled_theme_changes_nothing() {
     assert!(r.desktop.active_profile().is_none());
     assert!(r.power.sets.lock().unwrap().is_empty());
     assert!(profile_events(&mut r.events).is_empty());
+}
+
+#[tokio::test]
+async fn off_with_the_old_theme_uninstalled_uses_the_default_theme() {
+    let mut r = rig().await;
+    add(
+        &mut r,
+        "format = 1\nid = \"red\"\nname = \"Red\"\n[appearance]\ntheme = \"rosewood\"\n[look]\ngaps_in = 0\n",
+    )
+    .await;
+    r.desktop.apply_profile("red").await.unwrap();
+    // The theme in use before the profile has been uninstalled since.
+    let mut memo = r.desktop.active_profile().unwrap().clone();
+    let theme = memo.keys.iter_mut().find(|m| m.path == ["theme"]).unwrap();
+    theme.before = Some(json!("nosuch"));
+    save_active(&r.desktop.paths().profile_active, &memo).unwrap();
+    let mut again = desktop_on(r.dir.path(), r.comp.clone(), r.power.clone());
+    let report = again.profile_off().await.unwrap();
+    assert_eq!(again.state().theme, uq_core::state::State::default().theme);
+    assert_eq!(
+        read_leaf(again.state(), "look", &s(&["gaps_in"])),
+        Some(json!(5))
+    );
+    assert!(again.active_profile().is_none());
+    assert_eq!(report.notices, [THEME_GONE], "{report:?}");
 }
 
 #[tokio::test]
@@ -443,6 +492,43 @@ async fn restore_ends_the_active_profile() {
     assert!(!r.desktop.paths().profile_active.exists());
     assert_eq!(profile_events(&mut r.events), [""]);
     assert_eq!(look(&r, "gaps_in"), Some(json!(5)));
+}
+
+#[tokio::test]
+async fn restore_puts_the_profiles_power_mode_back() {
+    let mut r = rig().await;
+    add(&mut r, TURBO).await;
+    let id = r.desktop.save_restore_point("mine").unwrap();
+    r.desktop.apply_profile("turbo").await.unwrap();
+    assert_eq!(*r.power.mode.lock().unwrap(), Some("performance".into()));
+    let notices = r.desktop.restore(&id).await.unwrap();
+    assert!(notices.is_empty(), "{notices:?}");
+    assert_eq!(*r.power.mode.lock().unwrap(), Some("balanced".into()));
+    assert!(r.desktop.active_profile().is_none());
+
+    // Changed by hand while the profile was on: left alone.
+    r.desktop.apply_profile("turbo").await.unwrap();
+    *r.power.mode.lock().unwrap() = Some("power-saver".into());
+    r.desktop.restore(&id).await.unwrap();
+    assert_eq!(*r.power.mode.lock().unwrap(), Some("power-saver".into()));
+}
+
+#[tokio::test]
+async fn restore_with_power_refused_still_restores_with_a_notice() {
+    let mut r = rig().await;
+    add(&mut r, TURBO).await;
+    let id = r.desktop.save_restore_point("mine").unwrap();
+    r.desktop.apply_profile("turbo").await.unwrap();
+    r.power.refuse.store(true, Ordering::SeqCst);
+    let notices = r.desktop.restore(&id).await.unwrap();
+    assert_eq!(
+        notices,
+        [power_notice(
+            &PowerError::Refused(String::new()).to_string()
+        )]
+    );
+    assert_eq!(look(&r, "gaps_in"), Some(json!(5)));
+    assert!(r.desktop.active_profile().is_none());
 }
 
 #[tokio::test]

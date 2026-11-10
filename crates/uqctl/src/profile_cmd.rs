@@ -53,18 +53,21 @@ struct Report {
 }
 
 const NOT_RUNNING: &str = "Can't reach uQ's settings service. Is it running?";
+const FAILED: &str = "uQ's settings service couldn't do that.";
 
 fn rows(json: &str) -> Result<Vec<Row>, String> {
     serde_json::from_str(json).map_err(|_| "Got an answer uqctl doesn't understand.".to_string())
 }
 
 /// What a failed call says, in plain words.
+///
+/// A missing service is checked first: the bus's own message for it names D-Bus.
 fn describe(err: zbus::Error) -> String {
     match err {
-        zbus::Error::MethodError(_, Some(msg), _) => msg,
         e if uq_core::client::no_owner(&e) => NOT_RUNNING.into(),
-        zbus::Error::MethodError(name, None, _) => name.to_string(),
-        e => format!("{NOT_RUNNING} ({e})"),
+        zbus::Error::MethodError(_, Some(msg), _) => msg,
+        zbus::Error::MethodError(_, None, _) => FAILED.into(),
+        _ => NOT_RUNNING.into(),
     }
 }
 
@@ -360,19 +363,38 @@ mod tests {
         assert!(err.starts_with("Can't read the file"), "{err}");
     }
 
-    #[test]
-    fn errors_never_name_the_service() {
-        let gone = zbus::Error::MethodError(
-            "org.freedesktop.DBus.Error.ServiceUnknown"
-                .try_into()
-                .unwrap(),
-            None,
+    fn method_error(name: &str, msg: Option<&str>) -> zbus::Error {
+        zbus::Error::MethodError(
+            name.try_into().unwrap(),
+            msg.map(str::to_string),
             zbus::message::Message::method_call("/", "X")
                 .unwrap()
                 .build(&())
                 .unwrap(),
-        );
-        assert!(!describe(gone).to_lowercase().contains("uqd"));
+        )
+    }
+
+    #[test]
+    fn errors_never_name_the_service() {
+        // What a real bus daemon says when uqd isn't running: it always carries a message.
+        for name in [
+            "org.freedesktop.DBus.Error.ServiceUnknown",
+            "org.freedesktop.DBus.Error.NameHasNoOwner",
+        ] {
+            let gone = method_error(
+                name,
+                Some("The name org.uq.Desktop1 was not provided by any .service files"),
+            );
+            assert_eq!(describe(gone), NOT_RUNNING);
+        }
+        // uqd's own plain message still comes through.
+        let own = method_error("org.uq.Desktop1.Error.NotFound", Some("no profile \"x\""));
+        assert_eq!(describe(own), "no profile \"x\"");
+        // An error with no message never shows its bus name.
+        let bare = describe(method_error("org.uq.Desktop1.Error.Failed", None));
+        assert!(!bare.contains("org."), "{bare}");
+        // Anything else is the plain line, without the library's text.
+        assert_eq!(describe(zbus::Error::InvalidReply), NOT_RUNNING);
         assert!(!NOT_RUNNING.to_lowercase().contains("uqd"));
     }
 

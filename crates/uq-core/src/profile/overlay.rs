@@ -7,7 +7,7 @@
 use super::{
     DomainKind, Profile, ProfileError, key_label, kind_of, leaves, read_leaf, write_leaves,
 };
-use crate::history::Entry;
+use crate::history::{self, Entry};
 use crate::settings::SettingError;
 use crate::state::State;
 use serde::{Deserialize, Serialize};
@@ -92,15 +92,16 @@ pub fn apply(
             .map(|k| (k.domain.clone(), (k.path.clone(), Some(k.value.clone()))))
             .collect(),
     )?;
-    let memos = keys
-        .into_iter()
-        .map(|k| KeyMemo {
+    let mut memos = created_leaves(current, &next, &keys);
+    memos.splice(
+        0..0,
+        keys.into_iter().map(|k| KeyMemo {
             before: read_leaf(current, &k.domain, &k.path),
             set: read_leaf(&next, &k.domain, &k.path).unwrap_or(k.value),
             domain: k.domain,
             path: k.path,
-        })
-        .collect();
+        }),
+    );
     let active = ActiveProfile {
         id: profile.id.clone(),
         name: profile.name.clone(),
@@ -109,6 +110,37 @@ pub fn apply(
         power: None,
     };
     Ok((next, active))
+}
+
+/// Leaves the write created that the profile doesn't hold itself: the other fields of a map
+/// entry it added (for example `fit` and `interval` of a new `wallpaper.outputs.<name>`), which
+/// were filled in by default. They're remembered as unset, so "Back to normal" removes the whole
+/// entry, and a field changed by hand since is kept (K3).
+fn created_leaves(current: &State, next: &State, keys: &[super::Key]) -> Vec<KeyMemo> {
+    let mut domains: Vec<&str> = Vec::new();
+    for k in keys {
+        if !domains.contains(&k.domain.as_str()) {
+            domains.push(&k.domain);
+        }
+    }
+    let mut out = Vec::new();
+    for domain in domains {
+        let (Ok(before), Ok(after)) = (current.section(domain), next.section(domain)) else {
+            continue;
+        };
+        for (path, value) in leaves(&after) {
+            let own = keys.iter().any(|k| k.domain == domain && k.path == path);
+            if !own && history::get_path(&before, &path).is_none() {
+                out.push(KeyMemo {
+                    domain: domain.to_string(),
+                    path,
+                    before: None,
+                    set: value,
+                });
+            }
+        }
+    }
+    out
 }
 
 /// "Back to normal" (K3): put `before` back for keys that still hold what the profile set, keep
@@ -121,7 +153,9 @@ pub fn turn_off(
     let mut kept = Vec::new();
     for m in &active.keys {
         let cur = read_leaf(current, &m.domain, &m.path);
-        if cur.as_ref() == Some(&m.set) {
+        // A created leaf can be null, which `read_leaf` reads as unset.
+        let still_set = cur.as_ref() == Some(&m.set) || (m.set.is_null() && cur.is_none());
+        if still_set {
             writes.push((m.domain.clone(), (m.path.clone(), m.before.clone())));
         } else if cur != m.before {
             kept.push(Kept {
@@ -343,6 +377,70 @@ mod tests {
         );
         assert_eq!(active_b.keys.len(), 1);
         assert_eq!(active_b.keys[0].before, None);
+    }
+
+    fn wallpaper_base() -> State {
+        let mut st = State::default();
+        write_leaves(
+            &mut st,
+            "wallpaper",
+            &[(s(&["outputs", "*", "image"]), Some(json!("/w/a.png")))],
+        )
+        .unwrap();
+        st
+    }
+
+    #[test]
+    fn turn_off_removes_a_map_entry_the_profile_created() {
+        // The review's probe: the profile holds only one leaf of a display's entry, so applying
+        // it fills in `fit` and `interval` by default. Back to normal must remove all of it.
+        let cur = wallpaper_base();
+        let p = profile(
+            "work",
+            "[wallpaper.outputs.HDMI-A-1]\nimage = \"/w/b.png\"\n",
+        );
+        let (on, active) = apply(&cur, &p, 0).unwrap();
+        assert_eq!(
+            read_leaf(&on, "wallpaper", &s(&["outputs", "HDMI-A-1", "fit"])),
+            Some(json!("fill"))
+        );
+        let (off, kept) = turn_off(&on, &active).unwrap();
+        assert!(kept.is_empty(), "{kept:?}");
+        assert_eq!(
+            off.section("wallpaper").unwrap(),
+            cur.section("wallpaper").unwrap()
+        );
+        assert_eq!(off, cur);
+    }
+
+    #[test]
+    fn turn_off_keeps_a_hand_changed_leaf_of_a_created_entry() {
+        let cur = wallpaper_base();
+        let p = profile(
+            "work",
+            "[wallpaper.outputs.HDMI-A-1]\nimage = \"/w/b.png\"\n",
+        );
+        let (mut on, active) = apply(&cur, &p, 0).unwrap();
+        let fit = s(&["outputs", "HDMI-A-1", "fit"]);
+        write_leaves(&mut on, "wallpaper", &[(fit.clone(), Some(json!("tile")))]).unwrap();
+        let (off, kept) = turn_off(&on, &active).unwrap();
+        assert_eq!(read_leaf(&off, "wallpaper", &fit), Some(json!("tile")));
+        assert_eq!(
+            read_leaf(&off, "wallpaper", &s(&["outputs", "HDMI-A-1", "image"])),
+            None
+        );
+        assert_eq!(
+            kept.iter().map(|k| k.path.clone()).collect::<Vec<_>>(),
+            vec![fit]
+        );
+    }
+
+    #[test]
+    fn apply_remembers_nothing_extra_for_an_existing_entry() {
+        let cur = wallpaper_base();
+        let p = profile("work", "[wallpaper.outputs.\"*\"]\nimage = \"/w/b.png\"\n");
+        let (_, active) = apply(&cur, &p, 0).unwrap();
+        assert_eq!(active.keys.len(), 1);
     }
 
     #[test]

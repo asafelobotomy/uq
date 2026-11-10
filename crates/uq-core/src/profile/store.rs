@@ -58,6 +58,7 @@ impl ProfileStore {
         out
     }
 
+    /// Profile `id`; a file whose id isn't its name is `NotFound`, as `list` skips it.
     pub fn load(&self, id: &str) -> io::Result<Profile> {
         let path = self.file(id)?;
         let text = read_file(&path).map_err(|e| match e {
@@ -69,7 +70,14 @@ impl ProfileStore {
             }
             e => bad_file(e),
         })?;
-        Profile::parse(&text).map_err(bad_file)
+        let p = Profile::parse(&text).map_err(bad_file)?;
+        if p.id != id {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                "id isn't the file name",
+            ));
+        }
+        Ok(p)
     }
 
     pub fn save(&self, p: &Profile) -> io::Result<()> {
@@ -136,6 +144,11 @@ mod tests {
         assert_eq!(
             store.load("junk").unwrap_err().kind(),
             io::ErrorKind::InvalidData
+        );
+        // As `list`, a file whose id isn't its name isn't that profile.
+        assert_eq!(
+            store.load("other").unwrap_err().kind(),
+            io::ErrorKind::NotFound
         );
     }
 

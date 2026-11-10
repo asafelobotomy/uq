@@ -201,7 +201,11 @@ impl DesktopIface {
     }
 
     async fn restore(&self, id: &str) -> Result<(), UqError> {
-        Ok(self.desktop.lock().await.restore(id).await?)
+        // `Restore` has no report to carry a notice, so it's logged.
+        for notice in self.desktop.lock().await.restore(id).await? {
+            tracing::warn!("restore: {notice}");
+        }
+        Ok(())
     }
 
     /// Where each key of `domain` gets its live value, as JSON:

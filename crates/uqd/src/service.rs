@@ -797,8 +797,9 @@ impl Desktop {
 
     /// Bring back every domain of restore point `id` as one write, keeping today's launch
     /// counts. A damaged point or one whose theme is gone changes nothing; otherwise an
-    /// automatic point of the current state is saved first.
-    pub async fn restore(&mut self, id: &str) -> Result<(), DesktopError> {
+    /// automatic point of the current state is saved first. Returns plain notices (the power
+    /// mode of a profile the restore ended).
+    pub async fn restore(&mut self, id: &str) -> Result<Vec<String>, DesktopError> {
         let mut next = self.restore.load(id).map_err(|e| match e.kind() {
             std::io::ErrorKind::InvalidData => {
                 DesktopError::InvalidArgument("restore point is damaged".into())
@@ -822,11 +823,17 @@ impl Desktop {
         next.launch_counts = self.state.launch_counts.clone();
         self.commit(next, Change::Theme, Origin::Restore).await?;
         self.announce_all();
-        // The restored settings aren't the profile's any more.
-        if self.active.take().is_some() {
+        // The restored settings aren't the profile's any more, and neither is its power mode,
+        // which a restore point doesn't hold: put it back as "Back to normal" does (K2: a
+        // failure is a notice, never an error).
+        let mut notices = Vec::new();
+        if let Some(a) = self.active.take() {
+            if let Some(pm) = &a.power {
+                self.power_back(pm, &mut Vec::new(), &mut notices).await;
+            }
             self.forget_active();
         }
-        Ok(())
+        Ok(notices)
     }
 
     /// After a `Change::Theme` commit, which announces only the theme: every section and the

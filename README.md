@@ -152,7 +152,8 @@ the profile gave it. A setting you changed by hand since stays as you set it, an
 names it, such as "Gaps between windows". Turning on a second profile while one is on does the
 same, then applies the second in one step. While a profile that sets light or dark is on, the
 light/dark schedule doesn't switch it; the schedule carries on after Back to normal. Restoring a
-restore point ends the profile that's on. A profile that's on stays on after uqd restarts.
+restore point ends the profile that's on and, like Back to normal, puts its power mode back. A
+profile that's on stays on after uqd restarts.
 
 Switch from the quick-settings **Profile** row (it shows only when you have profiles; **Normal**
 is Back to normal), from the page, or with `uqctl profile`. To switch with a key, add this to
@@ -166,7 +167,7 @@ hl.bind("SUPER + ALT + P", hl.dsp.exec_cmd("uqctl profile next"))
 (`id`, `name`, optional `icon`, then the settings as tables). **Import** checks every setting
 and refuses a file that is over 64 KiB, isn't text, has an unknown setting or a value out of
 range, or has `[keybinds]` or `[rules]`, with a plain
-message and nothing saved. Turning on a profile whose theme has since been uninstalled is refused and changes nothing. Importing saves no restore point, since no setting changes. Manual
+message and nothing saved. Turning on a profile whose theme has since been uninstalled is refused and changes nothing; if the theme you used before a profile has been uninstalled since, Back to normal uses uQ's default theme and says so. Importing saves no restore point, since no setting changes. Manual
 checks are in [docs/notes/settings-slice-b-live-check.md](docs/notes/settings-slice-b-live-check.md).
 
 #### History page
