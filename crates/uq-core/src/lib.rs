@@ -8,6 +8,7 @@ pub mod lua;
 pub mod paths;
 pub mod profile;
 pub mod render;
+pub mod rules;
 pub mod schedule;
 pub mod settings;
 pub mod state;
