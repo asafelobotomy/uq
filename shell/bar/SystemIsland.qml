@@ -159,7 +159,7 @@ Island {
         function onConnectedChanged() { if (Bridge.connected) root.refreshLayouts(); }
         function onLayoutChanged(ws, layout) {
             var m = Object.assign({}, root.layouts);
-            m[String(ws)] = layout;
+            m[ws] = layout;
             root.layouts = m;
         }
     }

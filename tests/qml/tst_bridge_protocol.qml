@@ -57,8 +57,13 @@ TestCase {
         compare(themeSpy.count, 1);
         Bridge.feed('{"v":1,"event":"LayoutChanged","data":{"workspace":2,"layout":"dwindle"}}');
         compare(layoutSpy.count, 1);
-        compare(layoutSpy.signalArguments[0][0], 2);
+        compare(layoutSpy.signalArguments[0][0], "2");
         compare(layoutSpy.signalArguments[0][1], "dwindle");
+        // A named workspace's selector comes through as is, so the bar's map key matches.
+        Bridge.feed('{"v":1,"event":"LayoutChanged","data":{"workspace":"name:web","layout":"master"}}');
+        compare(layoutSpy.count, 2);
+        compare(layoutSpy.signalArguments[1][0], "name:web");
+        compare(layoutSpy.signalArguments[1][1], "master");
         compare(Bridge.weather, null);
         Bridge.feed('{"v":1,"event":"Weather","data":{"temp_c":3,"code":1,"is_day":true,"location_name":"Oslo"}}');
         compare(Bridge.weather.location_name, "Oslo");
