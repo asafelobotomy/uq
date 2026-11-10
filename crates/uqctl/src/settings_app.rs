@@ -42,11 +42,24 @@ fn spawn_detached(argv: &[String]) -> std::io::Result<()> {
         .map(drop)
 }
 
+/// Like every other uqctl command, never hang a keybind: give up after `limit`.
+async fn within<T>(
+    limit: std::time::Duration,
+    fut: impl std::future::Future<Output = Result<T, String>>,
+) -> Result<T, String> {
+    tokio::time::timeout(limit, fut)
+        .await
+        .unwrap_or_else(|_| Err(format!("{APP} did not answer within {} s", limit.as_secs())))
+}
+
 pub async fn main(page: &str, setting: &str) -> ExitCode {
-    let res = match zbus::Connection::session().await {
-        Ok(conn) => open(&conn, page, setting, spawn_detached).await,
-        Err(e) => Err(format!("{e} (is a session bus running?)")),
-    };
+    let res = within(std::time::Duration::from_secs(15), async {
+        match zbus::Connection::session().await {
+            Ok(conn) => open(&conn, page, setting, spawn_detached).await,
+            Err(e) => Err(format!("{e} (is a session bus running?)")),
+        }
+    })
+    .await;
     match res {
         Ok(()) => ExitCode::SUCCESS,
         Err(msg) => {
@@ -177,5 +190,20 @@ mod tests {
             .await
             .unwrap_err();
         assert!(err.contains("could not start uq-settings"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn a_hung_call_times_out() {
+        let err = within(
+            std::time::Duration::from_millis(50),
+            std::future::pending::<Result<(), String>>(),
+        )
+        .await
+        .unwrap_err();
+        assert!(err.contains("did not answer within"), "{err}");
+        assert_eq!(
+            within(std::time::Duration::from_secs(1), async { Ok(7) }).await,
+            Ok(7)
+        );
     }
 }

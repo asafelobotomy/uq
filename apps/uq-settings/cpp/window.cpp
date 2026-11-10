@@ -20,8 +20,8 @@ void describeApplication(rust::Str version)
     QGuiApplication::setApplicationName(QStringLiteral("uq-settings"));
     QGuiApplication::setApplicationDisplayName(QStringLiteral("uQ Settings"));
     QGuiApplication::setApplicationVersion(toQString(version));
-    // The Wayland app id; matches uq-settings.desktop.
-    QGuiApplication::setDesktopFileName(QStringLiteral("uq-settings"));
+    // The Wayland app id; matches packaging/org.uq.Settings.desktop.
+    QGuiApplication::setDesktopFileName(QStringLiteral("org.uq.Settings"));
 
     // Outside a full desktop (Hyprland, the offscreen screenshot run) Qt may search no icon
     // folders and have no icon theme: add the XDG ones, then use the first installed theme.

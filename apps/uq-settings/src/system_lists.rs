@@ -2,6 +2,7 @@
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;
+use uq_core::settings::valid_theme_name;
 
 /// The folders themes are installed in: system, user, and the legacy `~/.icons`.
 pub fn real_dirs() -> Vec<PathBuf> {
@@ -17,7 +18,8 @@ pub fn real_dirs() -> Vec<PathBuf> {
     dirs
 }
 
-/// Names of the theme directories under `dirs` that satisfy `keep`, sorted and de-duplicated.
+/// Names of the theme directories under `dirs` that satisfy `keep` and that uqd would accept
+/// ([`valid_theme_name`]), sorted and de-duplicated.
 fn themes(dirs: &[PathBuf], keep: impl Fn(&std::path::Path) -> bool) -> Vec<String> {
     let mut names = BTreeSet::new();
     for dir in dirs {
@@ -29,6 +31,7 @@ fn themes(dirs: &[PathBuf], keep: impl Fn(&std::path::Path) -> bool) -> Vec<Stri
             if path.is_dir()
                 && keep(&path)
                 && let Some(name) = entry.file_name().to_str()
+                && valid_theme_name(name)
             {
                 names.insert(name.to_owned());
             }
@@ -79,6 +82,10 @@ mod tests {
         mk(b.path(), "Papirus", &["32x32"], true); // duplicate
         mk(b.path(), "Adwaita", &["cursors"], false); // cursor theme, no index needed
         fs::write(b.path().join("stray-file"), "x").unwrap();
+        // Names uqd would refuse are not offered.
+        mk(b.path(), "Bad\u{e9}Name", &["cursors", "scalable"], true);
+        mk(b.path(), &"L".repeat(65), &["cursors", "scalable"], true);
+        mk(b.path(), "has:colon", &["cursors", "scalable"], true);
 
         let dirs = [
             a.path().to_path_buf(),

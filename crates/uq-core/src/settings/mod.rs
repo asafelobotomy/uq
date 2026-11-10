@@ -5,7 +5,7 @@ use serde_json::Value;
 
 mod appearance;
 mod wallpaper;
-pub use appearance::Appearance;
+pub use appearance::{Appearance, valid_theme_name};
 pub use wallpaper::{Fit, Wallpaper, WallpaperEntry};
 
 /// Every key `Settings::apply` accepts; anything else is rejected.

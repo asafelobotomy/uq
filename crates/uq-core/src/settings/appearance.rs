@@ -54,15 +54,18 @@ fn font(key: &str, v: &Option<String>) -> Result<(), SettingError> {
     Ok(())
 }
 
-/// `^[A-Za-z0-9._+ -]{1,64}$`, and not `.` or `..`.
-fn theme_name(key: &str, v: &Option<String>) -> Result<(), SettingError> {
-    let Some(s) = v else { return Ok(()) };
-    let ok = (1..=64).contains(&s.len())
+/// A cursor or icon theme name uqd accepts: `^[A-Za-z0-9._+ -]{1,64}$`, and not `.` or `..`.
+pub fn valid_theme_name(s: &str) -> bool {
+    (1..=64).contains(&s.len())
         && s.bytes()
             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'+' | b' ' | b'-'))
         && s != "."
-        && s != "..";
-    if ok {
+        && s != ".."
+}
+
+fn theme_name(key: &str, v: &Option<String>) -> Result<(), SettingError> {
+    let Some(s) = v else { return Ok(()) };
+    if valid_theme_name(s) {
         Ok(())
     } else {
         Err(invalid(

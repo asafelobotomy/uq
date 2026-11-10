@@ -79,6 +79,11 @@ fn valid_setting_id(id: &str) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))
 }
 
+/// A theme icon name, `^[A-Za-z0-9._-]{1,64}$`: no paths or URLs.
+fn valid_icon_name(name: &str) -> bool {
+    valid_setting_id(name)
+}
+
 fn valid_text(s: &str, max: usize) -> bool {
     (1..=max).contains(&s.chars().count()) && !s.chars().any(char::is_control)
 }
@@ -112,9 +117,11 @@ fn parse(dir: &Path, text: &str) -> Result<PluginPage, String> {
         return Err("name must be 1-100 characters without control characters".into());
     }
     if let Some(icon) = &m.icon
-        && !valid_text(icon, 100)
+        && !valid_icon_name(icon)
     {
-        return Err("icon must be 1-100 characters without control characters".into());
+        return Err(format!(
+            "icon {icon:?} must be an icon name matching [A-Za-z0-9._-]{{1,64}}"
+        ));
     }
     if !valid_qml_name(&m.qml) {
         return Err(format!(
@@ -405,6 +412,27 @@ mod tests {
         }
         assert_eq!(skipped.len(), 16, "{joined}");
         assert!(joined.contains("unknown field"), "{joined}");
+    }
+
+    #[test]
+    fn icon_is_a_bare_icon_name() {
+        let dir = Path::new("/p/x");
+        let with = |icon: &str| parse(dir, &manifest("x", &format!("icon = {icon:?}\n")));
+        for bad in [
+            "/usr/share/icons/x.png",
+            "file:///x.png",
+            "https://example.org/x.png",
+            "../x",
+            "a b",
+            "",
+            &"i".repeat(65),
+        ] {
+            assert!(with(bad).is_err(), "{bad:?}");
+        }
+        assert_eq!(
+            with("org.example.App_2-x").unwrap().icon,
+            "org.example.App_2-x"
+        );
     }
 
     #[test]

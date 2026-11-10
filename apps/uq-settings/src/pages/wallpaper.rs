@@ -11,11 +11,11 @@ use uq_core::client::{self, DesktopProxy};
 use uq_core::settings::Wallpaper;
 
 /// The file types the shell's slideshow picks up.
-/// How long the disk checks may take before the page is shown without them.
-const SCAN_TIMEOUT: Duration = Duration::from_secs(2);
+const IMAGE_EXTENSIONS: [&str; 6] = ["jpg", "jpeg", "png", "webp", "jxl", "avif"];
 /// The most folder entries looked at per folder.
 const MAX_SCANNED: usize = 5000;
-const IMAGE_EXTENSIONS: [&str; 6] = ["jpg", "jpeg", "png", "webp", "jxl", "avif"];
+/// How long the disk checks may take before the page is shown without them.
+const SCAN_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// What the page asks for.
 #[derive(Debug, Clone)]
