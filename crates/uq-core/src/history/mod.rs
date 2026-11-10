@@ -2,9 +2,11 @@
 
 mod diff;
 mod journal;
+mod restore;
 
 pub use diff::{DomainChange, Labels, diff, summarize};
 pub use journal::{Entry, Journal, MAX_AGE_DAYS, MAX_ENTRIES};
+pub use restore::{AutoReason, PointKind, RestorePoint, RestoreStore};
 
 /// Where a change came from. `Schedule` transitions are never journalled.
 #[derive(Debug, Clone, PartialEq, Eq)]
