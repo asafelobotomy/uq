@@ -272,4 +272,46 @@ mod tests {
         );
         assert_eq!(State::load(&path), st);
     }
+
+    #[test]
+    fn unknown_section_keys_and_fit_keep_state() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("state.toml");
+        std::fs::write(
+            &p,
+            "theme = \"rosewood\"\npinned = [\"firefox.desktop\"]\n\
+             [appearance]\ncursor_size = 32\nfuture_key = 1\n\
+             [wallpaper.outputs.\"*\"]\nfit = \"stretch\"\nshiny = true\n\
+             [wallpaper]\nlater = \"x\"\n",
+        )
+        .unwrap();
+        let s = State::load(&p);
+        assert_eq!(s.theme, "rosewood");
+        assert_eq!(s.settings.pinned, ["firefox.desktop"]);
+        assert_eq!(s.settings.appearance.cursor_size, Some(32));
+        assert_eq!(
+            s.settings.wallpaper.outputs["*"].fit,
+            crate::settings::Fit::Fill,
+            "an unknown fit loads as fill"
+        );
+        assert!(p.exists(), "a file with unknown keys is not moved aside");
+    }
+
+    #[test]
+    fn wallpaper_state_round_trip() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("state.toml");
+        let mut st = State::default();
+        st.settings
+            .set_section(
+                "wallpaper",
+                serde_json::json!({"outputs": {
+                    "*": {"image": "/w/a.png", "fit": "center"},
+                    "DP-1": {"folder": "/w/slides", "interval": 60, "fit": "tile"},
+                }}),
+            )
+            .unwrap();
+        st.save(&p).unwrap();
+        assert_eq!(State::load(&p), st);
+    }
 }

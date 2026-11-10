@@ -176,6 +176,16 @@ pub(crate) fn invalid(key: &str, reason: impl Into<String>) -> SettingError {
     }
 }
 
+/// Reject keys of the JSON object `v` that are not in `known` (non-objects are left to serde).
+pub(crate) fn check_known(key: &str, v: &Value, known: &[&str]) -> Result<(), SettingError> {
+    if let Some(obj) = v.as_object()
+        && let Some(k) = obj.keys().find(|k| !known.contains(&k.as_str()))
+    {
+        return Err(invalid(key, format!("unknown field {k:?}")));
+    }
+    Ok(())
+}
+
 fn as_bool(key: &str, v: &Value) -> Result<bool, SettingError> {
     v.as_bool()
         .ok_or_else(|| invalid(key, "expected a boolean"))
@@ -269,12 +279,14 @@ impl Settings {
     pub fn set_section(&mut self, domain: &str, value: Value) -> Result<(), SettingError> {
         match domain {
             "appearance" => {
+                check_known(domain, &value, &Appearance::FIELDS)?;
                 let a: Appearance =
                     serde_json::from_value(value).map_err(|e| invalid(domain, e.to_string()))?;
                 a.validate()?;
                 self.appearance = a;
             }
             "wallpaper" => {
+                Wallpaper::check_keys(&value)?;
                 let w: Wallpaper =
                     serde_json::from_value(value).map_err(|e| invalid(domain, e.to_string()))?;
                 w.validate()?;

@@ -5,8 +5,10 @@ use serde::{Deserialize, Serialize};
 
 const MAX_FONT_CHARS: usize = 100;
 
+/// Unknown keys are ignored on load (a newer uqd's state.toml still loads) and rejected by
+/// [`super::Settings::set_section`] via [`Appearance::FIELDS`].
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default, deny_unknown_fields)]
+#[serde(default)]
 pub struct Appearance {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ui_font: Option<String>,
@@ -80,6 +82,17 @@ fn ranged(key: &str, v: Option<u8>, lo: u8, hi: u8) -> Result<(), SettingError> 
 }
 
 impl Appearance {
+    /// Every key the API accepts.
+    pub const FIELDS: [&str; 7] = [
+        "ui_font",
+        "mono_font",
+        "font_size",
+        "cursor_theme",
+        "cursor_size",
+        "icon_theme",
+        "kvantum",
+    ];
+
     pub fn validate(&self) -> Result<(), SettingError> {
         font("appearance.ui_font", &self.ui_font)?;
         font("appearance.mono_font", &self.mono_font)?;
