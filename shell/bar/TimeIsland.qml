@@ -6,6 +6,7 @@ import Quickshell.Hyprland
 import Quickshell.Widgets
 import "../core"
 import "../logic/weather.js" as Weather
+import "../logic/shellprefs.js" as ShellPrefs
 
 // Clock, optional weather, and a popover with a month calendar and a "Set city" field.
 // The weather icon and temperature stay visible while screen sharing; the city name does not
@@ -99,7 +100,7 @@ Island {
             }
         }
         UqText {
-            text: Qt.formatDateTime(clock.date, "HH:mm")
+            text: Qt.formatDateTime(clock.date, ShellPrefs.clockFormat(Settings.values.shell))
         }
         UqText {
             text: Qt.formatDateTime(clock.date, "ddd d MMM")

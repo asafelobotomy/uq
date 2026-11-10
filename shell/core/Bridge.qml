@@ -21,7 +21,7 @@ QtObject {
     signal event(string name, var data)
     signal themeChanged()
     signal settingsChanged(var settings)
-    signal layoutChanged(int ws, string layout)
+    signal layoutChanged(string ws, string layout)
     // Spotlight results: {generation, provider, provider_name, source_dir, items}.
     signal searchResults(var data)
     // logind PrepareForSleep (true before sleep, false on resume) and the session's Lock signal.
@@ -166,7 +166,8 @@ QtObject {
         case "ThemeChanged": themeChanged(); break;
         case "SettingsChanged": settingsChanged(data); break;
         case "LayoutChanged":
-            if (data) layoutChanged(Number(data.workspace), String(data.layout));
+            // The selector uqd stored: "2", "name:web" or "special:x" (GetLayouts' keys).
+            if (data) layoutChanged(String(data.workspace), String(data.layout));
             break;
         case "Weather": weather = data; break;
         case "PublicIp": publicIp = data; break;

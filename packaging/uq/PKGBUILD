@@ -11,8 +11,9 @@ pkgdesc="Themeable Hyprland desktop: shell, theme and layout daemon, CLI and bas
 arch=(x86_64)
 url="https://github.com/asafelobotomy/uq"
 license=(MIT)
-depends=(uq-hyprland-pin dbus glib2 qt6ct gcc-libs 'quickshell>=0.3.1' 'quickshell<0.4' brightnessctl upower systemd noto-fonts-emoji)
-makedepends=(cargo)
+depends=(uq-hyprland-pin dbus glib2 qt6ct gcc-libs 'quickshell>=0.3.1' 'quickshell<0.4' brightnessctl upower systemd noto-fonts-emoji
+  kirigami qqc2-desktop-style qt6-declarative kvantum)
+makedepends=(cargo qt6-base qt6-declarative)
 checkdepends=(lua qt6-declarative)
 optdepends=(
   'kitty: default terminal (SUPER+Return)'
@@ -32,13 +33,14 @@ optdepends=(
   'fprintd: fingerprint unlock'
   'crum-bs: uninstall apps with their leftovers and clean up storage'
 )
+# Keep !lto: rustc links with lld, and makepkg's LTO flags make the cxx-qt C++ objects unreadable to it.
 options=(!lto)
 backup=(etc/pam.d/uq-lock etc/pam.d/uq-lock-fingerprint)
 # The release asset, not GitHub's /archive/ tarball: that one is generated on demand and its bytes
 # (so its checksum) can change. The release workflow uploads exactly this file and prints its sum.
 source=("$pkgname-$_tag.tar.gz::$url/releases/download/v$_tag/$pkgname-$_tag.tar.gz")
 # The release asset's sha256 for this tag; update it with pkgver at each release (docs/releasing.md).
-sha256sums=('e26496850b444ba0f3d5aae0291bbf9db69e403c1354078ccd1d0161d16ab0a1')
+sha256sums=('c87c9d3b7770df91e20b568a3383933371c1c63cbd5750ed8ac12d4069f1ef54')
 
 prepare() {
   cd "$srcdir/$pkgname-$_tag"
@@ -50,7 +52,7 @@ build() {
   cd "$srcdir/$pkgname-$_tag"
   export RUSTUP_TOOLCHAIN=stable
   export CARGO_TARGET_DIR=target
-  cargo build --frozen --release -p uqd -p uqctl
+  cargo build --frozen --release -p uqd -p uqctl -p uq-settings
 }
 
 check() {
@@ -60,10 +62,12 @@ check() {
   cargo test --frozen --release --workspace
   # Shell checks, when the tools are present (qs and qmltestrunner ship with quickshell and Qt).
   scripts/lint-shell.sh
+  scripts/lint-settings.sh
   local qmltest=/usr/lib/qt6/bin/qmltestrunner
   [ -x "$qmltest" ] || qmltest=$(command -v qmltestrunner || true)
   if [ -n "$qmltest" ]; then
     QT_QPA_PLATFORM=offscreen "$qmltest" -import shell -input tests/qml
+    QT_QPA_PLATFORM=offscreen "$qmltest" -import apps/uq-settings/qml -input tests/settings-qml
   fi
 }
 
@@ -81,6 +85,11 @@ package() {
   find lock -type f -exec install -Dm644 {} "$pkgdir/usr/share/uq/{}" \;
   ln -s ../shell/core "$pkgdir/usr/share/uq/lock/core"
   ln -s ../shell/logic "$pkgdir/usr/share/uq/lock/logic"
+  install -Dm755 target/release/uq-settings "$pkgdir/usr/bin/uq-settings"
+  install -Dm644 packaging/org.uq.Settings.desktop "$pkgdir/usr/share/applications/org.uq.Settings.desktop"
+  install -Dm644 packaging/dbus/org.uq.Settings1.service "$pkgdir/usr/share/dbus-1/services/org.uq.Settings1.service"
+  # Plugin settings pages are read from here (one directory per page); none ship with uQ itself.
+  install -dm755 "$pkgdir/usr/share/uq/settings/pages"
   install -Dm644 packaging/uqd.service "$pkgdir/usr/lib/systemd/user/uqd.service"
   install -Dm644 packaging/uq-shell.service "$pkgdir/usr/lib/systemd/user/uq-shell.service"
   install -Dm644 packaging/uq-lock.service "$pkgdir/usr/lib/systemd/user/uq-lock.service"

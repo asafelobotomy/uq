@@ -34,6 +34,8 @@ QtObject {
         function onEvent(name, data) {
             if (name === "UqdUp")
                 root.refresh();
+            else if (name === "SectionChanged")
+                root.refresh();
             else if (name === "LaunchCountsChanged" && data && typeof data === "object")
                 root.launchCounts = data;
             else if (name === "Hello" && data && data.uqd_up)

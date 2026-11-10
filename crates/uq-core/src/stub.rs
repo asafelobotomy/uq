@@ -72,10 +72,12 @@ pub fn install_stub(p: &Paths) -> std::io::Result<StubOutcome> {
 }
 
 /// Per-app config files that pull in uQ's rendered theme: (path, contents to create it with).
-pub fn consumer_files(p: &Paths) -> Vec<(std::path::PathBuf, String)> {
+/// `kvantum` means a Kvantum base theme is installed (see `render::kvantum_base`).
+pub fn consumer_files(p: &Paths, kvantum: bool) -> Vec<(std::path::PathBuf, String)> {
     let cfg = p.hypr_dir.parent().expect("hypr dir has a parent");
     let theme = p.theme_dir.to_string_lossy();
-    vec![
+    let qt_style = if kvantum { "kvantum" } else { "Fusion" };
+    let mut files = vec![
         (
             cfg.join("gtk-3.0/gtk.css"),
             format!("@import url(\"file://{theme}/gtk-3.0/gtk.css\");\n"),
@@ -87,7 +89,7 @@ pub fn consumer_files(p: &Paths) -> Vec<(std::path::PathBuf, String)> {
         (
             cfg.join("qt6ct/qt6ct.conf"),
             format!(
-                "[Appearance]\ncolor_scheme_path={theme}/qt6ct/colors/uq.conf\ncustom_palette=true\nstyle=Fusion\n"
+                "[Appearance]\ncolor_scheme_path={theme}/qt6ct/colors/uq.conf\ncustom_palette=true\nstyle={qt_style}\n"
             ),
         ),
         (
@@ -102,30 +104,109 @@ pub fn consumer_files(p: &Paths) -> Vec<(std::path::PathBuf, String)> {
             cfg.join("alacritty/alacritty.toml"),
             format!("[general]\nimport = [\"{theme}/terminal/alacritty.toml\"]\n"),
         ),
-    ]
+    ];
+    if kvantum {
+        files.push((
+            cfg.join("Kvantum/kvantum.kvconfig"),
+            "[General]\ntheme=uq\n".to_string(),
+        ));
+    }
+    files
+}
+
+/// The qt6ct.conf `uqctl setup --apps` wrote before Kvantum (0.2), byte for byte.
+fn qt6ct_fusion(p: &Paths) -> String {
+    consumer_files(p, false)
+        .into_iter()
+        .find(|(f, _)| f.ends_with("qt6ct/qt6ct.conf"))
+        .expect("qt6ct is a consumer")
+        .1
+}
+
+/// `~/.config/Kvantum/uq`, the link Kvantum looks the uQ theme up through.
+pub fn kvantum_link(p: &Paths) -> std::path::PathBuf {
+    p.hypr_dir
+        .parent()
+        .expect("hypr dir has a parent")
+        .join("Kvantum/uq")
+}
+
+/// Link `~/.config/Kvantum/uq` to the rendered theme. Any existing entry (even a dangling link)
+/// is left alone; a link already pointing at our target counts as installed.
+fn install_kvantum_link(p: &Paths) -> std::io::Result<(std::path::PathBuf, StubOutcome)> {
+    let link = kvantum_link(p);
+    let target = p.theme_dir.join("Kvantum/uq");
+    let outcome = match std::fs::symlink_metadata(&link) {
+        Ok(meta) => {
+            if meta.file_type().is_symlink() && std::fs::read_link(&link)? == target {
+                StubOutcome::Installed
+            } else {
+                StubOutcome::AlreadyPresent
+            }
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            if let Some(parent) = link.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            std::os::unix::fs::symlink(&target, &link)?;
+            StubOutcome::Installed
+        }
+        Err(e) => return Err(e),
+    };
+    Ok((link, outcome))
 }
 
 /// Create each consumer config that doesn't exist. An existing file counts as `Installed` if it
-/// already references uQ's theme directory; otherwise it is left alone (`AlreadyPresent`).
-pub fn install_consumers(p: &Paths) -> std::io::Result<Vec<(std::path::PathBuf, StubOutcome)>> {
+/// already references uQ's theme directory (and, for qt6ct with `kvantum`, sets
+/// `style=kvantum`); otherwise it is left alone (`AlreadyPresent`). The one exception is 0.2's
+/// untouched Fusion qt6ct.conf, which is rewritten to use Kvantum when `kvantum`.
+/// With `kvantum`, also links `~/.config/Kvantum/uq` (reported last).
+pub fn install_consumers(
+    p: &Paths,
+    kvantum: bool,
+) -> std::io::Result<Vec<(std::path::PathBuf, StubOutcome)>> {
     let theme = p.theme_dir.to_string_lossy().into_owned();
     let mut out = Vec::new();
-    for (path, content) in consumer_files(p) {
+    for (path, content) in consumer_files(p, kvantum) {
+        let is_kvconfig = path.ends_with("Kvantum/kvantum.kvconfig");
+        let is_qt6ct = path.ends_with("qt6ct/qt6ct.conf");
         let marker = content
             .lines()
             .find(|l| l.contains(&theme))
             .unwrap_or_default()
             .to_string();
+        let is_ours = |existing: &str| {
+            if is_kvconfig {
+                existing.lines().any(|l| l.trim() == "theme=uq")
+            } else if is_qt6ct && kvantum {
+                existing.contains(&marker) && existing.lines().any(|l| l.trim() == "style=kvantum")
+            } else {
+                !marker.is_empty() && existing.contains(&marker)
+            }
+        };
         let outcome = match std::fs::read_to_string(&path) {
-            Ok(existing) if existing.contains(&marker) => StubOutcome::Installed,
+            Ok(existing) if is_ours(&existing) => StubOutcome::Installed,
+            // 0.2's untouched Fusion qt6ct.conf: switch it to Kvantum now that a base exists.
+            Ok(existing) if is_qt6ct && kvantum && existing == qt6ct_fusion(p) => {
+                atomic_write(&path, &content)?;
+                StubOutcome::Installed
+            }
             Ok(_) => StubOutcome::AlreadyPresent,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 atomic_write(&path, &content)?;
                 StubOutcome::Installed
             }
-            Err(e) => return Err(e),
+            Err(e) => {
+                return Err(std::io::Error::new(
+                    e.kind(),
+                    format!("{}: {e}", path.display()),
+                ));
+            }
         };
         out.push((path, outcome));
+    }
+    if kvantum {
+        out.push(install_kvantum_link(p)?);
     }
     Ok(out)
 }
@@ -166,7 +247,7 @@ mod tests {
     #[test]
     fn consumer_files_point_at_theme_dir() {
         let p = Paths::under(Path::new("/r"));
-        let files = consumer_files(&p);
+        let files = consumer_files(&p, false);
         let get = |rel: &str| {
             files
                 .iter()
@@ -207,7 +288,7 @@ mod tests {
         fs::create_dir_all(kitty.parent().unwrap()).unwrap();
         fs::write(&kitty, "font_size 12\n").unwrap();
         let foot = p.hypr_dir.parent().unwrap().join("foot/foot.ini");
-        let foot_line = consumer_files(&p)
+        let foot_line = consumer_files(&p, false)
             .into_iter()
             .find(|(f, _)| *f == foot)
             .unwrap()
@@ -215,7 +296,7 @@ mod tests {
         fs::create_dir_all(foot.parent().unwrap()).unwrap();
         fs::write(&foot, format!("# mine\n{foot_line}")).unwrap();
 
-        let results = install_consumers(&p).unwrap();
+        let results = install_consumers(&p, false).unwrap();
         let outcome = |f: &Path| results.iter().find(|(path, _)| path == f).unwrap().1;
         assert_eq!(outcome(&kitty), StubOutcome::AlreadyPresent);
         assert_eq!(fs::read_to_string(&kitty).unwrap(), "font_size 12\n");
@@ -224,7 +305,7 @@ mod tests {
             StubOutcome::Installed,
             "existing file already includes uQ"
         );
-        for (path, content) in consumer_files(&p) {
+        for (path, content) in consumer_files(&p, false) {
             if path != kitty && path != foot {
                 assert_eq!(fs::read_to_string(&path).unwrap(), content, "{path:?}");
             }
@@ -283,5 +364,149 @@ mod tests {
         let p = Paths::under(dir.path());
         install_stub(&p).unwrap();
         assert_eq!(install_stub(&p).unwrap(), StubOutcome::Installed);
+    }
+
+    #[test]
+    fn kvantum_files_only_with_base() {
+        let p = Paths::under(Path::new("/r"));
+        let has = |k| {
+            consumer_files(&p, k)
+                .iter()
+                .any(|(f, _)| f.ends_with("Kvantum/kvantum.kvconfig"))
+        };
+        assert!(!has(false));
+        assert!(has(true));
+        let (_, content) = consumer_files(&p, true)
+            .into_iter()
+            .find(|(f, _)| f.ends_with("Kvantum/kvantum.kvconfig"))
+            .unwrap();
+        assert_eq!(content, "[General]\ntheme=uq\n");
+    }
+
+    #[test]
+    fn qt6ct_style_follows_kvantum() {
+        let p = Paths::under(Path::new("/r"));
+        let qt = |k| {
+            consumer_files(&p, k)
+                .into_iter()
+                .find(|(f, _)| f.ends_with("qt6ct/qt6ct.conf"))
+                .unwrap()
+                .1
+        };
+        assert!(qt(true).contains("style=kvantum\n"));
+        assert!(qt(false).contains("style=Fusion\n"));
+    }
+
+    #[test]
+    fn kvantum_symlink_created_once_and_existing_kept() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = Paths::under(dir.path());
+        let link = kvantum_link(&p);
+        let target = p.theme_dir.join("Kvantum/uq");
+
+        let r = install_consumers(&p, true).unwrap();
+        assert_eq!(r.last().unwrap(), &(link.clone(), StubOutcome::Installed));
+        assert_eq!(fs::read_link(&link).unwrap(), target);
+        let r = install_consumers(&p, true).unwrap();
+        assert_eq!(r.last().unwrap().1, StubOutcome::Installed);
+        assert!(
+            install_consumers(&p, false)
+                .unwrap()
+                .iter()
+                .all(|(f, _)| *f != link)
+        );
+
+        // A real directory, a foreign link and a dangling link are all left alone.
+        fs::remove_file(&link).unwrap();
+        fs::create_dir(&link).unwrap();
+        assert_eq!(
+            install_consumers(&p, true).unwrap().last().unwrap().1,
+            StubOutcome::AlreadyPresent
+        );
+        assert!(link.is_dir() && !link.is_symlink());
+        fs::remove_dir(&link).unwrap();
+        std::os::unix::fs::symlink("/nonexistent/elsewhere", &link).unwrap();
+        assert_eq!(
+            install_consumers(&p, true).unwrap().last().unwrap().1,
+            StubOutcome::AlreadyPresent
+        );
+        assert_eq!(
+            fs::read_link(&link).unwrap(),
+            Path::new("/nonexistent/elsewhere")
+        );
+    }
+
+    #[test]
+    fn existing_foreign_kvantum_config_is_kept() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = Paths::under(dir.path());
+        let kv = p
+            .hypr_dir
+            .parent()
+            .unwrap()
+            .join("Kvantum/kvantum.kvconfig");
+        fs::create_dir_all(kv.parent().unwrap()).unwrap();
+        fs::write(&kv, "[General]\ntheme=KvArc\n").unwrap();
+        let r = install_consumers(&p, true).unwrap();
+        assert_eq!(
+            r.iter().find(|(f, _)| *f == kv).unwrap().1,
+            StubOutcome::AlreadyPresent
+        );
+        assert_eq!(fs::read_to_string(&kv).unwrap(), "[General]\ntheme=KvArc\n");
+        fs::write(&kv, "[General]\ntheme=uq\n").unwrap();
+        let r = install_consumers(&p, true).unwrap();
+        assert_eq!(
+            r.iter().find(|(f, _)| *f == kv).unwrap().1,
+            StubOutcome::Installed
+        );
+    }
+
+    #[test]
+    fn old_fusion_qt6ct_moves_to_kvantum() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = Paths::under(dir.path());
+        let qt = |k| {
+            consumer_files(&p, k)
+                .into_iter()
+                .find(|(f, _)| f.ends_with("qt6ct/qt6ct.conf"))
+                .unwrap()
+        };
+        let (path, fusion) = qt(false);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, &fusion).unwrap();
+        // Without a Kvantum base the 0.2 file is already right.
+        let r = install_consumers(&p, false).unwrap();
+        assert_eq!(
+            r.iter().find(|(f, _)| *f == path).unwrap().1,
+            StubOutcome::Installed
+        );
+        assert_eq!(fs::read_to_string(&path).unwrap(), fusion);
+        // With one, the untouched 0.2 template is rewritten to use Kvantum.
+        let r = install_consumers(&p, true).unwrap();
+        assert_eq!(
+            r.iter().find(|(f, _)| *f == path).unwrap().1,
+            StubOutcome::Installed
+        );
+        assert_eq!(fs::read_to_string(&path).unwrap(), qt(true).1);
+    }
+
+    #[test]
+    fn edited_fusion_qt6ct_is_kept() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = Paths::under(dir.path());
+        let (path, fusion) = consumer_files(&p, false)
+            .into_iter()
+            .find(|(f, _)| f.ends_with("qt6ct/qt6ct.conf"))
+            .unwrap();
+        let edited = format!("{fusion}icon_theme=Papirus\n");
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, &edited).unwrap();
+        let r = install_consumers(&p, true).unwrap();
+        assert_eq!(
+            r.iter().find(|(f, _)| *f == path).unwrap().1,
+            StubOutcome::AlreadyPresent,
+            "a Fusion file the user changed is not a Kvantum install"
+        );
+        assert_eq!(fs::read_to_string(&path).unwrap(), edited);
     }
 }

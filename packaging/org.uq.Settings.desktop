@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=uQ Settings
+Comment=Appearance, wallpaper and other uQ desktop settings
+Exec=/usr/bin/uq-settings
+Icon=preferences-desktop
+Terminal=false
+Categories=Settings;DesktopSettings;Qt;
+Keywords=settings;preferences;theme;wallpaper;appearance;
+StartupNotify=false

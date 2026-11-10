@@ -2,48 +2,18 @@
 
 use futures_util::StreamExt;
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
-use std::process::{Child, Command, Stdio};
 use std::sync::Arc;
+use uq_core::test_bus::private_bus;
 use uqd::compositor::fake::FakeCompositor;
 use uqd::dbus::{IFACE, NAME, PATH, serve};
 use uqd::service::Desktop;
 use uqd::system::FakeSystem;
 
-struct Bus {
-    child: Child,
-    address: String,
-}
-
-impl Drop for Bus {
-    fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
-    }
-}
-
-fn private_bus(dir: &std::path::Path) -> Bus {
-    let mut child = Command::new("dbus-daemon")
-        .args(["--session", "--nofork", "--print-address"])
-        .arg(format!("--address=unix:path={}", dir.join("bus").display()))
-        .stdout(Stdio::piped())
-        .spawn()
-        .expect("dbus-daemon");
-    let mut line = String::new();
-    BufReader::new(child.stdout.take().unwrap())
-        .read_line(&mut line)
-        .unwrap();
-    Bus {
-        child,
-        address: line.trim().to_string(),
-    }
-}
-
 #[tokio::test]
 async fn dbus_round_trip() {
     let dir = tempfile::tempdir().unwrap();
-    let bus = private_bus(dir.path());
+    let bus = private_bus();
 
     let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     let mut paths = uq_core::paths::Paths::under(&dir.path().join("root"));
@@ -162,7 +132,7 @@ async fn dbus_round_trip() {
 #[tokio::test]
 async fn get_schedule_round_trips() {
     let dir = tempfile::tempdir().unwrap();
-    let bus = private_bus(dir.path());
+    let bus = private_bus();
     let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     let mut paths = uq_core::paths::Paths::under(&dir.path().join("root"));
     paths.themes_dir = repo.join("themes");
@@ -202,4 +172,119 @@ async fn get_schedule_round_trips() {
     let got: serde_json::Value = serde_json::from_str(&got).unwrap();
     assert_eq!(got["mode"], "sun");
     assert_eq!(got["lat"], 51.5);
+}
+
+#[tokio::test]
+async fn section_round_trip_over_dbus() {
+    let dir = tempfile::tempdir().unwrap();
+    let bus = private_bus();
+    let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut paths = uq_core::paths::Paths::under(&dir.path().join("root"));
+    paths.themes_dir = repo.join("themes");
+    paths.templates_dir = repo.join("templates");
+    let desktop = Desktop::new(
+        paths,
+        Arc::new(FakeCompositor::running()),
+        Arc::new(FakeSystem::default()),
+    )
+    .unwrap();
+    let _server = serve(
+        zbus::connection::Builder::address(bus.address.as_str()).unwrap(),
+        desktop,
+    )
+    .await
+    .unwrap();
+    let client = zbus::connection::Builder::address(bus.address.as_str())
+        .unwrap()
+        .build()
+        .await
+        .unwrap();
+    let proxy = zbus::Proxy::new(&client, NAME, PATH, IFACE).await.unwrap();
+    let mut changed = proxy.receive_signal("SectionChanged").await.unwrap();
+
+    let json = r#"{"outputs":{"*":{"image":"/a.png","fit":"tile"}}}"#;
+    let () = proxy
+        .call("SetSection", &("wallpaper", json))
+        .await
+        .unwrap();
+    let got: String = proxy.call("GetSection", &("wallpaper",)).await.unwrap();
+    let got: serde_json::Value = serde_json::from_str(&got).unwrap();
+    assert_eq!(got["outputs"]["*"]["image"], "/a.png");
+    assert_eq!(got["outputs"]["*"]["fit"], "tile");
+
+    let msg = tokio::time::timeout(std::time::Duration::from_secs(5), changed.next())
+        .await
+        .unwrap()
+        .unwrap();
+    let (domain, body): (String, String) = msg.body().deserialize().unwrap();
+    assert_eq!(domain, "wallpaper");
+    assert!(body.contains("/a.png"), "{body}");
+
+    let err = proxy
+        .call::<_, _, ()>("SetSection", &("appearance", r#"{"font_size":2}"#))
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("InvalidSetting"), "{err}");
+    let err = proxy
+        .call::<_, _, String>("GetSection", &("bogus",))
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("InvalidSetting"), "{err}");
+}
+
+#[tokio::test]
+async fn look_section_round_trip_over_dbus() {
+    let dir = tempfile::tempdir().unwrap();
+    let bus = private_bus();
+    let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut paths = uq_core::paths::Paths::under(&dir.path().join("root"));
+    paths.themes_dir = repo.join("themes");
+    paths.templates_dir = repo.join("templates");
+    let generated = paths.generated_lua.clone();
+    let desktop = Desktop::new(
+        paths,
+        Arc::new(FakeCompositor::running()),
+        Arc::new(FakeSystem::default()),
+    )
+    .unwrap();
+    let _server = serve(
+        zbus::connection::Builder::address(bus.address.as_str()).unwrap(),
+        desktop,
+    )
+    .await
+    .unwrap();
+    let client = zbus::connection::Builder::address(bus.address.as_str())
+        .unwrap()
+        .build()
+        .await
+        .unwrap();
+    let proxy = zbus::Proxy::new(&client, NAME, PATH, IFACE).await.unwrap();
+    let mut changed = proxy.receive_signal("SectionChanged").await.unwrap();
+
+    let () = proxy
+        .call("SetSection", &("look", r#"{"gaps_in":9,"blur_size":5}"#))
+        .await
+        .unwrap();
+    let got: String = proxy.call("GetSection", &("look",)).await.unwrap();
+    let got: serde_json::Value = serde_json::from_str(&got).unwrap();
+    assert_eq!(got["gaps_in"], 9);
+    assert!(
+        std::fs::read_to_string(&generated)
+            .unwrap()
+            .contains("gaps_in = 9")
+    );
+
+    let msg = tokio::time::timeout(std::time::Duration::from_secs(5), changed.next())
+        .await
+        .unwrap()
+        .unwrap();
+    let (domain, body): (String, String) = msg.body().deserialize().unwrap();
+    assert_eq!(domain, "look");
+    assert!(body.contains("\"gaps_in\":9"), "{body}");
+
+    let err = proxy
+        .call::<_, _, ()>("SetSection", &("look", r#"{"gaps_in":999}"#))
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("InvalidSetting"), "{err}");
 }

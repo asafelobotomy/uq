@@ -119,6 +119,36 @@ async fn bridge_settings_round_trip() {
 }
 
 #[tokio::test]
+async fn section_changed_is_forwarded() {
+    let bus = private_bus();
+    let dir = tempfile::tempdir().unwrap();
+    let _uqd = serve_uqd(&bus, dir.path()).await;
+    let mut b = Bridge::start(&bus);
+    b.next().await;
+
+    // The typed client against the real DesktopIface, on the same private bus.
+    let conn = zbus::connection::Builder::address(bus.address.as_str())
+        .unwrap()
+        .build()
+        .await
+        .unwrap();
+    let proxy = uq_core::client::DesktopProxy::new(&conn).await.unwrap();
+    let mut section =
+        serde_json::from_str::<Value>(&proxy.get_section("appearance").await.unwrap()).unwrap();
+    section["font_size"] = json!(14);
+    proxy
+        .set_section("appearance", &section.to_string())
+        .await
+        .unwrap();
+    let ev = b.event("SectionChanged").await;
+    assert_eq!(ev["domain"], "appearance", "{ev}");
+    assert_eq!(ev["value"]["font_size"], 14, "{ev}");
+    let got: Value = serde_json::from_str(&proxy.get_section("appearance").await.unwrap()).unwrap();
+    assert_eq!(got["font_size"], 14);
+    assert!(!proxy.get_theme().await.unwrap().1.is_empty());
+}
+
+#[tokio::test]
 async fn uqd_down_then_up_events() {
     let bus = private_bus();
     let dir = tempfile::tempdir().unwrap();
