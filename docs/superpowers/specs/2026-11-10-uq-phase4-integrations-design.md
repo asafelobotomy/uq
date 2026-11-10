@@ -1,7 +1,8 @@
 # uQ Phase 4: repo integrations design
 
-Date: 2026-11-10 · Status: draft for review (written from the roadmap without a brainstorming
-session; the choices marked **Decision** in §9 are the ones to confirm)
+Date: 2026-11-10 · Status: approved 2026-11-10; the decisions in §9 are confirmed with the
+recommended options. Ordering of the companion-app pages is reconciled with the Settings
+enhancements spec in §10.
 Parent spec: `2026-11-08-uq-desktop-design.md` (§2.4 extension points, §3 components per repo,
 §7 phase 4). Builds on: `2026-11-08-uq-phase2-shell-design.md` (launcher provider API, bridge) and
 `2026-11-08-uq-phase3-settings-design.md` (plugin pages, §2.5). Roadmap: M2 in
@@ -462,7 +463,9 @@ templates/widget/, templates/provider/
 docs/integrating.md
 ```
 
-## 9. Decisions to confirm
+## 9. Decisions (confirmed 2026-11-10)
+
+The user approved the spec with each recommended option below.
 
 1. **In-repo `uq/` folders, installed by each app's own package** (§2.6), instead of a
    `uq-<name>` adapter per repo. Simpler to keep in step with each app; the cost is that each app
@@ -494,6 +497,26 @@ docs/integrating.md
 1. scale_tail (and its AUR package). 2. appOFholding. 3. hauler. 4. emobie (with `uq-tokens`).
 5. XZram. 6. scdr. 7. crumBS. 8. oysterAV. 9. romforge (with `uq-tokens`, AUR package and the
    game-mode rule). 10. `uq-tokens` in SonicSound, noveleditor and gutcheck.
+
+**Companion pages move earlier.** `2026-11-10-uq-settings-enhancements-design.md` (§8) moves
+five settings pages ahead of the rest of Phase 4: Scheduling (scdr), Storage and cleanup (crumBS),
+Notifications (noti-fi), Memory and swap (XZram) and Tailscale (scale_tail), in that order. To
+make that possible:
+
+- the `command` helper and the `[[command]]`/`[requires]` keys in `page.toml` (§2.3), plus live
+  page discovery, are built with Phase 3 slice 6 (the plugin-page SDK), ahead of Phase 3 slices
+  3–5, instead of in slice 0 here;
+- those five pages ship from each repo's `uq/` folder (§2.6) as soon as that lands, with the
+  manifest and security rules of this spec unchanged;
+- noti-fi's page is added to this phase's scope (design §3 lists it; §3 above did not);
+- in slices 1 (scale_tail), 5 (XZram), 6 (scdr) and 7 (crumBS) here, the settings page is already
+  done, so each slice covers only what remains: scale_tail's quick-settings widget and AUR
+  package, crumBS's "Uninstall…" app action, and the gate test for each. Slices 5 and 6 reduce
+  to the gate test and release.
+
+Slice 0 keeps everything else (widget host, bridge calls, activatable providers, app actions,
+`uqctl integrations`, templates, docs, `uq-tokens`, gate test). Where the two specs disagree on
+order, the Settings enhancements spec wins; nothing else in this spec changes.
 
 Slices 1–10 each end with a release of the app's repo and a `v0.4.x` uQ tag when uQ itself
 changed (optdepends, docs). They can run in parallel once slice 0 has shipped, since each touches a

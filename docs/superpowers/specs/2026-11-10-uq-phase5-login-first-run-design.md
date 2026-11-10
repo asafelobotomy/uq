@@ -1,7 +1,7 @@
 # uQ Phase 5: login and first run design
 
-Date: 2026-11-10 · Status: draft for review (written from the roadmap without a brainstorming
-session; the choices marked **Decision** in §9 are the ones to confirm)
+Date: 2026-11-10 · Status: approved 2026-11-10; the decisions in §9 are confirmed with the
+recommended options.
 Parent spec: `2026-11-08-uq-desktop-design.md` (§1 success criteria, §3 bindle, §7 phase 5).
 Builds on: Phase 2 (lock screen, `lock/Auth.qml`), Phase 3 (`uq-settings`,
 `uq-settings-helper`, the Users page), and the roadmap's M0b (bindle installs uQ through its
@@ -298,7 +298,9 @@ and 4.
   3. Wrong password, faillock lockout, expired password, auto-login on and off, a broken greeter
      (rename a QML file) falling back to `agreety`.
 
-## 9. Decisions to confirm
+## 9. Decisions (confirmed 2026-11-10)
+
+The user approved the spec with each recommended option below.
 
 1. **The greeter runs on Hyprland** with a fixed config, not on `cage`. It's already installed and
    pinned, and handles multi-monitor the same way as the session.
