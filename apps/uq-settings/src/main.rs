@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::Parser;
-use cxx_qt_lib::{QGuiApplication, QQmlApplicationEngine, QQuickStyle, QString, QUrl};
+use cxx_qt_lib::{QQuickStyle, QString};
 
 mod app;
 mod instance;
@@ -21,6 +21,7 @@ mod test_bus;
 mod window;
 
 use app::Event;
+use session::StartError;
 
 #[derive(Parser)]
 #[command(version, about = "uQ Settings")]
@@ -68,10 +69,13 @@ fn main() -> ExitCode {
         None => match runtime.block_on(session::start(&args.page, &args.setting)) {
             Ok(Some(session)) => Some(session),
             Ok(None) => return ExitCode::SUCCESS, // the running instance shows the page
-            Err(e) => {
-                // No bus: run alone, with uqd counted as down.
+            Err(StartError::NoBus(e)) => {
                 eprintln!("uq-settings: no session bus ({e}); running without single instance");
                 None
+            }
+            Err(StartError::Claim(e)) => {
+                eprintln!("uq-settings: couldn't claim or reach org.uq.Settings1: {e}");
+                return ExitCode::FAILURE;
             }
         },
     };
@@ -82,20 +86,15 @@ fn main() -> ExitCode {
         QQuickStyle::set_style(&QString::from("org.kde.desktop"));
     }
 
-    let mut qapp = QGuiApplication::new();
-    window::ffi::uqs_describe_application(env!("CARGO_PKG_VERSION"));
-    let mut engine = QQmlApplicationEngine::new();
-    if let Some(engine) = engine.as_mut() {
-        engine.load(&QUrl::from("qrc:/qt/qml/org/uq/settings/qml/Main.qml"));
-    }
-    if !window::ffi::uqs_has_window() {
-        eprintln!("uq-settings: the window couldn't be created (is Kirigami installed?)");
-        return ExitCode::FAILURE;
-    }
-    let code = qapp.as_mut().map_or(1, |a| a.exec());
-    if code == 0 {
-        ExitCode::SUCCESS
-    } else {
-        ExitCode::FAILURE
+    match window::ffi::uqs_run(
+        env!("CARGO_PKG_VERSION"),
+        "qrc:/qt/qml/org/uq/settings/qml/Main.qml",
+    ) {
+        0 => ExitCode::SUCCESS,
+        -1 => {
+            eprintln!("uq-settings: the window couldn't be created (is Kirigami installed?)");
+            ExitCode::FAILURE
+        }
+        _ => ExitCode::FAILURE,
     }
 }

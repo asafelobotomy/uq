@@ -8,15 +8,12 @@ import org.uq.settings
 Kirigami.ApplicationWindow {
     id: root
 
-    readonly property var pageFiles: ({
-        appearance: "pages/AppearancePage.qml",
-        wallpaper: "pages/WallpaperPage.qml"
-    })
+    readonly property var pages: JSON.parse(App.pagesJson || "[]")
 
     function showCurrent() {
-        const file = pageFiles[App.page];
-        if (file)
-            stack.replace(null, Qt.resolvedUrl(file));
+        const page = root.pages.find(p => p.id === App.page);
+        if (page)
+            stack.replace(null, Qt.resolvedUrl(page.qml));
     }
 
     title: "uQ Settings"
@@ -39,7 +36,7 @@ Kirigami.ApplicationWindow {
                 id: sidebar
                 Layout.fillHeight: true
                 Layout.preferredWidth: Kirigami.Units.gridUnit * 12
-                pages: JSON.parse(App.pagesJson || "[]")
+                pages: root.pages
                 current: App.page
                 focus: true
                 onChosen: pageId => App.showPage(pageId, "")
@@ -76,7 +73,7 @@ Kirigami.ApplicationWindow {
         id: shots
 
         property int step: 0
-        readonly property var ids: JSON.parse(App.pagesJson || "[]").map(p => p.id)
+        readonly property var ids: root.pages.map(p => p.id)
 
         interval: 600
         repeat: true

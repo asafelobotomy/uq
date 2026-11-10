@@ -16,20 +16,40 @@ pub struct Session {
     _conn: zbus::Connection,
 }
 
+/// Why [`start`] failed.
+#[derive(Debug)]
+pub enum StartError {
+    /// No session bus: run alone, with uqd counted as down.
+    NoBus(zbus::Error),
+    /// The bus works but the name couldn't be claimed or the call forwarded: running anyway
+    /// would make a second window that no later launch can reach.
+    Claim(zbus::Error),
+}
+
 /// Connect, serve and claim. `Ok(None)`: another instance owns the name and was sent
 /// `ShowPage(page, setting)`, so this process should exit.
-pub async fn start(page: &str, setting: &str) -> zbus::Result<Option<Session>> {
-    let conn = zbus::Connection::session().await?;
+pub async fn start(page: &str, setting: &str) -> Result<Option<Session>, StartError> {
+    let conn = zbus::Connection::session()
+        .await
+        .map_err(StartError::NoBus)?;
+    claim_on(&conn, page, setting)
+        .await
+        .map_err(StartError::Claim)
+        .map(|owner| owner.then_some(Session { _conn: conn }))
+}
+
+/// Serve, claim, and when this process is the owner, start following uqd. `true` = owner.
+async fn claim_on(conn: &zbus::Connection, page: &str, setting: &str) -> zbus::Result<bool> {
     let on_show: instance::ShowHandler =
         Arc::new(|page, setting| app::post(Event::Show { page, setting }));
-    instance::serve(&conn, on_show).await?;
-    if instance::claim(&conn, page, setting).await? == Claim::Forwarded {
-        return Ok(None);
+    instance::serve(conn, on_show).await?;
+    if instance::claim(conn, page, setting).await? == Claim::Forwarded {
+        return Ok(false);
     }
-    if let Err(e) = watch_owner(&conn, DESKTOP_NAME, |up| app::post(Event::UqdUp(up))).await {
+    if let Err(e) = watch_owner(conn, DESKTOP_NAME, |up| app::post(Event::UqdUp(up))).await {
         eprintln!("uq-settings: can't follow {DESKTOP_NAME}: {e}");
     }
-    Ok(Some(Session { _conn: conn }))
+    Ok(true)
 }
 
 /// Report whether `name` has an owner now, then on every `NameOwnerChanged` for it, from a task

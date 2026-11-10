@@ -88,35 +88,49 @@ pub enum Event {
     ScreenshotDir(String),
 }
 
-#[derive(Default)]
-struct Inbox {
-    qt: Option<CxxQtThread<App>>,
-    pending: Vec<Event>,
+/// Where events go: kept until `App` exists, then queued to it, then dropped once it is gone.
+enum Route<T> {
+    Waiting(Vec<Event>),
+    Live(T),
+    Gone,
 }
 
-static INBOX: Mutex<Inbox> = Mutex::new(Inbox {
-    qt: None,
-    pending: Vec::new(),
-});
+impl<T> Route<T> {
+    /// Deliver or keep `event`; `send` returns false when the target is gone.
+    fn post(&mut self, event: Event, send: impl FnOnce(&T, Event) -> bool) {
+        match self {
+            Route::Waiting(pending) => pending.push(event),
+            Route::Live(target) => {
+                if !send(target, event) {
+                    eprintln!("uq-settings: the window is gone; dropping D-Bus events");
+                    *self = Route::Gone;
+                }
+            }
+            Route::Gone => {}
+        }
+    }
+
+    /// The target exists: return what was kept for it.
+    fn go_live(&mut self, target: T) -> Vec<Event> {
+        match std::mem::replace(self, Route::Live(target)) {
+            Route::Waiting(pending) => pending,
+            _ => Vec::new(),
+        }
+    }
+}
+
+static INBOX: Mutex<Route<CxxQtThread<App>>> = Mutex::new(Route::Waiting(Vec::new()));
 
 /// Hand `event` to `App` on the Qt thread; before `App` exists, keep it for [`App::initialize`].
 pub fn post(event: Event) {
     let mut inbox = INBOX.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some(qt) = &inbox.qt {
-        let ev = event.clone();
-        if qt.queue(move |app| app.apply(ev)).is_ok() {
-            return;
-        }
-        inbox.qt = None; // the App is gone; nothing will read this
-    }
-    inbox.pending.push(event);
+    inbox.post(event, |qt, ev| qt.queue(move |app| app.apply(ev)).is_ok());
 }
 
 impl cxx_qt::Initialize for App {
     fn initialize(mut self: Pin<&mut Self>) {
         let mut inbox = INBOX.lock().unwrap_or_else(|e| e.into_inner());
-        inbox.qt = Some(self.qt_thread());
-        for event in std::mem::take(&mut inbox.pending) {
+        for event in inbox.go_live(self.qt_thread()) {
             self.as_mut().apply(event);
         }
     }
@@ -167,6 +181,26 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn route_keeps_then_sends_then_drops() {
+        let ev = |n: bool| Event::UqdUp(n);
+        let mut route: Route<()> = Route::Waiting(Vec::new());
+        route.post(ev(true), |_, _| panic!("not live yet"));
+        assert_eq!(route.go_live(()), [ev(true)]);
+
+        let mut sent = Vec::new();
+        route.post(ev(false), |_, e| {
+            sent.push(e);
+            true
+        });
+        assert_eq!(sent, [ev(false)]);
+
+        route.post(ev(true), |_, _| false); // the App is gone
+        assert!(matches!(route, Route::Gone));
+        route.post(ev(true), |_, _| panic!("gone: dropped, not sent"));
+        assert!(matches!(route, Route::Gone));
+    }
 
     #[test]
     fn target_page_keeps_current_for_empty_and_unknown() {

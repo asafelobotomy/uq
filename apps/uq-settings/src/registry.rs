@@ -58,6 +58,8 @@ pub struct PageInfo {
     /// A Freedesktop icon name.
     pub icon: &'static str,
     pub category: Category,
+    /// The page's QML file, relative to `qml/Main.qml`.
+    pub qml: &'static str,
     pub settings: &'static [SearchEntry],
 }
 
@@ -67,6 +69,7 @@ static CORE_PAGES: [PageInfo; 2] = [
         name: "Appearance",
         icon: "preferences-desktop-theme",
         category: Category::Personal,
+        qml: "pages/AppearancePage.qml",
         settings: &[],
     },
     PageInfo {
@@ -74,6 +77,7 @@ static CORE_PAGES: [PageInfo; 2] = [
         name: "Wallpaper",
         icon: "preferences-desktop-wallpaper",
         category: Category::Personal,
+        qml: "pages/WallpaperPage.qml",
         settings: &[],
     },
 ];
@@ -87,7 +91,8 @@ pub fn find(id: &str) -> Option<&'static PageInfo> {
     core_pages().iter().find(|p| p.id == id)
 }
 
-/// The sidebar model: every page in category order, each with its category's heading.
+/// The sidebar model: every page in category order, each with its category's heading and
+/// its QML file.
 pub fn pages_json() -> String {
     let pages: Vec<_> = core_pages()
         .iter()
@@ -98,6 +103,7 @@ pub fn pages_json() -> String {
                 "icon": p.icon,
                 "category": p.category,
                 "categoryName": p.category.label(),
+                "qml": p.qml,
             })
         })
         .collect();
@@ -154,5 +160,6 @@ mod tests {
         assert_eq!(ids, ["appearance", "wallpaper"]);
         assert_eq!(v[0]["category"], "personal");
         assert_eq!(v[0]["categoryName"], "Personal");
+        assert_eq!(v[1]["qml"], "pages/WallpaperPage.qml");
     }
 }

@@ -6,7 +6,7 @@
 
 use std::sync::Arc;
 
-use uq_core::client::{SETTINGS_NAME, SETTINGS_PATH, SettingsAppProxy, no_owner};
+use uq_core::client::{SETTINGS_NAME, SETTINGS_PATH, SettingsAppProxy};
 use zbus::fdo::{RequestNameFlags, RequestNameReply};
 
 /// Where `ShowPage` calls go: in the app, onto the Qt thread.
@@ -40,10 +40,16 @@ pub async fn serve(conn: &zbus::Connection, on_show: ShowHandler) -> zbus::Resul
         .map(drop)
 }
 
+const PASSES: usize = 3;
+
 /// Take `org.uq.Settings1`, or hand `page`/`setting` to whoever holds it.
+///
+/// A forwarded call can fail because the owner quit or crashed after the name was found taken
+/// (`ServiceUnknown`, or `NoReply` once the daemon had routed the call). Any such failure is
+/// retried while passes remain, so a vanished owner never leaves us unclaimed.
 pub async fn claim(conn: &zbus::Connection, page: &str, setting: &str) -> zbus::Result<Claim> {
-    // Each pass either wins the name, forwards, or finds the owner gone and tries again.
-    for _ in 0..3 {
+    let mut last = None;
+    for _ in 0..PASSES {
         // zbus reports `Exists` (someone else holds the name) as `Error::NameTaken`.
         match conn
             .request_name_with_flags(SETTINGS_NAME, RequestNameFlags::DoNotQueue.into())
@@ -59,13 +65,11 @@ pub async fn claim(conn: &zbus::Connection, page: &str, setting: &str) -> zbus::
         let proxy = SettingsAppProxy::new(conn).await?;
         match proxy.show_page(page, setting).await {
             Ok(()) => return Ok(Claim::Forwarded),
-            Err(e) if no_owner(&e) => continue,
-            Err(e) => return Err(e),
+            Err(e) => last = Some(e),
         }
     }
-    Err(zbus::Error::Failure(format!(
-        "{SETTINGS_NAME} kept changing owner"
-    )))
+    Err(last
+        .unwrap_or_else(|| zbus::Error::Failure(format!("{SETTINGS_NAME} kept changing owner"))))
 }
 
 #[cfg(test)]
@@ -127,5 +131,29 @@ mod tests {
 
         let (_second, _, c2) = instance(&bus, "appearance").await;
         assert_eq!(c2, Claim::Owner);
+    }
+
+    /// The owner dies after the daemon routed our `ShowPage` to it: the call fails with
+    /// `NoReply`, the name is free again, and the next pass takes it.
+    #[tokio::test]
+    async fn owner_dying_mid_forward_means_owner() {
+        use futures_util::StreamExt;
+        let bus = private_bus();
+        let owner = connect(&bus).await;
+        owner.request_name(SETTINGS_NAME).await.unwrap();
+        let mut stream = zbus::MessageStream::from(&owner);
+        let dies = tokio::spawn(async move {
+            while let Some(Ok(msg)) = stream.next().await {
+                if msg.header().member().is_some_and(|m| m == "ShowPage") {
+                    break;
+                }
+            }
+            drop(stream);
+            owner.close().await.unwrap();
+        });
+
+        let (_second, _, c2) = instance(&bus, "wallpaper").await;
+        assert_eq!(c2, Claim::Owner);
+        dies.await.unwrap();
     }
 }

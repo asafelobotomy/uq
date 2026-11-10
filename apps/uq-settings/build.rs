@@ -12,6 +12,7 @@ fn main() {
     .qt_module("Gui")
     .qt_module("Quick")
     .qt_module("QuickControls2")
+    .qt_module("Widgets")
     .files(["src/app.rs", "src/window.rs"])
     .cpp_file("cpp/window.cpp");
     // SAFETY: only adds a warning flag; GCC 16 warns about Qt's own headers.

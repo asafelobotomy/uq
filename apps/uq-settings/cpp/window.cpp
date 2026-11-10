@@ -1,8 +1,10 @@
 #include "uq-settings/cpp/window.h"
 
+#include <QApplication>
 #include <QDir>
 #include <QGuiApplication>
 #include <QIcon>
+#include <QQmlApplicationEngine>
 #include <QQuickWindow>
 #include <QStandardPaths>
 #include <QString>
@@ -12,9 +14,8 @@ QString toQString(rust::Str s)
 {
     return QString::fromUtf8(s.data(), static_cast<qsizetype>(s.size()));
 }
-}
 
-void uqs_describe_application(rust::Str version)
+void describeApplication(rust::Str version)
 {
     QGuiApplication::setApplicationName(QStringLiteral("uq-settings"));
     QGuiApplication::setApplicationDisplayName(QStringLiteral("uQ Settings"));
@@ -48,9 +49,22 @@ void uqs_describe_application(rust::Str version)
     }
 }
 
-bool uqs_has_window()
+} // namespace
+
+int uqs_run(rust::Str version, rust::Str url)
 {
-    return !QGuiApplication::topLevelWindows().isEmpty();
+    // Qt keeps references to argc/argv for the application's lifetime. The command line was
+    // already parsed in Rust; Qt options come from the environment (QT_QPA_PLATFORM, ...).
+    static int argc = 1;
+    static char name[] = "uq-settings";
+    static char *argv[] = {name, nullptr};
+    QApplication app(argc, argv);
+    describeApplication(version);
+    QQmlApplicationEngine engine;
+    engine.load(QUrl(toQString(url)));
+    if (QGuiApplication::topLevelWindows().isEmpty())
+        return -1;
+    return QApplication::exec();
 }
 
 bool uqs_grab_window(rust::Str path)
