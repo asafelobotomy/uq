@@ -16,6 +16,7 @@ use cxx_qt_lib::{QQuickStyle, QString};
 mod app;
 mod appearance_model;
 mod instance;
+mod model_core;
 mod pages;
 mod plugins;
 mod registry;

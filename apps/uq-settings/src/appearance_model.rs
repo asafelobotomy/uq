@@ -1,20 +1,16 @@
-//! The Appearance page's QML object. It runs [`AppearanceState`] operations on the tokio runtime
-//! (never on the Qt thread) and queues each result back.
+//! The Appearance page's QML object: [`AppearanceState`] driven by `crate::model_core`.
 //!
 //! This file sits in `src/` because cxx-qt-build supports one directory of bridge files per QML
 //! module (QTBUG-93443), and `app.rs` and `window.rs` are there.
 
 use std::pin::Pin;
-use std::sync::Arc;
 
-use cxx_qt::{CxxQtThread, CxxQtType, Threading};
+use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
-use futures_util::StreamExt;
-use tokio::task::JoinHandle;
-use uq_core::client::DesktopProxy;
 
-use crate::pages::appearance::{AppearanceState, Op, Outcome};
-use crate::{session, system_lists};
+use crate::model_core::{self, Follow, ModelCore, PageModel};
+use crate::pages::appearance::{AppearanceState, Op};
+use crate::system_lists;
 
 #[cxx_qt::bridge]
 pub mod qobject {
@@ -62,10 +58,7 @@ pub struct AppearanceModelRust {
     state_json: QString,
     error: QString,
     busy: bool,
-    in_flight: usize,
-    /// `None` without a session bus (the offscreen screenshot run): the page reads as "uqd down".
-    state: Option<(tokio::runtime::Handle, Arc<AppearanceState>)>,
-    watcher: Option<JoinHandle<()>>,
+    core: ModelCore<AppearanceState>,
 }
 
 impl Default for AppearanceModelRust {
@@ -74,133 +67,70 @@ impl Default for AppearanceModelRust {
             state_json: QString::from("{}"),
             error: QString::default(),
             busy: false,
-            in_flight: 0,
-            state: session::bus().map(|(handle, conn)| {
-                (
-                    handle,
-                    Arc::new(AppearanceState::new(conn, system_lists::real_dirs())),
-                )
-            }),
-            watcher: None,
+            core: ModelCore::new(|conn| AppearanceState::new(conn, system_lists::real_dirs())),
         }
     }
 }
 
-impl Drop for AppearanceModelRust {
-    fn drop(&mut self) {
-        if let Some(task) = self.watcher.take() {
-            task.abort();
-        }
+impl PageModel for AppearanceModel {
+    type Logic = AppearanceState;
+    const FOLLOW: Follow = Follow {
+        sections: &["appearance"],
+        theme: true,
+        settings: true,
+    };
+
+    fn core(&self) -> &ModelCore<AppearanceState> {
+        &self.rust().core
+    }
+    fn core_mut(self: Pin<&mut Self>) -> &mut ModelCore<AppearanceState> {
+        &mut self.rust_mut().get_mut().core
+    }
+    fn show_busy(self: Pin<&mut Self>, busy: bool) {
+        self.set_busy(busy);
+    }
+    fn show_error(self: Pin<&mut Self>, e: QString) {
+        self.set_error(e);
+    }
+    fn show_state(self: Pin<&mut Self>, json: QString) {
+        self.set_state_json(json);
     }
 }
 
 impl cxx_qt::Initialize for AppearanceModel {
-    fn initialize(mut self: Pin<&mut Self>) {
-        let Some((handle, state)) = self.state.clone() else {
-            return;
-        };
-        let qt = self.qt_thread();
-        let conn = session::bus().map(|(_, c)| c);
-        let task = handle.spawn(async move {
-            if let Some(conn) = conn {
-                follow_uqd(conn, state, qt).await;
-            }
-        });
-        self.as_mut().rust_mut().watcher = Some(task);
-        self.refresh();
-    }
-}
-
-/// Re-read the state whenever uqd announces a theme, settings or `appearance` section change.
-async fn follow_uqd(
-    conn: zbus::Connection,
-    state: Arc<AppearanceState>,
-    qt: CxxQtThread<AppearanceModel>,
-) {
-    let streams = async {
-        let proxy = DesktopProxy::new(&conn).await?;
-        let sections = proxy
-            .receive_section_changed()
-            .await?
-            .filter(|s| std::future::ready(s.args().is_ok_and(|a| *a.domain() == "appearance")))
-            .map(|_| ())
-            .boxed();
-        let themes = proxy.receive_theme_changed().await?.map(|_| ()).boxed();
-        let settings = proxy.receive_settings_changed().await?.map(|_| ()).boxed();
-        zbus::Result::Ok(futures_util::stream::select_all([
-            sections, themes, settings,
-        ]))
-    };
-    let mut changes = match streams.await {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("uq-settings: can't follow uqd's changes: {e}");
-            return;
-        }
-    };
-    while changes.next().await.is_some() {
-        let outcome = state.run(Op::Refresh).await;
-        if qt
-            .queue(move |m| m.set_state_json(QString::from(&outcome.state.to_string())))
-            .is_err()
-        {
-            return;
-        }
+    fn initialize(self: Pin<&mut Self>) {
+        model_core::initialize(self);
     }
 }
 
 impl AppearanceModel {
-    /// Run `op` off the Qt thread; the result comes back through [`Self::finish`].
-    fn start(mut self: Pin<&mut Self>, op: Op) {
-        let Some((handle, state)) = self.state.clone() else {
-            return;
-        };
-        let qt = self.qt_thread();
-        let count = self.in_flight + 1;
-        self.as_mut().rust_mut().in_flight = count;
-        self.as_mut().set_busy(true);
-        if !matches!(op, Op::Refresh) {
-            // A new user action replaces the old message; a refresh keeps it on show.
-            self.as_mut().set_error(QString::default());
-        }
-        handle.spawn(async move {
-            let outcome = state.run(op).await;
-            let _ = qt.queue(move |m| m.finish(outcome));
-        });
-    }
-
-    /// A request finished: show its error (or clear the last one) and the state uqd now has.
-    fn finish(mut self: Pin<&mut Self>, outcome: Outcome) {
-        let count = self.in_flight.saturating_sub(1);
-        self.as_mut().rust_mut().in_flight = count;
-        self.as_mut().set_busy(count > 0);
-        if let Some(error) = &outcome.error {
-            self.as_mut().set_error(QString::from(error));
-        }
-        self.set_state_json(QString::from(&outcome.state.to_string()));
-    }
-
     fn refresh(self: Pin<&mut Self>) {
-        self.start(Op::Refresh);
+        model_core::start(self, Op::Refresh);
     }
 
     fn set_theme(self: Pin<&mut Self>, id: &QString, variant: &QString) {
-        self.start(Op::SetTheme {
-            id: id.to_string(),
-            variant: variant.to_string(),
-        });
+        model_core::start(
+            self,
+            Op::SetTheme {
+                id: id.to_string(),
+                variant: variant.to_string(),
+            },
+        );
     }
 
     fn set_schedule(self: Pin<&mut Self>, json: &QString) {
-        self.start(Op::SetSchedule(json.to_string()));
+        model_core::start(self, Op::SetSchedule(json.to_string()));
     }
 
     fn set_appearance(self: Pin<&mut Self>, field: &QString, json_value: &QString) {
         match serde_json::from_str(&json_value.to_string()) {
-            Ok(value) => self.start(Op::SetField {
-                field: field.to_string(),
-                value,
-            }),
+            Ok(value) => model_core::start(
+                self,
+                Op::SetField {
+                    field: field.to_string(),
+                    value,
+                },
+            ),
             Err(e) => self.set_error(QString::from(&format!("{field}: not valid JSON ({e})"))),
         }
     }
