@@ -275,6 +275,9 @@ async fn forward(
                 .map(|(w, l)| json!({"workspace": w, "layout": l})),
             "ConfigError" => body.deserialize::<String>().map(|m| json!({"message": m})),
             "SettingsChanged" => body.deserialize::<String>().map(|j| parse_json(&j)),
+            "SectionChanged" => body
+                .deserialize::<(String, String)>()
+                .map(|(d, j)| json!({"domain": d, "value": parse_json(&j)})),
             "LaunchCountsChanged" => body.deserialize::<HashMap<String, u32>>().map(|c| json!(c)),
             _ => continue,
         };

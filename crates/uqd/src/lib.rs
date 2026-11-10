@@ -2,6 +2,7 @@
 pub mod compositor;
 pub mod dbus;
 pub mod hypr;
+mod sections;
 pub mod service;
 pub mod system;
 

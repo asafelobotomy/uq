@@ -110,6 +110,22 @@ pub fn emit_generated(
     let _ = writeln!(out, "    }},");
     emit_mouse(&mut out, mouse);
     let _ = writeln!(out, "}})");
+    // After base.lua's fixed size, so these win.
+    let _ = writeln!(
+        out,
+        "hl.env(\"XCURSOR_THEME\", {})",
+        lua_string(&theme.icons.cursor_theme)
+    );
+    let _ = writeln!(
+        out,
+        "hl.env(\"XCURSOR_SIZE\", {})",
+        lua_string(&theme.icons.cursor_size.to_string())
+    );
+    let _ = writeln!(
+        out,
+        "hl.env(\"HYPRCURSOR_SIZE\", {})",
+        lua_string(&theme.icons.cursor_size.to_string())
+    );
     if !layouts.is_empty() {
         let _ = writeln!(out, "\n-- Per-workspace layouts");
     }
@@ -171,6 +187,33 @@ mod tests {
         assert!(out.contains("gaps_out = 12"), "{out}");
         assert!(out.contains("border_size = 2"), "{out}");
         assert!(out.contains("rounding = 10"), "{out}");
+    }
+
+    #[test]
+    fn generated_sets_cursor_env() {
+        let out = emit_generated(&theme(), &BTreeMap::new(), &MouseSettings::default());
+        assert!(
+            out.contains(r#"hl.env("XCURSOR_THEME", "Bibata-Modern-Classic")"#),
+            "{out}"
+        );
+        assert!(out.contains(r#"hl.env("XCURSOR_SIZE", "24")"#), "{out}");
+        assert!(out.contains(r#"hl.env("HYPRCURSOR_SIZE", "24")"#), "{out}");
+        let a = crate::settings::Appearance {
+            cursor_theme: Some("Breeze_Snow".into()),
+            cursor_size: Some(40),
+            ..Default::default()
+        };
+        let out = emit_generated(
+            &theme().with_appearance(&a),
+            &BTreeMap::new(),
+            &MouseSettings::default(),
+        );
+        assert!(
+            out.contains(r#"hl.env("XCURSOR_THEME", "Breeze_Snow")"#),
+            "{out}"
+        );
+        assert!(out.contains(r#"hl.env("XCURSOR_SIZE", "40")"#), "{out}");
+        assert!(out.contains(r#"hl.env("HYPRCURSOR_SIZE", "40")"#), "{out}");
     }
 
     #[test]

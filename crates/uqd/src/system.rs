@@ -73,11 +73,16 @@ impl SystemSettings for GSettings {
 #[derive(Debug, Default)]
 pub struct FakeSystem {
     pub applied: std::sync::Mutex<Vec<String>>,
+    /// Makes `apply` fail, as a missing or broken gsettings would.
+    pub fail: std::sync::atomic::AtomicBool,
 }
 
 #[cfg(any(test, feature = "fake"))]
 impl SystemSettings for FakeSystem {
     fn apply(&self, theme: &Theme) -> std::io::Result<()> {
+        if self.fail.load(std::sync::atomic::Ordering::SeqCst) {
+            return Err(std::io::Error::other("gsettings failed"));
+        }
         self.applied
             .lock()
             .unwrap()

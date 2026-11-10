@@ -11,6 +11,7 @@ import "notif/builtin"
 import "session"
 import "idle"
 import "power"
+import "wallpaper"
 
 ShellRoot {
     // NotifBackend is a lazily created singleton: this binding touches it so it picks a backend
@@ -30,6 +31,12 @@ ShellRoot {
     Connections {
         target: Hyprland
         function onRawEvent(event) { Bridge.handleRawEvent(event.name, event.data); }
+    }
+
+    // The wallpaper layer, one window per screen.
+    Variants {
+        model: Quickshell.screens
+        delegate: Wallpaper {}
     }
 
     Variants {

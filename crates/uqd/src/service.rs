@@ -4,14 +4,14 @@ use crate::compositor::{Compositor, CompositorError};
 use crate::system::SystemSettings;
 use chrono::{DateTime, Local, TimeZone, Utc};
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::broadcast;
 use uq_core::atomic::{atomic_replace_dir, atomic_write};
 use uq_core::lua::{Layout, emit_generated, emit_workspace_rule, lua_string};
 use uq_core::paths::Paths;
-use uq_core::render::render;
+use uq_core::render::{kvantum_base, render};
 use uq_core::schedule::{Schedule, last_event, variant_at};
 use uq_core::settings::{Settings, renders_config, valid_pinned_id};
 use uq_core::state::State;
@@ -33,8 +33,13 @@ pub enum Event {
     },
     ConfigError(String),
     /// The full settings (never the launch counts).
-    SettingsChanged(Settings),
+    SettingsChanged(Box<Settings>),
     LaunchCountsChanged(BTreeMap<String, u32>),
+    /// One whole settings section (`appearance`, `wallpaper`) changed; `json` is its new content.
+    SectionChanged {
+        domain: String,
+        json: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
@@ -55,7 +60,7 @@ pub enum DesktopError {
     Io(String),
 }
 
-fn io_err(context: &str) -> impl Fn(std::io::Error) -> DesktopError + '_ {
+pub(crate) fn io_err(context: &str) -> impl Fn(std::io::Error) -> DesktopError + '_ {
     move |e| DesktopError::Io(format!("{context}: {e}"))
 }
 
@@ -76,7 +81,7 @@ pub fn workspace_selector(ws: &str) -> String {
 }
 
 /// What a commit changed, which decides how it is applied to the live session.
-enum Change {
+pub(crate) enum Change {
     Theme,
     /// A setting rendered into generated.lua (mouse): reload Hyprland, report SettingsChanged.
     Input,
@@ -84,13 +89,17 @@ enum Change {
     Quiet,
 }
 
+/// Where the system's Kvantum base themes live.
+pub const KVANTUM_DIR: &str = "/usr/share/Kvantum";
+
 pub struct Desktop {
-    paths: Paths,
+    pub(crate) paths: Paths,
     themes: ThemeRegistry,
-    state: State,
+    pub(crate) state: State,
     comp: Arc<dyn Compositor>,
     sys: Arc<dyn SystemSettings>,
-    events: broadcast::Sender<Event>,
+    pub(crate) events: broadcast::Sender<Event>,
+    kvantum_dir: PathBuf,
     /// When launch counts were last written; `None` until the first save.
     last_launch_save: Option<Instant>,
     launch_dirty: bool,
@@ -159,10 +168,17 @@ impl Desktop {
             comp,
             sys,
             events,
+            kvantum_dir: PathBuf::from(KVANTUM_DIR),
             last_launch_save: None,
             launch_dirty: false,
             launch_saves: 0,
         })
+    }
+
+    /// Look for Kvantum base themes in `dir` instead of `/usr/share/Kvantum` (tests).
+    pub fn with_kvantum_dir(mut self, dir: impl Into<PathBuf>) -> Self {
+        self.kvantum_dir = dir.into();
+        self
     }
 
     pub fn subscribe(&self) -> broadcast::Receiver<Event> {
@@ -224,9 +240,9 @@ impl Desktop {
         next.save(&self.paths.state_file)
             .map_err(io_err("saving state"))?;
         self.state = next;
-        let _ = self
-            .events
-            .send(Event::SettingsChanged(self.state.settings.clone()));
+        let _ = self.events.send(Event::SettingsChanged(Box::new(
+            self.state.settings.clone(),
+        )));
         Ok(())
     }
 
@@ -400,13 +416,20 @@ impl Desktop {
     }
 
     /// Validate, then write theme dir + generated.lua + state; then apply live and notify.
-    async fn commit(&mut self, next: State, change: Change) -> Result<(), DesktopError> {
+    pub(crate) async fn commit(&mut self, next: State, change: Change) -> Result<(), DesktopError> {
         let theme = self
             .themes
             .get(&next.theme, next.variant)
             .ok_or_else(|| DesktopError::UnknownTheme(next.theme.clone()))?
             .clone();
-        let files = render(&theme, &self.paths.templates_dir)
+        // The user's appearance overrides win over the theme's fonts, cursor and icons.
+        let theme = theme.with_appearance(&next.settings.appearance);
+        let base = if next.settings.appearance.kvantum {
+            kvantum_base(Path::new(&self.kvantum_dir))
+        } else {
+            None
+        };
+        let files = render(&theme, &self.paths.templates_dir, base)
             .map_err(|e| DesktopError::Io(e.to_string()))?;
         let generated = emit_generated(&theme, &next.layouts, &next.settings.mouse);
 
@@ -468,17 +491,22 @@ impl Desktop {
             }
             Change::Input => {
                 let _ = self.live(self.comp.reload().await);
-                let _ = self
-                    .events
-                    .send(Event::SettingsChanged(self.state.settings.clone()));
+                let _ = self.events.send(Event::SettingsChanged(Box::new(
+                    self.state.settings.clone(),
+                )));
             }
             Change::Theme => {
                 // gsettings are desktop-wide: only touch them while a Hyprland session is live,
                 // so a uqd left running never re-themes another desktop.
-                if self.live(self.comp.reload().await)
-                    && let Err(e) = self.sys.apply(&theme)
-                {
-                    tracing::warn!("system settings: {e}");
+                if self.live(self.comp.reload().await) {
+                    if let Err(e) = self.sys.apply(&theme) {
+                        tracing::warn!("system settings: {e}");
+                    }
+                    let cursor = self
+                        .comp
+                        .set_cursor(&theme.icons.cursor_theme, theme.icons.cursor_size)
+                        .await;
+                    self.live(cursor);
                 }
                 let _ = self.events.send(Event::ThemeChanged {
                     name: theme.id.clone(),

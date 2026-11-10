@@ -16,6 +16,8 @@ pub enum RenderError {
         name: String,
         source: std::io::Error,
     },
+    #[error("unknown Kvantum base {0:?}")]
+    BadKvantumBase(String),
     #[error("template {name}: {message}")]
     Template { name: String, message: String },
 }
@@ -40,15 +42,38 @@ fn argb(s: String) -> String {
     format!("#ff{}", s.trim_start_matches('#'))
 }
 
-pub fn render(theme: &Theme, templates_dir: &Path) -> Result<RenderedFiles, RenderError> {
+/// Kvantum bases uQ's theme can inherit from, in preference order.
+pub const KVANTUM_BASES: [&str; 4] = ["KvGnome", "KvAdapta", "KvArc", "KvFlat"];
+
+/// Template and output path of the Kvantum theme, rendered only when a base exists.
+const KVANTUM_TARGET: (&str, &str) = ("kvantum.kvconfig.j2", "Kvantum/uq/uq.kvconfig");
+
+/// The first of [`KVANTUM_BASES`] installed under `dir` (`dir/<name>/<name>.kvconfig`).
+pub fn kvantum_base(dir: &Path) -> Option<&'static str> {
+    KVANTUM_BASES
+        .into_iter()
+        .find(|n| dir.join(n).join(format!("{n}.kvconfig")).is_file())
+}
+
+pub fn render(
+    theme: &Theme,
+    templates_dir: &Path,
+    kvantum_base: Option<&'static str>,
+) -> Result<RenderedFiles, RenderError> {
+    if let Some(b) = kvantum_base
+        && !KVANTUM_BASES.contains(&b)
+    {
+        return Err(RenderError::BadKvantumBase(b.to_string()));
+    }
     let mut env = Environment::new();
     env.set_undefined_behavior(UndefinedBehavior::Strict);
     env.set_keep_trailing_newline(true);
     env.add_filter("bare", bare);
     env.add_filter("argb", argb);
-    let ctx = context! { theme => theme, variant => theme.variant.as_str(), is_dark => theme.variant == crate::theme::Variant::Dark };
+    let ctx = context! { theme => theme, variant => theme.variant.as_str(), is_dark => theme.variant == crate::theme::Variant::Dark, base => kvantum_base };
     let mut out = BTreeMap::new();
-    for (name, rel) in TARGETS {
+    let extra = kvantum_base.map(|_| KVANTUM_TARGET);
+    for (name, rel) in TARGETS.into_iter().chain(extra) {
         let src = std::fs::read_to_string(templates_dir.join(name)).map_err(|source| {
             RenderError::Read {
                 name: name.to_string(),
@@ -63,4 +88,50 @@ pub fn render(theme: &Theme, templates_dir: &Path) -> Result<RenderedFiles, Rend
         out.insert(PathBuf::from(rel), body);
     }
     Ok(RenderedFiles(out))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::theme::{Variant, tests::FIXTURE};
+
+    fn templates() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../templates")
+    }
+
+    fn theme() -> Theme {
+        Theme::from_toml(FIXTURE, "fixture", Variant::Dark).unwrap()
+    }
+
+    #[test]
+    fn kvantum_rendered_only_with_base() {
+        let none = render(&theme(), &templates(), None).unwrap();
+        assert!(!none.0.contains_key(Path::new("Kvantum/uq/uq.kvconfig")));
+        let some = render(&theme(), &templates(), Some("KvArc")).unwrap();
+        let body = &some.0[Path::new("Kvantum/uq/uq.kvconfig")];
+        assert!(body.starts_with("[%General]\ninherits=KvArc\n"), "{body}");
+        assert!(body.contains("[GeneralColors]"), "{body}");
+        assert!(body.contains("window.color=#282828"), "{body}");
+        assert!(body.contains("highlight.color=#d79921"), "{body}");
+        assert!(body.contains("disabled.text.color=#bdae93"), "{body}");
+    }
+
+    #[test]
+    fn kvantum_base_outside_list_is_rejected() {
+        let err = render(&theme(), &templates(), Some("Evil\n[x]")).unwrap_err();
+        assert!(matches!(err, RenderError::BadKvantumBase(_)), "{err:?}");
+    }
+
+    #[test]
+    fn kvantum_base_order() {
+        let d = tempfile::tempdir().unwrap();
+        assert_eq!(kvantum_base(d.path()), None);
+        for n in ["KvFlat", "KvArc"] {
+            std::fs::create_dir(d.path().join(n)).unwrap();
+            std::fs::write(d.path().join(n).join(format!("{n}.kvconfig")), "").unwrap();
+        }
+        // A directory without its .kvconfig doesn't count.
+        std::fs::create_dir(d.path().join("KvGnome")).unwrap();
+        assert_eq!(kvantum_base(d.path()), Some("KvArc"));
+    }
 }

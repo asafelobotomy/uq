@@ -203,3 +203,61 @@ async fn get_schedule_round_trips() {
     assert_eq!(got["mode"], "sun");
     assert_eq!(got["lat"], 51.5);
 }
+
+#[tokio::test]
+async fn section_round_trip_over_dbus() {
+    let dir = tempfile::tempdir().unwrap();
+    let bus = private_bus(dir.path());
+    let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut paths = uq_core::paths::Paths::under(&dir.path().join("root"));
+    paths.themes_dir = repo.join("themes");
+    paths.templates_dir = repo.join("templates");
+    let desktop = Desktop::new(
+        paths,
+        Arc::new(FakeCompositor::running()),
+        Arc::new(FakeSystem::default()),
+    )
+    .unwrap();
+    let _server = serve(
+        zbus::connection::Builder::address(bus.address.as_str()).unwrap(),
+        desktop,
+    )
+    .await
+    .unwrap();
+    let client = zbus::connection::Builder::address(bus.address.as_str())
+        .unwrap()
+        .build()
+        .await
+        .unwrap();
+    let proxy = zbus::Proxy::new(&client, NAME, PATH, IFACE).await.unwrap();
+    let mut changed = proxy.receive_signal("SectionChanged").await.unwrap();
+
+    let json = r#"{"outputs":{"*":{"image":"/a.png","fit":"tile"}}}"#;
+    let () = proxy
+        .call("SetSection", &("wallpaper", json))
+        .await
+        .unwrap();
+    let got: String = proxy.call("GetSection", &("wallpaper",)).await.unwrap();
+    let got: serde_json::Value = serde_json::from_str(&got).unwrap();
+    assert_eq!(got["outputs"]["*"]["image"], "/a.png");
+    assert_eq!(got["outputs"]["*"]["fit"], "tile");
+
+    let msg = tokio::time::timeout(std::time::Duration::from_secs(5), changed.next())
+        .await
+        .unwrap()
+        .unwrap();
+    let (domain, body): (String, String) = msg.body().deserialize().unwrap();
+    assert_eq!(domain, "wallpaper");
+    assert!(body.contains("/a.png"), "{body}");
+
+    let err = proxy
+        .call::<_, _, ()>("SetSection", &("appearance", r#"{"font_size":2}"#))
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("InvalidSetting"), "{err}");
+    let err = proxy
+        .call::<_, _, String>("GetSection", &("bogus",))
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("InvalidSetting"), "{err}");
+}

@@ -6,6 +6,8 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
+use crate::settings::Appearance;
+
 #[derive(Debug, thiserror::Error)]
 pub enum ThemeError {
     #[error("bad colour {0:?} (expected #rrggbb)")]
@@ -194,6 +196,30 @@ impl Theme {
             terminal: f.terminal,
         })
     }
+
+    /// A copy with the user's appearance overrides applied; each `Some` replaces the theme's value.
+    pub fn with_appearance(&self, a: &Appearance) -> Theme {
+        let mut t = self.clone();
+        if let Some(v) = &a.ui_font {
+            t.fonts.ui = v.clone();
+        }
+        if let Some(v) = &a.mono_font {
+            t.fonts.mono = v.clone();
+        }
+        if let Some(v) = a.font_size {
+            t.fonts.size = v;
+        }
+        if let Some(v) = &a.cursor_theme {
+            t.icons.cursor_theme = v.clone();
+        }
+        if let Some(v) = a.cursor_size {
+            t.icons.cursor_size = v;
+        }
+        if let Some(v) = &a.icon_theme {
+            t.icons.theme = v.clone();
+        }
+        t
+    }
 }
 
 /// All themes found under a directory, each guaranteed to have both variants.
@@ -311,6 +337,40 @@ ansi = ["#282828","#cc241d","#98971a","#d79921","#458588","#b16286","#689d6a","#
         let src = FIXTURE.replace("bg = \"#282828\"", "bg = \"#12345\"");
         let err = Theme::from_toml(&src, "fixture", Variant::Dark).unwrap_err();
         assert!(matches!(err, ThemeError::BadColor(_)), "got {err:?}");
+    }
+
+    #[test]
+    fn with_appearance_overrides_only_set_fields() {
+        let t = Theme::from_toml(FIXTURE, "fixture", Variant::Dark).unwrap();
+        assert_eq!(t.with_appearance(&Appearance::default()), t);
+        let a = Appearance {
+            mono_font: Some("Hack".into()),
+            cursor_size: Some(32),
+            icon_theme: Some("Adwaita".into()),
+            ..Appearance::default()
+        };
+        let o = t.with_appearance(&a);
+        assert_eq!(o.fonts.mono, "Hack");
+        assert_eq!(o.fonts.ui, "Inter");
+        assert_eq!(o.fonts.size, 11);
+        assert_eq!(o.icons.cursor_size, 32);
+        assert_eq!(o.icons.cursor_theme, "Bibata-Modern-Classic");
+        assert_eq!(o.icons.theme, "Adwaita");
+        let all = Appearance {
+            ui_font: Some("Cantarell".into()),
+            font_size: Some(14),
+            cursor_theme: Some("Breeze".into()),
+            ..Appearance::default()
+        };
+        let o = t.with_appearance(&all);
+        assert_eq!(
+            (
+                o.fonts.ui.as_str(),
+                o.fonts.size,
+                o.icons.cursor_theme.as_str()
+            ),
+            ("Cantarell", 14, "Breeze")
+        );
     }
 
     #[test]

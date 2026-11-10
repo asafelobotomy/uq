@@ -1,0 +1,226 @@
+//! Whole-section settings (`appearance`, `wallpaper`) for `GetSection` / `SetSection`.
+
+use crate::service::{Change, Desktop, DesktopError, Event, io_err};
+use uq_core::settings::renders_section;
+
+impl Desktop {
+    /// One settings section as JSON (`appearance` or `wallpaper`).
+    pub fn get_section(&self, domain: &str) -> Result<String, DesktopError> {
+        let v = self
+            .state
+            .settings
+            .section(domain)
+            .map_err(|e| DesktopError::InvalidSetting(e.to_string()))?;
+        serde_json::to_string(&v).map_err(|e| DesktopError::Io(e.to_string()))
+    }
+
+    /// Replace a whole section. `appearance` re-renders through the normal commit (verify,
+    /// reload, theme events); `wallpaper` only saves, since the shell draws it.
+    pub async fn set_section(&mut self, domain: &str, json: &str) -> Result<(), DesktopError> {
+        let value: serde_json::Value = serde_json::from_str(json)
+            .map_err(|e| DesktopError::InvalidSetting(format!("value is not JSON: {e}")))?;
+        let mut next = self.state.clone();
+        next.settings
+            .set_section(domain, value)
+            .map_err(|e| DesktopError::InvalidSetting(e.to_string()))?;
+        if renders_section(domain) {
+            self.commit(next, Change::Theme).await?;
+        } else {
+            next.save(&self.paths.state_file)
+                .map_err(io_err("saving state"))?;
+            self.state = next;
+        }
+        let section = self.get_section(domain)?;
+        let _ = self.events.send(Event::SectionChanged {
+            domain: domain.to_string(),
+            json: section,
+        });
+        let _ = self.events.send(Event::SettingsChanged(Box::new(
+            self.state.settings.clone(),
+        )));
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::compositor::fake::FakeCompositor;
+    use crate::system::FakeSystem;
+    use std::path::PathBuf;
+    use std::sync::Arc;
+    use std::sync::atomic::Ordering;
+    use tokio::sync::broadcast;
+    use uq_core::paths::Paths;
+    use uq_core::state::State;
+
+    struct Rig {
+        _dir: tempfile::TempDir,
+        desktop: Desktop,
+        comp: Arc<FakeCompositor>,
+        sys: Arc<FakeSystem>,
+        events: broadcast::Receiver<Event>,
+    }
+
+    fn rig() -> Rig {
+        let dir = tempfile::tempdir().unwrap();
+        let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let mut paths = Paths::under(dir.path());
+        paths.themes_dir = repo.join("themes");
+        paths.templates_dir = repo.join("templates");
+        let kv = dir.path().join("kvantum");
+        std::fs::create_dir_all(kv.join("KvGnome")).unwrap();
+        std::fs::write(kv.join("KvGnome/KvGnome.kvconfig"), "").unwrap();
+        let comp = Arc::new(FakeCompositor::running());
+        let sys = Arc::new(FakeSystem::default());
+        let desktop = Desktop::new(paths, comp.clone(), sys.clone())
+            .unwrap()
+            .with_kvantum_dir(kv);
+        let events = desktop.subscribe();
+        Rig {
+            _dir: dir,
+            desktop,
+            comp,
+            sys,
+            events,
+        }
+    }
+
+    fn drain(rx: &mut broadcast::Receiver<Event>) -> Vec<Event> {
+        std::iter::from_fn(|| rx.try_recv().ok()).collect()
+    }
+
+    fn kvconfig(r: &Rig) -> PathBuf {
+        r.desktop.paths().theme_dir.join("Kvantum/uq/uq.kvconfig")
+    }
+
+    #[tokio::test]
+    async fn set_appearance_renders_overrides_and_sets_cursor() {
+        let mut r = rig();
+        r.desktop
+            .set_section(
+                "appearance",
+                r#"{"ui_font":"Cantarell","cursor_theme":"Adwaita","cursor_size":32}"#,
+            )
+            .await
+            .unwrap();
+        let tokens =
+            std::fs::read_to_string(r.desktop.paths().theme_dir.join("tokens.json")).unwrap();
+        assert!(tokens.contains("Cantarell"), "{tokens}");
+        assert!(r.comp.calls().contains(&"setcursor Adwaita 32".to_string()));
+        assert!(kvconfig(&r).is_file());
+        assert_eq!(
+            State::load(&r.desktop.paths().state_file)
+                .settings
+                .appearance
+                .ui_font
+                .as_deref(),
+            Some("Cantarell")
+        );
+        let evs = drain(&mut r.events);
+        assert!(evs.iter().any(|e| matches!(e, Event::ThemeChanged { .. })));
+        assert!(
+            evs.iter().any(
+                |e| matches!(e, Event::SectionChanged { domain, .. } if domain == "appearance")
+            )
+        );
+    }
+
+    #[tokio::test]
+    async fn appearance_commit_survives_gsettings_failure() {
+        let mut r = rig();
+        r.sys.fail.store(true, Ordering::SeqCst);
+        r.desktop
+            .set_section("appearance", r#"{"mono_font":"Hack"}"#)
+            .await
+            .unwrap();
+        let got: serde_json::Value =
+            serde_json::from_str(&r.desktop.get_section("appearance").unwrap()).unwrap();
+        assert_eq!(got["mono_font"], "Hack");
+        assert!(r.sys.applied.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn kvantum_off_removes_the_kvconfig() {
+        let mut r = rig();
+        r.desktop.set_section("appearance", "{}").await.unwrap();
+        assert!(kvconfig(&r).is_file());
+        r.desktop
+            .set_section("appearance", r#"{"kvantum":false}"#)
+            .await
+            .unwrap();
+        assert!(!kvconfig(&r).exists());
+    }
+
+    #[tokio::test]
+    async fn set_wallpaper_saves_and_emits_without_render() {
+        let mut r = rig();
+        r.desktop.startup().await;
+        let gen_path = r.desktop.paths().generated_lua.clone();
+        let before = std::fs::metadata(&gen_path).unwrap().modified().unwrap();
+        r.comp.calls.lock().unwrap().clear();
+        drain(&mut r.events);
+        let json = r#"{"outputs":{"*":{"image":"/a.png"}}}"#;
+        r.desktop.set_section("wallpaper", json).await.unwrap();
+        assert_eq!(
+            std::fs::metadata(&gen_path).unwrap().modified().unwrap(),
+            before
+        );
+        assert!(r.comp.calls().is_empty(), "{:?}", r.comp.calls());
+        let evs = drain(&mut r.events);
+        assert!(
+            evs.iter().any(
+                |e| matches!(e, Event::SectionChanged { domain, .. } if domain == "wallpaper")
+            )
+        );
+        assert!(evs.iter().any(|e| matches!(e, Event::SettingsChanged(_))));
+        assert!(!evs.iter().any(|e| matches!(e, Event::ThemeChanged { .. })));
+        let saved = State::load(&r.desktop.paths().state_file);
+        assert!(saved.settings.wallpaper.outputs.contains_key("*"));
+    }
+
+    #[tokio::test]
+    async fn invalid_section_is_rejected_and_state_unchanged() {
+        let mut r = rig();
+        let before = r.desktop.get_section("appearance").unwrap();
+        for (d, j) in [
+            ("appearance", r#"{"font_size":5}"#),
+            ("appearance", "not json"),
+            ("wallpaper", r#"{"outputs":{"*":{"image":"../x"}}}"#),
+            ("nope", "{}"),
+        ] {
+            assert!(
+                matches!(
+                    r.desktop.set_section(d, j).await,
+                    Err(DesktopError::InvalidSetting(_))
+                ),
+                "{d} {j}"
+            );
+        }
+        assert_eq!(r.desktop.get_section("appearance").unwrap(), before);
+        assert!(r.desktop.get_section("nope").is_err());
+        assert!(drain(&mut r.events).is_empty());
+    }
+
+    #[tokio::test]
+    async fn rejected_config_keeps_previous_appearance() {
+        let mut r = rig();
+        r.desktop
+            .set_section("appearance", r#"{"ui_font":"Inter"}"#)
+            .await
+            .unwrap();
+        let before = r.desktop.get_section("appearance").unwrap();
+        drain(&mut r.events);
+        *r.comp.verify_error.lock().unwrap() = Some("bad".into());
+        let res = r
+            .desktop
+            .set_section("appearance", r#"{"ui_font":"Other"}"#)
+            .await;
+        assert!(matches!(res, Err(DesktopError::ConfigInvalid(_))));
+        assert_eq!(r.desktop.get_section("appearance").unwrap(), before);
+        let saved = State::load(&r.desktop.paths().state_file);
+        assert_eq!(saved.settings.appearance.ui_font.as_deref(), Some("Inter"));
+        let evs = drain(&mut r.events);
+        assert!(evs.iter().all(|e| matches!(e, Event::ConfigError(_))));
+    }
+}

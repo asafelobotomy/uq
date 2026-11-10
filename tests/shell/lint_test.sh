@@ -6,7 +6,7 @@ root=$(cd "$(dirname "$0")/../.." && pwd)
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 mkdir -p "$tmp/scripts" "$tmp/shell/core"
-cp "$root/scripts/lint-shell.sh" "$tmp/scripts/"
+cp "$root/scripts/lint-shell.sh" "$root/scripts/lib-qml-lint.sh" "$tmp/scripts/"
 printf 'Text {\n  text: "x"\n}\n' > "$tmp/shell/core/UqText.qml"
 printf 'TextInput {\n}\n' > "$tmp/shell/core/UqInput.qml"
 fail=0

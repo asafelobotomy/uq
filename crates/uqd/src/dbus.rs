@@ -113,6 +113,16 @@ impl DesktopIface {
         Ok(self.desktop.lock().await.set_setting(key, value).await?)
     }
 
+    /// One whole settings section (`appearance`, `wallpaper`) as JSON.
+    async fn get_section(&self, domain: &str) -> Result<String, UqError> {
+        Ok(self.desktop.lock().await.get_section(domain)?)
+    }
+
+    /// Replace a whole section with `json`.
+    async fn set_section(&self, domain: &str, json: &str) -> Result<(), UqError> {
+        Ok(self.desktop.lock().await.set_section(domain, json).await?)
+    }
+
     async fn record_launch(&self, id: &str) {
         self.desktop.lock().await.record_launch(id);
     }
@@ -132,6 +142,9 @@ impl DesktopIface {
 
     #[zbus(signal)]
     async fn settings_changed(e: &SignalEmitter<'_>, json: &str) -> zbus::Result<()>;
+
+    #[zbus(signal)]
+    async fn section_changed(e: &SignalEmitter<'_>, domain: &str, json: &str) -> zbus::Result<()>;
 
     #[zbus(signal)]
     async fn launch_counts_changed(
@@ -212,6 +225,9 @@ pub async fn serve(
                     Ok(json) => DesktopIface::settings_changed(e, &json).await,
                     Err(err) => Err(zbus::Error::Failure(err.to_string())),
                 },
+                Event::SectionChanged { domain, json } => {
+                    DesktopIface::section_changed(e, domain, json).await
+                }
                 Event::LaunchCountsChanged(counts) => {
                     DesktopIface::launch_counts_changed(
                         e,

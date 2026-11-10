@@ -174,6 +174,10 @@ PanelWindow {
                 PowerGroup {
                     Layout.fillWidth: true
                 }
+
+                SettingsEntry {
+                    Layout.fillWidth: true
+                }
             }
         }
     }
