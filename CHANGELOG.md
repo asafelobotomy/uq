@@ -23,6 +23,23 @@ All notable changes to uQ are listed here. The format follows
   (`uqctl setup --apps` links it in; needs the `kvantum` package). An unchanged qt6ct.conf
   from 0.2 is switched to `style=kvantum`; one you edited is left alone with a hint. Turn it
   off with `appearance.kvantum = false`.
+- **Look and layouts page.** Gaps, border width, rounding, blur (on, size, passes), shadow, and
+  animations (on/off, speed) override the theme's values; workspace rules, the default layout and
+  dwindle/master/scrolling options live on the same page. `uqd` gains `look` and `layouts`
+  sections (stored as `[look]` and `[layout_options]`), verified with Hyprland before they apply;
+  a rejected value keeps the old config and the page shows Hyprland's message. `SetLayout` also
+  emits `SectionChanged("layouts")`, so the page follows the `SUPER` keybind.
+- **Shell page and `shell` section.** Islands on or off, 24-hour clock, launcher providers on/off
+  and order, and the terminal for `Terminal=true` apps. The bridge opens such apps in the chosen
+  terminal (`X-TerminalArgExec`, else `-e`; kitty if it is missing or unparseable) and refuses to
+  activate or launch from a switched-off provider.
+
+### Changed
+
+- **Animations moved to `generated.lua`.** The animation lines are no longer in `base.lua`.
+  After an upgrade Hyprland shows its own default animations until `uqd` re-renders
+  `generated.lua` (restart `uqd` or change any setting). `hl.animation` calls in `user.lua`
+  still win.
 
 ## [0.2.1] - 2026-11-10
 
