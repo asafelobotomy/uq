@@ -11,7 +11,7 @@ use tokio::sync::broadcast;
 use uq_core::atomic::{atomic_replace_dir, atomic_write};
 use uq_core::lua::{Layout, emit_generated, emit_workspace_rule, lua_string};
 use uq_core::paths::Paths;
-use uq_core::render::{kvantum_base, render};
+use uq_core::render::{RenderedFiles, kvantum_base, render};
 use uq_core::schedule::{Schedule, last_event, variant_at};
 use uq_core::settings::{Settings, renders_config, set_rule, valid_pinned_id};
 use uq_core::state::State;
@@ -83,7 +83,7 @@ pub struct Desktop {
     pub(crate) paths: Paths,
     themes: ThemeRegistry,
     pub(crate) state: State,
-    comp: Arc<dyn Compositor>,
+    pub(crate) comp: Arc<dyn Compositor>,
     sys: Arc<dyn SystemSettings>,
     pub(crate) events: broadcast::Sender<Event>,
     kvantum_dir: PathBuf,
@@ -91,6 +91,16 @@ pub struct Desktop {
     last_launch_save: Option<Instant>,
     launch_dirty: bool,
     launch_saves: u32,
+    pub(crate) section_commits: u32,
+}
+
+/// A rendered, verified candidate config, left on disk until `install` writes it.
+pub(crate) struct Candidate {
+    pub(crate) files: RenderedFiles,
+    /// The candidate's text; Task 5's `apply_monitors` diffs and evals from it.
+    #[allow(dead_code)]
+    pub(crate) generated: String,
+    pub(crate) path: PathBuf,
 }
 
 /// Launch counts stop here per app.
@@ -159,6 +169,7 @@ impl Desktop {
             last_launch_save: None,
             launch_dirty: false,
             launch_saves: 0,
+            section_commits: 0,
         })
     }
 
@@ -403,6 +414,13 @@ impl Desktop {
 
     /// Validate, then write theme dir + generated.lua + state; then apply live and notify.
     pub(crate) async fn commit(&mut self, next: State, change: Change) -> Result<(), DesktopError> {
+        let c = self.render_candidate(&next).await?;
+        self.install(c, next, change).await
+    }
+
+    /// Render `next`, write the candidate `generated.lua` and have Hyprland verify it. The
+    /// candidate stays on disk for `install`; a rejected one is removed.
+    pub(crate) async fn render_candidate(&self, next: &State) -> Result<Candidate, DesktopError> {
         let theme = self
             .themes
             .get(&next.theme, next.variant)
@@ -420,7 +438,7 @@ impl Desktop {
         let generated = emit_generated(&theme, &next.layouts, &next.settings);
 
         self.ensure_user_lua()?;
-        let candidate = self
+        let path = self
             .paths
             .generated_lua
             .with_file_name("generated.lua.candidate");
@@ -430,7 +448,7 @@ impl Desktop {
             .paths
             .hypr_dir
             .join(format!(".uq-verify-{}.lua", std::process::id()));
-        atomic_write(&candidate, &generated).map_err(io_err("writing candidate config"))?;
+        atomic_write(&path, &generated).map_err(io_err("writing candidate config"))?;
         let main_src = format!(
             "require({})\nrequire(\"./uq/generated.lua.candidate\")\nrequire(\"./uq/user.lua\")\n",
             lua_string(&self.paths.base_lua.to_string_lossy())
@@ -443,25 +461,41 @@ impl Desktop {
         match verdict {
             Ok(()) => {}
             Err(CompositorError::Rejected(msg)) => {
-                let _ = std::fs::remove_file(&candidate);
+                let _ = std::fs::remove_file(&path);
                 let _ = self.events.send(Event::ConfigError(msg.clone()));
                 return Err(DesktopError::ConfigInvalid(msg));
             }
             Err(e) => tracing::warn!("could not validate config ({e}); applying unvalidated"),
         }
+        Ok(Candidate {
+            files,
+            generated,
+            path,
+        })
+    }
 
-        let committed = atomic_replace_dir(&self.paths.theme_dir, &files)
+    /// Write a verified candidate (theme dir, `generated.lua`, state), then apply `change` live.
+    pub(crate) async fn install(
+        &mut self,
+        c: Candidate,
+        next: State,
+        change: Change,
+    ) -> Result<(), DesktopError> {
+        let theme = self
+            .themes
+            .get(&next.theme, next.variant)
+            .ok_or_else(|| DesktopError::UnknownTheme(next.theme.clone()))?
+            .clone()
+            .with_appearance(&next.settings.appearance);
+        let committed = atomic_replace_dir(&self.paths.theme_dir, &c.files)
             .map_err(io_err("writing theme files"))
             .and_then(|()| {
-                std::fs::rename(&candidate, &self.paths.generated_lua)
+                std::fs::rename(&c.path, &self.paths.generated_lua)
                     .map_err(io_err("installing generated.lua"))
             })
-            .and_then(|()| {
-                next.save(&self.paths.state_file)
-                    .map_err(io_err("saving state"))
-            });
+            .and_then(|()| self.save_state(&next));
         if let Err(e) = committed {
-            let _ = std::fs::remove_file(&candidate);
+            let _ = std::fs::remove_file(&c.path);
             return Err(e);
         }
         self.state = next;
@@ -512,6 +546,20 @@ impl Desktop {
             }
         }
         Ok(())
+    }
+
+    /// Write `state.toml`. Every settings save goes through here, from `install` (rendered
+    /// changes) and from `commit_section`'s light path.
+    ///
+    /// uq#8 slice A: this is where `persist(next, origin)` journals the change (Task 13).
+    pub(crate) fn save_state(&self, next: &State) -> Result<(), DesktopError> {
+        next.save(&self.paths.state_file)
+            .map_err(io_err("saving state"))
+    }
+
+    /// Section writes that succeeded since uqd started (see `commit_section`).
+    pub fn section_commits(&self) -> u32 {
+        self.section_commits
     }
 
     /// Report the outcome of a live-apply call; the change is already persisted either way.

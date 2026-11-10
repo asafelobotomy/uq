@@ -123,6 +123,11 @@ impl DesktopIface {
         Ok(self.desktop.lock().await.set_section(domain, json).await?)
     }
 
+    /// Input devices Hyprland reports: `{keyboards, pointers, touch}` as JSON.
+    async fn list_input_devices(&self) -> Result<String, UqError> {
+        Ok(self.desktop.lock().await.list_input_devices().await?)
+    }
+
     async fn record_launch(&self, id: &str) {
         self.desktop.lock().await.record_launch(id);
     }

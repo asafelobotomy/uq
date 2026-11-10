@@ -28,6 +28,10 @@ pub trait Compositor: Send + Sync {
     async fn set_cursor(&self, theme: &str, size: u8) -> Result<(), CompositorError>;
     /// Current config errors (`hyprctl configerrors`).
     async fn config_errors(&self) -> Result<Vec<String>, CompositorError>;
+    /// Live outputs as JSON (`hyprctl monitors all -j`).
+    async fn monitors(&self) -> Result<String, CompositorError>;
+    /// Live input devices as JSON (`hyprctl devices -j`).
+    async fn devices(&self) -> Result<String, CompositorError>;
 }
 
 /// Hyprland over its request socket, plus `Hyprland --verify-config` for validation.
@@ -121,6 +125,14 @@ impl Compositor for Hyprland {
             .unwrap_or_else(|_| reply.lines().map(str::to_string).collect());
         Ok(lines.into_iter().filter(|l| !l.trim().is_empty()).collect())
     }
+
+    async fn monitors(&self) -> Result<String, CompositorError> {
+        self.socket.request("j/monitors all").await
+    }
+
+    async fn devices(&self) -> Result<String, CompositorError> {
+        self.socket.request("j/devices").await
+    }
 }
 
 /// In-memory compositor for tests: records calls, returns configurable results.
@@ -137,6 +149,14 @@ pub mod fake {
         pub calls: Mutex<Vec<String>>,
         /// (main config path, its contents) for every `verify` call.
         pub verified: Mutex<Vec<(std::path::PathBuf, String)>>,
+        /// What `monitors` returns (`monitors all -j`); empty means `[]`.
+        pub monitors_json: Mutex<String>,
+        /// What `devices` returns (`devices -j`); empty means `{}`.
+        pub devices_json: Mutex<String>,
+        /// `Some(msg)` makes the next `eval` return `Rejected(msg)`, once.
+        pub eval_error: Mutex<Option<String>>,
+        /// `Some(msg)` makes the next `reload` return `Rejected(msg)`, once.
+        pub reload_error: Mutex<Option<String>>,
     }
 
     impl FakeCompositor {
@@ -177,16 +197,34 @@ pub mod fake {
             }
         }
         async fn eval(&self, lua: &str) -> Result<(), CompositorError> {
-            self.record(format!("eval {lua}"))
+            self.record(format!("eval {lua}"))?;
+            match self.eval_error.lock().unwrap().take() {
+                Some(msg) => Err(CompositorError::Rejected(msg)),
+                None => Ok(()),
+            }
         }
         async fn reload(&self) -> Result<(), CompositorError> {
-            self.record("reload".into())
+            self.record("reload".into())?;
+            match self.reload_error.lock().unwrap().take() {
+                Some(msg) => Err(CompositorError::Rejected(msg)),
+                None => Ok(()),
+            }
         }
         async fn set_cursor(&self, theme: &str, size: u8) -> Result<(), CompositorError> {
             self.record(format!("setcursor {theme} {size}"))
         }
         async fn config_errors(&self) -> Result<Vec<String>, CompositorError> {
             self.record("configerrors".into()).map(|()| Vec::new())
+        }
+        async fn monitors(&self) -> Result<String, CompositorError> {
+            self.record("monitors".into())?;
+            let j = self.monitors_json.lock().unwrap().clone();
+            Ok(if j.is_empty() { "[]".into() } else { j })
+        }
+        async fn devices(&self) -> Result<String, CompositorError> {
+            self.record("devices".into())?;
+            let j = self.devices_json.lock().unwrap().clone();
+            Ok(if j.is_empty() { "{}".into() } else { j })
         }
     }
 }
