@@ -6,6 +6,7 @@ mod labels;
 mod restore;
 
 pub use diff::{DomainChange, Labels, diff, revert_changed, summarize};
+pub(crate) use diff::{get_path, put_path, segment_leaves};
 pub use journal::{Entry, Journal, MAX_AGE_DAYS, MAX_ENTRIES};
 pub use labels::label;
 pub use restore::{AutoReason, PointKind, RestorePoint, RestoreStore};

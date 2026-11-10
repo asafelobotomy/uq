@@ -95,6 +95,7 @@ impl PageModel for ShellModel {
         settings: true,
         history: false,
         monitors: false,
+        profiles: false,
     };
 
     fn core(&self) -> &ModelCore<ShellState> {

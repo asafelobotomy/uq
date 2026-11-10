@@ -248,3 +248,78 @@ function workspaceLayout(layouts, ws, fallback) {
     var dflt = typeof fallback === "string" && fallback !== "" ? fallback : "dwindle";
     return (sel !== "" && m[sel]) || m["name:" + ws.name] || dflt;
 }
+
+// --- profiles ---
+
+// ListProfiles' reply -> [{id, name, active}], at most 50 rows. A row needs a non-empty string
+// id and name; `active` is true only for a literal true. Names are untrusted text for UqText.
+// Anything that isn't an array -> [].
+function profileList(v) {
+    if (!Array.isArray(v))
+        return [];
+    var out = [];
+    for (var i = 0; i < v.length && out.length < 50; i++) {
+        var p = v[i];
+        if (!p || typeof p !== "object")
+            continue;
+        if (typeof p.id !== "string" || p.id === "" || typeof p.name !== "string" || p.name === "")
+            continue;
+        out.push({ id: p.id, name: p.name, active: p.active === true });
+    }
+    return out;
+}
+
+// The active row's id from profileList's rows, or "" when none is on.
+function activeProfile(list) {
+    if (!Array.isArray(list))
+        return "";
+    for (var i = 0; i < list.length; i++)
+        if (list[i] && list[i].active === true && typeof list[i].id === "string")
+            return list[i].id;
+    return "";
+}
+
+// One line from an ApplyProfile / ProfileOff report {active, kept: [{label}], notices}:
+// "Kept your own value: A, B" when Back to normal kept hand-changed keys, then each notice,
+// joined with a space. A malformed report -> "".
+function profileReportText(r) {
+    if (!r || typeof r !== "object" || !Array.isArray(r.kept) || !Array.isArray(r.notices))
+        return "";
+    var parts = [];
+    var labels = r.kept.filter(function (k) {
+        return k && typeof k.label === "string" && k.label !== "";
+    }).map(function (k) { return k.label; });
+    if (labels.length > 0)
+        parts.push("Kept your own value: " + labels.join(", "));
+    r.notices.forEach(function (n) {
+        if (typeof n === "string" && n !== "")
+            parts.push(n);
+    });
+    return parts.join(" ");
+}
+
+// Whether two profileList results show the same chips (id, name and active, in order), so the
+// row keeps its chips, and keyboard focus, when a refetch brings nothing new.
+function sameProfiles(a, b) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length)
+        return false;
+    for (var i = 0; i < a.length; i++) {
+        var x = a[i], y = b[i];
+        if (!x || !y || x.id !== y.id || x.name !== y.name || x.active !== y.active)
+            return false;
+    }
+    return true;
+}
+
+// The line a failed ApplyProfile / ProfileOff shows. uqd's own refusals are plain words and
+// shown as they are; the bridge's transport errors (they name uqd or the bridge) become one
+// plain line, and anything else that isn't a usable string becomes a generic one.
+function profileErrorText(e) {
+    if (typeof e !== "string" || e.trim() === "")
+        return "Couldn't switch profiles.";
+    if (/uqd|bridge|d-?bus/i.test(e) || e === "reset")
+        return "Couldn't reach uQ's settings service. Is it running?";
+    if (/^(bad profile|unknown call)/.test(e))
+        return "Couldn't switch profiles.";
+    return e;
+}

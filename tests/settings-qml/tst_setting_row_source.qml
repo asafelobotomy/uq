@@ -68,6 +68,22 @@ TestCase {
         compare(shown(row, "reapplyButton"), data.tag === "runtime");
     }
 
+    function test_profile_source() {
+        const row = make({ source: "profile", detail: { name: "Gaming" } });
+        compare(text(row), "From the Gaming profile");
+        const t = findChild(row, "sourceText");
+        compare(t.textFormat, Text.PlainText, "a profile's name is never rich text");
+        verify(t.opacity < 1, "muted like the theme");
+        verify(!shown(row, "sourceWarning"));
+        verify(!shown(row, "openUserLuaButton"));
+        verify(!shown(row, "reapplyButton"));
+        compare(text(make({ source: "profile", detail: null })), "From a profile");
+        compare(text(make({ source: "profile", detail: { name: "" } })), "From a profile");
+        const rich = make({ source: "profile", detail: { name: "<b>x</b>" } });
+        compare(text(rich), "From the <b>x</b> profile");
+        compare(findChild(rich, "sourceText").textFormat, Text.PlainText);
+    }
+
     function test_error_uses_the_negative_colour() {
         const row = make({ source: "error", detail: { message: "nope" } });
         verify(Qt.colorEqual(findChild(row, "sourceText").color, Kirigami.Theme.negativeTextColor));

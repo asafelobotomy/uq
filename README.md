@@ -89,6 +89,18 @@ uqctl restore <id>                     # bring back every setting as it was; to 
                                        # restore the newest auto:before_restore point it saved
 ```
 
+Profiles (a named set of settings you turn on together; see the Profiles page below):
+
+```bash
+uqctl profile list                     # id, name, number of settings; * marks the one that's on
+uqctl profile apply <id>               # turn a profile on
+uqctl profile off                      # Back to normal
+uqctl profile next                     # normal -> each profile in list order -> normal
+uqctl profile export <id> [file]       # write the profile's TOML (to the screen without a file)
+uqctl profile import <file> [--replace] # add a profile from a file; --replace swaps one with the same id
+uqctl profile delete <id>              # a profile that is on can't be deleted
+```
+
 The shell runs as `uq-shell.service` (Quickshell, started with the session). `SUPER+CTRL+L`
 restarts the lock surface (`uq-lock.service`, else `hyprlock`) if it ever dies.
 
@@ -110,6 +122,53 @@ installing `/usr/share/uq/settings/pages/<id>/page.toml` with a QML file. Settin
 available over D-Bus as `GetSection` / `SetSection` on `uqd`. Every write method there
 (`SetSection`, `SetSetting`, `SetTheme`, `SetLayout`, `SetSchedule`) takes a last `origin` string
 that the history records; `""` records as unknown.
+Profiles use `ListProfiles` (JSON), `GetProfile(id)` (the TOML text), `SetProfile(toml, replace)`
+(returns the id; `Conflict` if it exists and `replace` is false), `DeleteProfile(id)`,
+`ApplyProfile(id)` and `ProfileOff()` (both return a JSON report), and a `ProfileChanged(id)`
+signal, sent when the profile that's on or the list of profiles changes (`""` for none).
+
+#### Profiles page
+
+A profile is a named set of settings you turn on together, such as Gaming or Presentation. It
+holds only the settings you put in it, and only those change when it's on. It can hold settings
+from Look and layouts, Appearance (including the theme, light or dark, and fonts), Shell and
+Wallpaper, and one power mode (Power saver, Balanced or Performance). Only one profile is on at a
+time. Keybinds and window rules aren't part of profiles yet.
+
+**New profile** starts from the settings you changed lately, or from the current settings of the
+pages you tick; **Add settings** adds more later, each with the value it has now. The app can't
+add a power mode; to set one, export the profile, add `[power]` and `profile = "performance"`
+(or `"balanced"`, `"power-saver"`) to the file, and import it with `--replace`. You can remove it
+in the app again. Editing a profile that's on takes effect the next time you turn it on.
+
+Turning a profile on first saves a restore point named "Before the Gaming profile", then applies
+the whole profile in one step. Rows on the other pages say "From the Gaming profile" while it
+holds their value, and History lists the changes "from the Gaming profile". Power mode goes
+through the system's power service; if there isn't one, or it refuses or doesn't answer within
+3 seconds, everything else still applies and a notice says "Power mode wasn't changed".
+
+**Back to normal** puts back each setting the profile changed, but only if it still has the value
+the profile gave it. A setting you changed by hand since stays as you set it, and the message
+names it, such as "Gaps between windows". Turning on a second profile while one is on does the
+same, then applies the second in one step. While a profile that sets light or dark is on, the
+light/dark schedule doesn't switch it; the schedule carries on after Back to normal. Restoring a
+restore point ends the profile that's on and, like Back to normal, puts its power mode back. A
+profile that's on stays on after uqd restarts.
+
+Switch from the quick-settings **Profile** row (it shows only when you have profiles; **Normal**
+is Back to normal), from the page, or with `uqctl profile`. To switch with a key, add this to
+`user.lua` (the keybinds page will bring a setting for it later):
+
+```lua
+hl.bind("SUPER + ALT + P", hl.dsp.exec_cmd("uqctl profile next"))
+```
+
+**Export** and `uqctl profile export` write a TOML file with a header comment and `format = 1`
+(`id`, `name`, optional `icon`, then the settings as tables). **Import** checks every setting
+and refuses a file that is over 64 KiB, isn't text, has an unknown setting or a value out of
+range, or has `[keybinds]` or `[rules]`, with a plain
+message and nothing saved. Turning on a profile whose theme has since been uninstalled is refused and changes nothing; if the theme you used before a profile has been uninstalled since, Back to normal uses uQ's default theme and says so. Importing saves no restore point, since no setting changes. Manual
+checks are in [docs/notes/settings-slice-b-live-check.md](docs/notes/settings-slice-b-live-check.md).
 
 #### History page
 

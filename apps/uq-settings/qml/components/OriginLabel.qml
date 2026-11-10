@@ -6,6 +6,8 @@ UqLabel {
     /// The entry's origin as uqd journals it: settings, uqctl, shell, profile:<name>, restore,
     /// import or unknown.
     property string origin
+    /// `{"<profile id>": "<name>"}` from the history snapshot, so `profile:<id>` can say the name.
+    property var profileNames: ({})
 
     text: {
         switch (origin) {
@@ -20,8 +22,11 @@ UqLabel {
         case "import":
             return "from an import";
         }
-        if (origin.startsWith("profile:") && origin.length > "profile:".length)
-            return "from the profile " + origin.slice("profile:".length);
+        if (origin.startsWith("profile:") && origin.length > "profile:".length) {
+            const id = origin.slice("profile:".length);
+            const name = profileNames ? profileNames[id] : undefined;
+            return typeof name === "string" && name !== "" ? "from the " + name + " profile" : "from the profile " + id;
+        }
         return "from somewhere else";
     }
 }

@@ -7,6 +7,7 @@ pub mod fake_uqd;
 pub mod history;
 pub mod input;
 pub mod look;
+pub mod profiles;
 pub mod runner;
 pub mod shell;
 pub mod wallpaper;

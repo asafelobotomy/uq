@@ -90,6 +90,7 @@ impl PageModel for InputModel {
         settings: true,
         history: false,
         monitors: false,
+        profiles: false,
     };
 
     fn core(&self) -> &ModelCore<InputState> {

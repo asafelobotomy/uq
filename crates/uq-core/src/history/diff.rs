@@ -143,7 +143,11 @@ pub fn summarize(domain: &str, before: &Value, after: &Value, labels: Labels) ->
 }
 
 /// Object leaves by path segment (arrays and scalars are leaves; an empty object is none).
-fn segment_leaves(v: &Value, prefix: &mut Vec<String>, out: &mut Vec<(Vec<String>, Value)>) {
+pub(crate) fn segment_leaves(
+    v: &Value,
+    prefix: &mut Vec<String>,
+    out: &mut Vec<(Vec<String>, Value)>,
+) {
     match v {
         Value::Object(m) => {
             for (k, child) in m {
@@ -156,13 +160,13 @@ fn segment_leaves(v: &Value, prefix: &mut Vec<String>, out: &mut Vec<(Vec<String
     }
 }
 
-fn get_path<'a>(v: &'a Value, path: &[String]) -> Option<&'a Value> {
+pub(crate) fn get_path<'a>(v: &'a Value, path: &[String]) -> Option<&'a Value> {
     path.iter().try_fold(v, |v, part| v.get(part))
 }
 
 /// Set `path` in `root` to `value`, creating objects on the way; `None` removes it and then
 /// any object on the way that this left empty.
-fn put_path(root: &mut Value, path: &[String], value: Option<Value>) {
+pub(crate) fn put_path(root: &mut Value, path: &[String], value: Option<Value>) {
     let Some((last, parents)) = path.split_last() else {
         return;
     };

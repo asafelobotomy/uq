@@ -8,6 +8,7 @@ TestCase {
     property var sent: []
     SignalSpy { id: themeSpy; target: Bridge; signalName: "themeChanged" }
     SignalSpy { id: layoutSpy; target: Bridge; signalName: "layoutChanged" }
+    SignalSpy { id: profileSpy; target: Bridge; signalName: "profileChanged" }
     SignalSpy { id: eventSpy; target: Bridge; signalName: "event" }
     SignalSpy { id: resultsSpy; target: Bridge; signalName: "searchResults" }
     SignalSpy { id: sleepSpy; target: Bridge; signalName: "prepareForSleep" }
@@ -18,7 +19,7 @@ TestCase {
         Bridge.reset();
         Bridge.writer = function (s) { sent.push(s); };
         Bridge.processStarted();
-        themeSpy.clear(); layoutSpy.clear(); eventSpy.clear(); resultsSpy.clear();
+        themeSpy.clear(); layoutSpy.clear(); profileSpy.clear(); eventSpy.clear(); resultsSpy.clear();
         sleepSpy.clear(); lockReqSpy.clear();
     }
 
@@ -64,6 +65,12 @@ TestCase {
         compare(layoutSpy.count, 2);
         compare(layoutSpy.signalArguments[1][0], "name:web");
         compare(layoutSpy.signalArguments[1][1], "master");
+        Bridge.feed('{"v":1,"event":"ProfileChanged","data":{"id":"gaming"}}');
+        Bridge.feed('{"v":1,"event":"ProfileChanged","data":{"id":""}}');
+        Bridge.feed('{"v":1,"event":"ProfileChanged","data":null}');
+        compare(profileSpy.count, 2);
+        compare(profileSpy.signalArguments[0][0], "gaming");
+        compare(profileSpy.signalArguments[1][0], "");
         compare(Bridge.weather, null);
         Bridge.feed('{"v":1,"event":"Weather","data":{"temp_c":3,"code":1,"is_day":true,"location_name":"Oslo"}}');
         compare(Bridge.weather.location_name, "Oslo");

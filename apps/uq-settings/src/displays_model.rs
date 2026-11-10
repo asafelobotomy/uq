@@ -104,6 +104,7 @@ impl PageModel for DisplaysModel {
         settings: false,
         history: false,
         monitors: true,
+        profiles: false,
     };
 
     fn core(&self) -> &ModelCore<DisplaysState> {

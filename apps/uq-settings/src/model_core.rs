@@ -30,6 +30,8 @@ pub struct Follow {
     pub history: bool,
     /// `MonitorsChanged`: a display change was applied, kept or put back.
     pub monitors: bool,
+    /// `ProfileChanged`: the active profile or the list of profiles changed.
+    pub profiles: bool,
 }
 
 /// Whether a `SectionChanged(domain, …)` concerns the page.
@@ -123,6 +125,9 @@ async fn follow_uqd<M: PageModel>(
         }
         if follow.monitors {
             all.push(proxy.receive_monitors_changed().await?.map(|_| ()).boxed());
+        }
+        if follow.profiles {
+            all.push(proxy.receive_profile_changed().await?.map(|_| ()).boxed());
         }
         zbus::Result::Ok(futures_util::stream::select_all(all))
     };
@@ -218,6 +223,7 @@ mod tests {
             settings: false,
             history: false,
             monitors: false,
+            profiles: false,
         };
         assert!(wants(&wallpaper, "wallpaper"));
         assert!(!wants(&wallpaper, "appearance"));
@@ -228,6 +234,7 @@ mod tests {
             settings: true,
             history: false,
             monitors: false,
+            profiles: false,
         };
         assert!(wants(&two, "look") && wants(&two, "layouts"));
         assert!(!wants(&two, "shell"));

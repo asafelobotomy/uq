@@ -1,6 +1,7 @@
 //! Desktop state and the commit sequence (spec §4, §5). No D-Bus here.
 
 use crate::compositor::{Compositor, CompositorError};
+use crate::power::{NoPowerProfiles, POWER_TIMEOUT, PowerError, PowerProfiles};
 use crate::system::SystemSettings;
 use chrono::{DateTime, Local, TimeZone, Utc};
 use std::collections::BTreeMap;
@@ -15,6 +16,7 @@ use uq_core::history::{
 };
 use uq_core::lua::{Layout, emit_generated, emit_workspace_rule, lua_string};
 use uq_core::paths::Paths;
+use uq_core::profile::{ActiveProfile, ProfileStore, holds, load_active};
 use uq_core::render::{RenderedFiles, kvantum_base, render};
 use uq_core::schedule::{Schedule, last_event, variant_at};
 use uq_core::settings::{
@@ -51,6 +53,8 @@ pub enum Event {
     HistoryChanged,
     /// A display change was applied, confirmed or reverted: `ListOutputs` has the new picture.
     MonitorsChanged,
+    /// The active profile or the list of profiles changed; the active profile's id, or `""`.
+    ProfileChanged(String),
 }
 
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
@@ -97,7 +101,7 @@ pub const KVANTUM_DIR: &str = "/usr/share/Kvantum";
 
 pub struct Desktop {
     pub(crate) paths: Paths,
-    themes: ThemeRegistry,
+    pub(crate) themes: ThemeRegistry,
     pub(crate) state: State,
     pub(crate) comp: Arc<dyn Compositor>,
     sys: Arc<dyn SystemSettings>,
@@ -108,7 +112,7 @@ pub struct Desktop {
     launch_dirty: bool,
     launch_saves: u32,
     journal: Journal,
-    restore: RestoreStore,
+    pub(crate) restore: RestoreStore,
     /// Ids of the journal entries the latest `persist` appended; empty when it journalled nothing.
     last_entry_ids: Vec<String>,
     /// `(domain, Hyprland's message)` of the last section write that failed verification.
@@ -117,6 +121,17 @@ pub struct Desktop {
     pub(crate) pending: Option<crate::monitors::Pending>,
     /// How long an unconfirmed display change stays ([`crate::monitors::REVERT_AFTER`]).
     pub(crate) revert_after: Duration,
+    pub(crate) power: Arc<dyn PowerProfiles>,
+    /// How long a power call may take ([`POWER_TIMEOUT`]).
+    pub(crate) power_timeout: Duration,
+    pub(crate) profiles: ProfileStore,
+    /// The profile that is on, and what it replaced; kept in `paths.profile_active`.
+    pub(crate) active: Option<ActiveProfile>,
+}
+
+/// `explain`'s dotted key as a profile path.
+fn json_path(key: &str) -> Vec<String> {
+    key.split('.').map(str::to_string).collect()
 }
 
 /// How much of `user.lua` `explain` scans.
@@ -215,6 +230,8 @@ impl Desktop {
         let (events, _) = broadcast::channel(64);
         let journal = Journal::open(&paths.history_dir);
         let restore = RestoreStore::open(&paths.restore_dir);
+        let profiles = ProfileStore::open(paths.profiles_dir.clone());
+        let active = load_active(&paths.profile_active);
         Ok(Desktop {
             paths,
             themes,
@@ -232,7 +249,37 @@ impl Desktop {
             last_rejected: None,
             pending: None,
             revert_after: crate::monitors::REVERT_AFTER,
+            power: Arc::new(NoPowerProfiles),
+            power_timeout: POWER_TIMEOUT,
+            profiles,
+            active,
         })
+    }
+
+    /// Use `p` for power modes instead of none (the system's service in `main`, a fake in tests).
+    pub fn with_power(mut self, p: Arc<dyn PowerProfiles>) -> Self {
+        self.power = p;
+        self
+    }
+
+    /// Wait at most `d` for a power call instead of [`POWER_TIMEOUT`] (tests).
+    pub fn with_power_timeout(mut self, d: Duration) -> Self {
+        self.power_timeout = d;
+        self
+    }
+
+    /// The current power mode; `Timeout` when the power service doesn't answer in time.
+    pub(crate) async fn power_active(&self) -> Result<String, PowerError> {
+        tokio::time::timeout(self.power_timeout, self.power.active())
+            .await
+            .unwrap_or(Err(PowerError::Timeout))
+    }
+
+    /// Set the power mode; `Timeout` when the power service doesn't answer in time.
+    pub(crate) async fn power_set(&self, mode: &str) -> Result<(), PowerError> {
+        tokio::time::timeout(self.power_timeout, self.power.set_active(mode))
+            .await
+            .unwrap_or(Err(PowerError::Timeout))
     }
 
     /// Look for Kvantum base themes in `dir` instead of `/usr/share/Kvantum` (tests).
@@ -474,8 +521,13 @@ impl Desktop {
     ) -> Result<(), DesktopError> {
         s.validate().map_err(DesktopError::InvalidSchedule)?;
         let mut next = self.state.clone();
-        let wanted = variant_at(&s, &now);
-        next.schedule_mark = last_event(&s, &now).map(|(at, _)| at.with_timezone(&Utc));
+        // While the active profile sets the variant, the schedule waits: no mark, so the first
+        // tick after Back to normal applies it.
+        let held = self.profile_holds_variant();
+        let wanted = variant_at(&s, &now).filter(|_| !held);
+        next.schedule_mark = last_event(&s, &now)
+            .filter(|_| !held)
+            .map(|(at, _)| at.with_timezone(&Utc));
         next.schedule = s;
         let change = match wanted {
             Some(v) if v != next.variant => {
@@ -490,10 +542,15 @@ impl Desktop {
     /// Apply a scheduled transition that is newer than the last one applied. Returns whether the
     /// variant switched. A manual variant change therefore holds until the next boundary.
     /// Called every minute, so suspend/resume and clock changes are caught on the next tick.
+    /// While the active profile sets the variant nothing happens and the mark stays, so the first
+    /// tick after Back to normal switches as usual.
     pub async fn tick_schedule_at<Tz: TimeZone>(
         &mut self,
         now: DateTime<Tz>,
     ) -> Result<bool, DesktopError> {
+        if self.profile_holds_variant() {
+            return Ok(false);
+        }
         let Some((at, v)) = last_event(&self.state.schedule, &now) else {
             return Ok(false);
         };
@@ -597,7 +654,8 @@ impl Desktop {
 
     /// Where each key of `domain` gets its live value: `{key: {source, live, stored, detail}}`,
     /// keyed by the dotted path within the section. `source` is `theme`, `default`, `uq`,
-    /// `user_lua`, `runtime` or `error`. Without a live Hyprland every key reports from state.
+    /// `profile` (a `uq` value the active profile set), `user_lua`, `runtime` or `error`.
+    /// Without a live Hyprland every key reports from state.
     pub async fn explain(&self, domain: &str) -> Result<serde_json::Value, DesktopError> {
         use serde_json::{Value, json};
         if !SECTION_DOMAINS.contains(&domain) {
@@ -661,6 +719,14 @@ impl Desktop {
                     None if expected.is_none() => (from_state, Value::Null),
                     None => ("runtime", Value::Null),
                 }
+            };
+            let (source, detail) = match &self.active {
+                Some(a)
+                    if source == "uq" && holds(a, domain, &json_path(row.json_key()), &stored) =>
+                {
+                    ("profile", json!({ "name": a.name }))
+                }
+                _ => (source, detail),
             };
             out.insert(
                 row.json_key().to_string(),
@@ -731,8 +797,9 @@ impl Desktop {
 
     /// Bring back every domain of restore point `id` as one write, keeping today's launch
     /// counts. A damaged point or one whose theme is gone changes nothing; otherwise an
-    /// automatic point of the current state is saved first.
-    pub async fn restore(&mut self, id: &str) -> Result<(), DesktopError> {
+    /// automatic point of the current state is saved first. Returns plain notices (the power
+    /// mode of a profile the restore ended).
+    pub async fn restore(&mut self, id: &str) -> Result<Vec<String>, DesktopError> {
         let mut next = self.restore.load(id).map_err(|e| match e.kind() {
             std::io::ErrorKind::InvalidData => {
                 DesktopError::InvalidArgument("restore point is damaged".into())
@@ -755,7 +822,23 @@ impl Desktop {
         }
         next.launch_counts = self.state.launch_counts.clone();
         self.commit(next, Change::Theme, Origin::Restore).await?;
-        // `Change::Theme` announces only the theme; every section may have changed too.
+        self.announce_all();
+        // The restored settings aren't the profile's any more, and neither is its power mode,
+        // which a restore point doesn't hold: put it back as "Back to normal" does (K2: a
+        // failure is a notice, never an error).
+        let mut notices = Vec::new();
+        if let Some(a) = self.active.take() {
+            if let Some(pm) = &a.power {
+                self.power_back(pm, &mut Vec::new(), &mut notices).await;
+            }
+            self.forget_active();
+        }
+        Ok(notices)
+    }
+
+    /// After a `Change::Theme` commit, which announces only the theme: every section and the
+    /// settings may have changed too.
+    pub(crate) fn announce_all(&self) {
         for domain in SECTION_DOMAINS {
             if let Ok(json) = self.get_section(domain) {
                 let _ = self.events.send(Event::SectionChanged {
@@ -767,7 +850,6 @@ impl Desktop {
         let _ = self.events.send(Event::SettingsChanged(Box::new(
             self.state.settings.clone(),
         )));
-        Ok(())
     }
 
     fn ensure_user_lua(&self) -> Result<(), DesktopError> {

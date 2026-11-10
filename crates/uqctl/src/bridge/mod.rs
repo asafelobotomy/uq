@@ -46,7 +46,9 @@ async fn handle(
         "Ping" => Ok(json!("pong")),
         "GetTheme" | "SetTheme" | "ListThemes" | "GetLayouts" | "SetLayout" | "GetSchedule"
         | "SetSchedule" | "Reload" | "GetSettings" | "SetSetting" | "GetLaunchCounts"
-        | "RecordLaunch" => link.call(call, args).await,
+        | "RecordLaunch" | "ListProfiles" | "ApplyProfile" | "ProfileOff" => {
+            link.call(call, args).await
+        }
         "Launch" => launch::launch(link, args, runs).await,
         "Search" => providers.search(link, runs, args).await,
         "Activate" => providers.activate(link, runs, args).await,

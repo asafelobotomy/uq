@@ -279,6 +279,7 @@ async fn forward(
                 .deserialize::<(String, String)>()
                 .map(|(d, j)| json!({"domain": d, "value": parse_json(&j)})),
             "LaunchCountsChanged" => body.deserialize::<HashMap<String, u32>>().map(|c| json!(c)),
+            "ProfileChanged" => body.deserialize::<String>().map(|id| json!({"id": id})),
             _ => continue,
         };
         match parsed {
@@ -323,6 +324,9 @@ enum Request {
     SetSetting(String, String),
     GetLaunchCounts,
     RecordLaunch(String),
+    ListProfiles,
+    ApplyProfile(String),
+    ProfileOff,
 }
 
 fn string_arg(args: &[Value], i: usize, what: &str) -> Result<String, String> {
@@ -350,6 +354,8 @@ impl Request {
             "Reload" => (0, Request::Reload),
             "GetSettings" => (0, Request::GetSettings),
             "GetLaunchCounts" => (0, Request::GetLaunchCounts),
+            "ListProfiles" => (0, Request::ListProfiles),
+            "ProfileOff" => (0, Request::ProfileOff),
             "SetTheme" => {
                 arity(call, args, 2)?;
                 (
@@ -390,6 +396,10 @@ impl Request {
             "RecordLaunch" => {
                 arity(call, args, 1)?;
                 (1, Request::RecordLaunch(string_arg(args, 0, "desktop id")?))
+            }
+            "ApplyProfile" => {
+                arity(call, args, 1)?;
+                (1, Request::ApplyProfile(string_arg(args, 0, "profile id")?))
             }
             other => return Err(format!("unknown call {other}")),
         };
@@ -443,8 +453,22 @@ impl Request {
             Request::SetSchedule(j) => unit(proxy.call("SetSchedule", &(j, ORIGIN)).await),
             Request::SetSetting(k, j) => unit(proxy.call("SetSetting", &(k, j, ORIGIN)).await),
             Request::RecordLaunch(id) => unit(proxy.call("RecordLaunch", &(id,)).await),
+            // Profile writes take no origin: uqd journals them as `profile:<id>`.
+            Request::ListProfiles => {
+                let s: String = proxy.call("ListProfiles", &()).await.map_err(describe)?;
+                serde_json::from_str(&s).map_err(|e| format!("bad profile list: {e}"))
+            }
+            Request::ApplyProfile(id) => {
+                report(proxy.call("ApplyProfile", &(id,)).await.map_err(describe)?)
+            }
+            Request::ProfileOff => report(proxy.call("ProfileOff", &()).await.map_err(describe)?),
         }
     }
+}
+
+/// uqd's profile report (`{active, kept, notices}`), parsed.
+fn report(s: String) -> Result<Value, String> {
+    serde_json::from_str(&s).map_err(|e| format!("bad profile report: {e}"))
 }
 
 fn unit(r: zbus::Result<()>) -> Result<Value, String> {
@@ -473,5 +497,22 @@ fn describe(err: zbus::Error) -> String {
             other => other.to_string(),
         },
         other => other.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn profile_requests_check_arity() {
+        assert!(Request::parse("ListProfiles", &[]).is_ok());
+        assert!(Request::parse("ListProfiles", &[json!(1)]).is_err());
+        assert!(Request::parse("ApplyProfile", &[json!("gaming")]).is_ok());
+        assert!(Request::parse("ApplyProfile", &[]).is_err());
+        assert!(Request::parse("ApplyProfile", &[json!(1)]).is_err());
+        assert!(Request::parse("ApplyProfile", &[json!("a"), json!("b")]).is_err());
+        assert!(Request::parse("ProfileOff", &[]).is_ok());
+        assert!(Request::parse("ProfileOff", &[json!("x")]).is_err());
     }
 }

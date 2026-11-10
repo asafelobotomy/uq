@@ -62,6 +62,17 @@ All notable changes to uQ are listed here. The format follows
 - **Input page.** Keyboard layouts (from xkeyboard-config's list) with variants, order and a
   switch combo, repeat delay and rate, mouse and touchpad speed, acceleration, natural scroll,
   tap-to-click and per-device overrides. `uqd` gains an `input` section and `ListInputDevices`.
+- **Profiles.** A profile is a named set of settings (Look and layouts, Appearance with theme,
+  light/dark and fonts, Shell, Wallpaper, and a power mode) that you turn on together and
+  turn off with Back to normal, which keeps anything you changed by hand since. New Profiles
+  page in uq-settings, a Profile row in quick settings, and `uqctl profile list | apply | off |
+  next | export | import | delete`. Each switch saves a "Before the ... profile" restore point and
+  shows in History as "from the ... profile". A power mode goes through the system's power
+  service; if it can't be set, the rest still applies with a notice. While a profile that sets
+  light or dark is on, the light/dark schedule doesn't switch it. Export and import use TOML
+  (`format = 1`); keybinds and rules can't be in a profile yet. `uqd` gains `ListProfiles`,
+  `GetProfile`, `SetProfile`, `DeleteProfile`, `ApplyProfile`, `ProfileOff` and a
+  `ProfileChanged` signal.
 
 ### Changed
 

@@ -171,6 +171,11 @@ PanelWindow {
                     active: root.shown
                 }
 
+                ProfileGroup {
+                    Layout.fillWidth: true
+                    active: root.shown
+                }
+
                 PowerGroup {
                     Layout.fillWidth: true
                 }

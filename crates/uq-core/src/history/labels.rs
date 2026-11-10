@@ -285,6 +285,38 @@ mod tests {
     }
 
     #[test]
+    fn every_profile_key_has_a_plain_label() {
+        use crate::profile::{DomainKind, PROFILE_DOMAINS, key_label, leaves};
+        let mut dotted_names = Vec::new();
+        for st in populated() {
+            let mut keys: Vec<(&str, Vec<String>)> = vec![
+                ("appearance", vec!["theme".into()]),
+                ("appearance", vec!["variant".into()]),
+                ("power", vec!["profile".into()]),
+            ];
+            for (domain, kind) in PROFILE_DOMAINS {
+                if matches!(kind, DomainKind::Section | DomainKind::Appearance) {
+                    keys.extend(
+                        leaves(&st.section(domain).unwrap())
+                            .into_iter()
+                            .map(|(path, _)| (domain, path)),
+                    );
+                }
+            }
+            for (domain, path) in keys {
+                if key_label(domain, &path) == path.join(".") {
+                    dotted_names.push(format!("{domain}.{}", path.join(".")));
+                }
+            }
+        }
+        assert!(
+            dotted_names.is_empty(),
+            "a profile would show these internal key names: {dotted_names:?}. Add a plain label \
+             for each in `label` above."
+        );
+    }
+
+    #[test]
     fn wildcard_paths_name_the_screen_or_workspace() {
         assert_eq!(
             label("wallpaper", "outputs.DP-1.image").as_deref(),

@@ -1,11 +1,13 @@
 //! uqctl: command-line client for uqd (`org.uq.Desktop1`).
 
 mod bridge;
+mod profile_cmd;
 mod settings_app;
 mod settings_cmd;
 mod setup;
 
 use clap::{Parser, Subcommand};
+use profile_cmd::ProfileCmd;
 use serde_json::Value;
 use settings_cmd::{
     IdleCmd, LaunchesCmd, MouseCmd, NotifCmd, OnOff, PinCmd, PrivacyKey, RestoreCmd, WeatherCmd,
@@ -74,6 +76,11 @@ enum Cmd {
     Launches {
         #[command(subcommand)]
         cmd: LaunchesCmd,
+    },
+    /// Settings profiles: list, turn on and off, switch, export, import or delete.
+    Profile {
+        #[command(subcommand)]
+        cmd: ProfileCmd,
     },
     /// Open the Settings app, optionally on a page and a setting (e.g. `uqctl settings wallpaper`).
     Settings {
@@ -218,6 +225,9 @@ async fn run(cmd: Cmd) -> Result<(), String> {
     if matches!(cmd, Cmd::Bridge | Cmd::Settings { .. }) {
         unreachable!("handled in main");
     }
+    if let Cmd::Profile { cmd } = cmd {
+        return profile_cmd::run(&profile_cmd::connect().await?, cmd).await;
+    }
     let conn = zbus::Connection::session().await.map_err(describe)?;
     let proxy = zbus::Proxy::new(&conn, NAME, PATH, NAME)
         .await
@@ -351,7 +361,7 @@ async fn run(cmd: Cmd) -> Result<(), String> {
             .call::<_, _, ()>("ClearLaunchCounts", &())
             .await
             .map_err(describe)?,
-        Cmd::Setup { .. } | Cmd::Bridge | Cmd::Settings { .. } => {
+        Cmd::Setup { .. } | Cmd::Bridge | Cmd::Settings { .. } | Cmd::Profile { .. } => {
             unreachable!("handled before connecting")
         }
     }

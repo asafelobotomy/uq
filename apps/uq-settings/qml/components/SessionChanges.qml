@@ -13,6 +13,8 @@ QQC2.ToolButton {
     property var entries: []
     /// Unix seconds the app started at: entries from then on are this session's.
     property real sessionStart: 0
+    /// Profile names by id (history's `profiles`), so an origin says "from the Gaming profile".
+    property var profileNames: ({})
     readonly property var session: (root.entries || []).filter(e => e.time >= root.sessionStart)
     /// The sheet's rows, one per entry of `session` (for tests).
     readonly property alias rows: rowRepeater
@@ -82,6 +84,7 @@ QQC2.ToolButton {
                             OriginLabel {
                                 objectName: "originText"
                                 origin: row.modelData.origin
+                                profileNames: root.profileNames
                                 opacity: 0.7
                             }
                         }

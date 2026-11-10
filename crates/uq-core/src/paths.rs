@@ -22,6 +22,10 @@ pub struct Paths {
     pub history_dir: PathBuf,
     /// `~/.local/state/uq/restore`: restore points.
     pub restore_dir: PathBuf,
+    /// `~/.local/state/uq/profiles`: one `<id>.toml` per profile.
+    pub profiles_dir: PathBuf,
+    /// `~/.local/state/uq/profile-active.json`: which profile is on, and what it replaced.
+    pub profile_active: PathBuf,
     /// `$UQ_DATA_DIR/themes`
     pub themes_dir: PathBuf,
     /// `$UQ_DATA_DIR/templates`
@@ -78,6 +82,8 @@ impl Paths {
             state_file: state.join("uq/state.toml"),
             history_dir: state.join("uq/history"),
             restore_dir: state.join("uq/restore"),
+            profiles_dir: state.join("uq/profiles"),
+            profile_active: state.join("uq/profile-active.json"),
             themes_dir: data.join("themes"),
             templates_dir: data.join("templates"),
             hypr_default: hypr_default.to_path_buf(),
@@ -134,6 +140,8 @@ mod tests {
             &p.state_file,
             &p.history_dir,
             &p.restore_dir,
+            &p.profiles_dir,
+            &p.profile_active,
         ] {
             assert!(path.starts_with("/tmp/r"), "{path:?}");
         }

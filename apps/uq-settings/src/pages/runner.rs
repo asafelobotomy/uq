@@ -110,9 +110,10 @@ pub async fn patch_section(
 /// the most telling one wins, and the first of equals.
 fn rank(source: &str) -> u8 {
     match source {
-        "error" => 5,
-        "user_lua" => 4,
-        "runtime" => 3,
+        "error" => 6,
+        "user_lua" => 5,
+        "runtime" => 4,
+        "profile" => 3,
         "uq" => 2,
         "theme" | "default" => 1,
         _ => 0,
@@ -239,6 +240,16 @@ mod tests {
             r.state.lock().unwrap().settings.appearance.font_size,
             Some(12)
         );
+    }
+
+    #[test]
+    fn profile_source_outranks_uq_but_not_runtime() {
+        assert!(rank("profile") > rank("uq"));
+        assert!(rank("profile") > rank("theme"));
+        assert!(rank("profile") > rank("default"));
+        assert!(rank("runtime") > rank("profile"));
+        assert!(rank("user_lua") > rank("runtime"));
+        assert!(rank("error") > rank("user_lua"));
     }
 
     #[tokio::test]

@@ -119,6 +119,7 @@ Kirigami.ApplicationWindow {
             SessionChanges {
                 entries: root.history.entries || []
                 sessionStart: root.history.session_start || 0
+                profileNames: root.history.profiles || ({})
                 enabled: App.uqdUp
                 onUndoRequested: id => HistoryModel.undo(id, false)
             }
