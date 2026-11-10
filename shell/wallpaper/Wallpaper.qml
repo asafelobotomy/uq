@@ -30,11 +30,22 @@ PanelWindow {
 
     property var slideList: []
     property int slideIndex: 0
-    property var errored: ({})
+    // Slides that failed to load, by file name.
+    property var badNames: ({})
+    // The same as indices into slideList, for W.nextReadable.
+    readonly property var errored: {
+        var e = {};
+        for (var i = 0; i < slideList.length; i++)
+            if (badNames[slideList[i]])
+                e[i] = true;
+        return e;
+    }
+    // Every slide failed: show the colour.
+    readonly property bool exhausted: slideList.length > 0 && W.nextReadable(0, slideList.length, errored) < 0
 
     readonly property string target: {
         if (slideshow)
-            return slideList.length > 0 && slideIndex >= 0 && slideIndex < slideList.length
+            return !exhausted && slideIndex >= 0 && slideIndex < slideList.length
                 ? W.fileUrl(folder + "/" + slideList[slideIndex]) : "";
         return imagePath !== "" ? W.fileUrl(imagePath) : "";
     }
@@ -49,13 +60,19 @@ PanelWindow {
     mask: Region {}
     anchors { top: true; bottom: true; left: true; right: true }
 
+    // Re-read the folder. The current slide stays current when the list only grows or shrinks
+    // elsewhere; the position resets only when it is gone.
     function rebuildSlides() {
         var names = [];
         for (var i = 0; i < folderModel.count; i++)
             names.push(folderModel.get(i, "fileName"));
-        slideList = W.slides(names, readableFormats);
-        errored = ({});
-        slideIndex = 0;
+        var list = W.slides(names, readableFormats);
+        if (JSON.stringify(list) === JSON.stringify(slideList))
+            return;
+        var cur = slideList[slideIndex];
+        var at = list.indexOf(cur);
+        slideList = list;
+        slideIndex = at >= 0 ? at : 0;
     }
 
     function advance() {
@@ -64,68 +81,15 @@ PanelWindow {
             slideIndex = j;
     }
 
-    // The image on top (or none) and the one waiting to load the next source.
-    property Image shown: null
-    readonly property Image hidden: shown === imgA ? imgB : imgA
-
-    function showTarget() {
-        fade.stop();
-        if (shown)
-            shown.opacity = 1;
-        if (target === "") {
-            clearImages();
+    // The slide on screen failed to load: mark it and move on at once.
+    function slideFailed() {
+        if (!slideshow)
             return;
-        }
-        if (shown && shown.source.toString() === target)
-            return;
-        hidden.opacity = 0;
-        hidden.z = 1;
-        if (shown)
-            shown.z = 0;
-        hidden.source = target;
+        var b = Object.assign({}, badNames);
+        b[slideList[slideIndex]] = true;
+        badNames = b;
+        advance();
     }
-
-    function clearImages() {
-        imgA.opacity = 0;
-        imgB.opacity = 0;
-        shown = null;
-    }
-
-    function imageLoaded(img) {
-        if (img === shown || img.source.toString() !== target)
-            return;
-        var old = shown;
-        shown = img;
-        if (reduceMotion || !old) {
-            img.opacity = 1;
-            if (old)
-                old.opacity = 0;
-        } else {
-            fade.target = img;
-            fade.old = old;
-            fade.restart();
-        }
-    }
-
-    function imageFailed(img) {
-        if (img.source.toString() !== target)
-            return;
-        if (slideshow) {
-            var e = errored;
-            e[slideIndex] = true;
-            errored = e;
-            var j = W.nextReadable(slideIndex, slideList.length, errored);
-            if (j >= 0 && j !== slideIndex) {
-                slideIndex = j;
-                return;
-            }
-        }
-        // Single image, or every slide failed: show the colour.
-        clearImages();
-    }
-
-    onTargetChanged: showTarget()
-    onFitChanged: if (shown) shown.opacity = 1
 
     FolderListModel {
         id: folderModel
@@ -139,7 +103,7 @@ PanelWindow {
 
     onFolderChanged: {
         slideList = [];
-        errored = ({});
+        badNames = ({});
         slideIndex = 0;
     }
 
@@ -150,41 +114,15 @@ PanelWindow {
         onTriggered: win.advance()
     }
 
-    Rectangle {
+    Crossfade {
         anchors.fill: parent
+        target: win.target
+        fit: win.fit
         color: W.fallbackColor(win.entry, Theme.bg)
+        reduceMotion: win.reduceMotion
+        fadeMs: win.fadeMs
+        // A slideshow skips a bad slide without flashing the colour.
+        clearOnFail: !win.slideshow
+        onFailed: win.slideFailed()
     }
-
-    NumberAnimation {
-        id: fade
-
-        property Image old: null
-
-        property: "opacity"
-        from: 0
-        to: 1
-        duration: win.fadeMs
-        easing.type: Easing.InOutQuad
-        onFinished: if (old) old.opacity = 0
-    }
-
-    component Slide: Image {
-        anchors.fill: parent
-        asynchronous: true
-        cache: false
-        opacity: 0
-        fillMode: win.fit
-        // Fill and fit decode at screen size; center and tile need the real size.
-        sourceSize: win.fit === Image.PreserveAspectCrop || win.fit === Image.PreserveAspectFit
-            ? Qt.size(win.width, win.height) : Qt.size(0, 0)
-        onStatusChanged: {
-            if (status === Image.Ready)
-                win.imageLoaded(this);
-            else if (status === Image.Error)
-                win.imageFailed(this);
-        }
-    }
-
-    Slide { id: imgA }
-    Slide { id: imgB }
 }
