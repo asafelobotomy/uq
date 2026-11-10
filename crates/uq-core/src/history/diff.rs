@@ -59,7 +59,9 @@ fn domain_value(st: &State, domain: &str) -> Value {
         "settings" => {
             let all = serde_json::to_value(&st.settings).expect("settings serialise");
             let mut m = Map::new();
-            for key in SETTING_KEYS {
+            // `mouse.*` is the `input` section's mouse part: it is recorded there, once, so
+            // the Input page owns it in History.
+            for key in SETTING_KEYS.iter().filter(|k| !k.starts_with("mouse.")) {
                 let v = key
                     .split('.')
                     .try_fold(&all, |v, part| v.get(part))
@@ -68,15 +70,6 @@ fn domain_value(st: &State, domain: &str) -> Value {
                 m.insert(key.to_string(), v);
             }
             Value::Object(m)
-        }
-        // The input page's mouse part is `[mouse]`, journalled as the `settings` keys
-        // `mouse.*`; leaving it out here records each mouse change once.
-        "input" => {
-            let mut v = st.section(domain).unwrap_or(Value::Null);
-            if let Some(m) = v.as_object_mut() {
-                m.remove("mouse");
-            }
-            v
         }
         _ => st.section(domain).unwrap_or(Value::Null),
     }
@@ -253,8 +246,8 @@ mod tests {
             .into_iter()
             .map(|c| c.domain)
             .collect();
-        assert_eq!(domains, ["settings"]);
-        new.settings.input.touchpad.tap_to_click = Some(true);
+        assert_eq!(domains, ["input"]);
+        new.settings.idle.dim = Some(30);
         let domains: Vec<_> = diff(&old, &new, &labels)
             .into_iter()
             .map(|c| c.domain)

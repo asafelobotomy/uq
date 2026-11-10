@@ -73,9 +73,12 @@ fn wallpaper(key: &str) -> Option<String> {
     })
 }
 
-/// `keyboard.*`, `touchpad.*` and `devices.<device>.<field>`. The mouse part of `input` is
-/// journalled under `settings` (`mouse.*`), so it never reaches here.
+/// `keyboard.*`, `mouse.*`, `touchpad.*` and `devices.<device>.<field>`. Older journals
+/// recorded the mouse keys under `settings`, which keeps its own labels for them.
 fn input(key: &str) -> Option<String> {
+    if let Some(k) = key.strip_prefix("mouse.") {
+        return label("settings", &format!("mouse.{k}"));
+    }
     let fixed = match key {
         "keyboard.layouts" => "Keyboard layouts",
         "keyboard.switch_combo" => "Layout switch keys",
