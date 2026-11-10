@@ -283,7 +283,7 @@ The data shapes here let uq#8's slice F add its features without migrating slice
     gains `"monitors"`. `renders_section("monitors")` is **false**: uqd treats it specially
     (Task 5). `validated()` uses `sanitised`.
 
-- [ ] **Step 1:** Write the failing tests:
+- [x] **Step 1:** Write the failing tests:
   - `monitors::tests::modes_and_ranges`:
     - accepts `"2560x1440@143.912"`, `"preferred"` and scale `1.333333`;
     - rejects `"2560x1440@"`, `"big"`, scale 0.2, scale 4.5, NaN, transform 8, vrr 4, the name
@@ -299,13 +299,13 @@ The data shapes here let uq#8's slice F add its features without migrating slice
     `"` is cut to 200 with no control characters, and `"mirrorOf":"none"` becomes `None`.
   - `monitors::tests::stays_visible_rules`: all disabled gives false, all mirroring gives false,
     and an empty `outputs` gives true.
-- [ ] **Step 2:** Run `CARGO_BUILD_JOBS=4 cargo test -p uq-core monitors`. Expected: FAIL (no
+- [x] **Step 2:** Run `CARGO_BUILD_JOBS=4 cargo test -p uq-core monitors`. Expected: FAIL (no
   module).
-- [ ] **Step 3:** Implement. Add the fixture
+- [x] **Step 3:** Implement. Add the fixture
   `crates/uq-core/tests/fixtures/monitors-all.json`: two outputs, eDP-1 and DP-1, written by hand
   in Hyprland's shape.
-- [ ] **Step 4:** Run `CARGO_BUILD_JOBS=4 cargo test -p uq-core`. Expected: PASS.
-- [ ] **Step 5:** Commit: `feat(core): monitors settings section`
+- [x] **Step 4:** Run `CARGO_BUILD_JOBS=4 cargo test -p uq-core`. Expected: PASS.
+- [x] **Step 5:** Commit: `feat(core): monitors settings section`
 
 ### Task 2: `input` domain in uq-core
 
@@ -337,7 +337,7 @@ The data shapes here let uq#8's slice F add its features without migrating slice
     - The other parts go through `from_value`, `check_kept` and `validate`.
     - On error `self` is unchanged.
 
-- [ ] **Step 1:** Write the failing tests:
+- [x] **Step 1:** Write the failing tests:
   - `input::tests::keyboard_rules`:
     - accepts `[{us}, {de, nodeadkeys}]`;
     - rejects 5 layouts, `"US"`, `"u s"`, a duplicate, `switch_combo = "ctrl:nocaps"`,
@@ -350,10 +350,10 @@ The data shapes here let uq#8's slice F add its features without migrating slice
     then `section("input")["mouse"]` equals those values, and `save` and reload keep `[mouse]`
     and write no `[input].mouse`.
   - `input::tests::unknown_fields_refused`, at the top level, in `keyboard` and in `mouse`.
-- [ ] **Step 2:** Run `CARGO_BUILD_JOBS=4 cargo test -p uq-core input`. Expected: FAIL.
-- [ ] **Step 3:** Implement.
-- [ ] **Step 4:** Run `CARGO_BUILD_JOBS=4 cargo test -p uq-core`. Expected: PASS.
-- [ ] **Step 5:** Commit: `feat(core): input settings section (keyboard, touchpad, devices; mouse kept in [mouse])`
+- [x] **Step 2:** Run `CARGO_BUILD_JOBS=4 cargo test -p uq-core input`. Expected: FAIL.
+- [x] **Step 3:** Implement.
+- [x] **Step 4:** Run `CARGO_BUILD_JOBS=4 cargo test -p uq-core`. Expected: PASS.
+- [x] **Step 5:** Commit: `feat(core): input settings section (keyboard, touchpad, devices; mouse kept in [mouse])`
 
 ### Task 3: Render monitors and input into `generated.lua`
 
@@ -396,7 +396,7 @@ The data shapes here let uq#8's slice F add its features without migrating slice
     `accel_profile` `Default` is left out.
   - `emit_generated` keeps its signature.
 
-- [ ] **Step 1:** Write the failing tests:
+- [x] **Step 1:** Write the failing tests:
   - `lua::monitors::tests::line_shapes`:
     - `DP-1 {mode:"2560x1440@144", position:{0,0}, scale:1.25, transform:1, vrr:1}` gives exactly
       `hl.monitor({ output = "DP-1", mode = "2560x1440@144", position = "0x0", scale = "1.25", transform = 1, vrr = 1 })`;
@@ -411,14 +411,14 @@ The data shapes here let uq#8's slice F add its features without migrating slice
     `name = "x\"y\\\\z"`. `generated.lua` gains no extra line.
   - `generated_golden::golden_default_and_all_set`, where `all-set` gains two monitors (one
     mirrored), two layouts, a switch combo, touchpad keys and one device.
-- [ ] **Step 2:** Run `CARGO_BUILD_JOBS=4 cargo test -p uq-core`, then
+- [x] **Step 2:** Run `CARGO_BUILD_JOBS=4 cargo test -p uq-core`, then
   `CARGO_BUILD_JOBS=4 cargo test -p uqd --test verify_config`. Expected: FAIL.
-- [ ] **Step 3:** Implement. Bless only `all-set.lua` (`UQ_BLESS=1`) and read it by eye.
+- [x] **Step 3:** Implement. Bless only `all-set.lua` (`UQ_BLESS=1`) and read it by eye.
   `lua_mock_runs_every_variant` must pass.
-- [ ] **Step 4:** Run `CARGO_BUILD_JOBS=4 cargo test --workspace`. Expected: PASS.
+- [x] **Step 4:** Run `CARGO_BUILD_JOBS=4 cargo test --workspace`. Expected: PASS.
   `all_variants_pass_hyprland_verify` runs in CI only; the PR names the hyphenated
   `tap-to-click` key as the one to watch.
-- [ ] **Step 5:** Commit: `feat(core): render monitor lines, keyboard, touchpad and device overrides`
+- [x] **Step 5:** Commit: `feat(core): render monitor lines, keyboard, touchpad and device overrides`
 
 ### Task 4: uqd: one section-commit path, `input` writes, and live device lists
 
@@ -464,7 +464,7 @@ The data shapes here let uq#8's slice F add its features without migrating slice
     gives `{keyboards:[],pointers:[],touch:[]}`.
   - D-Bus `ListInputDevices() → s`, and `DesktopProxy::list_input_devices`.
 
-- [ ] **Step 1:** Write the failing tests:
+- [x] **Step 1:** Write the failing tests:
   - `sections::tests::set_input_renders_and_reloads`: `generated.lua` contains
     `kb_layout = "us,de"`, and the fake recorded `reload`.
   - `sections::tests::rejected_input_keeps_previous_config`: copy `rejected_look_keeps_previous_config`
@@ -476,10 +476,10 @@ The data shapes here let uq#8's slice F add its features without migrating slice
     one with a 300-char name.
   - In `tests/dbus.rs`: `input_section_round_trip_over_dbus`.
   - Every existing `service.rs` test passes unchanged; that is the refactor's check.
-- [ ] **Step 2:** Run `CARGO_BUILD_JOBS=4 cargo test -p uqd`. Expected: FAIL.
-- [ ] **Step 3:** Implement.
-- [ ] **Step 4:** Run `CARGO_BUILD_JOBS=4 cargo test --workspace`. Expected: PASS.
-- [ ] **Step 5:** Commit: `feat(uqd): one section-commit path; input section and device list`
+- [x] **Step 2:** Run `CARGO_BUILD_JOBS=4 cargo test -p uqd`. Expected: FAIL.
+- [x] **Step 3:** Implement.
+- [x] **Step 4:** Run `CARGO_BUILD_JOBS=4 cargo test --workspace`. Expected: PASS.
+- [x] **Step 5:** Commit: `feat(uqd): one section-commit path; input section and device list`
 
 ### Task 5: uqd: the monitor apply/confirm/revert state machine
 
@@ -536,7 +536,7 @@ The data shapes here let uq#8's slice F add its features without migrating slice
     `{live: [LiveOutput], stored: <monitors section>, pending: null | {token, seconds_left: u64}}`.
     With Hyprland down, `live` is `[]`.
 
-- [ ] **Step 1:** Write the failing tests in `monitors.rs`, using the `sections.rs` rig with
+- [x] **Step 1:** Write the failing tests in `monitors.rs`, using the `sections.rs` rig with
   `monitors_json` set to the Task 1 fixture:
   - `confirm_saves_once`:
     - apply `{outputs:{DP-1:{scale:1.5}}}`; the fake recorded one `eval hl.monitor({ output = "DP-1", … scale = "1.5" …})`;
@@ -571,10 +571,10 @@ The data shapes here let uq#8's slice F add its features without migrating slice
     end `reload, eval <candidate>`. Then confirm saves both the look change and the monitors.
   - `apply_refused_without_hyprland`.
   - `revert_window_is_fifteen_seconds`: `assert_eq!(REVERT_AFTER, Duration::from_secs(15))`.
-- [ ] **Step 2:** Run `CARGO_BUILD_JOBS=4 cargo test -p uqd monitors`. Expected: FAIL.
-- [ ] **Step 3:** Implement.
-- [ ] **Step 4:** Run `CARGO_BUILD_JOBS=4 cargo test --workspace`. Expected: PASS.
-- [ ] **Step 5:** Commit: `feat(uqd): monitor apply, confirm and automatic revert`
+- [x] **Step 2:** Run `CARGO_BUILD_JOBS=4 cargo test -p uqd monitors`. Expected: FAIL.
+- [x] **Step 3:** Implement.
+- [x] **Step 4:** Run `CARGO_BUILD_JOBS=4 cargo test --workspace`. Expected: PASS.
+- [x] **Step 5:** Commit: `feat(uqd): monitor apply, confirm and automatic revert`
 
 ### Task 6: uqd D-Bus: ListOutputs, ApplyMonitors, ConfirmMonitors, RevertMonitors and the timer
 
@@ -603,7 +603,7 @@ The data shapes here let uq#8's slice F add its features without migrating slice
   - `DesktopProxy` gains `list_outputs`, `apply_monitors`, `confirm_monitors`, `revert_monitors`,
     `list_input_devices` and `#[zbus(signal)] fn monitors_changed`.
 
-- [ ] **Step 1:** Write the failing tests in `tests/dbus.rs`:
+- [x] **Step 1:** Write the failing tests in `tests/dbus.rs`:
   - `unconfirmed_apply_reverts_on_its_own`:
     - the `Desktop` uses `with_revert_after(300 ms)` and a `FakeCompositor` with the fixture;
     - over the bus, `ApplyMonitors`, then wait for `MonitorsChanged` twice (applied, then
@@ -615,10 +615,10 @@ The data shapes here let uq#8's slice F add its features without migrating slice
   - `revert_now_over_dbus`.
   - `list_outputs_reports_pending`: `pending.seconds_left` is 0 or 1 within the 300 ms window,
     and `null` after confirm.
-- [ ] **Step 2:** Run `CARGO_BUILD_JOBS=4 cargo test -p uqd --test dbus`. Expected: FAIL.
-- [ ] **Step 3:** Implement.
-- [ ] **Step 4:** Run `CARGO_BUILD_JOBS=4 cargo test --workspace`. Expected: PASS.
-- [ ] **Step 5:** Commit: `feat(uqd): displays over D-Bus, reverted by uqd's own timer`
+- [x] **Step 2:** Run `CARGO_BUILD_JOBS=4 cargo test -p uqd --test dbus`. Expected: FAIL.
+- [x] **Step 3:** Implement.
+- [x] **Step 4:** Run `CARGO_BUILD_JOBS=4 cargo test --workspace`. Expected: PASS.
+- [x] **Step 5:** Commit: `feat(uqd): displays over D-Bus, reverted by uqd's own timer`
 
 ### Task 7: Fake uqd support and the Displays arrangement logic
 
@@ -657,15 +657,15 @@ The data shapes here let uq#8's slice F add its features without migrating slice
   - `pub fn parse_mode(s: &str) -> Option<(u32, u32, Option<f64>)>` reads Hyprland's
     `"2560x1440@143.91Hz"` form.
 
-- [ ] **Step 1:** Write the failing tests:
+- [x] **Step 1:** Write the failing tests:
   - `arrange::tests::{snaps_to_right_edge, overlap_pushed_out, rotated_size_swaps, normalise_to_origin, scale_choices_for_4k_and_1080p, parse_hyprland_modes}`.
     For 3840x2160 the choices include 1.5 and 2.0. For 1920x1080 they include 1.25 and not 1.6.
   - `fake_uqd` tests: `fake_apply_then_confirm` and `fake_refuses_all_off`.
   - `model_core::tests::wants_filters_by_domain` still passes.
-- [ ] **Step 2:** Run `CARGO_BUILD_JOBS=4 cargo test -p uq-settings arrange`. Expected: FAIL.
-- [ ] **Step 3:** Implement.
-- [ ] **Step 4:** Run `CARGO_BUILD_JOBS=4 cargo test -p uq-settings`. Expected: PASS.
-- [ ] **Step 5:** Commit: `feat(settings): display arrangement maths and fake uqd displays`
+- [x] **Step 2:** Run `CARGO_BUILD_JOBS=4 cargo test -p uq-settings arrange`. Expected: FAIL.
+- [x] **Step 3:** Implement.
+- [x] **Step 4:** Run `CARGO_BUILD_JOBS=4 cargo test -p uq-settings`. Expected: PASS.
+- [x] **Step 5:** Commit: `feat(settings): display arrangement maths and fake uqd displays`
 
 ### Task 8: Displays page model
 
@@ -704,7 +704,7 @@ The data shapes here let uq#8's slice F add its features without migrating slice
     `pending` is `null`), `error` becomes "The previous display settings were restored." This is
     plain copy for the page.
 
-- [ ] **Step 1:** Write the failing tests in `pages::displays::tests`:
+- [x] **Step 1:** Write the failing tests in `pages::displays::tests`:
   - `edit_changes_only_the_draft`: the fake's stored monitors are unchanged, and `dirty` is
     true.
   - `apply_then_keep_saves`: the fake's stored monitors equal the draft, and `pending` is `null`.
@@ -717,11 +717,11 @@ The data shapes here let uq#8's slice F add its features without migrating slice
     `enabled`, `mirror_of` and `vrr`, apply and keep, make a fresh `DisplaysState`, refresh, and
     every field reads back.
   - `unknown_field_refused`.
-- [ ] **Step 2:** Run `CARGO_BUILD_JOBS=4 cargo test -p uq-settings displays`. Expected: FAIL.
-- [ ] **Step 3:** Implement.
-- [ ] **Step 4:** Run `CARGO_BUILD_JOBS=4 cargo test -p uq-settings` and
+- [x] **Step 2:** Run `CARGO_BUILD_JOBS=4 cargo test -p uq-settings displays`. Expected: FAIL.
+- [x] **Step 3:** Implement.
+- [x] **Step 4:** Run `CARGO_BUILD_JOBS=4 cargo test -p uq-settings` and
   `CARGO_BUILD_JOBS=4 cargo clippy -p uq-settings --all-targets -- -D warnings`. Expected: PASS.
-- [ ] **Step 5:** Commit: `feat(settings): Displays page model (draft, apply, keep, revert)`
+- [x] **Step 5:** Commit: `feat(settings): Displays page model (draft, apply, keep, revert)`
 
 ### Task 9: Displays page QML and the revert dialog
 
@@ -767,7 +767,7 @@ The data shapes here let uq#8's slice F add its features without migrating slice
       each a `SettingRow` id, with keywords such as `monitor`, `screen`, `resolution` and
       `hz`.
 
-- [ ] **Step 1:** Write the failing tests:
+- [x] **Step 1:** Write the failing tests:
   - `tst_revert_dialog.qml`:
     - `test_counts_down`: with `seconds: 3`, after 1.1 s the text contains "2";
     - `test_enter_does_not_keep`: a `Return` key press emits no `keep`;
@@ -777,14 +777,14 @@ The data shapes here let uq#8's slice F add its features without migrating slice
     coordinates, at a fixed preview scale.
   - `registry::tests::ids_unique_and_categories_ordered` covers `displays`, and a new
     `every_entry_has_keywords` (uq#8 §9) passes for all pages.
-- [ ] **Step 2:** Run `QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -import apps/uq-settings/qml -input tests/settings-qml`
+- [x] **Step 2:** Run `QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -import apps/uq-settings/qml -input tests/settings-qml`
   and `CARGO_BUILD_JOBS=4 cargo test -p uq-settings registry`. Expected: FAIL.
-- [ ] **Step 3:** Implement. All labels are plain words: no "Hyprland", "uqd" or connector names
+- [x] **Step 3:** Implement. All labels are plain words: no "Hyprland", "uqd" or connector names
   outside "Details".
-- [ ] **Step 4:** Run the QML suite, `bash tests/shell/lint_settings.sh && scripts/lint-settings.sh`,
+- [x] **Step 4:** Run the QML suite, `bash tests/shell/lint_settings.sh && scripts/lint-settings.sh`,
   and the offscreen `--screenshots` run into `/tmp/uqs-shots`. Check `displays.png` by eye; with
   no bus it shows the uqd-down state.
-- [ ] **Step 5:** Commit: `feat(settings): Displays page with keep-or-revert dialog`
+- [x] **Step 5:** Commit: `feat(settings): Displays page with keep-or-revert dialog`
 
 ### Task 10: Input page model and the xkb lists
 
@@ -818,7 +818,7 @@ The data shapes here let uq#8's slice F add its features without migrating slice
     - the invokables `refresh`, `setKeyboard`, `setMouse`, `setTouchpad`, `setDevice` and
       `removeDevice`.
 
-- [ ] **Step 1:** Write the failing tests:
+- [x] **Step 1:** Write the failing tests:
   - `xkb_lists::tests::{parses_fixture, switch_options_only_grp_toggles, names_sanitised}`.
   - `pages::input::tests`:
     - `layouts_add_reorder_remove`;
@@ -828,10 +828,10 @@ The data shapes here let uq#8's slice F add its features without migrating slice
     - `rejected_verify_restores_state`;
     - `bad_layout_refused_with_reason`;
     - `round_trip_every_field` (uq#8 §9).
-- [ ] **Step 2:** Run `CARGO_BUILD_JOBS=4 cargo test -p uq-settings input xkb`. Expected: FAIL.
-- [ ] **Step 3:** Implement.
-- [ ] **Step 4:** Run `CARGO_BUILD_JOBS=4 cargo test -p uq-settings` and clippy. Expected: PASS.
-- [ ] **Step 5:** Commit: `feat(settings): Input page model and keyboard layout lists`
+- [x] **Step 2:** Run `CARGO_BUILD_JOBS=4 cargo test -p uq-settings input xkb`. Expected: FAIL.
+- [x] **Step 3:** Implement.
+- [x] **Step 4:** Run `CARGO_BUILD_JOBS=4 cargo test -p uq-settings` and clippy. Expected: PASS.
+- [x] **Step 5:** Commit: `feat(settings): Input page model and keyboard layout lists`
 
 ### Task 11: Input page QML
 
@@ -867,16 +867,16 @@ The data shapes here let uq#8's slice F add its features without migrating slice
       `mouse-scroll-speed`, `touchpad-natural-scroll`, `tap-to-click`, `disable-while-typing`,
       `touchpad-scroll-speed` and `device-overrides`, each a `SettingRow` id.
 
-- [ ] **Step 1:** Write the failing tests:
+- [x] **Step 1:** Write the failing tests:
   - `tst_keyboard_layout_list.qml`: moving row 1 up emits `reordered([...])`, Remove emits
     `removed(i)`, the first row's up button is disabled, and Add with no layout chosen is
     disabled.
   - The registry tests now include `input`.
-- [ ] **Step 2:** Run the settings QML suite and `CARGO_BUILD_JOBS=4 cargo test -p uq-settings registry`.
+- [x] **Step 2:** Run the settings QML suite and `CARGO_BUILD_JOBS=4 cargo test -p uq-settings registry`.
   Expected: FAIL.
-- [ ] **Step 3:** Implement.
-- [ ] **Step 4:** Run the tests, both lint scripts and `--screenshots`. Check `input.png` by eye.
-- [ ] **Step 5:** Commit: `feat(settings): Input page`
+- [x] **Step 3:** Implement.
+- [x] **Step 4:** Run the tests, both lint scripts and `--screenshots`. Check `input.png` by eye.
+- [x] **Step 5:** Commit: `feat(settings): Input page`
 
 ### Task 12: Docs, changelog, live checklist and the whole gate
 
@@ -912,8 +912,8 @@ The manual checklist runs on real hardware with two outputs where possible:
   mouse.
 - **`eval`:** Hyprland's `eval` of `hl.monitor` applied without a reload. Record the version.
 
-- [ ] **Step 1:** Write the files.
-- [ ] **Step 2:** Run the whole gate, one command at a time, all with `CARGO_BUILD_JOBS=4`:
+- [x] **Step 1:** Write the files.
+- [x] **Step 2:** Run the whole gate, one command at a time, all with `CARGO_BUILD_JOBS=4`:
   - `cargo fmt --all --check`;
   - `cargo clippy --workspace --all-targets -- -D warnings`;
   - `cargo test --workspace`;
@@ -922,7 +922,7 @@ The manual checklist runs on real hardware with two outputs where possible:
   - `tests/shell/*.sh` except `bar_loads.sh`.
 
   Expected: all PASS.
-- [ ] **Step 3:** Commit: `docs: Settings slice 3 notes, changelog and live checklist`. Push the
+- [x] **Step 3:** Commit: `docs: Settings slice 3 notes, changelog and live checklist`. Push the
   branch and report. CI runs `--verify-config`, which covers the `tap-to-click` spelling and the
   `hl.monitor` and `hl.device` fields. Don't wait on it.
 
@@ -961,10 +961,10 @@ same merge from its side, and this task is dropped.
   - `DesktopProxy::confirm_monitors(token, origin)`. Both new page models pass `"settings"` on
     every `SetSection` and `ConfirmMonitors`.
 
-- [ ] **Step 1:** Run `git merge origin/main`. Resolve the domain lists in `settings/mod.rs`
+- [x] **Step 1:** Run `git merge origin/main`. Resolve the domain lists in `settings/mod.rs`
   (keep both sides' domains), the `DesktopIface` methods and events in `dbus.rs`, the `commit`
   call sites in `service.rs`, and the page list in `Main.qml` (keep both).
-- [ ] **Step 2:** Rewrite the counter assertions as journal assertions, through slice A's
+- [x] **Step 2:** Rewrite the counter assertions as journal assertions, through slice A's
   `ListHistory`:
   - `confirm_saves_once`: after apply there are 0 new entries; after confirm there is exactly 1,
     with domain `monitors` and origin `settings`;
@@ -975,9 +975,28 @@ same merge from its side, and this task is dropped.
     refused one.
   - Add `tests/dbus.rs::confirm_origin_is_recorded`: `ConfirmMonitors(token, "uqctl")` records
     origin `uqctl`, and a missing origin records `unknown`.
-- [ ] **Step 3:** Run `CARGO_BUILD_JOBS=4 cargo test -p uqd`. Expected: FAIL until the origin is
+- [x] **Step 3:** Run `CARGO_BUILD_JOBS=4 cargo test -p uqd`. Expected: FAIL until the origin is
   threaded through.
-- [ ] **Step 4:** Implement, then run the whole Task 12 gate again, one command at a time.
+- [x] **Step 4:** Implement, then run the whole Task 12 gate again, one command at a time.
   Expected: all PASS.
-- [ ] **Step 5:** Commit: `merge: main after slice A; displays and input record history through persist`.
+- [x] **Step 5:** Commit: `merge: main after slice A; displays and input record history through persist`.
   Push and report. Don't wait on CI.
+
+## Outcome
+
+Built on `claude/project-thread-xqfhd0` after slice A merged (uq#10), so Task 13's merge came
+first and the later tasks were written against `persist` and `Origin` directly. Differences from
+the plan:
+
+- **Revert dialog:** a `QQC2.Dialog` (`RevertDialog.qml`), not `Kirigami.PromptDialog`, so Enter can
+  be swallowed and Escape always reverts, and so it can be tested without Kirigami.
+- **Mouse history:** `mouse.*` keys are journalled under `input` only (the page that shows them),
+  not also under `settings`; `diff` skips them there.
+- **Scale test:** the plan said 1920x1080 excludes 1.6; it doesn't (1200x675 is whole). The test
+  checks that 1.75 is excluded instead.
+- **Arrangement overlap:** a dropped display that overlaps goes to the first free side, in the
+  order right, below, left, above.
+- **Undo of a display change:** saves and reloads without a revert window, and is refused while a
+  change is waiting to be kept.
+- Kirigami-based QML tests and Hyprland's `--verify-config` run only in CI (Arch); locally the
+  revert dialog, arrangement and keyboard layout list tests ran against stubs.
