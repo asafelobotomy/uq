@@ -53,6 +53,29 @@ pub enum Op {
     },
 }
 
+/// What applies when a field is `null`: `config/hypr/base.lua`'s value where it sets one, else
+/// Hyprland's own default. The page seeds "Use default" from this (state key `defaults`), so
+/// there is one place; `defaults_match_base_lua` keeps it true to base.lua.
+/// Gaps, border and rounding are not here: they come from the theme's `ui` tokens.
+pub fn defaults() -> Value {
+    json!({
+        "look": {
+            "blur": true,
+            "blur_size": 3,
+            "blur_passes": 1,
+            "shadow": true,
+            "animations": true,
+            "animation_speed": 1.0,
+        },
+        "layouts": {
+            "default": "dwindle",
+            "dwindle": {"preserve_split": true, "smart_split": false, "force_split": "follow_mouse"},
+            "master": {"mfact": 0.55, "new_status": "slave", "orientation": "left"},
+            "scrolling": {"column_width": 0.5, "fullscreen_on_one_column": true},
+        },
+    })
+}
+
 pub struct LookState {
     conn: zbus::Connection,
     /// Writes read-modify-write the section, so one at a time.
@@ -178,7 +201,7 @@ impl PageLogic for LookState {
         let proxy = DesktopProxy::new(&self.conn).await?;
         let look = parse_json(&proxy.get_section("look").await?)?;
         let layouts = parse_json(&proxy.get_section("layouts").await?)?;
-        Ok(json!({ "look": look, "layouts": layouts }))
+        Ok(json!({ "look": look, "layouts": layouts, "defaults": defaults() }))
     }
 }
 
@@ -188,6 +211,79 @@ mod tests {
     use crate::pages::fake_uqd::{self, Rig};
     use crate::pages::runner::run;
     use uq_core::state::State;
+
+    /// The value base.lua sets for `key` inside `table = {...}`, as JSON; `None` when it sets none.
+    fn lua_value(src: &str, table: &str, key: &str) -> Option<Value> {
+        let mut inside = false;
+        for line in src.lines().map(str::trim) {
+            if !inside {
+                inside = line.starts_with(&format!("{table} ")) && line.ends_with('{');
+            } else if line.starts_with('}') {
+                return None;
+            } else if let Some(rest) = line.strip_prefix(key)
+                && let Some(v) = rest.trim_start().strip_prefix('=')
+            {
+                let v = v.split("--").next().unwrap().trim().trim_end_matches(',');
+                return serde_json::from_str(v).ok();
+            }
+        }
+        None
+    }
+
+    #[test]
+    fn defaults_match_base_lua() {
+        let base = include_str!("../../../../config/hypr/base.lua");
+        let d = defaults();
+        // (state path, base.lua table, key): base.lua sets these, so its value is the default.
+        for (section, group, field, table, key) in [
+            ("look", "", "blur", "blur", "enabled"),
+            ("look", "", "blur_size", "blur", "size"),
+            ("look", "", "blur_passes", "blur", "passes"),
+            ("look", "", "shadow", "shadow", "enabled"),
+            ("look", "", "animations", "animations", "enabled"),
+            ("layouts", "", "default", "general", "layout"),
+            (
+                "layouts",
+                "dwindle",
+                "preserve_split",
+                "dwindle",
+                "preserve_split",
+            ),
+            (
+                "layouts",
+                "scrolling",
+                "fullscreen_on_one_column",
+                "scrolling",
+                "fullscreen_on_one_column",
+            ),
+        ] {
+            let seed = if group.is_empty() {
+                &d[section][field]
+            } else {
+                &d[section][group][field]
+            };
+            assert_eq!(
+                lua_value(base, table, key).as_ref(),
+                Some(seed),
+                "{section}.{group}.{field} vs base.lua {table}.{key}"
+            );
+        }
+        // base.lua leaves these to Hyprland, so the seed is Hyprland's documented default.
+        for (table, key) in [
+            ("dwindle", "smart_split"),
+            ("dwindle", "force_split"),
+            ("master", "mfact"),
+            ("master", "new_status"),
+            ("master", "orientation"),
+            ("scrolling", "column_width"),
+        ] {
+            assert_eq!(
+                lua_value(base, table, key),
+                None,
+                "base.lua now sets {table}.{key}"
+            );
+        }
+    }
 
     async fn rig() -> (Rig, LookState) {
         let mut state = State::default();

@@ -15,6 +15,8 @@ fn main() {
         QmlFile::from("qml/components/OverrideSpin.qml"),
         QmlFile::from("qml/components/OverrideSwitch.qml"),
         QmlFile::from("qml/components/OverrideSlider.qml"),
+        QmlFile::from("qml/components/OptionGroup.qml"),
+        QmlFile::from("qml/components/WorkspaceRules.qml"),
         QmlFile::from("qml/components/ScheduleEditor.qml"),
         QmlFile::from("qml/components/WallpaperEntryEditor.qml"),
         QmlFile::from("qml/pages/AppearancePage.qml"),

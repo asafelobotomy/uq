@@ -14,6 +14,8 @@ SettingRow {
     property var value: null
     property string themeLabel: "Use theme"
     property bool editable: true
+    /// Shown names for some choices, by choice: `{ master: "Master" }`; others show as they are.
+    property var labels: ({})
     /// The new value: a string, or null for "Use theme".
     signal chosen(var value)
 
@@ -24,13 +26,17 @@ SettingRow {
         return list;
     }
 
+    function labelOf(item) {
+        return labels[item] !== undefined ? labels[item] : item;
+    }
+
     function shownIndex() {
         return value ? items.indexOf(value) : 0;
     }
 
     UqComboBox {
         id: combo
-        model: root.items
+        model: root.items.map(root.labelOf)
         currentIndex: root.shownIndex()
         enabled: root.enabled
         implicitContentWidthPolicy: QQC2.ComboBox.WidestText
