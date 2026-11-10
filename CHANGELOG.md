@@ -7,6 +7,22 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Settings app.** `uq-settings` (Qt, Kirigami; `uqctl settings [page] [setting]` or the new
+  "Settings…" button in quick settings) with Appearance and Wallpaper pages, search across
+  settings, and a single instance on `org.uq.Settings1`. Third-party pages are read from
+  `/usr/share/uq/settings/pages/<id>/page.toml`; a page that fails to load shows an error card.
+  `uqd` gains `GetSection` / `SetSection` for the `appearance` and `wallpaper` domains.
+- **Appearance.** UI and monospace fonts, font size, cursor theme and size, and icon theme, each
+  overriding the theme when set. They reach Hyprland, GTK and the shell.
+- **Wallpaper.** A wallpaper per monitor (or one for all): an image with fill, fit, center or
+  tile, a folder slideshow with an interval, and a fallback colour. The shell draws it on the
+  background layer.
+- **Kvantum.** Qt apps follow the uQ theme through a generated Kvantum theme
+  (`uqctl setup --apps` links it in; needs the `kvantum` package). Turn it off with
+  `appearance.kvantum = false`.
+
 ### Changed
 
 - **scdr alignment.** `uqd`, `uq-shell` and `uq-lock` run in `session.slice` instead of the

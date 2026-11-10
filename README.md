@@ -82,6 +82,15 @@ uqctl launches clear
 The shell runs as `uq-shell.service` (Quickshell, started with the session). `SUPER+CTRL+L`
 restarts the lock surface (`uq-lock.service`, else `hyprlock`) if it ever dies.
 
+### Settings
+
+`uqctl settings` (or **Settings…** at the bottom of quick settings) opens `uq-settings`: Appearance
+(fonts, cursor, icons, Kvantum for Qt apps) and Wallpaper (per monitor, slideshow, fallback
+colour). `uqctl settings wallpaper` opens a page directly, and a second call raises the same
+window. Run `uqctl setup --apps` once to hook Qt apps up to the uQ Kvantum theme. Other packages
+can add a page under Apps by installing `/usr/share/uq/settings/pages/<id>/page.toml` with a QML
+file. Settings are also available over D-Bus as `GetSection` / `SetSection` on `uqd`.
+
 ### Launchers
 
 - `SUPER+Space` opens or closes Spotlight: apps, a calculator (`=2+2`), a command runner
