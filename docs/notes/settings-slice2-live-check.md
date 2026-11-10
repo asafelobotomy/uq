@@ -27,10 +27,15 @@ Run on a real Hyprland session with uQ installed (not CI, not a private bus). Ti
 - [ ] Hide each island in turn (Status, and the others): its space is freed; show it again.
 - [ ] 12-hour clock: the bar clock switches; 24-hour switches back.
 - [ ] Spotlight: switch calc off, calculator results stop; switch other providers off, their
-  sections disappear and old rows cannot be activated.
+  sections disappear and old rows cannot be activated. To get a stale row: open Spotlight and
+  type a query a provider answers, switch that provider off in the page, then press Enter on
+  its row; nothing runs.
 - [ ] Change a provider's order: the Spotlight section order follows.
-- [ ] Choose foot as the terminal: `htop.desktop` (Terminal=true) opens in foot. Uninstall foot:
-  it falls back to kitty.
+- [ ] Choose foot as the terminal: `htop.desktop` (Terminal=true) opens in foot. Point the
+  setting at a missing desktop id (`busctl --user call org.uq.Desktop1 /org/uq/Desktop1
+  org.uq.Desktop1 SetSection ss shell '{"terminal": "nope.desktop"}'`; it replaces the whole
+  section, so start from `GetSection`'s JSON to keep the rest), or hide foot (a copy of
+  foot.desktop in `~/.local/share/applications` with `Hidden=true`): it falls back to kitty.
 - [ ] Idle settings round trip: change idle timings and notification/privacy options, restart
   uqd and the page, values persist. Dim above lock is refused with a message and both controls
   show the saved values.

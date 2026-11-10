@@ -89,11 +89,12 @@ restarts the lock surface (`uq-lock.service`, else `hyprlock`) if it ever dies.
 colour), Look and layouts (gaps, borders, rounding, blur, shadow, animations and their speed,
 default layout, per-workspace rules, dwindle/master/scrolling options) and Shell (islands on or off,
 24-hour clock, launcher providers on/off and order, terminal for `Terminal=true` apps, idle,
-notification and privacy settings). Animations now come from `generated.lua`, so an `hl.animation`
-override in `user.lua` still wins. `uqctl settings wallpaper` opens a page directly, and a second call raises the same
-window. Run `uqctl setup --apps` once to hook Qt apps up to the uQ Kvantum theme. Other packages
-can add a page under Apps by installing `/usr/share/uq/settings/pages/<id>/page.toml` with a QML
-file. Settings are also available over D-Bus as `GetSection` / `SetSection` on `uqd`.
+notification and privacy settings). Animations now come from `generated.lua`, so an
+`hl.animation` override in `user.lua` still wins. `uqctl settings look` (or `wallpaper`, `shell`,
+...) opens a page directly, and a second call raises the same window. Run `uqctl setup --apps`
+once to hook Qt apps up to the uQ Kvantum theme. Other packages can add a page under Apps by
+installing `/usr/share/uq/settings/pages/<id>/page.toml` with a QML file. Settings are also
+available over D-Bus as `GetSection` / `SetSection` on `uqd`.
 
 ### Launchers
 
