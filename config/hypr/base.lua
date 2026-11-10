@@ -14,6 +14,8 @@ local mainMod  = "SUPER"
 ---- MONITORS ----
 ------------------
 
+-- Per-output hl.monitor lines come from generated.lua (Displays). This catch-all is the
+-- fallback for any output with no stored entry, and what a reload falls back to on revert.
 hl.monitor({
     output   = "",
     mode     = "preferred",
@@ -105,6 +107,8 @@ hl.config({
 ---- INPUT ----
 ---------------
 
+-- Keyboard layouts, repeat, touchpad options, mouse settings and hl.device overrides come
+-- from generated.lua, which loads after this and wins; these are the fallbacks.
 hl.config({
     input = {
         kb_layout    = "us",
