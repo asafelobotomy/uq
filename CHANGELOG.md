@@ -9,6 +9,10 @@ All notable changes to uQ are listed here. The format follows
 
 ### Added
 
+- **`uq-dev`.** Use uQ and develop it on the same machine: `uq-dev session` opens a nested
+  uQ desktop running a checkout's uqd and shell on a private bus with sandboxed config,
+  `uq-dev run` runs an app from its checkout with throwaway config, and `uq-dev promote` /
+  `rollback` install a package built from a checkout's HEAD and undo it (docs/developing.md).
 - **Settings app.** `uq-settings` (Qt, Kirigami; `uqctl settings [page] [setting]` or the new
   "Settings…" button in quick settings) with Appearance and Wallpaper pages, search across
   settings, and a single instance on `org.uq.Settings1`. Third-party pages are read from
@@ -36,6 +40,8 @@ All notable changes to uQ are listed here. The format follows
 
 ### Changed
 
+- `base.lua`'s start and shutdown hooks do nothing when `UQ_DEV_SESSION` is set, so a nested
+  dev session can no longer restart, repoint or stop the installed uqd and shell.
 - **Animations moved to `generated.lua`.** The animation lines are no longer in `base.lua`.
   After an upgrade Hyprland shows its own default animations until `uqd` re-renders
   `generated.lua` (restart `uqd` or change any setting). `hl.animation` calls in `user.lua`

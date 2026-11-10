@@ -148,6 +148,8 @@ for _, want in ipairs({
   {"hyprland.shutdown", "stop uq-shell.service"},
   {"hyprland.start", "is-enabled scdr-session.service && systemctl --user restart scdr-session.service"},
   {"hyprland.shutdown", "stop scdr-session.service"},
+  {"hyprland.start", 'test -n "$UQ_DEV_SESSION" || {'},
+  {"hyprland.shutdown", 'test -n "$UQ_DEV_SESSION" || {'},
 }) do
   if not (in_hook[want[1]] or ""):find(want[2], 1, true) then
     error("missing in " .. want[1] .. " hook: " .. want[2])
