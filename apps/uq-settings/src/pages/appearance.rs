@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 use tokio::sync::Mutex;
 use uq_core::client::DesktopProxy;
 
-use crate::pages::runner::{PageLogic, parse_json, patch_section};
+use crate::pages::runner::{ORIGIN, PageLogic, parse_json, patch_section};
 use crate::system_lists;
 
 /// The `appearance` section's fields that [`Op::SetField`] may change.
@@ -75,8 +75,8 @@ impl PageLogic for AppearanceState {
         let proxy = DesktopProxy::new(&self.conn).await?;
         match op {
             Op::Refresh => Ok(()),
-            Op::SetTheme { id, variant } => proxy.set_theme(&id, &variant).await,
-            Op::SetSchedule(schedule) => proxy.set_schedule(&schedule).await,
+            Op::SetTheme { id, variant } => proxy.set_theme(&id, &variant, ORIGIN).await,
+            Op::SetSchedule(schedule) => proxy.set_schedule(&schedule, ORIGIN).await,
             Op::SetField { field, value } => {
                 if !FIELDS.contains(&field.as_str()) {
                     return Err(zbus::Error::Failure(format!("unknown field {field:?}")));

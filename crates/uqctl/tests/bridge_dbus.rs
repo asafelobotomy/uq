@@ -59,6 +59,11 @@ async fn bridge_forwards_set_theme() {
         b.call(2, "GetTheme", json!([])).await["ok"],
         json!(["dracula", "light"])
     );
+    // The bridge's writes are recorded as the shell's.
+    let history = uq_core::paths::Paths::under(dir.path()).history_dir;
+    let entries = uq_core::history::Journal::open(history).list(10);
+    assert_eq!(entries.len(), 1, "{entries:?}");
+    assert_eq!(entries[0].origin, "shell");
     let themes = b.call(3, "ListThemes", json!([])).await;
     assert_eq!(themes["ok"].as_array().unwrap().len(), 7);
     assert!(b.call(4, "GetLayouts", json!([])).await["ok"].is_object());
@@ -137,7 +142,7 @@ async fn section_changed_is_forwarded() {
         serde_json::from_str::<Value>(&proxy.get_section("appearance").await.unwrap()).unwrap();
     section["font_size"] = json!(14);
     proxy
-        .set_section("appearance", &section.to_string())
+        .set_section("appearance", &section.to_string(), "settings")
         .await
         .unwrap();
     let ev = b.event("SectionChanged").await;

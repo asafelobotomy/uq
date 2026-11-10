@@ -8,6 +8,9 @@ use serde_json::{Map, Value, json};
 use tokio::sync::Mutex;
 use uq_core::client::{self, DesktopProxy};
 
+/// The origin uqd's history records for every write the app makes.
+pub const ORIGIN: &str = "settings";
+
 /// The result of an operation: the state to show, and uqd's message when it was refused.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Outcome {
@@ -77,7 +80,9 @@ pub async fn patch_section(
         .as_object_mut()
         .ok_or_else(|| zbus::Error::Failure(format!("the {domain} section isn't an object")))?;
     edit(object)?;
-    proxy.set_section(domain, &section.to_string()).await
+    proxy
+        .set_section(domain, &section.to_string(), ORIGIN)
+        .await
 }
 
 #[cfg(test)]

@@ -306,6 +306,9 @@ fn parse_json(s: &str) -> Value {
     serde_json::from_str(s).unwrap_or(Value::Null)
 }
 
+/// The origin uqd's history records for the shell's writes.
+const ORIGIN: &str = "shell";
+
 /// A validated call, ready to send.
 enum Request {
     GetTheme,
@@ -435,10 +438,10 @@ impl Request {
                 Ok(json!(m))
             }
             Request::Reload => unit(proxy.call("Reload", &()).await),
-            Request::SetTheme(a, b) => unit(proxy.call("SetTheme", &(a, b)).await),
-            Request::SetLayout(a, b) => unit(proxy.call("SetLayout", &(a, b)).await),
-            Request::SetSchedule(j) => unit(proxy.call("SetSchedule", &(j,)).await),
-            Request::SetSetting(k, j) => unit(proxy.call("SetSetting", &(k, j)).await),
+            Request::SetTheme(a, b) => unit(proxy.call("SetTheme", &(a, b, ORIGIN)).await),
+            Request::SetLayout(a, b) => unit(proxy.call("SetLayout", &(a, b, ORIGIN)).await),
+            Request::SetSchedule(j) => unit(proxy.call("SetSchedule", &(j, ORIGIN)).await),
+            Request::SetSetting(k, j) => unit(proxy.call("SetSetting", &(k, j, ORIGIN)).await),
             Request::RecordLaunch(id) => unit(proxy.call("RecordLaunch", &(id,)).await),
         }
     }

@@ -130,12 +130,23 @@ impl RestoreStore {
         points
     }
 
+    /// The point's state. An empty file or one that isn't valid TOML is `InvalidData` and is
+    /// left alone, since [`State::load`] would turn it into the defaults.
     pub fn load(&self, id: &str) -> io::Result<State> {
         let path = self.state_path(Self::checked(id)?);
-        if !path.exists() {
+        let src = match std::fs::read_to_string(&path) {
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {
+                return Err(io::Error::new(
+                    io::ErrorKind::NotFound,
+                    format!("no restore point {id}"),
+                ));
+            }
+            other => other?,
+        };
+        if src.trim().is_empty() || toml::from_str::<toml::Value>(&src).is_err() {
             return Err(io::Error::new(
-                io::ErrorKind::NotFound,
-                format!("no restore point {id}"),
+                io::ErrorKind::InvalidData,
+                format!("restore point {id} is damaged"),
             ));
         }
         Ok(State::load(&path))
@@ -230,6 +241,22 @@ mod tests {
             .map(|p| p.time)
             .min();
         assert_eq!(oldest_auto, Some(1_700_000_005));
+    }
+
+    #[test]
+    fn damaged_point_is_invalid_data_and_kept() {
+        let (_d, s) = store();
+        let p = s
+            .save(&State::default(), "x", PointKind::Manual, 1)
+            .unwrap();
+        for damage in ["", "  \n", "theme = \"nord\"\n[look\n"] {
+            std::fs::write(s.state_path(&p.id), damage).unwrap();
+            let err = s.load(&p.id).unwrap_err();
+            assert_eq!(err.kind(), io::ErrorKind::InvalidData, "{damage:?}");
+            assert!(s.state_path(&p.id).exists());
+        }
+        let missing = s.load("1700000000-abcdef").unwrap_err();
+        assert_eq!(missing.kind(), io::ErrorKind::NotFound);
     }
 
     #[test]

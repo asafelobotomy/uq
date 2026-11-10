@@ -38,7 +38,8 @@ impl FakeUqd {
         (s.theme.clone(), s.variant.to_string())
     }
 
-    fn set_theme(&self, name: &str, variant: &str) -> Result<(), FakeError> {
+    // Writes take uqd's last `origin` argument; the fake keeps no history, so ignores it.
+    fn set_theme(&self, name: &str, variant: &str, _origin: &str) -> Result<(), FakeError> {
         let variant = variant.parse().map_err(invalid)?;
         let mut s = self.state.lock().unwrap();
         s.theme = name.to_string();
@@ -54,7 +55,7 @@ impl FakeUqd {
         serde_json::to_string(&self.state.lock().unwrap().schedule).unwrap()
     }
 
-    fn set_schedule(&self, json: &str) -> Result<(), FakeError> {
+    fn set_schedule(&self, json: &str, _origin: &str) -> Result<(), FakeError> {
         let schedule: Schedule = serde_json::from_str(json).map_err(invalid)?;
         schedule.validate().map_err(invalid)?;
         self.state.lock().unwrap().schedule = schedule;
@@ -68,7 +69,7 @@ impl FakeUqd {
         read
     }
 
-    fn set_setting(&self, key: &str, json: &str) -> Result<(), FakeError> {
+    fn set_setting(&self, key: &str, json: &str, _origin: &str) -> Result<(), FakeError> {
         let value =
             serde_json::from_str(json).map_err(|e| invalid(format!("value is not JSON: {e}")))?;
         self.state
@@ -91,7 +92,7 @@ impl FakeUqd {
         Ok(read.to_string())
     }
 
-    fn set_section(&self, domain: &str, json: &str) -> Result<(), FakeError> {
+    fn set_section(&self, domain: &str, json: &str, _origin: &str) -> Result<(), FakeError> {
         let value =
             serde_json::from_str(json).map_err(|e| invalid(format!("value is not JSON: {e}")))?;
         let mut s = self.state.lock().unwrap();

@@ -9,12 +9,14 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::broadcast;
 use uq_core::atomic::{atomic_replace_dir, atomic_write};
-use uq_core::history::{AutoReason, Entry, Journal, Origin, PointKind, RestoreStore, diff};
+use uq_core::history::{
+    AutoReason, Entry, Journal, MAX_ENTRIES, Origin, PointKind, RestorePoint, RestoreStore, diff,
+};
 use uq_core::lua::{Layout, emit_generated, emit_workspace_rule, lua_string};
 use uq_core::paths::Paths;
 use uq_core::render::{kvantum_base, render};
 use uq_core::schedule::{Schedule, last_event, variant_at};
-use uq_core::settings::{Settings, renders_config, set_rule, valid_pinned_id};
+use uq_core::settings::{SECTION_DOMAINS, Settings, renders_config, set_rule, valid_pinned_id};
 use uq_core::state::State;
 use uq_core::theme::{ThemeRegistry, Variant};
 
@@ -61,6 +63,11 @@ pub enum DesktopError {
     InvalidSetting(String),
     #[error("{0}")]
     Io(String),
+    #[error("{0}")]
+    InvalidArgument(String),
+    /// An undo whose domain changed again since; the caller may force it.
+    #[error("{0}")]
+    Conflict(String),
 }
 
 pub(crate) fn io_err(context: &str) -> impl Fn(std::io::Error) -> DesktopError + '_ {
@@ -98,6 +105,21 @@ pub struct Desktop {
     restore: RestoreStore,
     /// Ids of the journal entries the latest `persist` appended; empty when it journalled nothing.
     last_entry_ids: Vec<String>,
+}
+
+/// How a conflict message names a journal domain.
+fn domain_label(domain: &str) -> &'static str {
+    match domain {
+        "theme" => "The theme",
+        "schedule" => "The theme schedule",
+        "appearance" => "Appearance",
+        "look" => "Look",
+        "layouts" => "Layouts",
+        "wallpaper" => "Wallpaper",
+        "shell" => "Shell",
+        "settings" => "A setting",
+        _ => "This setting",
+    }
 }
 
 /// Launch counts stop here per app.
@@ -189,7 +211,6 @@ impl Desktop {
     }
 
     /// Ids of the entries the latest `persist` journalled (empty if none).
-    #[allow(dead_code)] // Task 4's D-Bus Undo reads it.
     pub(crate) fn last_entry_ids(&self) -> &[String] {
         &self.last_entry_ids
     }
@@ -236,11 +257,35 @@ impl Desktop {
         value: serde_json::Value,
         origin: Origin,
     ) -> Result<(), DesktopError> {
+        self.set_settings(vec![(key.to_string(), value)], origin)
+            .await
+    }
+
+    /// [`Self::set_setting`] for several keys as one write. Keys are applied in whatever order
+    /// passes validation, so an undo can move idle stages past each other.
+    async fn set_settings(
+        &mut self,
+        values: Vec<(String, serde_json::Value)>,
+        origin: Origin,
+    ) -> Result<(), DesktopError> {
+        let renders = values.iter().any(|(k, _)| renders_config(k));
         let mut next = self.state.clone();
-        next.settings
-            .apply(key, value)
-            .map_err(|e| DesktopError::InvalidSetting(e.to_string()))?;
-        if renders_config(key) {
+        let mut pending = values;
+        while !pending.is_empty() {
+            let mut err = None;
+            let left = pending.len();
+            pending.retain(|(k, v)| match next.settings.apply(k, v.clone()) {
+                Ok(()) => false,
+                Err(e) => {
+                    err = Some(e);
+                    true
+                }
+            });
+            if let Some(e) = err.filter(|_| pending.len() == left) {
+                return Err(DesktopError::InvalidSetting(e.to_string()));
+            }
+        }
+        if renders {
             return self.commit(next, Change::Input, origin).await;
         }
         self.persist(next, origin)?;
@@ -288,6 +333,7 @@ impl Desktop {
         self.flush_launch_counts_at(Instant::now());
     }
 
+    /// Writes `state.toml` outside `persist` on purpose: launch counts are never journalled.
     fn save_launch_counts(&mut self, now: Instant) {
         match self.state.save(&self.paths.state_file) {
             Ok(()) => {
@@ -430,6 +476,125 @@ impl Desktop {
             .await
     }
 
+    /// The journal, newest first, at most `limit` (capped at [`MAX_ENTRIES`]) entries.
+    pub fn history(&self, limit: usize) -> Vec<Entry> {
+        self.journal.list(limit.min(MAX_ENTRIES))
+    }
+
+    /// Write entry `id`'s `before` back through the normal write path, recorded with origin
+    /// `restore`. Refused with `Conflict` when a newer entry changed the same domain, unless
+    /// `force`. [`Self::last_entry_ids`] then holds what the undo itself journalled.
+    pub async fn undo(&mut self, id: &str, force: bool) -> Result<(), DesktopError> {
+        let entries = self.journal.list(usize::MAX);
+        let Some(pos) = entries.iter().position(|e| e.id == id) else {
+            return Err(DesktopError::InvalidArgument(format!(
+                "no history entry {id:?}"
+            )));
+        };
+        let entry = &entries[pos];
+        if !force && entries[..pos].iter().any(|e| e.domain == entry.domain) {
+            return Err(DesktopError::Conflict(format!(
+                "{} was changed again after this. Undo anyway?",
+                domain_label(&entry.domain)
+            )));
+        }
+        let damaged = |e: serde_json::Error| {
+            DesktopError::InvalidArgument(format!("history entry {id:?} is damaged: {e}"))
+        };
+        let before = entry.before.clone();
+        match entry.domain.as_str() {
+            "theme" => {
+                let name: String =
+                    serde_json::from_value(before["theme"].clone()).map_err(damaged)?;
+                let variant: Variant =
+                    serde_json::from_value(before["variant"].clone()).map_err(damaged)?;
+                self.set_theme(&name, variant, Origin::Restore).await?;
+            }
+            "schedule" => {
+                let schedule: Schedule = serde_json::from_value(before).map_err(damaged)?;
+                self.set_schedule(schedule, Origin::Restore).await?;
+            }
+            "settings" => {
+                let after = &entry.after;
+                let values: Vec<(String, serde_json::Value)> = before
+                    .as_object()
+                    .into_iter()
+                    .flatten()
+                    .filter(|(k, v)| after.get(k.as_str()) != Some(*v))
+                    .map(|(k, v)| (k.clone(), v.clone()))
+                    .collect();
+                self.set_settings(values, Origin::Restore).await?;
+            }
+            domain => {
+                let domain = domain.to_string();
+                self.set_section(&domain, &before.to_string(), Origin::Restore)
+                    .await?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Restore points, newest first.
+    pub fn restore_points(&self) -> Vec<RestorePoint> {
+        self.restore.list()
+    }
+
+    /// Save the current state as a manual restore point; returns its id.
+    pub fn save_restore_point(&self, name: &str) -> Result<String, DesktopError> {
+        self.restore
+            .save(&self.state, name, PointKind::Manual, Utc::now().timestamp())
+            .map(|p| p.id)
+            .map_err(io_err("saving restore point"))
+    }
+
+    pub fn delete_restore_point(&self, id: &str) -> Result<(), DesktopError> {
+        self.restore.delete(id).map_err(|e| match e.kind() {
+            std::io::ErrorKind::InvalidInput => DesktopError::InvalidArgument(e.to_string()),
+            _ => DesktopError::Io(format!("deleting restore point: {e}")),
+        })
+    }
+
+    /// Bring back every domain of restore point `id` as one write, keeping today's launch
+    /// counts. A damaged point or one whose theme is gone changes nothing; otherwise an
+    /// automatic point of the current state is saved first.
+    pub async fn restore(&mut self, id: &str) -> Result<(), DesktopError> {
+        let mut next = self.restore.load(id).map_err(|e| match e.kind() {
+            std::io::ErrorKind::InvalidData => {
+                DesktopError::InvalidArgument("restore point is damaged".into())
+            }
+            std::io::ErrorKind::InvalidInput | std::io::ErrorKind::NotFound => {
+                DesktopError::InvalidArgument(e.to_string())
+            }
+            _ => DesktopError::Io(format!("reading restore point: {e}")),
+        })?;
+        if self.themes.get(&next.theme, next.variant).is_none() {
+            return Err(DesktopError::UnknownTheme(next.theme));
+        }
+        if let Err(e) = self.restore.save(
+            &self.state,
+            "Before restoring a restore point",
+            PointKind::Auto(AutoReason::BeforeRestore),
+            Utc::now().timestamp(),
+        ) {
+            tracing::warn!("saving before-restore point: {e}");
+        }
+        next.launch_counts = self.state.launch_counts.clone();
+        self.commit(next, Change::Theme, Origin::Restore).await?;
+        // `Change::Theme` announces only the theme; every section may have changed too.
+        for domain in SECTION_DOMAINS {
+            if let Ok(json) = self.get_section(domain) {
+                let _ = self.events.send(Event::SectionChanged {
+                    domain: domain.to_string(),
+                    json,
+                });
+            }
+        }
+        let _ = self.events.send(Event::SettingsChanged(Box::new(
+            self.state.settings.clone(),
+        )));
+        Ok(())
+    }
+
     fn ensure_user_lua(&self) -> Result<(), DesktopError> {
         let p = &self.paths.user_lua;
         if p.exists() {
@@ -444,10 +609,11 @@ impl Desktop {
         next.save(&self.paths.state_file)
             .map_err(io_err("saving state"))?;
         let old = std::mem::replace(&mut self.state, next);
-        self.last_entry_ids.clear();
+        // A schedule tick keeps the last entry ids, so it never moves the undo target.
         if origin == Origin::Schedule {
             return Ok(());
         }
+        self.last_entry_ids.clear();
         let changes = diff(&old, &self.state, &|_, _| None);
         if changes.is_empty() {
             return Ok(());
@@ -1425,11 +1591,36 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn several_settings_apply_in_an_order_that_validates() {
+        let mut r = rig();
+        // Defaults are dim 240 < lock 300 < screen_off 360: dim 310 alone would break the order.
+        let values = vec![
+            ("idle.dim".to_string(), serde_json::json!(310)),
+            ("idle.lock".to_string(), serde_json::json!(320)),
+        ];
+        r.desktop
+            .set_settings(values, Origin::Restore)
+            .await
+            .unwrap();
+        let idle = &r.desktop.settings().idle;
+        assert_eq!((idle.dim, idle.lock), (Some(310), Some(320)));
+        assert_eq!(journal_of(&r).len(), 1);
+
+        let bad = vec![("idle.dim".to_string(), serde_json::json!(999))];
+        let res = r.desktop.set_settings(bad, Origin::Restore).await;
+        assert!(
+            matches!(res, Err(DesktopError::InvalidSetting(_))),
+            "{res:?}"
+        );
+        assert_eq!(r.desktop.settings().idle.dim, Some(310));
+    }
+
+    #[tokio::test]
     async fn schedule_tick_is_not_journalled() {
         let mut r = rig();
         let day = chrono::Local::now().date_naive();
-        let at = |h, m| {
-            day.and_hms_opt(h, m, 0)
+        let at = |d: chrono::NaiveDate, h| {
+            d.and_hms_opt(h, 0, 0)
                 .unwrap()
                 .and_local_timezone(chrono::Local)
                 .earliest()
@@ -1439,14 +1630,20 @@ mod tests {
             light_at: chrono::NaiveTime::from_hms_opt(7, 0, 0).unwrap(),
             dark_at: chrono::NaiveTime::from_hms_opt(19, 0, 0).unwrap(),
         };
+        // At 20:00 the schedule wants dark, the default, so setting it journals one entry.
         r.desktop
-            .set_schedule_at(s, at(12, 0), Origin::Schedule)
+            .set_schedule_at(s, at(day, 20), Origin::Settings)
             .await
             .unwrap();
-        let _ = r.desktop.tick_schedule_at(at(23, 0)).await.unwrap();
-        assert!(journal_of(&r).is_empty());
-        assert!(r.desktop.last_entry_ids().is_empty());
-        assert!(r.desktop.restore.list().is_empty());
+        let entries = journal_of(&r);
+        assert_eq!(entries.len(), 1, "{entries:?}");
+        let points = r.desktop.restore.list().len();
+        let next_morning = at(day.succ_opt().unwrap(), 8);
+        assert!(r.desktop.tick_schedule_at(next_morning).await.unwrap());
+        assert_eq!(journal_of(&r), entries);
+        // The tick leaves the undo target alone.
+        assert_eq!(r.desktop.last_entry_ids(), [entries[0].id.clone()]);
+        assert_eq!(r.desktop.restore.list().len(), points);
     }
 
     #[tokio::test]

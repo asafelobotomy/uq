@@ -10,17 +10,28 @@ use std::collections::HashMap;
 )]
 pub trait Desktop {
     fn get_theme(&self) -> zbus::Result<(String, String)>;
-    fn set_theme(&self, name: &str, variant: &str) -> zbus::Result<()>;
+    /// Every write's last argument is its origin: `settings`, `uqctl`, `shell`, … ("" is unknown).
+    fn set_theme(&self, name: &str, variant: &str, origin: &str) -> zbus::Result<()>;
     fn list_themes(&self) -> zbus::Result<Vec<String>>;
     fn get_schedule(&self) -> zbus::Result<String>;
-    fn set_schedule(&self, json: &str) -> zbus::Result<()>;
+    fn set_schedule(&self, json: &str, origin: &str) -> zbus::Result<()>;
     fn get_settings(&self) -> zbus::Result<String>;
     fn get_section(&self, domain: &str) -> zbus::Result<String>;
-    fn set_section(&self, domain: &str, json: &str) -> zbus::Result<()>;
-    fn set_setting(&self, key: &str, json: &str) -> zbus::Result<()>;
+    fn set_section(&self, domain: &str, json: &str, origin: &str) -> zbus::Result<()>;
+    fn set_setting(&self, key: &str, json: &str, origin: &str) -> zbus::Result<()>;
     fn get_launch_counts(&self) -> zbus::Result<HashMap<String, u32>>;
     fn clear_launch_counts(&self) -> zbus::Result<()>;
     fn get_layouts(&self) -> zbus::Result<HashMap<String, String>>;
+    fn set_layout(&self, workspace: &str, layout: &str, origin: &str) -> zbus::Result<()>;
+    /// JSON array of history entries, newest first.
+    fn list_history(&self, limit: u32) -> zbus::Result<String>;
+    /// Returns the id of the entry the undo recorded.
+    fn undo(&self, entry_id: &str, force: bool) -> zbus::Result<String>;
+    /// JSON array of restore points, newest first.
+    fn list_restore_points(&self) -> zbus::Result<String>;
+    fn save_restore_point(&self, name: &str) -> zbus::Result<String>;
+    fn delete_restore_point(&self, id: &str) -> zbus::Result<()>;
+    fn restore(&self, id: &str) -> zbus::Result<()>;
 
     #[zbus(signal)]
     fn section_changed(&self, domain: &str, json: &str) -> zbus::Result<()>;
@@ -28,6 +39,8 @@ pub trait Desktop {
     fn theme_changed(&self, name: &str, variant: &str, tokens_path: &str) -> zbus::Result<()>;
     #[zbus(signal)]
     fn settings_changed(&self, json: &str) -> zbus::Result<()>;
+    #[zbus(signal)]
+    fn history_changed(&self) -> zbus::Result<()>;
 }
 
 /// The Settings app's single-instance interface. An empty `page_id` means "just raise".

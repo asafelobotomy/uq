@@ -79,6 +79,15 @@ uqctl mouse speed -0.3                 # -1..1; also: accel default|adaptive|fla
 uqctl launches clear
 ```
 
+History and restore points (uqd records every change, who made it, and what it was before):
+
+```bash
+uqctl history [--limit 20]             # id, time, origin (settings, uqctl, shell, ...), summary
+uqctl undo [<id>] [--force]            # no id: the newest change; --force if it changed again since
+uqctl restore list                     # also: restore save <name>, restore delete <id>
+uqctl restore <id>                     # bring back every setting as it was; can itself be undone
+```
+
 The shell runs as `uq-shell.service` (Quickshell, started with the session). `SUPER+CTRL+L`
 restarts the lock surface (`uq-lock.service`, else `hyprlock`) if it ever dies.
 
@@ -94,7 +103,9 @@ notification and privacy settings). Animations now come from `generated.lua`, so
 ...) opens a page directly, and a second call raises the same window. Run `uqctl setup --apps`
 once to hook Qt apps up to the uQ Kvantum theme. Other packages can add a page under Apps by
 installing `/usr/share/uq/settings/pages/<id>/page.toml` with a QML file. Settings are also
-available over D-Bus as `GetSection` / `SetSection` on `uqd`.
+available over D-Bus as `GetSection` / `SetSection` on `uqd`. Every write method there
+(`SetSection`, `SetSetting`, `SetTheme`, `SetLayout`, `SetSchedule`) takes a last `origin` string
+that the history records; `""` records as unknown.
 
 ### Launchers
 
