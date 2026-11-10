@@ -24,6 +24,7 @@ mod look_model;
 mod model_core;
 mod pages;
 mod plugins;
+mod profiles_model;
 mod registry;
 mod search;
 mod session;

@@ -28,11 +28,13 @@ fn main() {
         QmlFile::from("qml/components/DisplayArrangement.qml"),
         QmlFile::from("qml/components/KeyboardLayoutList.qml"),
         QmlFile::from("qml/components/ValueSlider.qml"),
+        QmlFile::from("qml/components/ProfileKeyList.qml"),
         QmlFile::from("qml/pages/AppearancePage.qml"),
         QmlFile::from("qml/pages/DisplaysPage.qml"),
         QmlFile::from("qml/pages/HistoryPage.qml"),
         QmlFile::from("qml/pages/InputPage.qml"),
         QmlFile::from("qml/pages/LookPage.qml"),
+        QmlFile::from("qml/pages/ProfilesPage.qml"),
         QmlFile::from("qml/pages/ShellPage.qml"),
         QmlFile::from("qml/pages/WallpaperPage.qml"),
     ]))
@@ -48,6 +50,7 @@ fn main() {
         "src/history_model.rs",
         "src/input_model.rs",
         "src/look_model.rs",
+        "src/profiles_model.rs",
         "src/shell_model.rs",
         "src/wallpaper_model.rs",
     ])

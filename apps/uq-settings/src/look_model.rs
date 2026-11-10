@@ -89,6 +89,7 @@ impl PageModel for LookModel {
         settings: false,
         history: false,
         monitors: false,
+        profiles: false,
     };
 
     fn core(&self) -> &ModelCore<LookState> {

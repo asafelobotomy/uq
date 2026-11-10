@@ -110,7 +110,16 @@ struct Report {
 struct Conflict {
     seq: u64,
     path: String,
+    /// uqd's message without its closing "Replace it?": the page's dialog asks the question.
     message: String,
+}
+
+/// uqd's conflict message without the question it ends with.
+fn conflict_message(text: &str) -> String {
+    let text = text.trim();
+    text.strip_suffix("Replace it?")
+        .map_or(text, str::trim_end)
+        .to_string()
 }
 
 #[derive(Debug, Default)]
@@ -343,7 +352,7 @@ impl ProfilesState {
                 shown.conflict = Some(Conflict {
                     seq,
                     path: path.display().to_string(),
-                    message: text.unwrap_or_default(),
+                    message: conflict_message(&text.unwrap_or_default()),
                 });
                 Ok(())
             }

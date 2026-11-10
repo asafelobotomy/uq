@@ -442,12 +442,10 @@ async fn export_then_import_round_trips() {
     assert_eq!(out.error, None, "a conflict is asked about, not an error");
     let conflict = &out.state["conflict"];
     assert_eq!(conflict["path"], file.display().to_string());
-    assert!(
-        conflict["message"]
-            .as_str()
-            .unwrap()
-            .contains("already exists"),
-        "{conflict}"
+    // The page asks the question; uqd's own "Replace it?" would ask it twice.
+    assert_eq!(
+        conflict["message"],
+        "A profile called \u{201c}Changed\u{201d} already exists."
     );
     assert!(conflict["seq"].as_u64().unwrap() > 0);
     assert_eq!(stored(&r, "gaming").unwrap().name, "Changed");

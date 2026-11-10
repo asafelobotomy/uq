@@ -85,6 +85,7 @@ impl PageModel for WallpaperModel {
         settings: false,
         history: false,
         monitors: false,
+        profiles: false,
     };
 
     fn core(&self) -> &ModelCore<WallpaperState> {

@@ -12,3 +12,4 @@ org.uq
 hyprctl
 state.toml
 gsettings
+power-profiles-daemon

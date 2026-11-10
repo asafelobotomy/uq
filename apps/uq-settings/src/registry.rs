@@ -319,6 +319,19 @@ static SHELL_SETTINGS: [SearchEntry; 16] = [
     ),
 ];
 
+static PROFILES_SETTINGS: [SearchEntry; 2] = [
+    entry(
+        "profiles",
+        "Profiles",
+        &["modes", "gaming", "presentation", "switch", "preset"],
+    ),
+    entry(
+        "profile-files",
+        "Export or import a profile",
+        &["share", "file", "backup", "copy"],
+    ),
+];
+
 static HISTORY_SETTINGS: [SearchEntry; 2] = [
     entry(
         "history",
@@ -471,7 +484,7 @@ static INPUT_SETTINGS: [SearchEntry; 14] = [
     ),
 ];
 
-static CORE_PAGES: [PageInfo; 7] = [
+static CORE_PAGES: [PageInfo; 8] = [
     PageInfo {
         id: "appearance",
         name: "Appearance",
@@ -525,6 +538,15 @@ static CORE_PAGES: [PageInfo; 7] = [
         qml: "pages/ShellPage.qml",
         settings: &SHELL_SETTINGS,
         domains: &["shell", "settings"],
+    },
+    PageInfo {
+        id: "profiles",
+        name: "Profiles",
+        icon: "bookmarks",
+        category: Category::Uq,
+        qml: "pages/ProfilesPage.qml",
+        settings: &PROFILES_SETTINGS,
+        domains: &[],
     },
     PageInfo {
         id: "history",
@@ -721,6 +743,43 @@ mod tests {
     }
 
     #[test]
+    fn profiles_page_registered_with_search_entries() {
+        let page = find("profiles").expect("the profiles page is registered");
+        assert_eq!(page.name, "Profiles");
+        assert_eq!(page.category, Category::Uq);
+        assert_eq!(page.icon, "bookmarks");
+        assert_eq!(page.qml, "pages/ProfilesPage.qml");
+        assert!(page.domains.is_empty());
+        let entries: Vec<_> = page
+            .settings
+            .iter()
+            .map(|s| (s.id, s.label, s.keywords))
+            .collect();
+        assert_eq!(
+            entries,
+            [
+                (
+                    "profiles",
+                    "Profiles",
+                    &["modes", "gaming", "presentation", "switch", "preset"][..]
+                ),
+                (
+                    "profile-files",
+                    "Export or import a profile",
+                    &["share", "file", "backup", "copy"][..]
+                ),
+            ]
+        );
+        let ids: Vec<_> = core_pages().iter().map(|p| p.id).collect();
+        let at = ids.iter().position(|id| *id == "profiles").unwrap();
+        assert_eq!(
+            (ids[at - 1], ids[at + 1]),
+            ("shell", "history"),
+            "between Shell and History"
+        );
+    }
+
+    #[test]
     fn every_journal_domain_has_one_page() {
         let mut domains: Vec<&str> = uq_core::settings::SECTION_DOMAINS.to_vec();
         domains.extend(["theme", "schedule", "settings"]);
@@ -754,6 +813,7 @@ mod tests {
                 "displays",
                 "input",
                 "shell",
+                "profiles",
                 "history"
             ]
         );
