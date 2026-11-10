@@ -50,6 +50,8 @@ impl From<DesktopError> for UqError {
 
 pub struct DesktopIface {
     desktop: SharedDesktop,
+    /// Outside the desktop lock: a pick waits for the user, and writes must still go through.
+    picks: crate::pick::PickBroker,
 }
 
 /// Every write takes a last `origin` argument (`settings`, `uqctl`, `shell`, …; "" is unknown),
@@ -240,6 +242,27 @@ impl DesktopIface {
         serde_json::to_string(&windows).map_err(|e| UqError::Io(e.to_string()))
     }
 
+    /// Let the user click a window (spec §5). Returns JSON `{status, window?}`: `picked` (with
+    /// only that window's fields), `none`, `cancelled`, `timeout`, `no_shell` or `unavailable`.
+    /// `Conflict` when a pick is already pending. Waits up to 20 s without the desktop lock.
+    async fn pick_window(&self) -> Result<String, UqError> {
+        let (comp, events) = {
+            let d = self.desktop.lock().await;
+            (d.comp.clone(), d.events.clone())
+        };
+        let emit = move |t: String| {
+            let _ = events.send(Event::PickRequested(t));
+        };
+        Ok(crate::pick::pick(&self.picks, comp, emit).await?)
+    }
+
+    /// The shell's answer for the pick `token`: `shown`, `click` or `cancel`. An unknown token
+    /// does nothing.
+    async fn pick_done(&self, token: &str, outcome: &str) -> Result<(), UqError> {
+        self.picks.done(token, outcome.parse()?);
+        Ok(())
+    }
+
     /// Apply a whole `monitors` section live for 15 s. Returns the token `ConfirmMonitors`
     /// needs; without a confirm, uqd puts the old layout back on its own.
     async fn apply_monitors(&self, json: &str) -> Result<String, UqError> {
@@ -300,6 +323,10 @@ impl DesktopIface {
         let report = self.desktop.lock().await.profile_off().await?;
         serde_json::to_string(&report).map_err(|e| UqError::Io(e.to_string()))
     }
+
+    /// A pick began; the shell shows its overlay and answers `PickDone(token, …)`.
+    #[zbus(signal)]
+    async fn pick_requested(e: &SignalEmitter<'_>, token: &str) -> zbus::Result<()>;
 
     #[zbus(signal)]
     async fn monitors_changed(e: &SignalEmitter<'_>) -> zbus::Result<()>;
@@ -366,6 +393,7 @@ pub async fn serve(
             PATH,
             DesktopIface {
                 desktop: shared.clone(),
+                picks: crate::pick::PickBroker::default(),
             },
         )?
         .build()
@@ -413,6 +441,7 @@ pub async fn serve(
                 Event::HistoryChanged => DesktopIface::history_changed(e).await,
                 Event::MonitorsChanged => DesktopIface::monitors_changed(e).await,
                 Event::ProfileChanged(id) => DesktopIface::profile_changed(e, id).await,
+                Event::PickRequested(token) => DesktopIface::pick_requested(e, token).await,
                 Event::LaunchCountsChanged(counts) => {
                     DesktopIface::launch_counts_changed(
                         e,

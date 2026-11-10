@@ -55,6 +55,8 @@ pub enum Event {
     MonitorsChanged,
     /// The active profile or the list of profiles changed; the active profile's id, or `""`.
     ProfileChanged(String),
+    /// A window pick started; the token goes to the shell, which answers `PickDone`.
+    PickRequested(String),
 }
 
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]

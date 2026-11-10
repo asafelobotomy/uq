@@ -3,6 +3,7 @@ pub mod compositor;
 pub mod dbus;
 pub mod hypr;
 mod monitors;
+pub mod pick;
 pub mod power;
 mod profiles;
 mod rules;
