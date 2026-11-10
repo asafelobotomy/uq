@@ -44,6 +44,11 @@ pub mod qobject {
         #[qinvokable]
         fn set_entry(self: Pin<&mut WallpaperModel>, output: &QString, json_entry: &QString);
 
+        /// Change some fields of one output's entry: `json_patch` is merged over the entry uqd
+        /// has (or over the `"*"` entry for a display without its own).
+        #[qinvokable]
+        fn patch_entry(self: Pin<&mut WallpaperModel>, output: &QString, json_patch: &QString);
+
         /// Remove one output's entry.
         #[qinvokable]
         fn clear_entry(self: Pin<&mut WallpaperModel>, output: &QString);
@@ -178,6 +183,16 @@ impl WallpaperModel {
             Ok(entry) => self.start(Op::SetEntry {
                 output: output.to_string(),
                 entry,
+            }),
+            Err(e) => self.set_error(QString::from(&format!("{output}: not valid JSON ({e})"))),
+        }
+    }
+
+    fn patch_entry(self: Pin<&mut Self>, output: &QString, json_patch: &QString) {
+        match serde_json::from_str(&json_patch.to_string()) {
+            Ok(patch) => self.start(Op::PatchEntry {
+                output: output.to_string(),
+                patch,
             }),
             Err(e) => self.set_error(QString::from(&format!("{output}: not valid JSON ({e})"))),
         }

@@ -38,7 +38,7 @@ TestCase {
         ed.applyInterval();
         compare(got.length, 1);
         compare(got[0].interval, 10);
-        compare(got[0].folder, "/pics");
+        compare(got[0].folder, undefined);
         compare(ed.secondsBox.value, 10);
         ed.minutesBox.value = 1440;
         ed.secondsBox.value = 59;
@@ -57,7 +57,6 @@ TestCase {
         ed.applyColor();
         compare(got.length, 1);
         compare(got[0].color, "#a0b0c0");
-        compare(got[0].fit, "fill");
         ed.colorField.text = "";
         ed.applyColor();
         compare(got[1].color, null);

@@ -36,21 +36,16 @@ ColumnLayout {
         { id: "tile", name: "Tile" }
     ]
     readonly property string imageFilter: "Images (*.jpg *.jpeg *.png *.webp *.jxl *.avif)"
-    /// The whole new entry, for the model to save.
-    signal changed(var entry)
+    /// The fields to change, e.g. `{fit: "tile"}`.
+    signal changed(var patch)
 
     function saved(key, fallback) {
         const v = (entry || {})[key];
         return v === undefined || v === null ? fallback : v;
     }
+    /// Only the changed fields: the model merges them into the entry uqd has at that moment.
     function commit(patch) {
-        root.changed(Object.assign({
-            image: root.saved("image", null),
-            fit: root.saved("fit", "fill"),
-            folder: root.saved("folder", null),
-            interval: root.saved("interval", 300),
-            color: root.saved("color", null)
-        }, patch));
+        root.changed(patch);
     }
     function fitIndex(id) {
         return Math.max(0, fits.findIndex(f => f.id === id));

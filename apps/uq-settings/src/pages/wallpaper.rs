@@ -3,6 +3,7 @@
 
 use std::collections::BTreeMap;
 use std::path::Path;
+use std::time::Duration;
 
 use serde_json::{Value, json};
 use tokio::sync::Mutex;
@@ -10,6 +11,10 @@ use uq_core::client::{self, DesktopProxy};
 use uq_core::settings::Wallpaper;
 
 /// The file types the shell's slideshow picks up.
+/// How long the disk checks may take before the page is shown without them.
+const SCAN_TIMEOUT: Duration = Duration::from_secs(2);
+/// The most folder entries looked at per folder.
+const MAX_SCANNED: usize = 5000;
 const IMAGE_EXTENSIONS: [&str; 6] = ["jpg", "jpeg", "png", "webp", "jxl", "avif"];
 
 /// What the page asks for.
@@ -19,6 +24,10 @@ pub enum Op {
     Refresh,
     /// Replace one output's entry (`"*"` = all displays) with `entry`.
     SetEntry { output: String, entry: Value },
+    /// Change some fields of one output's entry: `patch` (an object) is merged over the entry as
+    /// uqd has it now (or, for a display without one, over the `"*"` entry), so two quick edits
+    /// to different fields both land.
+    PatchEntry { output: String, patch: Value },
     /// Remove one output's entry.
     ClearEntry { output: String },
 }
@@ -26,7 +35,7 @@ pub enum Op {
 /// The result of an [`Op`]: the state to show, and uqd's message when it was refused.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Outcome {
-    /// `{outputs, problems}`, or `{}` when uqd can't be read.
+    /// `{outputs, problems, problemsSkipped}`, or `{}` when uqd can't be read.
     pub state: Value,
     pub error: Option<String>,
 }
@@ -35,6 +44,8 @@ pub struct WallpaperState {
     conn: zbus::Connection,
     /// Writes read-modify-write the section, so one at a time.
     write: Mutex<()>,
+    scan: fn(&Wallpaper) -> BTreeMap<String, String>,
+    scan_timeout: Duration,
 }
 
 /// The text to show for a failed call: uqd's own message when it sent one.
@@ -52,15 +63,22 @@ fn is_image(path: &Path) -> bool {
         .is_some_and(|e| IMAGE_EXTENSIONS.contains(&e.to_ascii_lowercase().as_str()))
 }
 
-/// What is wrong with each output's wallpaper, by output name. A folder wins over an image (as in
-/// the shell), so only the one in use is checked. Outputs that are fine are left out.
+/// A regular file (or a link to one) that can be opened. Anything else, such as a FIFO, is
+/// refused without being opened, since opening it could block forever.
+fn readable_file(path: &Path) -> bool {
+    std::fs::metadata(path).is_ok_and(|m| m.is_file()) && std::fs::File::open(path).is_ok()
+}
+
+/// What is wrong with each output's wallpaper, by output name. This mirrors the shell: a folder
+/// wins over an image (`shell/wallpaper/Wallpaper.qml`), so only the one in use is checked. Outputs that are fine are left out.
 pub fn problems(w: &Wallpaper) -> BTreeMap<String, String> {
     let mut out = BTreeMap::new();
     for (name, entry) in &w.outputs {
         if let Some(folder) = &entry.folder {
             let has_image = std::fs::read_dir(folder).is_ok_and(|dir| {
                 dir.flatten()
-                    .any(|f| is_image(&f.path()) && std::fs::File::open(f.path()).is_ok())
+                    .take(MAX_SCANNED)
+                    .any(|f| is_image(&f.path()) && readable_file(&f.path()))
             });
             if !has_image {
                 out.insert(
@@ -69,7 +87,7 @@ pub fn problems(w: &Wallpaper) -> BTreeMap<String, String> {
                 );
             }
         } else if let Some(image) = &entry.image
-            && !(image.is_file() && std::fs::File::open(image).is_ok())
+            && !readable_file(image)
         {
             out.insert(
                 name.clone(),
@@ -101,9 +119,20 @@ pub fn local_path(url: &str) -> Option<String> {
 
 impl WallpaperState {
     pub fn new(conn: zbus::Connection) -> Self {
+        Self::with_scan(conn, problems, SCAN_TIMEOUT)
+    }
+
+    /// Like [`Self::new`], with the disk check and its time limit chosen (tests).
+    pub fn with_scan(
+        conn: zbus::Connection,
+        scan: fn(&Wallpaper) -> BTreeMap<String, String>,
+        scan_timeout: Duration,
+    ) -> Self {
         Self {
             conn,
             write: Mutex::new(()),
+            scan,
+            scan_timeout,
         }
     }
 
@@ -129,9 +158,10 @@ impl WallpaperState {
 
     async fn apply(&self, op: Op) -> zbus::Result<()> {
         let proxy = DesktopProxy::new(&self.conn).await?;
-        let (output, entry) = match op {
+        let (output, change) = match op {
             Op::Refresh => return Ok(()),
-            Op::SetEntry { output, entry } => (output, Some(entry)),
+            Op::SetEntry { output, entry } => (output, Some((entry, false))),
+            Op::PatchEntry { output, patch } => (output, Some((patch, true))),
             Op::ClearEntry { output } => (output, None),
         };
         let bad = |what: &str| zbus::Error::Failure(what.to_string());
@@ -144,10 +174,27 @@ impl WallpaperState {
             .or_insert_with(|| json!({}))
             .as_object_mut()
             .ok_or_else(|| bad("the wallpaper outputs aren't an object"))?;
-        match entry {
-            Some(entry) => outputs.insert(output, entry),
-            None => outputs.remove(&output),
-        };
+        match change {
+            Some((entry, false)) => {
+                outputs.insert(output, entry);
+            }
+            Some((patch, true)) => {
+                let mut merged = outputs
+                    .get(&output)
+                    .or_else(|| outputs.get("*"))
+                    .cloned()
+                    .unwrap_or_else(|| json!({}));
+                let (Some(fields), Some(changes)) = (merged.as_object_mut(), patch.as_object())
+                else {
+                    return Err(bad("a wallpaper entry must be an object"));
+                };
+                fields.extend(changes.iter().map(|(k, v)| (k.clone(), v.clone())));
+                outputs.insert(output, merged);
+            }
+            None => {
+                outputs.remove(&output);
+            }
+        }
         proxy.set_section("wallpaper", &section.to_string()).await
     }
 
@@ -157,13 +204,22 @@ impl WallpaperState {
         let section: Value = serde_json::from_str(&text)
             .map_err(|e| zbus::Error::Failure(format!("uqd sent bad JSON: {e}")))?;
         let parsed: Wallpaper = serde_json::from_value(section.clone()).unwrap_or_default();
-        // Disk checks can block on a slow mount; keep them off the async threads.
-        let problems = tokio::task::spawn_blocking(move || problems(&parsed))
-            .await
-            .unwrap_or_default();
+        // Disk checks can block on a stalled mount: off the async threads, and not waited for
+        // beyond the time limit (the page then shows without problems, `problemsSkipped` set).
+        let scan = self.scan;
+        let checked = tokio::time::timeout(
+            self.scan_timeout,
+            tokio::task::spawn_blocking(move || scan(&parsed)),
+        )
+        .await;
+        let (problems, skipped) = match checked {
+            Ok(Ok(found)) => (found, false),
+            Ok(Err(_)) | Err(_) => (BTreeMap::new(), true),
+        };
         Ok(json!({
             "outputs": section.get("outputs").cloned().unwrap_or_else(|| json!({})),
             "problems": problems,
+            "problemsSkipped": skipped,
         }))
     }
 }
@@ -317,6 +373,90 @@ mod tests {
         assert_eq!(
             p["DP-2"],
             format!("The folder has no readable images: {}", empty.display())
+        );
+    }
+
+    #[test]
+    fn a_fifo_named_like_an_image_does_not_hang() {
+        let dir = tempfile::tempdir().unwrap();
+        let fifo = dir.path().join("x.png");
+        assert!(
+            std::process::Command::new("mkfifo")
+                .arg(&fifo)
+                .status()
+                .unwrap()
+                .success()
+        );
+        let entry = |image: Option<&Path>, folder: Option<&Path>| WallpaperEntry {
+            image: image.map(Into::into),
+            folder: folder.map(Into::into),
+            ..WallpaperEntry::default()
+        };
+        let w = Wallpaper {
+            outputs: BTreeMap::from([
+                ("DP-1".into(), entry(None, Some(dir.path()))),
+                ("DP-2".into(), entry(Some(&fifo), None)),
+            ]),
+        };
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || tx.send(problems(&w)).unwrap());
+        let p = rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("the scan hung on a FIFO");
+        assert_eq!(
+            p.keys().map(String::as_str).collect::<Vec<_>>(),
+            ["DP-1", "DP-2"]
+        );
+    }
+
+    #[tokio::test]
+    async fn a_stalled_scan_still_delivers_the_outcome() {
+        fn stall(_: &Wallpaper) -> BTreeMap<String, String> {
+            std::thread::sleep(Duration::from_secs(3));
+            BTreeMap::new()
+        }
+        let r = rig(two_outputs()).await;
+        let state =
+            WallpaperState::with_scan(r.state.conn.clone(), stall, Duration::from_millis(100));
+        let started = std::time::Instant::now();
+        let out = state
+            .run(set("DP-1", json!({"fit": "fill", "interval": 5})))
+            .await;
+        assert!(started.elapsed() < Duration::from_secs(2));
+        assert_eq!(
+            out.error.as_deref(),
+            Some("DP-1: interval 5 is outside 10 to 86400"),
+            "a refused write's message still arrives"
+        );
+        assert_eq!(out.state["problemsSkipped"], true);
+        assert_eq!(out.state["problems"], json!({}));
+        assert_eq!(out.state["outputs"]["DP-1"]["fit"], "tile");
+    }
+
+    #[tokio::test]
+    async fn patches_merge_into_the_current_entry() {
+        let r = rig(two_outputs()).await;
+        let patch = |output: &str, patch: Value| Op::PatchEntry {
+            output: output.into(),
+            patch,
+        };
+        let (a, b) = tokio::join!(
+            r.state
+                .run(patch("DP-1", json!({"image": "/usr/share/b.png"}))),
+            r.state.run(patch("DP-1", json!({"fit": "center"})))
+        );
+        assert_eq!((a.error, b.error), (None, None));
+        let section = r.section.lock().unwrap().clone();
+        let dp1 = &section["outputs"]["DP-1"];
+        assert_eq!(dp1["image"], "/usr/share/b.png");
+        assert_eq!(dp1["fit"], "center");
+        assert_eq!(dp1["folder"], "/usr/share/pics", "untouched fields stay");
+
+        // A display without an entry starts from the "*" entry.
+        let out = r.state.run(patch("DP-9", json!({"fit": "tile"}))).await;
+        assert_eq!(
+            out.state["outputs"]["DP-9"],
+            json!({"image": "/usr/share/a.png", "fit": "tile", "interval": 300})
         );
     }
 

@@ -127,12 +127,12 @@ QQC2.ScrollView {
             objectName: "editor"
             output: page.selected
             entry: page.shown
-            problem: page.problems[page.selected] || ""
+            problem: page.problems[page.selected] || (page.selected !== "*" && !page.hasOwn ? page.problems["*"] || "" : "")
             highlight: App.highlight
             error: wm.error
             enabled: page.ready
             toPath: url => wm.localPath(url)
-            onChanged: entry => wm.setEntry(page.selected, JSON.stringify(entry))
+            onChanged: patch => wm.patchEntry(page.selected, JSON.stringify(patch))
             Layout.fillWidth: true
         }
 
