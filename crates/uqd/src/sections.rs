@@ -211,6 +211,44 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn set_shell_saves_and_emits_without_render() {
+        let mut r = rig();
+        r.desktop.startup().await;
+        let gen_path = r.desktop.paths().generated_lua.clone();
+        let before = std::fs::metadata(&gen_path).unwrap().modified().unwrap();
+        r.comp.calls.lock().unwrap().clear();
+        drain(&mut r.events);
+        let json = r#"{"islands":{"work":false},"clock_24h":false,"terminal":"foot.desktop","providers":[{"id":"run"},{"id":"org.x.Y","enabled":false}]}"#;
+        r.desktop.set_section("shell", json).await.unwrap();
+        assert_eq!(
+            std::fs::metadata(&gen_path).unwrap().modified().unwrap(),
+            before
+        );
+        assert!(r.comp.calls().is_empty(), "{:?}", r.comp.calls());
+        let evs = drain(&mut r.events);
+        assert!(
+            evs.iter()
+                .any(|e| matches!(e, Event::SectionChanged { domain, .. } if domain == "shell"))
+        );
+        assert!(evs.iter().any(|e| matches!(e, Event::SettingsChanged(_))));
+        assert!(!evs.iter().any(|e| matches!(e, Event::ThemeChanged { .. })));
+        let saved = State::load(&r.desktop.paths().state_file);
+        let sh = &saved.settings.shell;
+        assert!(!sh.islands.work && !sh.clock_24h && sh.islands.time);
+        assert_eq!(sh.terminal.as_deref(), Some("foot.desktop"));
+        assert_eq!(sh.providers.len(), 2);
+        let got: serde_json::Value =
+            serde_json::from_str(&r.desktop.get_section("shell").unwrap()).unwrap();
+        assert_eq!(got["providers"][1]["enabled"], false);
+        for bad in [r#"{"terminal":"kitty"}"#, r#"{"nope":1}"#] {
+            assert!(matches!(
+                r.desktop.set_section("shell", bad).await,
+                Err(DesktopError::InvalidSetting(_))
+            ));
+        }
+    }
+
+    #[tokio::test]
     async fn invalid_section_is_rejected_and_state_unchanged() {
         let mut r = rig();
         let before = r.desktop.get_section("appearance").unwrap();

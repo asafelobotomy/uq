@@ -447,6 +447,55 @@ mod tests {
     }
 
     #[test]
+    fn bad_shell_keeps_state() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("state.toml");
+        for shell in [
+            "shell = 5
+",
+            "[shell]
+islands = 3
+providers = [1, \"x\"]
+clock_24h = \"no\"\nterminal = 7
+",
+            "[shell]
+providers = [{id = \":1.5\"}, {id = \"calc\"}, {id = \"calc\"}]
+terminal = \"kitty\"
+[shell.islands]\nwork = \"x\"\nfuture = 1
+",
+        ] {
+            std::fs::write(
+                &p,
+                format!("theme = \"rosewood\"\npinned = [\"a.desktop\"]\n{shell}"),
+            )
+            .unwrap();
+            let s = State::load(&p);
+            assert_eq!(s.theme, "rosewood", "{shell}");
+            assert_eq!(s.settings.pinned, ["a.desktop"], "{shell}");
+            assert!(p.exists());
+            assert!(s.settings.shell.islands.work && s.settings.shell.clock_24h);
+            assert_eq!(s.settings.shell.terminal, None);
+            assert!(s.settings.shell.providers.len() <= 1);
+        }
+    }
+
+    #[test]
+    fn shell_round_trips() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("state.toml");
+        let mut st = State::default();
+        st.set_section(
+            "shell",
+            serde_json::json!({"islands": {"time": false}, "clock_24h": false,
+                "terminal": "foot.desktop",
+                "providers": [{"id": "run"}, {"id": "org.x.Y", "enabled": false}]}),
+        )
+        .unwrap();
+        st.save(&p).unwrap();
+        assert_eq!(State::load(&p), st);
+    }
+
+    #[test]
     fn look_and_layout_options_round_trip() {
         let dir = tempfile::tempdir().unwrap();
         let p = dir.path().join("state.toml");

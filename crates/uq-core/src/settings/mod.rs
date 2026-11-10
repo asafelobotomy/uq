@@ -6,6 +6,7 @@ use serde_json::Value;
 mod appearance;
 mod layouts;
 mod look;
+mod shell;
 mod wallpaper;
 pub use appearance::{Appearance, valid_theme_name};
 pub use layouts::{
@@ -13,6 +14,9 @@ pub use layouts::{
     ScrollingOptions,
 };
 pub use look::Look;
+pub use shell::{
+    BUILTIN_PROVIDERS, Islands, ProviderPref, ShellSettings, provider_enabled, provider_order,
+};
 pub use wallpaper::{Fit, Wallpaper, WallpaperEntry};
 
 /// Every key `Settings::apply` accepts; anything else is rejected.
@@ -179,6 +183,14 @@ pub struct Settings {
     /// Default layout and per-layout options (`[layout_options]`; `[layouts]` holds the
     /// workspace rules in `State`).
     pub layout_options: LayoutOptions,
+    #[serde(deserialize_with = "lenient_shell")]
+    pub shell: ShellSettings,
+}
+
+/// A wrong-typed `[shell]` loads as the defaults instead of failing the whole file.
+fn lenient_shell<'de, D: serde::Deserializer<'de>>(d: D) -> Result<ShellSettings, D::Error> {
+    let v = Value::deserialize(d)?;
+    Ok(ShellSettings::deserialize(v).unwrap_or_default())
 }
 
 pub(crate) fn invalid(key: &str, reason: impl Into<String>) -> SettingError {
@@ -276,6 +288,7 @@ impl Settings {
         out.wallpaper.validate()?;
         out.look = self.look.clone().normalised()?;
         out.layout_options = self.layout_options.clone().normalised()?;
+        out.shell = self.shell.clone().sanitised();
         Ok(out)
     }
 
@@ -286,6 +299,7 @@ impl Settings {
             "appearance" => serde_json::to_value(&self.appearance),
             "wallpaper" => serde_json::to_value(&self.wallpaper),
             "look" => serde_json::to_value(&self.look),
+            "shell" => serde_json::to_value(&self.shell),
             _ => return Err(SettingError::UnknownKey(domain.to_string())),
         };
         Ok(v.expect("settings serialise"))
@@ -314,6 +328,7 @@ impl Settings {
                     serde_json::from_value(value).map_err(|e| invalid(domain, e.to_string()))?;
                 self.look = l.normalised()?;
             }
+            "shell" => self.shell = ShellSettings::from_section(&value)?,
             _ => return Err(SettingError::UnknownKey(domain.to_string())),
         }
         Ok(())
