@@ -1,6 +1,7 @@
 //! Desktop state and the commit sequence (spec §4, §5). No D-Bus here.
 
 use crate::compositor::{Compositor, CompositorError};
+use crate::power::{NoPowerProfiles, POWER_TIMEOUT, PowerError, PowerProfiles};
 use crate::system::SystemSettings;
 use chrono::{DateTime, Local, TimeZone, Utc};
 use std::collections::BTreeMap;
@@ -117,6 +118,9 @@ pub struct Desktop {
     pub(crate) pending: Option<crate::monitors::Pending>,
     /// How long an unconfirmed display change stays ([`crate::monitors::REVERT_AFTER`]).
     pub(crate) revert_after: Duration,
+    pub(crate) power: Arc<dyn PowerProfiles>,
+    /// How long a power call may take ([`POWER_TIMEOUT`]).
+    pub(crate) power_timeout: Duration,
 }
 
 /// How much of `user.lua` `explain` scans.
@@ -232,7 +236,37 @@ impl Desktop {
             last_rejected: None,
             pending: None,
             revert_after: crate::monitors::REVERT_AFTER,
+            power: Arc::new(NoPowerProfiles),
+            power_timeout: POWER_TIMEOUT,
         })
+    }
+
+    /// Use `p` for power modes instead of none (the system's service in `main`, a fake in tests).
+    pub fn with_power(mut self, p: Arc<dyn PowerProfiles>) -> Self {
+        self.power = p;
+        self
+    }
+
+    /// Wait at most `d` for a power call instead of [`POWER_TIMEOUT`] (tests).
+    pub fn with_power_timeout(mut self, d: Duration) -> Self {
+        self.power_timeout = d;
+        self
+    }
+
+    /// The current power mode; `Timeout` when the power service doesn't answer in time.
+    #[allow(dead_code)] // used by the profile apply (Task 4)
+    pub(crate) async fn power_active(&self) -> Result<String, PowerError> {
+        tokio::time::timeout(self.power_timeout, self.power.active())
+            .await
+            .unwrap_or(Err(PowerError::Timeout))
+    }
+
+    /// Set the power mode; `Timeout` when the power service doesn't answer in time.
+    #[allow(dead_code)] // used by the profile apply (Task 4)
+    pub(crate) async fn power_set(&self, mode: &str) -> Result<(), PowerError> {
+        tokio::time::timeout(self.power_timeout, self.power.set_active(mode))
+            .await
+            .unwrap_or(Err(PowerError::Timeout))
     }
 
     /// Look for Kvantum base themes in `dir` instead of `/usr/share/Kvantum` (tests).

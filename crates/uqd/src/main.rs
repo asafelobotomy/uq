@@ -7,6 +7,7 @@ use tracing_subscriber::EnvFilter;
 use uq_core::paths::Paths;
 use uqd::compositor::Hyprland;
 use uqd::dbus::serve;
+use uqd::power::SystemPowerProfiles;
 use uqd::service::{Desktop, desktop_file_installed, xdg_data_dirs};
 use uqd::system::GSettings;
 
@@ -22,7 +23,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Paths::from_env(),
         Arc::new(Hyprland::from_env()),
         Arc::new(GSettings::default()),
-    )?;
+    )?
+    .with_power(Arc::new(SystemPowerProfiles::default()));
     desktop.startup().await;
     let data_dirs = xdg_data_dirs();
     desktop.prune_launch_counts(&|id| desktop_file_installed(id, &data_dirs));
