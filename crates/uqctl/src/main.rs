@@ -291,7 +291,7 @@ async fn run(cmd: Cmd) -> Result<(), String> {
                         .ok_or_else(|| "nothing to undo".to_string())?
                 }
             };
-            proxy
+            let new_id = proxy
                 .call::<_, _, String>("Undo", &(id, force))
                 .await
                 .map_err(|e| {
@@ -304,6 +304,7 @@ async fn run(cmd: Cmd) -> Result<(), String> {
                         msg
                     }
                 })?;
+            println!("{}", settings_cmd::undo_line(&new_id));
         }
         Cmd::Restore { cmd } => restore(&proxy, cmd).await?,
         Cmd::Reload => proxy

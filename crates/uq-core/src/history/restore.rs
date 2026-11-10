@@ -130,8 +130,8 @@ impl RestoreStore {
         points
     }
 
-    /// The point's state. An empty file or one that isn't valid TOML is `InvalidData` and is
-    /// left alone, since [`State::load`] would turn it into the defaults.
+    /// The point's state. An empty file, or one that doesn't parse as a `State`, is
+    /// `InvalidData`. The file is never renamed or rewritten (unlike [`State::load`]).
     pub fn load(&self, id: &str) -> io::Result<State> {
         let path = self.state_path(Self::checked(id)?);
         let src = match std::fs::read_to_string(&path) {
@@ -143,13 +143,16 @@ impl RestoreStore {
             }
             other => other?,
         };
-        if src.trim().is_empty() || toml::from_str::<toml::Value>(&src).is_err() {
-            return Err(io::Error::new(
+        let damaged = || {
+            io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!("restore point {id} is damaged"),
-            ));
+            )
+        };
+        if src.trim().is_empty() {
+            return Err(damaged());
         }
-        Ok(State::load(&path))
+        State::parse_strict(&src).map_err(|_| damaged())
     }
 
     pub fn delete(&self, id: &str) -> io::Result<()> {
@@ -243,18 +246,34 @@ mod tests {
         assert_eq!(oldest_auto, Some(1_700_000_005));
     }
 
+    fn fs_read(p: &Path) -> String {
+        std::fs::read_to_string(p).unwrap()
+    }
+
     #[test]
     fn damaged_point_is_invalid_data_and_kept() {
         let (_d, s) = store();
         let p = s
             .save(&State::default(), "x", PointKind::Manual, 1)
             .unwrap();
-        for damage in ["", "  \n", "theme = \"nord\"\n[look\n"] {
+        for damage in [
+            "",
+            "  \n",
+            "theme = \"nord\"\n[look\n",
+            "variant = \"purple\"\n",
+            "theme = 5\n",
+        ] {
             std::fs::write(s.state_path(&p.id), damage).unwrap();
             let err = s.load(&p.id).unwrap_err();
             assert_eq!(err.kind(), io::ErrorKind::InvalidData, "{damage:?}");
-            assert!(s.state_path(&p.id).exists());
+            assert_eq!(fs_read(&s.state_path(&p.id)), damage);
+            assert_eq!(s.list().len(), 1);
         }
+        // A value the loader repairs on its own costs only that value, as in `State::load`.
+        std::fs::write(s.state_path(&p.id), "layouts = \"x\"\ntheme = \"nord\"\n").unwrap();
+        let repaired = s.load(&p.id).unwrap();
+        assert!(repaired.layouts.is_empty());
+        assert_eq!(repaired.theme, "nord");
         let missing = s.load("1700000000-abcdef").unwrap_err();
         assert_eq!(missing.kind(), io::ErrorKind::NotFound);
     }

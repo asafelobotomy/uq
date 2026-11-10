@@ -289,6 +289,15 @@ pub fn newest_entry_id(json: &str) -> Result<Option<String>, String> {
         .map(str::to_owned))
 }
 
+/// What `uqctl undo` prints: the id of the entry the undo recorded, or "nothing changed".
+pub fn undo_line(new_entry_id: &str) -> String {
+    if new_entry_id.is_empty() {
+        "nothing changed".into()
+    } else {
+        new_entry_id.to_string()
+    }
+}
+
 /// `ListRestorePoints`' JSON as `id  time  kind  name` lines; kind is `manual` or `auto:<why>`.
 pub fn restore_lines(json: &str) -> Result<Vec<String>, String> {
     Ok(parse_list(json, "restore points")?
@@ -599,6 +608,12 @@ mod tests {
             Some("1800000000-0001")
         );
         assert_eq!(newest_entry_id("[]").unwrap(), None);
+    }
+
+    #[test]
+    fn undo_line_names_the_new_entry() {
+        assert_eq!(undo_line("1800000000-0002"), "1800000000-0002");
+        assert_eq!(undo_line(""), "nothing changed");
     }
 
     #[test]

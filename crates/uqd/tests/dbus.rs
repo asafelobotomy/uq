@@ -493,6 +493,9 @@ async fn undo_theme_and_schedule_pseudo_domains() {
         "off"
     );
 
+    let settings = |json: String| serde_json::from_str::<serde_json::Value>(&json).unwrap();
+    let dim_before =
+        settings(s.proxy.call("GetSettings", &()).await.unwrap())["idle"]["dim"].clone();
     let () = s
         .proxy
         .call("SetSetting", &("idle.dim", "200", "settings"))
@@ -501,9 +504,9 @@ async fn undo_theme_and_schedule_pseudo_domains() {
     let entry = s.history().await[0].clone();
     assert_eq!(entry["domain"], "settings");
     s.undo(entry["id"].as_str().unwrap(), false).await.unwrap();
-    let got: String = s.proxy.call("GetSettings", &()).await.unwrap();
-    let got: serde_json::Value = serde_json::from_str(&got).unwrap();
-    assert_ne!(got["idle"]["dim"], 200, "{got}");
+    let got = settings(s.proxy.call("GetSettings", &()).await.unwrap());
+    assert_ne!(dim_before, 200);
+    assert_eq!(got["idle"]["dim"], dim_before, "{got}");
 }
 
 #[tokio::test]
@@ -556,15 +559,21 @@ async fn restore_damaged_point_changes_nothing() {
     let id: String = s.proxy.call("SaveRestorePoint", &("old",)).await.unwrap();
     s.set_gaps(12, "settings").await;
     let points = s.points().await.len();
-    for damage in ["", "theme = \"nord\"\n[look\ngaps_in = "] {
+    for damage in [
+        "",
+        "theme = \"nord\"\n[look\ngaps_in = ",
+        "variant = \"purple\"\n",
+        "theme = 5\n",
+    ] {
         std::fs::write(s.point_file(&id), damage).unwrap();
         let err = s.restore(&id).await.unwrap_err();
         assert_eq!(error_name(&err), "org.uq.Desktop1.Error.InvalidArgument");
         assert_eq!(error_message(&err), "restore point is damaged");
         assert_eq!(s.gaps().await, 12);
         assert_eq!(s.points().await.len(), points);
-        // The damaged file is left where it is.
-        assert!(s.point_file(&id).exists());
+        // The damaged file is left where it is, untouched, and still listed.
+        assert_eq!(std::fs::read_to_string(s.point_file(&id)).unwrap(), damage);
+        assert!(s.points().await.iter().any(|p| p["id"] == id.as_str()));
     }
 }
 

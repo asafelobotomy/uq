@@ -81,7 +81,7 @@ impl State {
                 return State::default();
             }
         };
-        let mut state = match Self::parse(&src) {
+        match Self::parse_strict(&src) {
             Ok(state) => state,
             Err(e) => {
                 let secs = std::time::SystemTime::now()
@@ -100,16 +100,23 @@ impl State {
                         path.display()
                     ),
                 }
-                return State::default();
+                State::default()
             }
-        };
+        }
+    }
+
+    /// Parse `state.toml` text without touching any file: a document that isn't valid TOML or
+    /// doesn't fit `State` (wrong type, unknown variant) is an error. Values that parse but break
+    /// a rule are repaired as [`State::load`] does, costing only their own field or domain.
+    pub fn parse_strict(src: &str) -> Result<State, toml::de::Error> {
+        let mut state = Self::parse(src)?;
         let (valid, repaired) = state.settings.validated();
         for e in repaired {
-            tracing::warn!("{}: {e}; that setting uses its default", path.display());
+            tracing::warn!("state: {e}; that setting uses its default");
         }
         state.settings = valid;
         state.layouts = crate::settings::repair_rules(std::mem::take(&mut state.layouts));
-        state
+        Ok(state)
     }
 
     fn parse(src: &str) -> Result<State, toml::de::Error> {
