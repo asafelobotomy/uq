@@ -33,6 +33,23 @@ All notable changes to uQ are listed here. The format follows
   and order, and the terminal for `Terminal=true` apps. The bridge opens such apps in the chosen
   terminal (`X-TerminalArgExec`, else `-e`; kitty if it is missing or unparseable) and refuses to
   activate or launch from a switched-off provider.
+- **Settings history, undo and restore points.** `uqd` records every settings change (who made
+  it, and the values before and after) in `~/.local/state/uq/history/` for 30 days or 500
+  entries, and keeps restore points of `state.toml` in `~/.local/state/uq/restore/` (automatic
+  ones before the first change of each day, before a restore and when uQ is updated, 20 at most;
+  your own are never removed). New `uqctl history [--limit N]`, `uqctl undo [<id>] [--force]` and
+  `uqctl restore list | save <name> | delete <id> | <id>`. On D-Bus: `ListHistory`, `Undo`,
+  `ListRestorePoints`, `SaveRestorePoint`, `DeleteRestorePoint`, `Restore` and a `HistoryChanged`
+  signal. **Breaking for D-Bus callers:** `SetSection`, `SetSetting`, `SetTheme`, `SetLayout`
+  and `SetSchedule` take a last `origin` string argument (`""` records as unknown).
+- **Where a setting's value comes from.** `uqd` can explain a setting's live value (theme,
+  default, uQ, `user.lua`, changed while running, or error). Setting rows in uq-settings say
+  "Overridden in user.lua, line N" or "Changed while running (not by uQ)", with a Re-apply
+  button. uQ reads `user.lua` and never writes it.
+- **Undo and History in uq-settings.** Ctrl+Z and Ctrl+Shift+Z undo and redo your changes, a
+  "Changed this session" list shows what changed (including changes "from the terminal"), and a
+  History page lists restore points and past changes, with Undo, Save and Restore. The window
+  remembers its size.
 
 ### Changed
 

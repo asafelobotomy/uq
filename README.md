@@ -107,6 +107,21 @@ available over D-Bus as `GetSection` / `SetSection` on `uqd`. Every write method
 (`SetSection`, `SetSetting`, `SetTheme`, `SetLayout`, `SetSchedule`) takes a last `origin` string
 that the history records; `""` records as unknown.
 
+#### History page
+
+The **History** page lists your restore points and every change from the last 30 days (up to 500),
+newest first, each with where it came from (the Settings app, `uqctl`, the shell). **Undo** on a
+row puts that setting back; if it was changed again since, the app asks first. **Save** keeps a
+restore point under a name you pick, and **Restore** brings every setting back as it was, after
+saving a restore point of your current settings, so a restore can be undone too. uQ also saves
+one on its own before the first change of each day, before a restore, and when uQ is updated
+(named after the new version); it keeps the last 20 of these, and the ones you save are never
+removed. In the app, Ctrl+Z and Ctrl+Shift+Z undo and redo your own changes this session, and
+"Changed this session" lists them. Rows on the other pages say when a value comes from
+`user.lua` or was changed while running, with **Re-apply** to put uQ's value back. uQ never
+writes to `user.lua`. Manual checks are in
+[docs/notes/settings-slice-a-live-check.md](docs/notes/settings-slice-a-live-check.md).
+
 ### Launchers
 
 - `SUPER+Space` opens or closes Spotlight: apps, a calculator (`=2+2`), a command runner
