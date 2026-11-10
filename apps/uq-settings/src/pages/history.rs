@@ -14,12 +14,16 @@ use std::sync::Mutex as StdMutex;
 use serde_json::{Value, json};
 use tokio::sync::Mutex;
 use uq_core::client::DesktopProxy;
-use uq_core::history::{Entry, MAX_ENTRIES, PointKind, RestorePoint};
+use uq_core::history::{AutoReason, Entry, MAX_ENTRIES, PointKind, RestorePoint};
 
 use crate::pages::runner::{ORIGIN, PageLogic, parse_json};
 
 /// The error name uqd's `Undo` answers when the entry's domain changed again since.
 const CONFLICT: &str = "org.uq.Desktop1.Error.Conflict";
+/// After a restore: how to go back, naming the kind line HistoryPage.qml shows on that point.
+const RESTORED_WAY_BACK: &str = "Settings restored. To go back, restore the top restore point, \
+     \u{201c}Saved automatically before a restore\u{201d}, on the History page.";
+
 /// A restore point's name is cut to this many characters (by uqd too).
 pub const MAX_NAME_CHARS: usize = 100;
 
@@ -345,7 +349,20 @@ impl PageLogic for HistoryState {
             Op::Restore { id } => {
                 Self::point(&proxy, &id).await?;
                 proxy.restore(&id).await?;
-                self.shown.lock().unwrap().notice("Settings restored");
+                // A restore is undone by restoring the point uqd saved just before it, the
+                // newest one; Ctrl+Z doesn't reach it. Point there only if uqd saved it. The
+                // toast isn't a UqLabel, so it says the fixed kind line the page shows, never
+                // the point's name.
+                let saved = Self::points(&proxy).await.ok().is_some_and(|points| {
+                    points
+                        .first()
+                        .is_some_and(|p| p.kind == PointKind::Auto(AutoReason::BeforeRestore))
+                });
+                self.shown.lock().unwrap().notice(if saved {
+                    RESTORED_WAY_BACK
+                } else {
+                    "Settings restored"
+                });
                 Ok(())
             }
         }
@@ -678,7 +695,16 @@ mod tests {
 
         let out = run(&page, Op::Restore { id: auto.clone() }).await;
         assert_eq!(out.error, None);
-        assert_eq!(out.state["notice"]["text"], "Settings restored");
+        // The way back is the point uqd saved first: newest, so at the top of the list.
+        assert_eq!(
+            out.state["notice"]["text"],
+            "Settings restored. To go back, restore the top restore point, \u{201c}Saved \
+             automatically before a restore\u{201d}, on the History page."
+        );
+        assert_eq!(
+            out.state["points"][0]["kind"],
+            json!({"auto": "before_restore"})
+        );
         assert_eq!(r.state.lock().unwrap().theme, "dracula");
         assert_eq!(r.history.origins(), ["restore"]);
 

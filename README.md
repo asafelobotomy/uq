@@ -85,7 +85,8 @@ History and restore points (uqd records every change, who made it, and what it w
 uqctl history [--limit 20]             # id, time, origin (settings, uqctl, shell, ...), summary
 uqctl undo [<id>] [--force]            # no id: the newest change; --force if it changed again since
 uqctl restore list                     # also: restore save <name>, restore delete <id>
-uqctl restore <id>                     # bring back every setting as it was; can itself be undone
+uqctl restore <id>                     # bring back every setting as it was; to go back,
+                                       # restore the newest auto:before_restore point it saved
 ```
 
 The shell runs as `uq-shell.service` (Quickshell, started with the session). `SUPER+CTRL+L`

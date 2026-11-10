@@ -103,7 +103,7 @@ QQC2.ScrollView {
         property string pointId
 
         title: "Restore these settings?"
-        subtitle: "Every setting goes back to how it was when this restore point was saved. uQ saves a restore point of your current settings first, so you can come back."
+        subtitle: "Every setting goes back to how it was when this restore point was saved. uQ saves a restore point of your current settings first, so you can come back: it appears at the top of this list, marked \u201cSaved automatically before a restore\u201d."
         standardButtons: Kirigami.Dialog.Ok | Kirigami.Dialog.Cancel
         onAccepted: HistoryModel.restore(confirmRestore.pointId)
     }

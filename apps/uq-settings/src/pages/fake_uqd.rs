@@ -10,7 +10,7 @@ use std::time::Duration;
 
 use serde_json::{Map, Value, json};
 use uq_core::client::DESKTOP_NAME;
-use uq_core::history::{Entry, PointKind, RestorePoint, diff, revert_changed};
+use uq_core::history::{AutoReason, Entry, PointKind, RestorePoint, diff, revert_changed};
 use uq_core::schedule::Schedule;
 use uq_core::settings::provenance;
 use uq_core::settings::renders_section;
@@ -296,6 +296,13 @@ impl FakeUqd {
             };
             state.clone()
         };
+        // As uqd: save the current settings first, so the restore can be reversed.
+        let current = self.state.lock().unwrap().clone();
+        self.history.add_point(
+            "Before restoring a restore point",
+            PointKind::Auto(AutoReason::BeforeRestore),
+            current,
+        );
         self.write("restore", |s| {
             let launch_counts = std::mem::take(&mut s.launch_counts);
             *s = next;

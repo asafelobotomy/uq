@@ -17,10 +17,13 @@ Run on a real Hyprland session with uQ installed (not CI, not a private bus). Ti
   app does not undo it. `uqctl history` shows it with origin `uqctl`, and `uqctl undo` reverts it.
 - [ ] **5. Restore points.** On the **History** page, save a restore point with a name. Change
   settings on several pages, then press **Restore** on that point and confirm. Everything comes
-  back. A new "before a restore" point appears in the list. Undo the restore (Ctrl+Z, or
-  **Undo** on the restore's row under Changes) and the changes return.
+  back. The message says how to go back. A new point appears at the top of the restore points,
+  marked "Saved automatically before a restore". Press **Restore** on that one and confirm: the
+  changes from every page return in one step. (Ctrl+Z does not undo a restore, and **Undo** on
+  one of the restore's rows under Changes reverts only that page's part.)
   The same from the terminal: `uqctl restore save mine`, `uqctl restore list`,
-  `uqctl restore <id>`.
+  `uqctl restore <id>`, then `uqctl restore list` again and `uqctl restore <id>` of the newest
+  `auto:before_restore` point.
 - [ ] **6. New version.** After a package update that bumps the uQ version (or by hand: stop
   `uqd`, remove the `*.toml` whose kind is `new_version` from `~/.local/state/uq/restore/`, then
   start `uqd` again), a restore point named after the version (for example `0.2.2`) appears on

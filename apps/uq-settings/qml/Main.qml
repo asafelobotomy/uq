@@ -202,7 +202,8 @@ Kirigami.ApplicationWindow {
     }
     Timer {
         id: toastTimer
-        interval: 4000
+        // Long enough to read a longer notice, such as how to go back after a restore.
+        interval: toast.text.length > 40 ? 12000 : 4000
         onTriggered: toast.visible = false
     }
     Connections {
