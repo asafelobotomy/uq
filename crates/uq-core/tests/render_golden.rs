@@ -29,7 +29,7 @@ fn golden_all_variants() {
     let bless = std::env::var_os("UQ_BLESS").is_some();
     let mut mismatches = Vec::new();
     for t in registry().iter() {
-        let out = render(t, &repo().join("templates")).unwrap();
+        let out = render(t, &repo().join("templates"), None).unwrap();
         let names: Vec<_> = out
             .0
             .keys()
@@ -58,7 +58,7 @@ fn golden_all_variants() {
 fn tokens_json_round_trips() {
     let reg = registry();
     let t = reg.get("graphite", Variant::Dark).unwrap();
-    let out = render(t, &repo().join("templates")).unwrap();
+    let out = render(t, &repo().join("templates"), None).unwrap();
     let v: serde_json::Value = serde_json::from_str(&out.0[Path::new("tokens.json")]).unwrap();
     assert_eq!(v["colors"]["accent"], t.colors.accent.hex());
     assert_eq!(v["variant"], "dark");
@@ -70,7 +70,7 @@ fn tokens_json_round_trips() {
 fn foot_uses_bare_hex() {
     let reg = registry();
     let t = reg.get("gruvbox", Variant::Dark).unwrap();
-    let out = render(t, &repo().join("templates")).unwrap();
+    let out = render(t, &repo().join("templates"), None).unwrap();
     assert!(out.0[Path::new("terminal/foot.ini")].contains("background=282828"));
 }
 
@@ -79,7 +79,7 @@ fn missing_template_is_an_error() {
     let reg = registry();
     let t = reg.get("gruvbox", Variant::Dark).unwrap();
     let empty = tempfile::tempdir().unwrap();
-    assert!(render(t, empty.path()).is_err());
+    assert!(render(t, empty.path(), None).is_err());
 }
 
 fn files(pairs: &[(&str, &str)]) -> RenderedFiles {

@@ -406,7 +406,7 @@ impl Desktop {
             .get(&next.theme, next.variant)
             .ok_or_else(|| DesktopError::UnknownTheme(next.theme.clone()))?
             .clone();
-        let files = render(&theme, &self.paths.templates_dir)
+        let files = render(&theme, &self.paths.templates_dir, None)
             .map_err(|e| DesktopError::Io(e.to_string()))?;
         let generated = emit_generated(&theme, &next.layouts, &next.settings.mouse);
 
