@@ -45,6 +45,22 @@ pub mod qobject {
         /// Forget which apps were launched how often.
         #[qinvokable]
         fn clear_launch_counts(self: Pin<&mut ShellModel>);
+
+        /// Unpin `id`.
+        #[qinvokable]
+        fn pin_remove(self: Pin<&mut ShellModel>, id: &QString);
+
+        /// Move pin `id` by `to - from` places from where it is now.
+        #[qinvokable]
+        fn pin_move(self: Pin<&mut ShellModel>, id: &QString, from: i32, to: i32);
+
+        /// Move provider `id` by `to - from` places from where it is now.
+        #[qinvokable]
+        fn provider_move(self: Pin<&mut ShellModel>, id: &QString, from: i32, to: i32);
+
+        /// Turn provider `id` on or off.
+        #[qinvokable]
+        fn provider_toggle(self: Pin<&mut ShellModel>, id: &QString, on: bool);
     }
 
     impl cxx_qt::Threading for ShellModel {}
@@ -136,4 +152,28 @@ impl ShellModel {
     fn clear_launch_counts(self: Pin<&mut Self>) {
         model_core::start(self, Op::ClearLaunchCounts);
     }
+
+    fn pin_remove(self: Pin<&mut Self>, id: &QString) {
+        model_core::start(self, Op::PinRemove { id: id.to_string() });
+    }
+
+    fn pin_move(self: Pin<&mut Self>, id: &QString, from: i32, to: i32) {
+        let (id, from, to) = (id.to_string(), index(from), index(to));
+        model_core::start(self, Op::PinMove { id, from, to });
+    }
+
+    fn provider_move(self: Pin<&mut Self>, id: &QString, from: i32, to: i32) {
+        let (id, from, to) = (id.to_string(), index(from), index(to));
+        model_core::start(self, Op::ProviderMove { id, from, to });
+    }
+
+    fn provider_toggle(self: Pin<&mut Self>, id: &QString, on: bool) {
+        let id = id.to_string();
+        model_core::start(self, Op::ProviderToggle { id, on });
+    }
+}
+
+/// A QML row index; a negative one is 0.
+fn index(i: i32) -> usize {
+    usize::try_from(i).unwrap_or(0)
 }

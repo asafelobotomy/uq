@@ -61,8 +61,11 @@ impl FakeUqd {
         Ok(())
     }
 
-    fn get_settings(&self) -> String {
-        serde_json::to_string(&self.state.lock().unwrap().settings).unwrap()
+    async fn get_settings(&self) -> String {
+        let read = serde_json::to_string(&self.state.lock().unwrap().settings).unwrap();
+        // Slow, like `get_section`, so an unserialised read-modify-write of pins would lose one.
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        read
     }
 
     fn set_setting(&self, key: &str, json: &str) -> Result<(), FakeError> {

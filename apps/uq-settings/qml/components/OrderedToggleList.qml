@@ -1,6 +1,6 @@
 // A list the user can reorder, with a switch per row (optional) and a remove button (optional).
 // `model` is an array of { id, name, enabled, missing }; names are shown through UqLabel only.
-// The list never changes itself: it asks (reordered, toggled, removed) and shows `model` again
+// The list never changes itself: it asks (moved, toggled, removed) and shows `model` again
 // once the page has the new state.
 import QtQuick
 import QtQuick.Controls as QQC2
@@ -14,19 +14,14 @@ ColumnLayout {
     property var model: []
     property bool showSwitch: true
     property bool removable: false
-    /// The ids in their new order.
-    signal reordered(var ids)
+    /// Row `id` asks to move from row `from` to row `to`.
+    signal moved(string id, int from, int to)
     signal toggled(string id, bool on)
     signal removed(string id)
     readonly property alias repeater: rep
 
-    function ids() {
-        return model.map(m => m.id);
-    }
     function move(from, to) {
-        const list = ids();
-        list.splice(to, 0, list.splice(from, 1)[0]);
-        reordered(list);
+        moved(model[from].id, from, to);
     }
 
     spacing: Kirigami.Units.smallSpacing

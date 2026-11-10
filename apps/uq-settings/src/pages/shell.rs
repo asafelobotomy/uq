@@ -48,6 +48,28 @@ pub enum Op {
         value: Value,
     },
     ClearLaunchCounts,
+    /// Unpin `id` from the pins as uqd has them now.
+    PinRemove {
+        id: String,
+    },
+    /// Move pin `id` by `to - from` places from where it is now (clamped to the list), so an
+    /// edit made on an older list still means what the user saw.
+    PinMove {
+        id: String,
+        from: usize,
+        to: usize,
+    },
+    /// Move provider row `id` by `to - from` places, as [`Op::PinMove`].
+    ProviderMove {
+        id: String,
+        from: usize,
+        to: usize,
+    },
+    /// Turn provider `id` on or off.
+    ProviderToggle {
+        id: String,
+        on: bool,
+    },
 }
 
 pub struct ShellState {
@@ -85,6 +107,35 @@ fn refuse<T>(text: String) -> zbus::Result<T> {
     Err(zbus::Error::Failure(text))
 }
 
+/// Move `id` within `list` by `to - from` places from its current position, clamped; an id
+/// that is gone is left alone.
+fn move_by<T>(list: &mut Vec<T>, pos: Option<usize>, from: usize, to: usize) {
+    let Some(i) = pos else { return };
+    let target = (i as isize + to as isize - from as isize).clamp(0, list.len() as isize - 1);
+    let item = list.remove(i);
+    list.insert(target as usize, item);
+}
+
+/// Every provider row in the launcher's order, as `{id, enabled}`: the saved order, then the
+/// providers the saved list lacks, in default order. Writing them all keeps that order.
+fn provider_rows(defs: &[ProviderDef], shell: &Value) -> Vec<Value> {
+    let mut rows: Vec<Value> = shell["providers"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|p| {
+            let id = p["id"].as_str()?;
+            Some(json!({"id": id, "enabled": p["enabled"].as_bool().unwrap_or(true)}))
+        })
+        .collect();
+    for p in providers_list(defs, shell) {
+        if !rows.iter().any(|r| r["id"] == p["id"]) {
+            rows.push(json!({"id": p["id"], "enabled": true}));
+        }
+    }
+    rows
+}
+
 /// Builtins, then installed definitions, then ids only the saved preferences know (`missing`).
 fn providers_list(defs: &[ProviderDef], shell: &Value) -> Vec<Value> {
     let mut out: Vec<Value> = BUILTIN_PROVIDERS
@@ -105,6 +156,26 @@ fn providers_list(defs: &[ProviderDef], shell: &Value) -> Vec<Value> {
         }
     }
     out
+}
+
+impl ShellState {
+    /// The pins as uqd has them now.
+    async fn pins(&self, proxy: &DesktopProxy<'_>) -> zbus::Result<Vec<String>> {
+        let settings = parse_json(&proxy.get_settings().await?)?;
+        Ok(settings["pinned"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|p| p.as_str().map(str::to_string))
+            .collect())
+    }
+
+    async fn defs(&self) -> zbus::Result<Vec<ProviderDef>> {
+        let dirs = self.provider_dirs.clone();
+        tokio::task::spawn_blocking(move || launcher_providers::load_defs(&dirs))
+            .await
+            .map_err(|e| zbus::Error::Failure(format!("reading the providers failed: {e}")))
+    }
 }
 
 impl PageLogic for ShellState {
@@ -144,6 +215,40 @@ impl PageLogic for ShellState {
             Op::Refresh => Ok(()),
             Op::SetSetting { key, value } => proxy.set_setting(&key, &value.to_string()).await,
             Op::ClearLaunchCounts => proxy.clear_launch_counts().await,
+            // Pins and providers are edited as intents on a fresh read, under the write lock,
+            // so two quick edits both land.
+            Op::PinRemove { id } => {
+                let mut pins = self.pins(&proxy).await?;
+                pins.retain(|p| *p != id);
+                proxy.set_setting("pinned", &json!(pins).to_string()).await
+            }
+            Op::PinMove { id, from, to } => {
+                let mut pins = self.pins(&proxy).await?;
+                let pos = pins.iter().position(|p| *p == id);
+                move_by(&mut pins, pos, from, to);
+                proxy.set_setting("pinned", &json!(pins).to_string()).await
+            }
+            Op::ProviderMove { .. } | Op::ProviderToggle { .. } => {
+                let defs = self.defs().await?;
+                patch_section(&proxy, "shell", |section| {
+                    let mut rows = provider_rows(&defs, &Value::Object(section.clone()));
+                    match op {
+                        Op::ProviderMove { id, from, to } => {
+                            let pos = rows.iter().position(|r| r["id"] == id.as_str());
+                            move_by(&mut rows, pos, from, to);
+                        }
+                        Op::ProviderToggle { id, on } => {
+                            if let Some(r) = rows.iter_mut().find(|r| r["id"] == id.as_str()) {
+                                r["enabled"] = json!(on);
+                            }
+                        }
+                        _ => unreachable!(),
+                    }
+                    section.insert("providers".into(), Value::Array(rows));
+                    Ok(())
+                })
+                .await
+            }
             Op::SetShell { field, value } => {
                 patch_section(&proxy, "shell", |section| {
                     match field.strip_prefix("islands.") {
@@ -193,170 +298,4 @@ impl PageLogic for ShellState {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::pages::fake_uqd::{self, Rig};
-    use crate::pages::runner::run;
-    use uq_core::state::State;
-
-    async fn rig_in(app_dirs: Vec<PathBuf>, provider_dirs: Vec<PathBuf>) -> (Rig, ShellState) {
-        let mut state = State::default();
-        state
-            .set_section(
-                "shell",
-                json!({"islands": {"work": false}, "clock_24h": false,
-                       "providers": [{"id": "run", "enabled": false}, {"id": "org.gone.P"}],
-                       "terminal": "kitty.desktop"}),
-            )
-            .unwrap();
-        state.settings.pinned = vec!["a.desktop".into(), "b.desktop".into()];
-        let r = fake_uqd::rig(state).await;
-        let page = ShellState::with_dirs(r.client.clone(), app_dirs, provider_dirs);
-        (r, page)
-    }
-
-    async fn rig() -> (Rig, ShellState) {
-        rig_in(vec![], vec![]).await
-    }
-
-    fn shell(field: &str, value: Value) -> Op {
-        Op::SetShell {
-            field: field.into(),
-            value,
-        }
-    }
-
-    fn setting(key: &str, value: Value) -> Op {
-        Op::SetSetting {
-            key: key.into(),
-            value,
-        }
-    }
-
-    #[tokio::test]
-    async fn set_shell_keeps_other_fields() {
-        let (r, page) = rig().await;
-        let out = run(&page, shell("clock_24h", json!(true))).await;
-        assert_eq!(out.error, None);
-        assert_eq!(out.state["shell"]["clock_24h"], true);
-        assert_eq!(out.state["shell"]["terminal"], "kitty.desktop");
-        assert_eq!(out.state["shell"]["islands"]["work"], false);
-        assert_eq!(out.state["shell"]["providers"][0]["id"], "run");
-
-        let out = run(&page, shell("terminal", json!("foot.desktop"))).await;
-        assert_eq!(out.error, None);
-        assert_eq!(out.state["shell"]["terminal"], "foot.desktop");
-        assert_eq!(out.state["shell"]["clock_24h"], true);
-        assert_eq!(
-            r.state.lock().unwrap().settings.shell.terminal.as_deref(),
-            Some("foot.desktop")
-        );
-
-        let out = run(&page, shell("terminal", json!("../x.desktop"))).await;
-        assert!(out.error.unwrap().contains("terminal"));
-        assert_eq!(out.state["shell"]["terminal"], "foot.desktop");
-
-        let out = run(&page, shell("terminal", Value::Null)).await;
-        assert_eq!(out.error, None);
-        assert_eq!(r.state.lock().unwrap().settings.shell.terminal, None);
-
-        let out = run(&page, shell("nope", json!(1))).await;
-        assert_eq!(out.error.as_deref(), Some("unknown field \"nope\""));
-        let out = run(&page, shell("islands.nope", json!(true))).await;
-        assert!(out.error.unwrap().contains("unknown field"));
-    }
-
-    #[tokio::test]
-    async fn islands_patch_one() {
-        let (r, page) = rig().await;
-        let out = run(&page, shell("islands.notif", json!(false))).await;
-        assert_eq!(out.error, None);
-        let islands = r.state.lock().unwrap().settings.shell.islands;
-        assert!(!islands.notif && !islands.work, "work was already off");
-        assert!(islands.system && islands.time && islands.status);
-        assert_eq!(out.state["shell"]["islands"]["notif"], false);
-        assert_eq!(out.state["shell"]["islands"]["system"], true);
-    }
-
-    #[tokio::test]
-    async fn providers_list_marks_missing() {
-        let d = tempfile::tempdir().unwrap();
-        std::fs::write(
-            d.path().join("x.provider"),
-            "[Launcher Provider]\nBusName=org.x.Search\nName=X search\n",
-        )
-        .unwrap();
-        let (_r, page) = rig_in(vec![], vec![d.path().to_path_buf()]).await;
-        let out = run(&page, Op::Refresh).await;
-        assert_eq!(out.error, None);
-        assert_eq!(
-            out.state["providers"],
-            json!([
-                {"id": "calc", "name": "Calculator", "builtin": true},
-                {"id": "run", "name": "Run", "builtin": true},
-                {"id": "org.x.Search", "name": "X search", "builtin": false},
-                {"id": "org.gone.P", "name": "org.gone.P", "builtin": false, "missing": true},
-            ])
-        );
-        assert_eq!(out.state["shell"]["providers"][0]["enabled"], false);
-    }
-
-    #[tokio::test]
-    async fn pins_go_through_set_setting() {
-        let (r, page) = rig().await;
-        let out = run(&page, setting("pinned", json!(["b.desktop", "a.desktop"]))).await;
-        assert_eq!(out.error, None);
-        assert_eq!(
-            out.state["settings"]["pinned"],
-            json!(["b.desktop", "a.desktop"])
-        );
-        assert_eq!(
-            r.state.lock().unwrap().settings.pinned,
-            ["b.desktop", "a.desktop"]
-        );
-
-        let out = run(&page, setting("pinned", json!(["../evil"]))).await;
-        let message = out.error.expect("a bad id is refused");
-        assert!(message.contains("pinned"), "{message}");
-        assert_eq!(
-            out.state["settings"]["pinned"],
-            json!(["b.desktop", "a.desktop"])
-        );
-
-        let out = run(&page, setting("shell", json!(1))).await;
-        assert_eq!(out.error.as_deref(), Some("unknown setting \"shell\""));
-    }
-
-    #[tokio::test]
-    async fn idle_order_refusal_snaps_back() {
-        let (r, page) = rig().await;
-        let out = run(&page, Op::Refresh).await;
-        assert_eq!(out.state["settings"]["idle"]["lock"], 300);
-        let out = run(&page, setting("idle.dim", json!(400))).await;
-        let message = out.error.expect("dim above lock is refused");
-        assert!(message.contains("strictly increasing"), "{message}");
-        assert_eq!(out.state["settings"]["idle"]["dim"], 240);
-        assert_eq!(r.state.lock().unwrap().settings.idle.dim, Some(240));
-
-        // Off is allowed, and so is a free value in order.
-        let out = run(&page, setting("idle.dim", Value::Null)).await;
-        assert_eq!(out.error, None);
-        assert_eq!(out.state["settings"]["idle"]["dim"], Value::Null);
-        let out = run(&page, setting("idle.locked_screen_off", json!(5))).await;
-        assert!(out.error.is_some());
-        assert_eq!(out.state["settings"]["idle"]["locked_screen_off"], 30);
-    }
-
-    #[tokio::test]
-    async fn clear_launch_counts_calls_uqd() {
-        let (r, page) = rig().await;
-        r.state
-            .lock()
-            .unwrap()
-            .launch_counts
-            .insert("a.desktop".into(), 3);
-        let out = run(&page, Op::ClearLaunchCounts).await;
-        assert_eq!(out.error, None);
-        assert!(r.state.lock().unwrap().launch_counts.is_empty());
-    }
-}
+mod tests;

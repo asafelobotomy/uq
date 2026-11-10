@@ -22,20 +22,29 @@ TestCase {
         }
     }
 
-    function test_moving_up_emits_new_order() {
+    // Moves are intents (which row, from where, to where), so the page can apply them to the
+    // list as uqd has it now instead of sending a whole list built from an old snapshot.
+    function test_moving_up_emits_intent() {
         const l = createTemporaryObject(comp, tc);
         const got = [];
-        l.reordered.connect(ids => got.push(ids));
+        l.moved.connect((id, from, to) => got.push([id, from, to]));
         l.repeater.itemAt(1).upButton.clicked();
-        compare(got, [["b", "a", "c"]]);
+        compare(got, [["b", 1, 0]]);
     }
 
-    function test_moving_down_emits_new_order() {
+    function test_moving_down_emits_intent() {
         const l = createTemporaryObject(comp, tc);
         const got = [];
-        l.reordered.connect(ids => got.push(ids));
+        l.moved.connect((id, from, to) => got.push([id, from, to]));
         l.repeater.itemAt(0).downButton.clicked();
-        compare(got, [["b", "a", "c"]]);
+        compare(got, [["a", 0, 1]]);
+    }
+
+    function test_disabled_list_has_no_buttons() {
+        const l = createTemporaryObject(comp, tc, { enabled: false });
+        compare(l.repeater.itemAt(1).upButton.enabled, false);
+        compare(l.repeater.itemAt(1).downButton.enabled, false);
+        compare(l.repeater.itemAt(1).toggle.enabled, false);
     }
 
     function test_toggle_emits_and_snaps_back() {

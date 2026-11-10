@@ -93,12 +93,6 @@ QQC2.ScrollView {
         const i = backendIds.indexOf((settings.notif || {}).backend);
         return i < 0 ? 0 : i;
     }
-    function setProviders(ids) {
-        const byId = {};
-        for (const r of providerRows)
-            byId[r.id] = r;
-        setShell("providers", ids.map(id => ({ id: id, enabled: byId[id].enabled })));
-    }
 
     Component.onCompleted: sm.refresh()
     Accessible.role: Accessible.Pane
@@ -178,9 +172,10 @@ QQC2.ScrollView {
             model: page.pinnedRows
             showSwitch: false
             removable: true
-            enabled: page.ready
-            onReordered: ids => page.setSetting("pinned", ids)
-            onRemoved: id => page.setSetting("pinned", page.pinnedRows.map(r => r.id).filter(x => x !== id))
+            // Edits are intents applied to uqd's current list, and one at a time.
+            enabled: page.ready && !sm.busy
+            onMoved: (id, from, to) => sm.pinMove(id, from, to)
+            onRemoved: id => sm.pinRemove(id)
             Layout.leftMargin: Kirigami.Units.largeSpacing * 2
             Layout.fillWidth: true
         }
@@ -200,9 +195,9 @@ QQC2.ScrollView {
         OrderedToggleList {
             objectName: "providerList"
             model: page.providerRows
-            enabled: page.ready
-            onReordered: ids => page.setProviders(ids)
-            onToggled: (id, on) => page.setShell("providers", page.providerRows.map(r => ({ id: r.id, enabled: r.id === id ? on : r.enabled })))
+            enabled: page.ready && !sm.busy
+            onMoved: (id, from, to) => sm.providerMove(id, from, to)
+            onToggled: (id, on) => sm.providerToggle(id, on)
             Layout.leftMargin: Kirigami.Units.largeSpacing * 2
             Layout.fillWidth: true
         }
