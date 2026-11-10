@@ -49,6 +49,8 @@ pub enum Event {
     },
     /// The journal gained entries.
     HistoryChanged,
+    /// A display change was applied, confirmed or reverted: `ListOutputs` has the new picture.
+    MonitorsChanged,
 }
 
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
@@ -111,6 +113,10 @@ pub struct Desktop {
     last_entry_ids: Vec<String>,
     /// `(domain, Hyprland's message)` of the last section write that failed verification.
     last_rejected: Option<(String, String)>,
+    /// The display change waiting for `ConfirmMonitors`, if any.
+    pub(crate) pending: Option<crate::monitors::Pending>,
+    /// How long an unconfirmed display change stays ([`crate::monitors::REVERT_AFTER`]).
+    pub(crate) revert_after: Duration,
 }
 
 /// How much of `user.lua` `explain` scans.
@@ -224,6 +230,8 @@ impl Desktop {
             restore,
             last_entry_ids: Vec::new(),
             last_rejected: None,
+            pending: None,
+            revert_after: crate::monitors::REVERT_AFTER,
         })
     }
 
@@ -405,11 +413,17 @@ impl Desktop {
             tracing::warn!("{e}");
         }
         self.save_new_version_point();
+        // A display change left unconfirmed by a crash: the stored config never changed, so
+        // the reload below puts the old layout back.
+        let crashed_mid_apply = self.clear_stale_monitor_marker();
         if let Err(e) = self
             .commit(self.state.clone(), Change::Theme, Origin::Schedule)
             .await
         {
             tracing::warn!("startup render failed: {e}");
+        }
+        if crashed_mid_apply {
+            let _ = self.events.send(Event::MonitorsChanged);
         }
     }
 
@@ -565,8 +579,17 @@ impl Desktop {
                     .section(&domain)
                     .map_err(|e| DesktopError::InvalidSetting(e.to_string()))?;
                 let value = revert_changed(&current, &before, &entry.after);
-                self.set_section(&domain, &value.to_string(), Origin::Restore)
-                    .await?;
+                if domain == "monitors" {
+                    // Displays never take SetSection; an undo goes back to a layout the user
+                    // already kept, so it is saved and reloaded without a revert window.
+                    let mut next = self.state.clone();
+                    next.set_section(&domain, value)
+                        .map_err(|e| DesktopError::InvalidSetting(e.to_string()))?;
+                    self.write_monitors(next, Origin::Restore).await?;
+                } else {
+                    self.set_section(&domain, &value.to_string(), Origin::Restore)
+                        .await?;
+                }
             }
         }
         Ok(())
@@ -938,9 +961,11 @@ impl Desktop {
             }
             Change::Reload => {
                 let _ = self.live(self.comp.reload().await);
+                self.reapply_pending().await;
             }
             Change::Input => {
                 let _ = self.live(self.comp.reload().await);
+                self.reapply_pending().await;
                 let _ = self.events.send(Event::SettingsChanged(Box::new(
                     self.state.settings.clone(),
                 )));
@@ -948,7 +973,9 @@ impl Desktop {
             Change::Theme => {
                 // gsettings are desktop-wide: only touch them while a Hyprland session is live,
                 // so a uqd left running never re-themes another desktop.
-                if self.live(self.comp.reload().await) {
+                let live = self.live(self.comp.reload().await);
+                self.reapply_pending().await;
+                if live {
                     if let Err(e) = self.sys.apply(&theme) {
                         tracing::warn!("system settings: {e}");
                     }
