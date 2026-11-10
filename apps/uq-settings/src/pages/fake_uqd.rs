@@ -1,7 +1,7 @@
 //! One fake uqd for every page model's tests: `org.uq.Desktop1` over a real
 //! [`uq_core::state::State`] on a private bus, so refusals carry uq-core's own messages. Writes
 //! are journalled like uqd does (one entry per changed domain, with the write's origin), and
-//! `Undo` and the restore points follow uqd's rules.
+//! `Undo`, the restore points and the profiles follow uqd's rules.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -19,7 +19,9 @@ use uq_core::test_bus::{Bus, connect, private_bus};
 use zbus::object_server::SignalEmitter;
 
 mod devices;
+mod profiles;
 pub use devices::Displays;
+pub use profiles::FakeProfiles;
 
 #[derive(Debug, zbus::DBusError)]
 #[zbus(prefix = "org.uq.Desktop1.Error")]
@@ -31,6 +33,7 @@ pub enum FakeError {
     ConfigInvalid(String),
     Io(String),
     Conflict(String),
+    UnknownTheme(String),
 }
 
 fn invalid(e: impl ToString) -> FakeError {
@@ -45,6 +48,7 @@ pub struct FakeUqd {
     pub explain: Explain,
     pub history: History,
     pub displays: Displays,
+    pub profiles: FakeProfiles,
 }
 
 /// The fake's journal and restore points.
@@ -412,6 +416,57 @@ impl FakeUqd {
         Ok(())
     }
 
+    fn list_profiles(&self) -> String {
+        self.profiles.list()
+    }
+
+    fn get_profile(&self, id: &str) -> Result<String, FakeError> {
+        self.profiles.get(id)
+    }
+
+    async fn set_profile(
+        &self,
+        toml: &str,
+        replace: bool,
+        #[zbus(signal_emitter)] e: SignalEmitter<'_>,
+    ) -> Result<String, FakeError> {
+        let id = self.profiles.set(toml, replace, &self.list_themes())?;
+        let _ = Self::profile_changed(&e, &self.profiles.active_id()).await;
+        Ok(id)
+    }
+
+    async fn delete_profile(
+        &self,
+        id: &str,
+        #[zbus(signal_emitter)] e: SignalEmitter<'_>,
+    ) -> Result<(), FakeError> {
+        self.profiles.delete(id)?;
+        let _ = Self::profile_changed(&e, &self.profiles.active_id()).await;
+        Ok(())
+    }
+
+    async fn apply_profile(
+        &self,
+        id: &str,
+        #[zbus(signal_emitter)] e: SignalEmitter<'_>,
+    ) -> Result<String, FakeError> {
+        let report = self.profiles.apply(self, id)?;
+        let _ = Self::profile_changed(&e, id).await;
+        Ok(report)
+    }
+
+    async fn profile_off(
+        &self,
+        #[zbus(signal_emitter)] e: SignalEmitter<'_>,
+    ) -> Result<String, FakeError> {
+        let report = self.profiles.off(self)?;
+        let _ = Self::profile_changed(&e, "").await;
+        Ok(report)
+    }
+
+    #[zbus(signal)]
+    async fn profile_changed(e: &SignalEmitter<'_>, id: &str) -> zbus::Result<()>;
+
     fn clear_launch_counts(&self) {
         self.state.lock().unwrap().launch_counts.clear();
     }
@@ -442,6 +497,8 @@ pub struct Rig {
     pub history: History,
     /// The live outputs and the pending display change.
     pub displays: Displays,
+    /// The stored profiles and the active one.
+    pub profiles: FakeProfiles,
 }
 
 /// uqd's revert timer firing: the pending display change is dropped and `MonitorsChanged` sent.
@@ -466,6 +523,7 @@ pub async fn rig(state: State) -> Rig {
     let explain = Explain::default();
     let history = History::default();
     let displays = Displays::default();
+    let profiles = FakeProfiles::default();
     let uqd = connect(&bus).await;
     uqd.object_server()
         .at(
@@ -476,6 +534,7 @@ pub async fn rig(state: State) -> Rig {
                 explain: explain.clone(),
                 history: history.clone(),
                 displays: displays.clone(),
+                profiles: profiles.clone(),
             },
         )
         .await
@@ -491,5 +550,6 @@ pub async fn rig(state: State) -> Rig {
         explain,
         history,
         displays,
+        profiles,
     }
 }
