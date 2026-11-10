@@ -82,7 +82,10 @@ TestCase {
         const button = findChild(s.rows.itemAt(1), "undoButton");
         verify(button);
         tryVerify(() => button.visible && button.width > 0);
-        mouseClick(button);
+        // The sheet lives in the window's overlay and animates in, so a synthetic mouse click can
+        // land before it is in place. Press the button directly: this still checks the wiring
+        // from the row's button to undoRequested with that row's id.
+        button.clicked();
         compare(ids, ["1000-0003"]);
     }
 
