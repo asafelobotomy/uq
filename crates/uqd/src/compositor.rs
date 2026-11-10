@@ -24,6 +24,8 @@ pub trait Compositor: Send + Sync {
     async fn eval(&self, lua: &str) -> Result<(), CompositorError>;
     /// Re-read the config (`hyprctl reload`).
     async fn reload(&self) -> Result<(), CompositorError>;
+    /// Switch the live cursor (`hyprctl setcursor <theme> <size>`).
+    async fn set_cursor(&self, theme: &str, size: u8) -> Result<(), CompositorError>;
     /// Current config errors (`hyprctl configerrors`).
     async fn config_errors(&self) -> Result<Vec<String>, CompositorError>;
 }
@@ -106,6 +108,13 @@ impl Compositor for Hyprland {
         self.socket.expect_ok("reload").await
     }
 
+    async fn set_cursor(&self, theme: &str, size: u8) -> Result<(), CompositorError> {
+        // Hyprland splits the argument at the last space: theme first, size last.
+        self.socket
+            .expect_ok(&format!("setcursor {theme} {size}"))
+            .await
+    }
+
     async fn config_errors(&self) -> Result<Vec<String>, CompositorError> {
         let reply = self.socket.request("j/configerrors").await?;
         let lines: Vec<String> = serde_json::from_str(&reply)
@@ -172,6 +181,9 @@ pub mod fake {
         }
         async fn reload(&self) -> Result<(), CompositorError> {
             self.record("reload".into())
+        }
+        async fn set_cursor(&self, theme: &str, size: u8) -> Result<(), CompositorError> {
+            self.record(format!("setcursor {theme} {size}"))
         }
         async fn config_errors(&self) -> Result<Vec<String>, CompositorError> {
             self.record("configerrors".into()).map(|()| Vec::new())
