@@ -7,6 +7,8 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-11-10
+
 ### Fixed
 
 - **`uqctl setup` on a fresh install.** An unedited copy of Hyprland's stock `hyprland.lua`
