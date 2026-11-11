@@ -5,11 +5,12 @@ import Quickshell.Hyprland
 import "../core"
 import "../logic/quick.js" as Q
 import "../logic/quickui.js" as U
+import "../logic/failure.js" as F
 
 // Quick settings: theme picker, dark/light, the dark/light schedule, and the focused workspace's
 // layout. All of it lives in uqd, reached through the bridge; it refetches when the panel opens
-// and on ThemeChanged / LayoutChanged. Failures are ignored quietly (uqd may be down), and the
-// group is greyed out while it is.
+// and on ThemeChanged / LayoutChanged. A failed refetch is ignored quietly (uqd may be down, and
+// the group is greyed out while it is); a failed switch is logged and says why in `report`.
 ColumnLayout {
     id: root
 
@@ -21,6 +22,8 @@ ColumnLayout {
     property string variant: ""
     property var schedule: null
     property var layouts: ({})
+    // Why the last theme, schedule or layout switch failed (failure.js); "" when none did.
+    property string report: ""
 
     readonly property var workspace: Hyprland.focusedWorkspace
     readonly property string layout: U.workspaceLayout(layouts, workspace, U.defaultLayout(Settings.values))
@@ -65,23 +68,42 @@ ColumnLayout {
     function setTheme(name, variant) {
         if (name === "" || (name === themeName && variant === root.variant))
             return;
-        Bridge.call("SetTheme", [name, variant]).then(root.refreshTheme).catch(function () {});
+        report = "";
+        Bridge.call("SetTheme", [name, variant]).then(root.refreshTheme)
+            .catch(root.failed("Couldn't switch the theme"));
     }
     // uqd emits no event for a schedule change, so refetch after a successful set.
     function toggleSchedule() {
         var next = nextSchedule;
         if (next === null)
             return;
-        Bridge.call("SetSchedule", [JSON.stringify(next)]).then(root.refreshTheme).catch(function () {});
+        report = "";
+        Bridge.call("SetSchedule", [JSON.stringify(next)]).then(root.refreshTheme)
+            .catch(root.failed("Couldn't change the schedule"));
     }
     function setLayout(l) {
         var sel = U.workspaceSelector(workspace);
         if (sel === "" || l === layout)
             return;
-        Bridge.call("SetLayout", [sel, l]).then(root.refreshLayouts).catch(function () {});
+        report = "";
+        Bridge.call("SetLayout", [sel, l]).then(root.refreshLayouts)
+            .catch(root.failed("Couldn't change the layout"));
     }
 
-    onActiveChanged: if (active) refresh()
+    // A catch handler for a switch: log the reason and show it under the group.
+    function failed(what) {
+        return function (e) {
+            console.warn("uq: " + what + ": " + e);
+            root.report = F.failureText(what, e);
+        };
+    }
+
+    onActiveChanged: {
+        if (active)
+            refresh();
+        else
+            report = "";
+    }
 
     Connections {
         target: Bridge
@@ -221,5 +243,14 @@ ColumnLayout {
                 }
             }
         }
+    }
+
+    UqText {
+        objectName: "themeReport"
+        visible: root.report !== ""
+        Layout.fillWidth: true
+        text: root.report
+        color: Theme.error
+        wrapMode: Text.Wrap
     }
 }

@@ -268,6 +268,10 @@ All notable changes to uQ are listed here. The format follows
   rules and says plainly why a password was refused. Other people's passwords still go through
   the accounts service.
 - **The Bluetooth page no longer crashes when an adapter goes away while it reads.**
+- **The shell says when something you asked for didn't happen.** The app menu and Spotlight
+  stay open and say why when an app can't be opened (they close once it has been), Spotlight
+  says when search isn't working, and quick settings says why a theme, schedule or layout switch
+  failed. Each failure is also logged.
 
 ## [0.2.1] - 2026-11-10
 
