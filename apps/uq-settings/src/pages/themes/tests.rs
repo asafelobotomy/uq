@@ -558,10 +558,7 @@ async fn editor_save_refuses_failing_colours_and_keeps_editor() {
     assert!(out.error.unwrap().contains("Text on the background"));
     d["dark"]["text"] = json!("nope");
     let out = run(&page, Op::Save { draft: d }).await;
-    assert_eq!(
-        out.error.as_deref(),
-        Some("Text: Use a colour like #1e2a3b")
-    );
+    assert_eq!(out.error.as_deref(), Some("Use a colour like #1e2a3b"));
     assert!(r.themes.calls().iter().all(|c| c != "ImportTheme"));
     let out = run(&page, Op::Save { draft: json!({}) }).await;
     assert!(out.error.is_some());

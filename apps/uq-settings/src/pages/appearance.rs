@@ -55,7 +55,28 @@ impl AppearanceState {
     }
 }
 
-/// The state is `{themes, theme, variant, schedule, appearance, cursorThemes, iconThemes,
+/// `[{id, name, user}]` from `ListThemeInfo`; when uqd can't answer that (an older one), the ids
+/// from `ListThemes`, each named by its id.
+async fn theme_list(proxy: &DesktopProxy<'_>) -> zbus::Result<Value> {
+    if let Ok(text) = proxy.list_theme_info().await
+        && let Ok(info) = parse_json(&text)
+        && let Some(list) = info["themes"].as_array()
+    {
+        let themes: Vec<Value> = list
+            .iter()
+            .map(|t| json!({"id": t["id"], "name": t["name"], "user": t["user"] == true}))
+            .collect();
+        return Ok(Value::Array(themes));
+    }
+    let ids = proxy.list_themes().await?;
+    Ok(Value::Array(
+        ids.into_iter()
+            .map(|id| json!({"id": id, "name": id, "user": false}))
+            .collect(),
+    ))
+}
+
+/// The state is `{themes: [{id, name, user}], theme, variant, schedule, appearance, cursorThemes, iconThemes,
 /// sources}`.
 impl PageLogic for AppearanceState {
     type Op = Op;
@@ -94,7 +115,7 @@ impl PageLogic for AppearanceState {
     async fn snapshot(&self) -> zbus::Result<Value> {
         let proxy = DesktopProxy::new(&self.conn).await?;
         let (theme, variant) = proxy.get_theme().await?;
-        let themes = proxy.list_themes().await?;
+        let themes = theme_list(&proxy).await?;
         let schedule = parse_json(&proxy.get_schedule().await?)?;
         let appearance = parse_json(&proxy.get_section("appearance").await?)?;
         let sources = sources(&proxy, &["appearance"]).await;
@@ -181,8 +202,29 @@ mod tests {
             (&out.state["theme"], &out.state["variant"]),
             (&json!("dracula"), &json!("light"))
         );
-        assert_eq!(out.state["themes"], json!(["gruvbox", "dracula"]));
+        assert_eq!(out.state["themes"][0]["id"], "dracula");
         assert_eq!(out.state["schedule"]["mode"], "off");
+    }
+
+    #[tokio::test]
+    async fn themes_carry_names_and_user_flag() {
+        let (r, page) = rig().await;
+        let text = r
+            .themes
+            .text_of("gruvbox")
+            .unwrap()
+            .replacen("id = \"gruvbox\"", "id = \"ocean\"", 1)
+            .replacen("name = \"Gruvbox\"", "name = \"Ocean\"", 1);
+        r.themes.add(&text);
+        let out = run(&page, Op::Refresh).await;
+        assert_eq!(
+            out.state["themes"],
+            json!([
+                {"id": "dracula", "name": "Dracula", "user": false},
+                {"id": "gruvbox", "name": "Gruvbox", "user": false},
+                {"id": "user-ocean", "name": "Ocean", "user": true},
+            ])
+        );
     }
 
     #[tokio::test]

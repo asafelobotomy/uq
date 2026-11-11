@@ -7,8 +7,6 @@
 //! whether picked from a file or made in the editor, goes through its `ImportTheme`, so every
 //! theme gets the same checks.
 
-#![cfg_attr(not(test), allow(dead_code, reason = "wired by its model in Task 8"))]
-
 use std::path::PathBuf;
 use std::sync::Mutex as StdMutex;
 

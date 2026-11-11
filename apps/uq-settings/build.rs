@@ -68,6 +68,7 @@ fn main() {
         "src/rules_model.rs",
         "src/shell_model.rs",
         "src/startup_model.rs",
+        "src/themes_model.rs",
         "src/wallpaper_model.rs",
     ])
     .cpp_file("cpp/window.cpp");

@@ -98,6 +98,7 @@ impl PageModel for CompatModel {
         monitors: false,
         profiles: true,
         autostart: false,
+        themes: false,
     };
 
     fn core(&self) -> &ModelCore<CompatState> {

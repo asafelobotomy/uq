@@ -3,8 +3,6 @@
 //! the palette is derived (`uq_core::theme::derive`), and everything else is copied from the
 //! theme the editor was opened from.
 
-#![cfg_attr(not(test), allow(dead_code, reason = "wired by its model in Task 8"))]
-
 use serde_json::{Value, json};
 use uq_core::theme::derive::{self, BaseColors, KEYS};
 use uq_core::theme::uqtheme::{self, ImportError};
@@ -241,6 +239,8 @@ pub fn to_file(
     if !author_problem.is_empty() {
         return Err(author_problem);
     }
+    // A colour that can't be read is refused plainly, before anything is derived.
+    draft_colors(draft)?;
     let [(mut dark, dark_problems), (mut light, light_problems)] = derived(session, draft);
     if let Some(first) = dark_problems.into_iter().chain(light_problems).next() {
         return Err(first);

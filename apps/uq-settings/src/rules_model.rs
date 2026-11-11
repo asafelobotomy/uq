@@ -136,6 +136,7 @@ impl PageModel for RulesModel {
         // "From the X profile" follows a profile turning on or off.
         profiles: true,
         autostart: false,
+        themes: false,
     };
 
     fn core(&self) -> &ModelCore<RulesState> {

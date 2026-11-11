@@ -142,6 +142,7 @@ impl PageModel for ProfilesModel {
         monitors: false,
         profiles: true,
         autostart: false,
+        themes: false,
     };
 
     fn core(&self) -> &ModelCore<ProfilesState> {

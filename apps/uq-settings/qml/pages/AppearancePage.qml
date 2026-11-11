@@ -107,21 +107,21 @@ QQC2.ScrollView {
                 Repeater {
                     model: page.snap.themes || []
                     QQC2.Button {
-                        required property string modelData
-                        readonly property bool current: modelData === page.snap.theme
+                        required property var modelData
+                        readonly property bool current: modelData.id === page.snap.theme
                         checkable: true
-                    highlighted: current
+                        highlighted: current
                         checked: current
-                        Accessible.name: modelData
+                        Accessible.name: "Theme " + modelData.name
                         contentItem: UqLabel {
-                            text: modelData
+                            text: modelData.name
                             horizontalAlignment: Text.AlignHCenter
                             font.bold: current
                             color: current ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor
                             padding: Kirigami.Units.smallSpacing
                         }
                         onClicked: {
-                            am.setTheme(modelData, page.snap.variant || "dark");
+                            am.setTheme(modelData.id, page.snap.variant || "dark");
                             checked = Qt.binding(() => current);
                         }
                     }
