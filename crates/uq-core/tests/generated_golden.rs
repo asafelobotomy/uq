@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
+use uq_core::gestures::SwipeOptions;
 use uq_core::keybinds::Keybinds;
 use uq_core::lua::{Layout, StartupRender, emit_generated};
 use uq_core::rules::{Rules, WorkspaceRule};
@@ -105,6 +106,24 @@ fn all_set() -> Settings {
     t.tap_to_click = Some(false);
     t.disable_while_typing = Some(true);
     t.scroll_factor = Some(0.8);
+    s.input.gestures = Some(
+        serde_json::from_value(serde_json::json!([
+            {"fingers": 3, "direction": "horizontal", "action": "workspace", "enabled": true},
+            {"fingers": 4, "direction": "up", "action": "uq:spotlight", "enabled": false},
+            {"fingers": 4, "direction": "down", "action": "uq:quick-settings", "enabled": true},
+            {"fingers": 3, "direction": "down", "action": "special", "workspace": "notes",
+             "modifier": "SUPER", "enabled": true},
+            {"fingers": 4, "direction": "pinch_in", "action": "float", "modifier": "SUPER SHIFT",
+             "enabled": true},
+        ]))
+        .expect("the golden gestures are valid"),
+    );
+    s.input.swipe = SwipeOptions {
+        distance: Some(400),
+        invert: Some(false),
+        create_new: Some(true),
+        cancel_ratio: Some(0.4),
+    };
     s.input.devices.insert(
         "logitech-g-pro".into(),
         DeviceOverride {

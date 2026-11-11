@@ -8,6 +8,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use uq_core::gestures::{self, Gesture};
 use uq_core::keybinds::Keybinds;
 use uq_core::keybinds::hypr::{self, SHELL_NAMES};
 use uq_core::keybinds::keys::{Group, KEYS, KeyKind};
@@ -421,7 +422,12 @@ fn fixtures() -> Vec<Keybinds> {
 /// `__KNOWN_OPTS__`: any other key is silently ignored by Hyprland, so the mock fails on it.
 const MOCK_TEMPLATE: &str = r#"
 local KNOWN_OPTS = __KNOWN_OPTS__
+-- The `hl.gesture` fields and directions Hyprland reads (`gestures::hypr`): any other key is
+-- silently ignored by Hyprland, and an unknown direction is a config error.
+local GESTURE_FIELDS = __GESTURE_FIELDS__
+local GESTURE_DIRS = __GESTURE_DIRS__
 local calls = {}
+local gestures = {}
 -- exec_cmd strings seen while a given hl.on("<event>", fn) callback runs.
 local hook, in_hook = nil, {}
 -- What each returned proxy stands for, e.g. `hl.dsp.global(uq:spotlight)`, and every hl.bind
@@ -453,6 +459,37 @@ local function proxy(name)
         for _, a in ipairs(args) do
           if type(a) == "table" and not desc[a] and getmetatable(a) == nil then tbls = tbls .. show(a) end
         end
+      end
+      if name == "hl.gesture" then
+        local t = args[1]
+        if type(t) ~= "table" then error("hl.gesture takes one table") end
+        for k in pairs(t) do
+          local known = false
+          for _, n in ipairs(GESTURE_FIELDS) do if n == k then known = true end end
+          if not known or tostring(k):find("-", 1, true) then
+            error("unknown hl.gesture field " .. tostring(k))
+          end
+        end
+        local dir_ok = false
+        for _, d in ipairs(GESTURE_DIRS) do if d == t.direction then dir_ok = true end end
+        if not dir_ok then error("unknown hl.gesture direction " .. tostring(t.direction)) end
+        if math.type(t.fingers) ~= "integer" or t.fingers < 2 or t.fingers > 9 then
+          error("hl.gesture fingers must be a whole number from 2 to 9")
+        end
+        if t.mods ~= nil and type(t.mods) ~= "string" then error("hl.gesture mods must be text") end
+        local a = t.action
+        if type(a) == "function" then
+          a()
+        elseif type(a) == "table" then
+          -- A returned `hl.dsp.*` proxy is a dispatcher object at Hyprland 0.57, which
+          -- `hlGesture` refuses; only a function (or a plain table of functions) works.
+          if getmetatable(a) ~= nil then
+            error("hl.gesture action is a dispatcher object: wrap it in a function")
+          end
+        elseif type(a) ~= "string" then
+          error("hl.gesture needs an action")
+        end
+        gestures[#gestures + 1] = t.fingers .. " " .. t.direction .. " " .. tostring(t.mods)
       end
       -- generated.lua starts its shortcuts with hl.unbind("all"): base.lua's fallback copies go.
       if name == "hl.unbind" and args[1] == "all" then binds = {} end
@@ -621,13 +658,22 @@ for _, c in ipairs(calls) do print(c) end
 print_binds()
 "#;
 
-/// The mock with the option whitelist filled in.
+/// The mock with the option whitelists filled in.
 fn mock() -> String {
-    let list: Vec<String> = hypr::ALL_BIND_OPTIONS
-        .iter()
-        .map(|o| format!("{o:?}"))
-        .collect();
-    MOCK_TEMPLATE.replace("__KNOWN_OPTS__", &format!("{{{}}}", list.join(", ")))
+    let quoted = |names: Vec<&str>| {
+        let list: Vec<String> = names.iter().map(|o| format!("{o:?}")).collect();
+        format!("{{{}}}", list.join(", "))
+    };
+    MOCK_TEMPLATE
+        .replace("__KNOWN_OPTS__", &quoted(hypr::ALL_BIND_OPTIONS.to_vec()))
+        .replace(
+            "__GESTURE_FIELDS__",
+            &quoted(gestures::hypr::ALL_FIELDS.to_vec()),
+        )
+        .replace(
+            "__GESTURE_DIRS__",
+            &quoted(gestures::hypr::DIRECTIONS.iter().map(|d| d.lua).collect()),
+        )
 }
 
 /// Spec §2.12: the launcher binds never work over the lock screen.
@@ -1270,6 +1316,215 @@ fn startup_switches_pass_hyprland_verify() {
         &startup_all(),
     );
     let (_, main) = tree(&dir.path().join("startup"), &gen_);
+    let out = Command::new("Hyprland")
+        .arg("--verify-config")
+        .arg("-c")
+        .arg(&main)
+        .output()
+        .unwrap();
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(out.status.success(), "{text}");
+}
+
+/// One gesture per action, every direction, modifiers, a special workspace name and every swipe
+/// option: all on different triggers, so none shadows another.
+fn gesture_settings() -> Settings {
+    let list: Vec<Gesture> = serde_json::from_value(serde_json::json!([
+        {"fingers": 3, "direction": "horizontal", "action": "workspace", "enabled": true},
+        {"fingers": 3, "direction": "vertical", "action": "workspace", "modifier": "ALT",
+         "enabled": true},
+        {"fingers": 4, "direction": "left", "action": "move", "enabled": true},
+        {"fingers": 4, "direction": "right", "action": "resize", "enabled": true},
+        {"fingers": 4, "direction": "up", "action": "special", "workspace": "scratch",
+         "enabled": true},
+        {"fingers": 5, "direction": "down", "action": "close", "enabled": true},
+        {"fingers": 5, "direction": "pinch_in", "action": "fullscreen", "enabled": true},
+        {"fingers": 5, "direction": "pinch_out", "action": "float", "enabled": true},
+        {"fingers": 3, "direction": "up", "action": "uq:spotlight", "modifier": "SUPER",
+         "enabled": true},
+        {"fingers": 4, "direction": "down", "action": "uq:quick-settings",
+         "modifier": "SUPER SHIFT", "enabled": true},
+        {"fingers": 3, "direction": "down", "action": "special", "modifier": "CTRL SHIFT",
+         "enabled": true},
+        {"fingers": 5, "direction": "left", "action": "close", "enabled": false},
+    ]))
+    .unwrap();
+    gestures::validate(&list).expect("the fixture gestures don't clash");
+    let mut s = settings();
+    s.input.gestures = Some(list);
+    s.input.swipe = gestures::SwipeOptions {
+        distance: Some(450),
+        invert: Some(false),
+        create_new: Some(false),
+        cancel_ratio: Some(0.35),
+    };
+    s
+}
+
+/// Gestures render and run under the mock, whose `hl.gesture` checks every key, the direction
+/// spelling and the action type.
+#[test]
+fn gestures_run_under_the_lua_mock() {
+    let Ok(lua) = which("lua") else {
+        eprintln!("skipping: no `lua` on PATH");
+        return;
+    };
+    let reg = ThemeRegistry::load_dir(&repo().join("themes")).unwrap();
+    let t = reg.iter().next().unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let mock = dir.path().join("mock.lua");
+    std::fs::write(&mock, self::mock()).unwrap();
+    let gen_ = emit_generated(
+        t,
+        &layouts(),
+        &rules(),
+        &keybinds(),
+        &gesture_settings(),
+        &StartupRender::default(),
+    );
+    assert!(
+        gen_.contains("gestures = { workspace_swipe_distance = 450"),
+        "{gen_}"
+    );
+    let (p, _) = tree(&dir.path().join("gestures"), &gen_);
+    let out = Command::new(&lua)
+        .arg(&mock)
+        .args([&p.base_lua, &p.generated_lua, &p.user_lua])
+        .output()
+        .unwrap();
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        out.status.success() && text.starts_with("ok "),
+        "{text}{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    // Eleven enabled gestures (the twelfth is off), and nothing from base.lua.
+    assert_eq!(
+        text.lines().filter(|l| *l == "hl.gesture").count(),
+        11,
+        "{text}"
+    );
+    // The shell actions run their function: a dispatch of the global shortcut.
+    assert!(text.contains("hl.dsp.global:uq:spotlight"), "{text}");
+    assert!(text.contains("hl.dsp.global:uq:quick-settings"), "{text}");
+}
+
+/// The first gesture the person's defaults make also runs: uQ's own two, from a never-set
+/// list, pass the same mock.
+#[test]
+fn default_gestures_run_under_the_lua_mock() {
+    let Ok(lua) = which("lua") else {
+        eprintln!("skipping: no `lua` on PATH");
+        return;
+    };
+    let reg = ThemeRegistry::load_dir(&repo().join("themes")).unwrap();
+    let t = reg.iter().next().unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let mock = dir.path().join("mock.lua");
+    std::fs::write(&mock, self::mock()).unwrap();
+    let gen_ = emit_generated(
+        t,
+        &layouts(),
+        &rules(),
+        &keybinds(),
+        &settings(),
+        &StartupRender::default(),
+    );
+    let (p, _) = tree(&dir.path().join("default-gestures"), &gen_);
+    let out = Command::new(&lua)
+        .arg(&mock)
+        .args([&p.base_lua, &p.generated_lua, &p.user_lua])
+        .output()
+        .unwrap();
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        out.status.success(),
+        "{text}{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(
+        text.lines().filter(|l| *l == "hl.gesture").count(),
+        2,
+        "{text}"
+    );
+}
+
+/// F3: at Hyprland 0.57 a bare `hl.dsp.global(…)` is a dispatcher object `hl.gesture` refuses,
+/// so the mock refuses it too; a misspelt field or direction is refused as well.
+#[test]
+fn mock_rejects_bad_gestures() {
+    let Ok(lua) = which("lua") else {
+        eprintln!("skipping: no `lua` on PATH");
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let f = dir.path().join("gesture.lua");
+    for (text, want) in [
+        (
+            "hl.gesture({ fingers = 4, direction = \"up\", action = hl.dsp.global(\"uq:spotlight\") })\n",
+            "dispatcher object",
+        ),
+        (
+            "hl.gesture({ fingers = 4, direction = \"up\", action = \"close\", modifier = \"SUPER\" })\n",
+            "unknown hl.gesture field",
+        ),
+        (
+            "hl.gesture({ fingers = 4, direction = \"up\", action = \"close\", [\"workspace-name\"] = \"x\" })\n",
+            "unknown hl.gesture field",
+        ),
+        (
+            "hl.gesture({ fingers = 4, direction = \"pinch_in\", action = \"close\" })\n",
+            "unknown hl.gesture direction",
+        ),
+        (
+            "hl.gesture({ fingers = 1, direction = \"up\", action = \"close\" })\n",
+            "fingers",
+        ),
+    ] {
+        std::fs::write(&f, text).unwrap();
+        let (ok, out, err) = run_mock(&lua, dir.path(), true, &[&f]);
+        assert!(!ok && err.contains(want), "{text}: {out}{err}");
+    }
+    // The shape uQ writes is accepted.
+    std::fs::write(
+        &f,
+        "hl.gesture({ fingers = 4, direction = \"up\", action = function() hl.dispatch(hl.dsp.global(\"uq:spotlight\")) end })\n",
+    )
+    .unwrap();
+    let (ok, out, err) = run_mock(&lua, dir.path(), true, &[&f]);
+    assert!(ok, "{out}{err}");
+}
+
+/// R20: `base.lua` has no gesture of its own; a second copy would shadow uQ's.
+#[test]
+fn base_lua_has_no_gesture() {
+    let base = std::fs::read_to_string(repo().join("config/hypr/base.lua")).unwrap();
+    let code: Vec<&str> = base
+        .lines()
+        .filter(|l| !l.trim_start().starts_with("--"))
+        .collect();
+    assert!(!code.iter().any(|l| l.contains("hl.gesture")), "{code:?}");
+}
+
+#[test]
+#[ignore = "needs Hyprland; CI runs it with --ignored"]
+fn gestures_pass_hyprland_verify() {
+    let reg = ThemeRegistry::load_dir(&repo().join("themes")).unwrap();
+    let t = reg.iter().next().unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let gen_ = emit_generated(
+        t,
+        &layouts(),
+        &rules(),
+        &keybinds(),
+        &gesture_settings(),
+        &StartupRender::default(),
+    );
+    let (_, main) = tree(&dir.path().join("gestures"), &gen_);
     let out = Command::new("Hyprland")
         .arg("--verify-config")
         .arg("-c")

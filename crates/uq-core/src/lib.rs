@@ -6,6 +6,7 @@ pub mod compat;
 pub mod contrast;
 pub mod desktop_entry;
 pub mod env;
+pub mod gestures;
 pub mod history;
 pub mod integration;
 pub mod keybinds;

@@ -16,8 +16,8 @@ mod shell;
 mod wallpaper;
 pub use appearance::{Appearance, valid_theme_name};
 pub use input::{
-    DeviceOverride, InputSettings, KbLayout, KeyboardSettings, TouchpadSettings, valid_device_name,
-    valid_layout, valid_switch_combo, valid_variant,
+    DeviceOverride, InputSettings, KbLayout, KeyboardSettings, TouchpadSettings, input_summary,
+    valid_device_name, valid_layout, valid_switch_combo, valid_variant,
 };
 pub use layouts::{
     DwindleOptions, ForceSplit, LayoutOptions, MasterOptions, NewStatus, Orientation,

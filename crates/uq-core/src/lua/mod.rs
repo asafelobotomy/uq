@@ -9,12 +9,14 @@ use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::str::FromStr;
 
+mod gestures;
 mod input;
 mod keybinds;
 mod look;
 mod monitors;
 mod rules;
 mod startup;
+pub use gestures::{emit_gesture, emit_gestures};
 pub use input::emit_devices;
 pub use keybinds::{emit_bind, emit_binds};
 pub use look::{ANIMATION_LEAVES, CURVES};
@@ -179,6 +181,7 @@ pub fn emit_generated_with_apps(
     let _ = writeln!(out, "    }},");
     look::emit_option_tables(&mut out, look, lo);
     input::emit_input(&mut out, &settings.mouse, &settings.input);
+    gestures::emit_swipe(&mut out, &settings.input.swipe);
     emit_xwayland(&mut out, startup);
     emit_cursor(&mut out, &startup.monitors);
     let _ = writeln!(out, "}})");
@@ -190,6 +193,7 @@ pub fn emit_generated_with_apps(
     if !devices.is_empty() {
         let _ = write!(out, "\n-- Input devices\n{devices}");
     }
+    out.push_str(&emit_gestures(&settings.input));
     look::emit_animations(&mut out, look);
     // After base.lua's fixed size, so these win.
     let _ = writeln!(

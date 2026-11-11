@@ -23,6 +23,10 @@ hl.config({
         force_zero_scaling = true,
     },
 })
+
+-- Touchpad gestures
+hl.gesture({ fingers = 3, direction = "horizontal", action = "workspace" })
+hl.gesture({ fingers = 4, direction = "up", action = function() hl.dispatch(hl.dsp.global("uq:spotlight")) end })
 hl.curve("easeOutQuint", { type = "bezier", points = { {0.23, 1},  {0.32, 1} } })
 hl.curve("linear",       { type = "bezier", points = { {0, 0},     {1, 1}    } })
 hl.curve("almostLinear", { type = "bezier", points = { {0.5, 0.5}, {0.75, 1} } })

@@ -131,6 +131,9 @@ pub fn summarize(domain: &str, before: &Value, after: &Value, labels: Labels) ->
     if domain == crate::integration::rules::DOMAIN {
         return crate::integration::rules::summary(before, after);
     }
+    if domain == "input" {
+        return crate::settings::input_summary(before, after, labels);
+    }
     if domain == "monitors" {
         return crate::settings::monitors_summary(before, after, labels);
     }

@@ -271,6 +271,36 @@ pub static OPTIONS: &[OptionRow] = &[
         "Icon theme",
         "icon-theme",
     ),
+    // `gestures:workspace_swipe_*`: ConfigValues.cpp lines 400-406 at v0.56.2, 487-493 at
+    // v0.57.0. The option names live in `crate::gestures::hypr::SWIPE_OPTIONS`.
+    hypr(
+        "input.swipe.distance",
+        "gesture-swipe-distance",
+        "Swipe distance",
+        "gestures:workspace_swipe_distance",
+        Dflt,
+    ),
+    hypr(
+        "input.swipe.invert",
+        "gesture-swipe-invert",
+        "Reverse swipe direction",
+        "gestures:workspace_swipe_invert",
+        Dflt,
+    ),
+    hypr(
+        "input.swipe.create_new",
+        "gesture-swipe-create",
+        "Swipe past the last workspace to make a new one",
+        "gestures:workspace_swipe_create_new",
+        Dflt,
+    ),
+    hypr(
+        "input.swipe.cancel_ratio",
+        "gesture-swipe-cancel",
+        "How far to swipe before it switches",
+        "gestures:workspace_swipe_cancel_ratio",
+        Dflt,
+    ),
     // `xwayland:force_zero_scaling`: ConfigValues.cpp line 549 at v0.56.2, line 653 at v0.57.0
     // (see `crate::compat::hypr`).
     hypr(
@@ -333,6 +363,10 @@ pub fn expected(row: &OptionRow, state: &State, theme: &Theme) -> Option<Value> 
         "appearance.icon_theme" => Some(Value::from(t.icons.theme.clone())),
         // Off renders nothing, so Hyprland's own default is all there is to read back (F6).
         "compat.sharp_x11" => state.compat.sharp_x11.then_some(Value::Bool(true)),
+        "input.swipe.distance" => s.input.swipe.distance.map(Value::from),
+        "input.swipe.invert" => b(s.input.swipe.invert),
+        "input.swipe.create_new" => b(s.input.swipe.create_new),
+        "input.swipe.cancel_ratio" => f(s.input.swipe.cancel_ratio),
         _ => None,
     }
 }
@@ -419,6 +453,30 @@ pub fn find_workspace_rule_in_user_lua(text: &str, selector: &str) -> Option<u32
         let line = strip_lua_comment(line);
         (line.contains("workspace_rule") && (line.contains(&dq) || line.contains(&sq)))
             .then(|| u32::try_from(n + 1).unwrap_or(u32::MAX))
+    })
+}
+
+/// The 1-based line of `user.lua` with an `hl.gesture(` call. Comments are ignored. uQ's own
+/// gestures render in `generated.lua`, which loads first, so Hyprland refuses a gesture here
+/// that one of them shadows (and `--verify-config` fails for every later uQ write).
+pub fn find_gesture_in_user_lua(text: &str) -> Option<u32> {
+    text.lines().enumerate().find_map(|(n, line)| {
+        let line = strip_lua_comment(line);
+        let mut from = 0;
+        while let Some(i) = line[from..].find("hl.gesture") {
+            let start = from + i;
+            from = start + 1;
+            if line[..start].chars().next_back().is_some_and(is_ident) {
+                continue;
+            }
+            if line[start + "hl.gesture".len()..]
+                .trim_start()
+                .starts_with('(')
+            {
+                return Some(u32::try_from(n + 1).unwrap_or(u32::MAX));
+            }
+        }
+        None
     })
 }
 
@@ -741,6 +799,12 @@ mod tests {
         .unwrap();
         st.set_section("compat", json!({"sharp_x11": true}))
             .unwrap();
+        st.set_section(
+            "input",
+            json!({"swipe": {"distance": 400, "invert": false, "create_new": false,
+                "cancel_ratio": 0.4}}),
+        )
+        .unwrap();
         let mut keys = std::collections::HashSet::new();
         for row in OPTIONS {
             assert!(keys.insert(row.key), "duplicate {}", row.key);
@@ -931,5 +995,57 @@ mod tests {
         // At most 100.
         let many = "hl.bind(\"SUPER + T\", d) -- uq:bind\n".repeat(150);
         assert_eq!(marked_binds(&many).len(), 100);
+    }
+
+    #[test]
+    fn find_gesture_in_user_lua_skips_comments() {
+        let text =
+            "-- hl.gesture({ fingers = 3 })\nhl.config({})\n  hl.gesture ( { fingers = 4 })\n";
+        assert_eq!(find_gesture_in_user_lua(text), Some(3));
+        assert_eq!(find_gesture_in_user_lua("x = my_hl.gesture(1)\n"), None);
+        assert_eq!(
+            find_gesture_in_user_lua("-- only a comment: hl.gesture(\n"),
+            None
+        );
+        assert_eq!(find_gesture_in_user_lua("local g = hl.gesture\n"), None);
+        assert_eq!(find_gesture_in_user_lua(""), None);
+        assert_eq!(
+            find_gesture_in_user_lua("hl.config({})\nhl.gesture({ fingers = 3 }) -- mine\n"),
+            Some(2)
+        );
+    }
+
+    #[test]
+    fn swipe_rows_read_back_what_is_rendered() {
+        let mut st = State::default();
+        st.set_section(
+            "input",
+            json!({"swipe": {"distance": 400, "cancel_ratio": 0.4}}),
+        )
+        .unwrap();
+        let theme = crate::theme::Theme::from_toml(
+            crate::theme::tests::FIXTURE,
+            "fixture",
+            crate::theme::Variant::Dark,
+        )
+        .unwrap();
+        let row = |k: &str| OPTIONS.iter().find(|r| r.key == k).unwrap();
+        assert_eq!(
+            expected(row("input.swipe.distance"), &st, &theme),
+            Some(json!(400))
+        );
+        assert_eq!(expected(row("input.swipe.invert"), &st, &theme), None);
+        assert_eq!(
+            expected(row("input.swipe.cancel_ratio"), &st, &theme),
+            Some(json!(0.4))
+        );
+        for (_, lua) in crate::gestures::hypr::SWIPE_OPTIONS {
+            assert!(
+                OPTIONS
+                    .iter()
+                    .any(|r| r.hypr == Some(format!("gestures:{lua}").as_str())),
+                "{lua}"
+            );
+        }
     }
 }

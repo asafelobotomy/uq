@@ -103,6 +103,11 @@ fn input(key: &str) -> Option<String> {
         "touchpad.tap_to_click" => "Tap to click",
         "touchpad.disable_while_typing" => "Touchpad off while typing",
         "touchpad.scroll_factor" => "Touchpad scroll speed",
+        "gestures" => "Touchpad gestures",
+        "swipe.distance" => "Swipe distance",
+        "swipe.invert" => "Reverse swipe direction",
+        "swipe.create_new" => "Swipe past the last workspace to make a new one",
+        "swipe.cancel_ratio" => "How far to swipe before it switches",
         k => {
             let (device, field) = k.strip_prefix("devices.")?.rsplit_once('.')?;
             let what = match field {
@@ -162,6 +167,7 @@ fn monitors(key: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::gestures::{Action, Direction, Gesture, Mods, SwipeOptions};
     use crate::history::diff::{journal_domains, leaf_keys};
     use crate::lua::Layout;
     use crate::schedule::Schedule;
@@ -243,6 +249,20 @@ mod tests {
         tp.tap_to_click = Some(true);
         tp.disable_while_typing = Some(true);
         tp.scroll_factor = Some(0.5);
+        s.input.gestures = Some(vec![Gesture {
+            fingers: 3,
+            direction: Direction::Down,
+            action: Action::Special,
+            modifier: Mods::parse("SUPER").unwrap(),
+            workspace: Some("magic".into()),
+            enabled: true,
+        }]);
+        s.input.swipe = SwipeOptions {
+            distance: Some(400),
+            invert: Some(false),
+            create_new: Some(false),
+            cancel_ratio: Some(0.4),
+        };
         s.input.devices.insert(
             "logitech-mx.v2".into(),
             DeviceOverride {
