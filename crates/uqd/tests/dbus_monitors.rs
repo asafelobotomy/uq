@@ -191,7 +191,36 @@ async fn apply_refusals_name_the_reason() {
     );
     let err = s
         .proxy
-        .call::<_, _, ()>("SetSection", &("monitors", r#"{"outputs":{}}"#, "settings"))
+        .call::<_, _, ()>(
+            "SetSection",
+            &(
+                "monitors",
+                r#"{"outputs":{"DP-1":{"scale":1.5}}}"#,
+                "settings",
+            ),
+        )
+        .await
+        .unwrap_err();
+    assert!(is_invalid_setting(&err), "{err}");
+}
+
+#[tokio::test]
+async fn remember_over_dbus() {
+    let s = served(Duration::from_secs(15)).await;
+    let id: String = s
+        .proxy
+        .call("RememberMonitors", &("Desk", "settings"))
+        .await
+        .unwrap();
+    assert!(id.starts_with("m-"), "{id}");
+    let v = s.outputs().await;
+    assert_eq!(v["arrangement"]["name"], "Desk");
+    assert_eq!(v["roles"]["main"], "eDP-1");
+    // Refused while a display change waits.
+    let _token = s.apply(SCALE).await;
+    let err = s
+        .proxy
+        .call::<_, _, String>("RememberMonitors", &("Other", "settings"))
         .await
         .unwrap_err();
     assert!(is_invalid_setting(&err), "{err}");

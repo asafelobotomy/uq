@@ -40,8 +40,10 @@ ShellRoot {
         delegate: Wallpaper {}
     }
 
+    // The bars: every screen, or the ones Settings chose (Outputs.barScreens returns the
+    // ShellScreen objects themselves, so Variants keeps each bar while its screen stays).
     Variants {
-        model: Quickshell.screens
+        model: Outputs.barScreens(Quickshell.screens)
         delegate: Bar {}
     }
 

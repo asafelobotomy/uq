@@ -89,6 +89,8 @@ fn unknown_fields_refused() {
 #[test]
 fn bad_output_entry_costs_only_itself() {
     let toml = "theme = \"rosewood\"\npinned = [\"firefox.desktop\"]\n\
+        [monitors]\nprimary = 3\n\
+        [[monitors.profiles]]\nid = \"bogus\"\nname = \"Bad\"\n\
         [monitors.outputs.DP-1]\nscale = \"huge\"\n\
         [monitors.outputs.DP-2]\nmode = \"preferred\"\nfuture = 1\n\
         [monitors.outputs.DP-3]\nscale = 9.0\n\
@@ -111,6 +113,11 @@ fn bad_output_entry_costs_only_itself() {
     assert!(!outs.contains_key("DP-3"), "out of range dropped");
     assert_eq!(outs["DP-2"].mode.as_deref(), Some("preferred"));
     assert_eq!(outs["DP-4"].mirror_of, None, "self-mirror cleared");
+    assert_eq!(s.settings.monitors.primary, None, "bad primary dropped");
+    assert!(
+        s.settings.monitors.profiles.is_empty(),
+        "bad arrangement dropped"
+    );
     // `monitors = 5` costs only the section.
     std::fs::write(&p, "theme = \"rosewood\"\nmonitors = 5\n").unwrap();
     let s = State::load(&p);

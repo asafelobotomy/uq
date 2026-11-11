@@ -123,11 +123,8 @@ hl.config({
     },
 })
 
-hl.gesture({
-    fingers   = 3,
-    direction = "horizontal",
-    action    = "workspace",
-})
+-- Touchpad gestures come from generated.lua (Input page), so a second copy here can't
+-- shadow them.
 
 ---------------------
 ---- KEYBINDINGS ----

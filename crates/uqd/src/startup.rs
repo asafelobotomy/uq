@@ -10,11 +10,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use uq_core::autostart::Added;
 use uq_core::autostart::scan::{Plan, Resolved, known_ids, read_capped, read_folders, resolve};
-use uq_core::compat::launch::main_scale;
 use uq_core::desktop_entry::{normalise_id, read_entry, valid_desktop_id, valid_override_source};
 use uq_core::env::{environment_d_lines, session_env};
 use uq_core::profile;
-use uq_core::settings::{LiveOutput, parse_live};
+use uq_core::settings::{LiveOutput, parse_live, plan};
 use uq_core::startup_explain::{
     BrowserFile, OverrideState, default_when_off, explain_autostart, explain_compat_extra,
     explain_env,
@@ -132,30 +131,13 @@ impl Desktop {
             .collect()
     }
 
-    /// The main screen's scale for `next` (R13, F4): Hyprland's outputs from one
-    /// `monitors all` read, with `next`'s stored display config (position, scale, on/off) laid
-    /// over them, so a stored scale wins before it is live. `None` without Hyprland.
-    pub(crate) async fn main_scale_for(&self, next: &State) -> Option<f64> {
+    /// Hyprland's outputs for `next` from one `monitors all` read, with `next`'s stored
+    /// display config (position, scale, on/off) laid over them so a stored value wins before
+    /// it is live. The main scale, the workspace plan and the default monitor all come from it
+    /// (R15). `None` without Hyprland.
+    pub(crate) async fn live_outputs_for(&self, next: &State) -> Option<Vec<LiveOutput>> {
         let live = parse_live(&self.comp.monitors().await.ok()?);
-        let stored = &next.settings.monitors.outputs;
-        let outputs: Vec<LiveOutput> = live
-            .into_iter()
-            .map(|mut o| {
-                if let Some(c) = stored.get(&o.name) {
-                    if let Some(p) = &c.position {
-                        (o.x, o.y) = (p.x, p.y);
-                    }
-                    if let Some(s) = c.scale {
-                        o.scale = s;
-                    }
-                    if let Some(on) = c.enabled {
-                        o.disabled = !on;
-                    }
-                }
-                o
-            })
-            .collect();
-        main_scale(&outputs)
+        Some(plan::overlay(&live, &next.settings.monitors))
     }
 
     /// Refuse turning a fix's "Also when started elsewhere" on when its override can't be

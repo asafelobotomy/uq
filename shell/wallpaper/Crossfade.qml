@@ -14,6 +14,15 @@ Item {
     property int fadeMs: 300
     // False while a slideshow is skipping bad slides: keep the old image until the next loads.
     property bool clearOnFail: true
+    // One picture across several screens: {x, y, width, height}, the box the image covers in this
+    // item's coordinates (the item clips it). null: the image fills the item.
+    property var span: null
+    readonly property real boxX: span ? span.x : 0
+    readonly property real boxY: span ? span.y : 0
+    readonly property real boxWidth: span ? span.width : width
+    readonly property real boxHeight: span ? span.height : height
+
+    clip: true
 
     signal failed
 
@@ -110,14 +119,17 @@ Item {
     component Slide: Image {
         property string want: ""
 
-        anchors.fill: parent
+        x: root.boxX
+        y: root.boxY
+        width: root.boxWidth
+        height: root.boxHeight
         asynchronous: true
         cache: false
         opacity: 0
         fillMode: root.fit
         // Fill and fit decode at screen size; center and tile need the real size.
         sourceSize: root.fit === Image.PreserveAspectCrop || root.fit === Image.PreserveAspectFit
-            ? Qt.size(root.width, root.height) : Qt.size(0, 0)
+            ? Qt.size(root.boxWidth, root.boxHeight) : Qt.size(0, 0)
         onStatusChanged: {
             if (status === Image.Ready)
                 root.loaded(this);

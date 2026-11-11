@@ -305,7 +305,10 @@ pub fn parse_monitors(json: &str) -> Result<Monitors, HelperError> {
     }
     let v: serde_json::Value = serde_json::from_str(json)
         .map_err(|e| HelperError::InvalidArgument(format!("monitor layout isn't JSON: {e}")))?;
-    Monitors::from_section(&v).map_err(|e| HelperError::InvalidArgument(e.to_string()))
+    let parsed =
+        Monitors::from_section(&v).map_err(|e| HelperError::InvalidArgument(e.to_string()))?;
+    // The greeter file holds the layout only; names, identities and the rest never reach it.
+    Ok(Monitors::default().with_layout(parsed.outputs))
 }
 
 /// Read one of the helper's own config files: a regular file, not through a symlink, capped.

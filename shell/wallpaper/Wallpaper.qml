@@ -27,6 +27,13 @@ PanelWindow {
     readonly property string imagePath: entry && typeof entry.image === "string" ? entry.image : ""
     readonly property int fit: W.fillMode(entry ? entry.fit : undefined)
     readonly property bool slideshow: folder !== ""
+    // One picture across screens (the "*" entry with fit "span"): the box it covers relative to
+    // this screen, or null when this screen draws its own.
+    readonly property var spanBox: W.spanGeometry(Quickshell.screens, modelData.name,
+        W.spanNames(Settings.values.wallpaper, Quickshell.screens))
+    readonly property bool spanning: spanBox !== null && entry !== null && entry.fit === "span"
+    // Spanning slideshows follow the clock, so every screen shows the same slide.
+    readonly property bool clocked: slideshow && spanning
 
     property var slideList: []
     property int slideIndex: 0
@@ -73,7 +80,19 @@ PanelWindow {
         var at = list.indexOf(cur);
         slideList = list;
         slideIndex = at >= 0 ? at : 0;
+        syncSlide();
     }
+
+    // Clocked slideshows: take the slide the clock says (the same on every spanning screen).
+    function syncSlide() {
+        if (!clocked)
+            return;
+        var j = W.clockIndex(Date.now(), W.intervalMs(entry) / 1000, slideList.length, errored);
+        if (j >= 0)
+            slideIndex = j;
+    }
+
+    onClockedChanged: syncSlide()
 
     function advance() {
         var j = W.nextReadable(slideIndex, slideList.length, errored);
@@ -88,7 +107,10 @@ PanelWindow {
         var b = Object.assign({}, badNames);
         b[slideList[slideIndex]] = true;
         badNames = b;
-        advance();
+        if (clocked)
+            syncSlide();
+        else
+            advance();
     }
 
     FolderListModel {
@@ -110,14 +132,45 @@ PanelWindow {
     Timer {
         interval: W.intervalMs(win.entry)
         repeat: true
-        running: win.slideshow && win.slideList.length > 1
+        running: win.slideshow && !win.clocked && win.slideList.length > 1
         onTriggered: win.advance()
+    }
+
+    // The same slideshow on every spanning screen: wake on each interval boundary of the clock
+    // (so on the minute for whole-minute intervals) and take the slide it names. `tick` makes
+    // the interval be worked out again after every wake.
+    property int tick: 0
+    Timer {
+        interval: {
+            win.tick;
+            return W.msToBoundary(Date.now(), W.intervalMs(win.entry) / 1000);
+        }
+        repeat: true
+        running: win.clocked && win.slideList.length > 1
+        // `interval` is worked out when `tick` changes, so start from a fresh one.
+        onRunningChanged: if (running) win.tick++
+        onTriggered: {
+            win.syncSlide();
+            win.tick++;
+        }
+    }
+    // After resume the monotonic timer may wake up to one interval late: name the slide now and
+    // re-arm on the next boundary.
+    Connections {
+        target: Bridge
+        function onPrepareForSleep(sleeping) {
+            if (!sleeping && win.clocked) {
+                win.syncSlide();
+                win.tick++;
+            }
+        }
     }
 
     Crossfade {
         anchors.fill: parent
         target: win.target
         fit: win.fit
+        span: win.spanning ? win.spanBox : null
         color: W.fallbackColor(win.entry, Theme.bg)
         reduceMotion: win.reduceMotion
         fadeMs: win.fadeMs

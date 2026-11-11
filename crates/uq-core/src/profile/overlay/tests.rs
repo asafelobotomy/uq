@@ -394,3 +394,28 @@ fn next_after_cycles_through_then_back_to_normal() {
     assert_eq!(next_after(&ids, Some("c")), None);
     assert_eq!(next_after(&[], None), None);
 }
+
+#[test]
+fn a_profile_cannot_span_one_display() {
+    // Wallpaper is a profile domain. A profile file holding `span` for a named display is
+    // refused when it is read (R24), and the overlay writes through the validated section too,
+    // so no route puts `span` on one screen.
+    let named = Profile::parse(
+        "format = 1\nid = \"work\"\nname = \"work\"\n[wallpaper.outputs.DP-1]\nfit = \"span\"\n",
+    );
+    assert!(named.is_err(), "{named:?}");
+    // On All displays it is fine.
+    let all = profile("work", "[wallpaper.outputs.\"*\"]\nfit = \"span\"\n");
+    let (on, _) = apply(&wallpaper_base(), &all, &BTreeSet::new(), 0).unwrap();
+    assert_eq!(
+        read_leaf(&on, "wallpaper", &s(&["outputs", "*", "fit"])),
+        Some(json!("span"))
+    );
+    let mut st = wallpaper_base();
+    let e = write_leaves(
+        &mut st,
+        "wallpaper",
+        &[(s(&["outputs", "DP-1", "fit"]), Some(json!("span")))],
+    );
+    assert!(e.is_err());
+}

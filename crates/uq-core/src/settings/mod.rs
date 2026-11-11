@@ -16,17 +16,20 @@ mod shell;
 mod wallpaper;
 pub use appearance::{Appearance, valid_theme_name};
 pub use input::{
-    DeviceOverride, InputSettings, KbLayout, KeyboardSettings, TouchpadSettings, valid_device_name,
-    valid_layout, valid_switch_combo, valid_variant,
+    DeviceOverride, InputSettings, KbLayout, KeyboardSettings, TouchpadSettings, input_summary,
+    valid_device_name, valid_layout, valid_switch_combo, valid_variant,
 };
 pub use layouts::{
     DwindleOptions, ForceSplit, LayoutOptions, MasterOptions, NewStatus, Orientation,
     ScrollingOptions, repair_rules, rule_selector, set_rule,
 };
 pub use look::Look;
+pub use monitors::plan;
+pub(crate) use monitors::summary::summary as monitors_summary;
 pub use monitors::{
-    LiveOutput, Monitors, OutputConfig, Position, clean_text, clean_text_spaced, parse_live,
-    stays_visible, valid_mode, valid_output_name,
+    BarChoice, BarShow, LiveOutput, ManualSlot, MonitorId, MonitorProfile, Monitors, OutputConfig,
+    Position, SavedOutput, Strategy, WorkspacePlan, clean_name, clean_text, clean_text_spaced,
+    counts_in_sets, parse_live, stays_visible, valid_mode, valid_output_name, valid_profile_id,
 };
 pub use shell::{
     BUILTIN_PROVIDERS, Islands, ProviderPref, ShellSettings, provider_enabled, provider_order,

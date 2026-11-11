@@ -12,6 +12,7 @@ import Quickshell
 import "file:$root/shell/bar"
 import "file:$root/shell/launcher"
 import "file:$root/shell/osd"
+import "file:$root/shell/core"
 ShellRoot {
     LauncherRoutes { id: routes }
     OsdRoutes { id: osd }
@@ -24,11 +25,18 @@ ShellRoot {
         StatusIsland { id: status; x: 450 }
         Component.onCompleted: console.log("LOADED", sys.width > 0, work.width > 0, time.width > 0, status.width > 0, routes.routed, osd.routed)
     }
+    // With no bridge answer yet, roles are null: a bar for every screen, no main display.
+    QtObject {
+        Component.onCompleted: console.log("BARS", Outputs.roles === null,
+            Outputs.barScreens(Quickshell.screens).length === Quickshell.screens.length,
+            Quickshell.screens.length > 0, Outputs.primaryScreen(Quickshell.screens) === null)
+    }
     Timer { interval: 1500; running: true; onTriggered: Qt.quit() }
 }
 QML
 out=$(env -u HYPRLAND_INSTANCE_SIGNATURE -u WAYLAND_DISPLAY QT_QPA_PLATFORM=offscreen timeout 30 qs -p "$tmp/shell.qml" --no-duplicate 2>&1)
 echo "$out" | grep -q 'LOADED true true true true true true' || { echo "FAIL: islands or launcher routes did not load"; echo "$out"; exit 1; }
+echo "$out" | grep -q 'BARS true true true true' || { echo "FAIL: Outputs with roles null is not a bar per screen"; echo "$out"; exit 1; }
 # Fail on QML/JS errors from the shell's own files, not on environment services the machine
 # lacks (PipeWire, NetworkManager, UPower, MPRIS, tray, D-Bus log ERROR lines of their own).
 # The scanner's `Ignoring unresolvable import ".../file:/..."` warning is harmless: Quickshell's

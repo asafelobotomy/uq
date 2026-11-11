@@ -104,6 +104,11 @@ fn input(key: &str) -> Option<String> {
         "touchpad.tap_to_click" => "Tap to click",
         "touchpad.disable_while_typing" => "Touchpad off while typing",
         "touchpad.scroll_factor" => "Touchpad scroll speed",
+        "gestures" => "Touchpad gestures",
+        "swipe.distance" => "Swipe distance",
+        "swipe.invert" => "Reverse swipe direction",
+        "swipe.create_new" => "Swipe past the last workspace to make a new one",
+        "swipe.cancel_ratio" => "How far to swipe before it switches",
         k => {
             let (device, field) = k.strip_prefix("devices.")?.rsplit_once('.')?;
             let what = match field {
@@ -122,6 +127,21 @@ fn input(key: &str) -> Option<String> {
 
 /// `outputs.<output>.<field>`, where `position` has `x` and `y` leaves.
 fn monitors(key: &str) -> Option<String> {
+    let fixed = match key {
+        "primary.make" | "primary.model" | "primary.serial" => Some("Main display"),
+        "auto_profiles" => Some("Switch arrangements when screens change"),
+        "bar.show" => Some("Show the bar on"),
+        "bar.on" => Some("Screens with a bar"),
+        "workspaces.strategy" => Some("Workspaces across screens"),
+        "workspaces.count" => Some("Planned workspaces"),
+        "workspaces.manual" => Some("Workspaces on each screen"),
+        "workspaces.move_back" => Some("Move workspaces back when a screen returns"),
+        "profiles" => Some("Saved display arrangements"),
+        _ => None,
+    };
+    if let Some(f) = fixed {
+        return Some(f.into());
+    }
     let rest = key.strip_prefix("outputs.")?;
     let (output, what) = if let Some(o) = rest.strip_suffix(".position.x") {
         (o, "Position (across)")
@@ -148,12 +168,14 @@ fn monitors(key: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::gestures::{Action, Direction, Gesture, Mods, SwipeOptions};
     use crate::history::diff::{journal_domains, leaf_keys};
     use crate::lua::Layout;
     use crate::schedule::Schedule;
     use crate::settings::{
-        AccelProfile, DeviceOverride, ForceSplit, KbLayout, Location, NewStatus, Orientation,
-        OutputConfig, Position, ProviderPref,
+        AccelProfile, BarChoice, BarShow, DeviceOverride, ForceSplit, KbLayout, Location,
+        ManualSlot, MonitorId, MonitorProfile, NewStatus, Orientation, OutputConfig, Position,
+        ProviderPref, SavedOutput, Strategy, WorkspacePlan,
     };
     use crate::state::State;
     use std::path::PathBuf;
@@ -199,6 +221,7 @@ mod tests {
             e.folder = Some(PathBuf::from("/walls"));
             e.color = Some("#112233".into());
         }
+        s.wallpaper.outputs.get_mut("*").unwrap().fit = crate::settings::Fit::Span;
         let lo = &mut s.layout_options;
         lo.default = Some(Layout::Master);
         lo.dwindle.preserve_split = Some(true);
@@ -228,6 +251,20 @@ mod tests {
         tp.tap_to_click = Some(true);
         tp.disable_while_typing = Some(true);
         tp.scroll_factor = Some(0.5);
+        s.input.gestures = Some(vec![Gesture {
+            fingers: 3,
+            direction: Direction::Down,
+            action: Action::Special,
+            modifier: Mods::parse("SUPER").unwrap(),
+            workspace: Some("magic".into()),
+            enabled: true,
+        }]);
+        s.input.swipe = SwipeOptions {
+            distance: Some(400),
+            invert: Some(false),
+            create_new: Some(false),
+            cancel_ratio: Some(0.4),
+        };
         s.input.devices.insert(
             "logitech-mx.v2".into(),
             DeviceOverride {
@@ -253,6 +290,37 @@ mod tests {
                 },
             );
         }
+        let dell = MonitorId {
+            make: "Dell Inc.".into(),
+            model: "DELL U2720Q".into(),
+            serial: "ABC123".into(),
+        };
+        let m = &mut s.monitors;
+        m.primary = Some(dell.clone());
+        m.auto_profiles = false;
+        m.bar = BarChoice {
+            show: BarShow::Chosen,
+            on: vec![dell.clone()],
+        };
+        m.workspaces = WorkspacePlan {
+            strategy: Strategy::Manual,
+            count: 8,
+            manual: vec![ManualSlot {
+                workspace: 2,
+                monitor: dell.clone(),
+            }],
+            move_back: false,
+        };
+        m.profiles = vec![MonitorProfile {
+            id: "m-7f2c".into(),
+            name: "Desk".into(),
+            outputs: vec![SavedOutput {
+                monitor: dell,
+                hint: "DP-1".into(),
+                config: OutputConfig::default(),
+            }],
+            workspaces: Some(WorkspacePlan::default()),
+        }];
         st.layouts.insert("2".into(), Layout::Scrolling);
         st.set_section(
             "rules",

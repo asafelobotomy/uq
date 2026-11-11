@@ -137,6 +137,34 @@ async fn section_changed_is_forwarded() {
 }
 
 #[tokio::test]
+async fn monitors_changed_is_forwarded() {
+    let bus = private_bus();
+    let dir = tempfile::tempdir().unwrap();
+    let _uqd = serve_uqd(&bus, dir.path()).await;
+    let mut b = Bridge::start(&bus);
+    b.next().await;
+
+    // The shell asks for the roles through the bridge; the reply is parsed JSON.
+    let outputs = b.call(1, "ListOutputs", json!([])).await;
+    assert!(outputs["ok"]["live"].is_array(), "{outputs}");
+    assert!(outputs["ok"]["roles"].is_object(), "{outputs}");
+    assert!(b.call(2, "ListOutputs", json!([1])).await["err"].is_string());
+
+    let conn = zbus::connection::Builder::address(bus.address.as_str())
+        .unwrap()
+        .build()
+        .await
+        .unwrap();
+    let proxy = uq_core::client::DesktopProxy::new(&conn).await.unwrap();
+    proxy
+        .set_section("monitors", "{}", "settings")
+        .await
+        .unwrap();
+    // No arguments travel with the signal; the shell asks `ListOutputs` again.
+    assert_eq!(b.event("MonitorsChanged").await, json!({}));
+}
+
+#[tokio::test]
 async fn uqd_down_then_up_events() {
     let bus = private_bus();
     let dir = tempfile::tempdir().unwrap();

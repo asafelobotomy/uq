@@ -1,9 +1,9 @@
 //! The `input` section: keyboard layouts, repeat, touchpad options and per-device overrides.
 //! Hyprland renders these into the `input` block and `hl.device`.
 //!
-//! The section's JSON is `{keyboard, mouse, touchpad, devices}`, but `mouse` is not stored
+//! The section's JSON is `{keyboard, mouse, touchpad, devices, gestures, swipe}`, but `mouse` is not stored
 //! here: it is [`Settings::mouse`], kept in the Phase 2 `[mouse]` table so `mouse.*` keys keep
-//! working unchanged. [`InputSettings`] holds the other three parts (TOML `[input]`).
+//! working unchanged. [`InputSettings`] holds the other parts (TOML `[input]`).
 //!
 //! Loading is lenient per field and per entry (a bad value costs only itself, an unknown key
 //! inside a nested table is ignored, never fatal to its entry); the API is strict.
@@ -11,6 +11,7 @@
 use super::{
     AccelProfile, SettingError, Settings, check_kept, check_known, invalid, lenient, round2,
 };
+use crate::gestures::{self, Gesture, MAX_GESTURES, SwipeOptions};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::{Map, Value};
 
@@ -183,6 +184,35 @@ fn device_key(name: &str) -> String {
     name.replace(' ', "-")
 }
 
+/// Gestures load entry by entry: a bad entry is dropped with a log line. Absent, `null` or
+/// not a list is `None`, which means uQ's own two gestures.
+fn lenient_gestures<'de, D: serde::Deserializer<'de>>(
+    d: D,
+) -> Result<Option<Vec<Gesture>>, D::Error> {
+    let Value::Array(items) = Value::deserialize(d)? else {
+        return Ok(None);
+    };
+    Ok(Some(
+        items
+            .into_iter()
+            .enumerate()
+            .filter_map(|(i, v)| {
+                let g = serde_json::from_value::<Gesture>(v.clone())
+                    .map_err(|e| e.to_string())
+                    .and_then(|g| {
+                        g.validate(&format!("input.gestures[{i}]"))
+                            .map(|()| g)
+                            .map_err(|e| e.to_string())
+                    });
+                if let Err(e) = &g {
+                    tracing::warn!("state: dropping gesture {v}: {e}");
+                }
+                g.ok()
+            })
+            .collect(),
+    ))
+}
+
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct InputSettings {
@@ -192,11 +222,24 @@ pub struct InputSettings {
     pub touchpad: TouchpadSettings,
     #[serde(deserialize_with = "lenient_devices")]
     pub devices: BTreeMap<String, DeviceOverride>,
+    /// `None` is uQ's defaults ([`gestures::defaults`]); a list, even empty, is exactly that.
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "lenient_gestures"
+    )]
+    pub gestures: Option<Vec<Gesture>>,
+    #[serde(
+        skip_serializing_if = "SwipeOptions::is_default",
+        deserialize_with = "lenient"
+    )]
+    pub swipe: SwipeOptions,
 }
 
 impl InputSettings {
     /// The parts of the section's JSON (`mouse` is the fourth, read from `Settings::mouse`).
-    pub const FIELDS: [&str; 4] = ["keyboard", "mouse", "touchpad", "devices"];
+    pub const FIELDS: [&str; 6] = [
+        "keyboard", "mouse", "touchpad", "devices", "gestures", "swipe",
+    ];
 
     /// Parse the section's JSON strictly, ignoring `mouse` (see [`Settings::set_section`]).
     pub fn from_section(v: &Value) -> Result<Self, SettingError> {
@@ -249,10 +292,33 @@ impl InputSettings {
                 format!("at most {MAX_DEVICES} devices"),
             ));
         }
+        let gestures = match part("gestures") {
+            None => None,
+            Some(Value::Array(items)) => {
+                let list = items
+                    .iter()
+                    .enumerate()
+                    .map(|(i, g)| Gesture::from_value(&format!("input.gestures[{i}]"), g))
+                    .collect::<Result<Vec<_>, _>>()?;
+                gestures::validate(&list)?;
+                Some(list)
+            }
+            Some(_) => return Err(invalid("input.gestures", "expected a list")),
+        };
+        let swipe = match part("swipe") {
+            Some(v) => {
+                let s: SwipeOptions = parse_strict("input.swipe", v, &SwipeOptions::FIELDS)?;
+                s.validate()?;
+                s.normalised()
+            }
+            None => SwipeOptions::default(),
+        };
         Ok(Self {
             keyboard,
             touchpad,
             devices,
+            gestures,
+            swipe,
         })
     }
 
@@ -299,15 +365,93 @@ impl InputSettings {
                 devices.insert(k, cfg.normalised());
             }
         }
+        let gestures = self
+            .gestures
+            .map(|list| repaired_gestures(list, &mut errors));
+        let mut swipe = self.swipe;
+        if swipe.distance.is_some_and(|d| d > 2000) {
+            errors.push(invalid("input.swipe.distance", "cleared: out of range"));
+            swipe.distance = None;
+        }
+        if swipe
+            .cancel_ratio
+            .is_some_and(|r| !r.is_finite() || !(0.0..=1.0).contains(&r))
+        {
+            errors.push(invalid("input.swipe.cancel_ratio", "cleared: out of range"));
+            swipe.cancel_ratio = None;
+        }
         (
             Self {
                 keyboard,
                 touchpad: touchpad.normalised(),
                 devices,
+                gestures,
+                swipe: swipe.normalised(),
             },
             errors,
         )
     }
+}
+
+/// Drop the gestures a write would refuse: bad ones, the later of two that clash, and any past
+/// the limit.
+fn repaired_gestures(list: Vec<Gesture>, errors: &mut Vec<SettingError>) -> Vec<Gesture> {
+    let mut kept: Vec<Gesture> = Vec::new();
+    for (i, g) in list.into_iter().enumerate() {
+        let key = format!("input.gestures[{i}]");
+        if let Err(e) = g.validate(&key) {
+            errors.push(e);
+            continue;
+        }
+        if kept.len() >= MAX_GESTURES {
+            errors.push(invalid(&key, "dropped: more than 24 gestures"));
+            continue;
+        }
+        kept.push(g);
+        if let Some(c) = gestures::clashes_of(&kept).into_iter().next() {
+            tracing::warn!(
+                "state: dropping a gesture: {}",
+                crate::keybinds::conflict::message(&c)
+            );
+            errors.push(invalid(
+                &format!("{key}.direction"),
+                "dropped: it clashes with an earlier gesture",
+            ));
+            kept.pop();
+        }
+    }
+    kept
+}
+
+/// One line for a change to the `input` section: gestures in words, every other leaf as
+/// "label: old → new". Never JSON.
+pub fn input_summary(before: &Value, after: &Value, labels: crate::history::Labels) -> String {
+    const MAX_NAMED: usize = 3;
+    let mut lines = gestures::summary(before, after);
+    let rest = |v: &Value| {
+        let mut v = v.clone();
+        if let Some(o) = v.as_object_mut() {
+            o.remove("gestures");
+        }
+        v
+    };
+    let (b, a) = (rest(before), rest(after));
+    if b != a {
+        lines.push(crate::history::summarize_leaves("input", &b, &a, labels));
+    }
+    let mut line = lines
+        .iter()
+        .take(MAX_NAMED)
+        .cloned()
+        .collect::<Vec<_>>()
+        .join(", ");
+    if lines.len() > MAX_NAMED {
+        line.push_str(&format!(", and {} more", lines.len() - MAX_NAMED));
+    }
+    if line.is_empty() {
+        line = "Input".into();
+    }
+    line
 }
 
 impl Settings {

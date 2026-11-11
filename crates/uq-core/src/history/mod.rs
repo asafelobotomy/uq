@@ -6,12 +6,12 @@ mod labels;
 mod restore;
 
 pub use diff::{DomainChange, Labels, diff, revert_changed, summarize};
-pub(crate) use diff::{get_path, put_path, segment_leaves};
+pub(crate) use diff::{get_path, put_path, segment_leaves, summarize_leaves};
 pub use journal::{Entry, Journal, MAX_AGE_DAYS, MAX_ENTRIES};
 pub use labels::label;
 pub use restore::{AutoReason, PointKind, RestorePoint, RestoreStore};
 
-/// Where a change came from. `Schedule` transitions are never journalled.
+/// Where a change came from. `Schedule` and `Hotplug` transitions are never journalled.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Origin {
     Settings,
@@ -21,6 +21,8 @@ pub enum Origin {
     Restore,
     Import,
     Schedule,
+    /// uqd's own switch to a saved display arrangement; never journalled, never parsed.
+    Hotplug,
     Unknown,
 }
 
@@ -50,6 +52,7 @@ impl Origin {
             Origin::Restore => "restore".into(),
             Origin::Import => "import".into(),
             Origin::Schedule => "schedule".into(),
+            Origin::Hotplug => "hotplug".into(),
             Origin::Unknown => "unknown".into(),
         }
     }
@@ -74,6 +77,8 @@ mod tests {
         }
         // Schedule flips are uqd's own; a caller can't claim one to skip the journal.
         assert_eq!(Origin::parse("schedule"), Origin::Unknown);
+        assert_eq!(Origin::parse("hotplug"), Origin::Unknown);
+        assert_eq!(Origin::Hotplug.as_str(), "hotplug");
         assert_eq!(Origin::parse("profile:gaming").as_str(), "profile:gaming");
         assert_eq!(Origin::parse(""), Origin::Unknown);
         assert_eq!(Origin::parse("bogus"), Origin::Unknown);

@@ -27,7 +27,8 @@ PanelWindow {
     readonly property real fraction: Q.osdFraction(OsdRouter.value, OsdRouter.max)
 
     visible: shown
-    screen: openedOn ? openedOn : screenFor(Hyprland.focusedMonitor)
+    screen: openedOn ? openedOn
+        : (Outputs.primaryScreen(Quickshell.screens) || screenFor(Hyprland.focusedMonitor))
     color: "transparent"
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "uq-osd"
@@ -54,7 +55,8 @@ PanelWindow {
         target: OsdRouter
         function onSerialChanged() {
             if (!root.shown)
-                root.openedOn = root.screenFor(Hyprland.focusedMonitor);
+                root.openedOn = Outputs.primaryScreen(Quickshell.screens)
+                    || root.screenFor(Hyprland.focusedMonitor);
             root.shown = true;
             hideTimer.restart();
         }

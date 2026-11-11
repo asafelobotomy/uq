@@ -30,6 +30,9 @@ QQC2.ScrollView {
     readonly property var defaults: snap.defaults || {}
     readonly property var dKeyboard: defaults.keyboard || {}
     readonly property var dTouchpad: defaults.touchpad || {}
+    readonly property var dSwipe: defaults.swipe || {}
+    readonly property var swipe: snap.swipe || {}
+    readonly property var sources: snap.sources || ({})
     readonly property var switchNames: {
         const m = {};
         for (const o of (xkb.switch_options || []))
@@ -53,6 +56,13 @@ QQC2.ScrollView {
     function setTouchpad(name, value) {
         im.setTouchpad(name, JSON.stringify(value));
     }
+    function setSwipe(name, value) {
+        im.setSwipe(name, JSON.stringify(value));
+    }
+    /// Where a row's live value comes from (`{source, detail}`), or null: see SettingRow.
+    function sourceOf(settingId) {
+        return page.sources[settingId] ?? null;
+    }
     function setDevice(device, name, value) {
         im.setDevice(device, name, JSON.stringify(value));
     }
@@ -72,6 +82,23 @@ QQC2.ScrollView {
 
     InputModel {
         id: im
+    }
+
+    GestureEditor {
+        id: gestureEditor
+        parent: QQC2.Overlay.overlay
+        choices: page.snap.choices || ({})
+        list: page.snap.gestures || []
+        check: (index, json) => im.draftClash(index, json)
+        canSave: page.ready && !im.busy
+        busy: im.busy
+        errorNow: () => im.error
+        onGestureAccepted: (index, json) => {
+            im.saveGesture(index, json);
+            // No request went out (no session bus): say so here.
+            if (!im.busy)
+                gestureEditor.finishSave(im.error !== "" ? im.error : "uQ isn't running");
+        }
     }
 
     Connections {
@@ -307,6 +334,97 @@ QQC2.ScrollView {
             highLabel: "Faster"
             value: page.saved(page.touchpad, "scroll_factor")
             onChosen: v => page.setTouchpad("scroll_factor", v)
+            Layout.fillWidth: true
+        }
+
+        UqLabel {
+            text: "Touchpad gestures"
+            font.bold: true
+            visible: page.hasTouchpad
+            Layout.topMargin: Kirigami.Units.largeSpacing
+        }
+        SettingRow {
+            settingId: "gestures"
+            label: "Touchpad gestures"
+            highlight: App.highlight
+            visible: page.hasTouchpad
+            enabled: page.ready
+            Layout.fillWidth: true
+
+            GestureList {
+                gestures: page.snap.gestures || []
+                defaults: page.snap.gestures_default !== false
+                clashes: page.snap.clashes || ({})
+                userLua: page.snap.user_lua || null
+                idle: page.ready && !im.busy
+                Layout.fillWidth: true
+                onToggled: (index, enabled) => im.toggleGesture(index, enabled)
+                onRemoved: index => im.removeGesture(index)
+                onChangeRequested: index => {
+                    const row = (page.snap.gestures || [])[index];
+                    if (row)
+                        gestureEditor.change(index, row.gesture);
+                }
+                onAddRequested: gestureEditor.startNew()
+                onResetRequested: im.resetGestures()
+            }
+        }
+        OverrideSpin {
+            busy: im.busy
+            settingId: "gesture-swipe-distance"
+            label: "Swipe distance"
+            highlight: App.highlight
+            visible: page.hasTouchpad
+            enabled: page.ready
+            source: page.sourceOf("gesture-swipe-distance")
+            useLabel: "Use default"
+            from: 0
+            to: 2000
+            fallback: page.dSwipe.distance || 300
+            value: page.saved(page.swipe, "distance")
+            onChosen: v => page.setSwipe("distance", v)
+            Layout.fillWidth: true
+        }
+        OverrideSwitch {
+            settingId: "gesture-swipe-invert"
+            label: "Reverse swipe direction"
+            highlight: App.highlight
+            visible: page.hasTouchpad
+            enabled: page.ready
+            source: page.sourceOf("gesture-swipe-invert")
+            fallback: page.dSwipe.invert !== false
+            value: page.saved(page.swipe, "invert")
+            onChosen: v => page.setSwipe("invert", v)
+            Layout.fillWidth: true
+        }
+        OverrideSwitch {
+            settingId: "gesture-swipe-create"
+            label: "Swipe past the last workspace to make a new one"
+            highlight: App.highlight
+            visible: page.hasTouchpad
+            enabled: page.ready
+            source: page.sourceOf("gesture-swipe-create")
+            fallback: page.dSwipe.create_new !== false
+            value: page.saved(page.swipe, "create_new")
+            onChosen: v => page.setSwipe("create_new", v)
+            Layout.fillWidth: true
+        }
+        OverrideSlider {
+            busy: im.busy
+            settingId: "gesture-swipe-cancel"
+            label: "How far to swipe before it switches"
+            highlight: App.highlight
+            visible: page.hasTouchpad
+            enabled: page.ready
+            source: page.sourceOf("gesture-swipe-cancel")
+            from: 0
+            to: 1
+            stepSize: 0.05
+            fallback: page.dSwipe.cancel_ratio ?? 0.5
+            lowLabel: "A little"
+            highLabel: "Most of the way"
+            value: page.saved(page.swipe, "cancel_ratio")
+            onChosen: v => page.setSwipe("cancel_ratio", v)
             Layout.fillWidth: true
         }
 

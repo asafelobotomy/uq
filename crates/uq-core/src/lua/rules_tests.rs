@@ -424,3 +424,66 @@ fullscreen = true
         )
     );
 }
+
+#[test]
+fn planned_rules_merge() {
+    use crate::lua::merge_planned;
+    use crate::settings::plan::Planned;
+    let rule = |ws: &str| WorkspaceRule {
+        workspace: ws.into(),
+        monitor: None,
+        default: None,
+        persistent: None,
+        gaps_in: None,
+        gaps_out: None,
+        border_size: None,
+    };
+    let user = [
+        WorkspaceRule {
+            monitor: Some("HDMI-A-1".into()),
+            ..rule("3")
+        },
+        WorkspaceRule {
+            gaps_in: Some(7),
+            ..rule("4")
+        },
+    ];
+    let plan = |ws: u8, out: &str, default: bool| Planned {
+        workspace: ws,
+        output: out.into(),
+        default,
+    };
+    let planned = [
+        plan(1, "DP-1", true),
+        plan(3, "DP-1", false),
+        plan(4, "DP-2", false),
+        plan(6, "DP-2", true),
+    ];
+    let merged = merge_planned(&user, &planned);
+    type Row<'a> = (&'a str, Option<&'a str>, Option<bool>, Option<u32>);
+    let got: Vec<Row> = merged
+        .iter()
+        .map(|r| {
+            (
+                r.workspace.as_str(),
+                r.monitor.as_deref(),
+                r.default,
+                r.gaps_in,
+            )
+        })
+        .collect();
+    assert_eq!(
+        got,
+        [
+            ("3", Some("HDMI-A-1"), None, None),
+            ("4", Some("DP-2"), None, Some(7)),
+            ("1", Some("DP-1"), Some(true), None),
+            ("6", Some("DP-2"), Some(true), None),
+        ]
+    );
+    // One call per selector, in that order.
+    let out = emit_workspace_rules(&BTreeMap::new(), &merged);
+    assert_eq!(out.matches("hl.workspace_rule").count(), 4, "{out}");
+    // No plan, no change.
+    assert_eq!(merge_planned(&user, &[]), user);
+}

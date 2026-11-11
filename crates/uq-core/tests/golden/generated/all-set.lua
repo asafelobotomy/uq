@@ -32,6 +32,7 @@ hl.config({
         repeat_delay = 250,
         touchpad = { natural_scroll = true, tap_to_click = false, disable_while_typing = true, scroll_factor = 0.8 },
     },
+    gestures = { workspace_swipe_distance = 400, workspace_swipe_invert = false, workspace_swipe_create_new = true, workspace_swipe_cancel_ratio = 0.4 },
 })
 
 -- Monitors
@@ -40,6 +41,12 @@ hl.monitor({ output = "HDMI-A-1", mode = "preferred", position = "auto", scale =
 
 -- Input devices
 hl.device({ name = "logitech-g-pro", sensitivity = -0.4, accel_profile = "flat", natural_scroll = false, left_handed = true, scroll_factor = 1.5 })
+
+-- Touchpad gestures
+hl.gesture({ fingers = 3, direction = "horizontal", action = "workspace" })
+hl.gesture({ fingers = 4, direction = "down", action = function() hl.dispatch(hl.dsp.global("uq:quick-settings")) end })
+hl.gesture({ fingers = 3, direction = "down", action = "special", workspace_name = "notes", mods = "SUPER" })
+hl.gesture({ fingers = 4, direction = "pinchin", action = "float", mods = "SUPER SHIFT" })
 hl.curve("easeOutQuint", { type = "bezier", points = { {0.23, 1},  {0.32, 1} } })
 hl.curve("linear",       { type = "bezier", points = { {0, 0},     {1, 1}    } })
 hl.curve("almostLinear", { type = "bezier", points = { {0.5, 0.5}, {0.75, 1} } })

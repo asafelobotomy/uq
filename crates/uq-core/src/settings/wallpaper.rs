@@ -17,10 +17,12 @@ pub enum Fit {
     Fit,
     Center,
     Tile,
+    /// One picture across every display that draws the `"*"` entry. Only that entry may use it.
+    Span,
 }
 
 impl Fit {
-    pub const NAMES: [&str; 4] = ["fill", "fit", "center", "tile"];
+    pub const NAMES: [&str; 5] = ["fill", "fit", "center", "tile", "span"];
 }
 
 impl<'de> Deserialize<'de> for Fit {
@@ -29,6 +31,7 @@ impl<'de> Deserialize<'de> for Fit {
             "fit" => Fit::Fit,
             "center" => Fit::Center,
             "tile" => Fit::Tile,
+            "span" => Fit::Span,
             _ => Fit::Fill,
         })
     }
@@ -129,7 +132,7 @@ impl Wallpaper {
             {
                 return Err(invalid(
                     &format!("{key}.fit"),
-                    "expected fill, fit, center or tile",
+                    "expected fill, fit, center, tile or span",
                 ));
             }
         }
@@ -151,6 +154,9 @@ impl Wallpaper {
                 ));
             }
             let key = |f: &str| format!("wallpaper.outputs.{name}.{f}");
+            if e.fit == Fit::Span && name != "*" {
+                return Err(invalid(&key("fit"), "Span works only for All displays"));
+            }
             check_path(&key("image"), &e.image)?;
             check_path(&key("folder"), &e.folder)?;
             if !(10..=86400).contains(&e.interval) {

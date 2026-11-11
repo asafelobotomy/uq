@@ -29,12 +29,16 @@ ColumnLayout {
     readonly property alias colorField: colorText
     readonly property alias minutesBox: minutes
     readonly property alias secondsBox: seconds
-    readonly property var fits: [
+    readonly property var baseFits: [
         { id: "fill", name: "Fill the screen" },
         { id: "fit", name: "Fit inside the screen" },
         { id: "center", name: "Centre" },
         { id: "tile", name: "Tile" }
     ]
+    /// "Span across displays" is only for All displays: the other screens draw their own picture.
+    readonly property var fits: output === "*"
+        ? baseFits.concat([{ id: "span", name: "Span across displays" }]) : baseFits
+    readonly property alias fitField: fitBox
     readonly property string imageFilter: "Images (*.jpg *.jpeg *.png *.webp *.jxl *.avif)"
     /// The fields to change, e.g. `{fit: "tile"}`.
     signal changed(var patch)
@@ -80,6 +84,8 @@ ColumnLayout {
             commit({ color: v.toLowerCase() });
     }
 
+    // A new model (All displays gains "Span across displays") resets the combo's index.
+    onFitsChanged: Qt.callLater(() => fitBox.currentIndex = fitIndex(saved("fit", "fill")))
     onSavedKeyChanged: reload()
     onErrorChanged: {
         if (error !== "")

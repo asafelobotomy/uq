@@ -97,8 +97,10 @@ impl Desktop {
     ) -> Result<(String, Instant), DesktopError> {
         let value: serde_json::Value = serde_json::from_str(json)
             .map_err(|e| DesktopError::InvalidSetting(format!("value is not JSON: {e}")))?;
-        let mut candidate = Monitors::from_section(&value)
+        // Only the layout comes from `json`; every other stored key stays (R7).
+        let parsed = Monitors::from_section(&value)
             .map_err(|e| DesktopError::InvalidSetting(e.to_string()))?;
+        let mut candidate = self.state.settings.monitors.with_layout(parsed.outputs);
         let live = match self.comp.monitors().await {
             Ok(j) => parse_live(&j),
             Err(CompositorError::NotRunning) => {
@@ -178,12 +180,15 @@ impl Desktop {
         origin: Origin,
     ) -> Result<(), DesktopError> {
         let candidate = self.take_matching(token)?.candidate.clone();
+        // Keep saves the layout only (R7); anything else changed during the window stays.
         let mut next = self.state.clone();
-        next.settings.monitors = candidate;
+        next.settings.monitors = self.state.settings.monitors.with_layout(candidate.outputs);
         self.commit_section("monitors", next, origin).await?;
         self.pending = None;
         let _ = std::fs::remove_file(self.marker_path());
+        self.sync_x11_primary_now().await;
         let _ = self.events.send(Event::MonitorsChanged);
+        self.after_window().await;
         Ok(())
     }
 
@@ -222,6 +227,7 @@ impl Desktop {
         }
         let _ = std::fs::remove_file(self.marker_path());
         let _ = self.events.send(Event::MonitorsChanged);
+        self.after_window().await;
     }
 
     /// After anything reloads Hyprland during a window, apply the candidate again, or the
@@ -253,11 +259,12 @@ impl Desktop {
         if let Err(e) = self.comp.reload().await {
             tracing::warn!("applying the restored displays: {e}");
         }
+        self.sync_x11_primary_now().await;
         Ok(())
     }
 
-    /// `{live, stored, pending}` for the Displays page. `pending` is `null` or
-    /// `{token, seconds_left}`; `live` is empty when Hyprland is down.
+    /// `{live, stored, pending, roles, arrangement}` for the Displays page and the shell.
+    /// `pending` is `null` or `{token, seconds_left}`; `live` is empty when Hyprland is down.
     pub async fn list_outputs(&self, now: Instant) -> String {
         let live = self
             .comp
@@ -265,18 +272,18 @@ impl Desktop {
             .await
             .map(|j| parse_live(&j))
             .unwrap_or_default();
-        let pending = self.pending.as_ref().map(|p| {
+        let mut out = crate::outputs::outputs_json(
+            &self.state,
+            &live,
+            self.hotplug.notified.iter().next().map(String::as_str),
+        );
+        out["pending"] = self.pending.as_ref().map_or(serde_json::Value::Null, |p| {
             serde_json::json!({
                 "token": p.token,
                 "seconds_left": p.deadline.saturating_duration_since(now).as_secs(),
             })
         });
-        serde_json::json!({
-            "live": live,
-            "stored": self.state.settings.monitors,
-            "pending": pending,
-        })
-        .to_string()
+        out.to_string()
     }
 }
 

@@ -4,9 +4,13 @@ pub mod capture;
 pub mod compositor;
 pub mod dbus;
 mod files;
+mod hotplug;
 pub mod hypr;
+pub mod hypr_events;
 mod keybinds;
 mod monitors;
+pub mod notify;
+mod outputs;
 pub mod pick;
 pub mod power;
 mod profiles;
@@ -17,6 +21,7 @@ mod startup;
 pub mod system;
 mod themes;
 mod welcome;
+pub mod xrandr;
 
 /// Helpers for tests that write a script and then execute it.
 ///

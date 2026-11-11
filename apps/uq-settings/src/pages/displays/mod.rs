@@ -6,6 +6,9 @@
 //! it (`ConfirmMonitors`), and puts the old one back by itself otherwise.
 
 pub mod arrange;
+pub mod extras;
+#[cfg(test)]
+mod extras_tests;
 #[cfg(test)]
 mod tests;
 
@@ -46,6 +49,39 @@ pub enum Op {
     Keep,
     /// Put the old layout back now; the draft stays, to be fixed.
     Revert,
+    /// Choose the main display by its connector name (`None` = none chosen).
+    SetMain {
+        output: Option<String>,
+    },
+    /// Where the bar shows: `all`, `main` or `chosen` (then on the named displays).
+    SetBar {
+        show: String,
+        outputs: Vec<String>,
+    },
+    /// Switch to a saved arrangement when the screens change.
+    SetAutoSwitch(bool),
+    /// How workspaces spread over the screens: `off`, `sequential`, `interleave` or `manual`.
+    SetPlan {
+        strategy: String,
+        count: u8,
+        move_back: bool,
+    },
+    /// Put one workspace on a display, or back to no choice (`None`).
+    SetManual {
+        workspace: u8,
+        output: Option<String>,
+    },
+    /// Save the screens connected now, with their layout, under `name`.
+    Remember {
+        name: String,
+    },
+    Rename {
+        id: String,
+        name: String,
+    },
+    Forget {
+        id: String,
+    },
 }
 
 pub struct DisplaysState {
@@ -333,6 +369,7 @@ impl PageLogic for DisplaysState {
                     None => Ok(()),
                 }
             }
+            other => extras::apply(&proxy, &o, other).await,
         }
     }
 
@@ -340,15 +377,19 @@ impl PageLogic for DisplaysState {
         let proxy = DesktopProxy::new(&self.conn).await?;
         let o = outputs(&proxy).await?;
         let draft = self.draft.lock().unwrap().clone();
-        let dirty = draft.as_ref().is_some_and(|d| *d != o.stored);
+        let dirty = draft.as_ref().is_some_and(|d| !d.layout_eq(&o.stored));
         let shown = draft.clone().unwrap_or_else(|| o.stored.clone());
-        Ok(json!({
+        let mut state = json!({
             "live": o.raw["live"],
             "stored": o.raw["stored"],
             "pending": o.raw["pending"],
             "draft": draft,
             "dirty": dirty,
             "view": view(&o.live, &shown),
-        }))
+        });
+        if let Some(map) = state.as_object_mut() {
+            map.extend(extras::snapshot_parts(&o.raw, &o.stored, &o.live));
+        }
+        Ok(state)
     }
 }

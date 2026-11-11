@@ -343,6 +343,17 @@ impl DesktopIface {
             .await?)
     }
 
+    /// Save the connected screens, with their layout, as an arrangement called `name`;
+    /// returns its id. Refused while a display change is waiting.
+    async fn remember_monitors(&self, name: &str, origin: &str) -> Result<String, UqError> {
+        Ok(self
+            .desktop
+            .lock()
+            .await
+            .remember_monitors(name, Origin::parse(origin))
+            .await?)
+    }
+
     /// Put the old layout back now.
     async fn revert_monitors(&self, token: &str) -> Result<(), UqError> {
         Ok(self.desktop.lock().await.revert_monitors(token).await?)

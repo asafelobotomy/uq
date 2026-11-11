@@ -52,6 +52,8 @@ pub trait Desktop {
     fn apply_monitors(&self, json: &str) -> zbus::Result<String>;
     fn confirm_monitors(&self, token: &str, origin: &str) -> zbus::Result<()>;
     fn revert_monitors(&self, token: &str) -> zbus::Result<()>;
+    /// Save the connected screens and their layout as an arrangement; returns its id.
+    fn remember_monitors(&self, name: &str, origin: &str) -> zbus::Result<String>;
     fn set_setting(&self, key: &str, json: &str, origin: &str) -> zbus::Result<()>;
     fn get_launch_counts(&self) -> zbus::Result<HashMap<String, u32>>;
     fn clear_launch_counts(&self) -> zbus::Result<()>;

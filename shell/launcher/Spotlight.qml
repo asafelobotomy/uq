@@ -22,7 +22,8 @@ PanelWindow {
     // the cursor (and Hyprland's focus) crosses to another output. Followed live only while hidden.
     property var openedOn: null
     readonly property var target: Surfaces.screen ? Surfaces.screen
-        : (openedOn ? openedOn : screenFor(Hyprland.focusedMonitor))
+        : (openedOn ? openedOn
+            : (Outputs.primaryScreen(Quickshell.screens) || screenFor(Hyprland.focusedMonitor)))
     readonly property real dpr: screen ? screen.devicePixelRatio : 1
     readonly property int iconSize: 24
     readonly property int rowHeight: 40
@@ -239,7 +240,10 @@ PanelWindow {
     }
 
     onShownChanged: {
-        openedOn = shown ? screenFor(Hyprland.focusedMonitor) : null;
+        // The main display when one is chosen (the emoji bind opens this window too), else the
+        // focused screen.
+        openedOn = shown ? (Outputs.primaryScreen(Quickshell.screens)
+                            || screenFor(Hyprland.focusedMonitor)) : null;
         wipe();
         if (shown)
             Qt.callLater(field.forceActiveFocus);

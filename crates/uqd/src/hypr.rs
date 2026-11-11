@@ -41,14 +41,22 @@ impl HyprSocket {
         self
     }
 
-    fn path(&self) -> Option<PathBuf> {
+    fn dir(&self) -> Option<PathBuf> {
         Some(
             self.runtime_dir
                 .as_ref()?
                 .join("hypr")
-                .join(self.signature.as_ref()?)
-                .join(".socket.sock"),
+                .join(self.signature.as_ref()?),
         )
+    }
+
+    fn path(&self) -> Option<PathBuf> {
+        Some(self.dir()?.join(".socket.sock"))
+    }
+
+    /// The event socket (`.socket2.sock`) beside the request socket; `None` outside Hyprland.
+    pub fn event_path(&self) -> Option<PathBuf> {
+        Some(self.dir()?.join(".socket2.sock"))
     }
 
     /// Send one request and return the whole reply.

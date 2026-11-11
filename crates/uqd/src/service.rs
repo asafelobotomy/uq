@@ -15,15 +15,16 @@ use uq_core::history::{
     revert_changed,
 };
 use uq_core::lua::{
-    Layout, emit_generated_with_apps, emit_workspace_rule, lua_string, startup_render,
+    Layout, StartupRender, emit_generated_with_apps, emit_workspace_rule, lua_string,
+    monitor_render, startup_render,
 };
 use uq_core::paths::Paths;
 use uq_core::profile::{ActiveProfile, ProfileStore, holds, load_active};
 use uq_core::render::{RenderedFiles, kvantum_base, render};
 use uq_core::schedule::{Schedule, last_event, variant_at};
 use uq_core::settings::{
-    SECTION_DOMAINS, Settings, provenance, renders_config, renders_section, set_rule,
-    valid_pinned_id,
+    SECTION_DOMAINS, Settings, Strategy, plan, provenance, renders_config, renders_section,
+    set_rule, valid_pinned_id,
 };
 use uq_core::startup_explain::FileReport;
 use uq_core::state::State;
@@ -146,6 +147,12 @@ pub struct Desktop {
     pub(crate) user_themes: uq_core::theme::user::Fingerprint,
     /// The theme folders the last scan left out, and why.
     pub(crate) skipped_themes: Vec<uq_core::theme::user::Skipped>,
+    /// Says things to the user on its own (a skipped display arrangement); silent until `main`.
+    pub(crate) notifier: Arc<dyn crate::notify::Notifier>,
+    /// Tells X11 apps which display is the main one; does nothing until `main` gives it a binary.
+    pub(crate) xrandr: Arc<dyn crate::xrandr::Xrandr>,
+    /// What the screen-change matcher remembers between events.
+    pub(crate) hotplug: crate::hotplug::HotplugState,
 }
 
 /// `explain`'s dotted key as a profile path.
@@ -176,6 +183,8 @@ fn domain_label(domain: &str) -> &'static str {
         "layouts" => "Layouts",
         "rules" => "Window rules",
         "keybinds" => "Keyboard shortcuts",
+        "monitors" => "Displays",
+        "input" => "Input",
         "env" => "The list of environment variables",
         "compat" => "Apps and scaling",
         "autostart" => "The list of startup apps",
@@ -277,6 +286,9 @@ impl Desktop {
             files: FileReport::default(),
             user_themes: Vec::new(),
             skipped_themes: Vec::new(),
+            notifier: Arc::new(crate::notify::NoNotifier),
+            xrandr: Arc::new(crate::xrandr::NoXrandr),
+            hotplug: Default::default(),
         };
         // The user's themes first, so a saved `user-…` theme survives a restart.
         desktop.load_user_themes();
@@ -293,6 +305,28 @@ impl Desktop {
             desktop.state.theme = State::default().theme;
         }
         Ok(desktop)
+    }
+
+    /// Say things through `n` instead of nowhere (the session bus in `main`, a fake in tests).
+    pub fn with_notifier(mut self, n: Arc<dyn crate::notify::Notifier>) -> Self {
+        self.notifier = n;
+        self
+    }
+
+    /// Set the notifier once the session connection exists (`main`, after `serve_with`).
+    pub fn set_notifier(&mut self, n: Arc<dyn crate::notify::Notifier>) {
+        self.notifier = n;
+    }
+
+    /// Set the X11 main display through `x` instead of not at all.
+    pub fn with_xrandr(mut self, x: Arc<dyn crate::xrandr::Xrandr>) -> Self {
+        self.xrandr = x;
+        self
+    }
+
+    /// [`with_xrandr`](Self::with_xrandr) for a desktop that is already shared.
+    pub fn set_xrandr(&mut self, x: Arc<dyn crate::xrandr::Xrandr>) {
+        self.xrandr = x;
     }
 
     /// Use `p` for power modes instead of none (the system's service in `main`, a fake in tests).
@@ -794,11 +828,40 @@ impl Desktop {
                 json!({ "source": source, "live": live, "stored": stored, "detail": detail }),
             );
         }
+        if domain == "input" {
+            let text = user_lua.get_or_insert_with(|| self.read_user_lua());
+            out.insert(
+                "gestures".into(),
+                self.explain_gestures(&section, text.as_deref()),
+            );
+        }
         let out = Value::Object(out);
         Ok(match domain {
             "compat" => self.explain_startup(domain, out),
             _ => out,
         })
+    }
+
+    /// The `gestures` row of `explain("input")` (R22): a gesture in `user.lua` is the one that
+    /// can make Hyprland refuse uQ's own, so it comes first. Hyprland can't list its gestures,
+    /// so there is no `runtime` source.
+    fn explain_gestures(
+        &self,
+        section: &serde_json::Value,
+        user_lua: Option<&str>,
+    ) -> serde_json::Value {
+        use serde_json::json;
+        let stored = section.get("gestures").cloned().unwrap_or_default();
+        let line = user_lua.and_then(provenance::find_gesture_in_user_lua);
+        let (source, detail) = match line {
+            Some(line) => (
+                "user_lua",
+                json!({ "line": line, "path": self.paths.user_lua.to_string_lossy() }),
+            ),
+            None if stored.is_null() => ("default", serde_json::Value::Null),
+            None => ("uq", serde_json::Value::Null),
+        };
+        json!({ "source": source, "live": null, "stored": stored, "detail": detail })
     }
 
     /// The first [`USER_LUA_SCAN_LIMIT`] bytes of `user.lua`, decoded lossily; `None` if unreadable.
@@ -889,6 +952,7 @@ impl Desktop {
         // Whether Welcome ran is not part of a restore point's settings.
         next.welcome = self.state.welcome;
         self.commit(next, Change::Theme, Origin::Restore).await?;
+        self.sync_x11_primary_now().await;
         self.announce_all();
         // The restored settings aren't the profile's any more, and neither is its power mode,
         // which a restore point doesn't hold: put it back as "Back to normal" does (K2: a
@@ -935,7 +999,8 @@ impl Desktop {
         let old = std::mem::replace(&mut self.state, next);
         self.sync_files(&old);
         // A schedule tick keeps the last entry ids, so it never moves the undo target.
-        if origin == Origin::Schedule {
+        // A hotplug switch is automatic, like a schedule flip: never journalled, no restore point.
+        if matches!(origin, Origin::Schedule | Origin::Hotplug) {
             return Ok(());
         }
         self.last_entry_ids.clear();
@@ -1030,10 +1095,29 @@ impl Desktop {
         };
         let files = render(&theme, &self.paths.templates_dir, base)
             .map_err(|e| DesktopError::Io(e.to_string()))?;
-        let main_scale = if next.compat.sharp_x11 || next.compat.steam_scale {
-            self.main_scale_for(next).await
+        // One read of the screens serves the main scale, the plan and the default monitor,
+        // and only when one of them is in use (no read otherwise, as before).
+        let monitors = &next.settings.monitors;
+        let scaled = next.compat.sharp_x11 || next.compat.steam_scale;
+        let live = if scaled
+            || monitors.primary.is_some()
+            || monitors.workspaces.strategy != Strategy::Off
+        {
+            self.live_outputs_for(next).await
         } else {
             None
+        };
+        let main_scale = live
+            .as_deref()
+            .filter(|_| scaled)
+            .and_then(|l| plan::main_output(monitors, l))
+            .map(|o| o.scale);
+        let startup = StartupRender {
+            monitors: live
+                .as_deref()
+                .map(|l| monitor_render(monitors, l))
+                .unwrap_or_default(),
+            ..startup_render(next, main_scale, self.dev_session)
         };
         let generated = emit_generated_with_apps(
             &theme,
@@ -1042,7 +1126,7 @@ impl Desktop {
             &self.app_rules_for(next),
             &next.keybinds,
             &next.settings,
-            &startup_render(next, main_scale, self.dev_session),
+            &startup,
         );
 
         self.ensure_user_lua()?;
@@ -2136,6 +2220,57 @@ mod tests {
             row["detail"]["path"],
             r.desktop.paths().user_lua.to_string_lossy().as_ref()
         );
+    }
+
+    #[tokio::test]
+    async fn explain_input_gestures_row() {
+        let mut r = rig();
+        let line7 = "-- a\n-- b\n-- c\n-- d\n-- e\n-- f\nhl.gesture({ fingers = 3 })\n";
+        user_lua(&r, line7);
+        let v = r.desktop.explain("input").await.unwrap();
+        let row = &v["gestures"];
+        assert_eq!(row["source"], "user_lua", "{v}");
+        assert_eq!(row["detail"]["line"], 7);
+        assert_eq!(
+            row["detail"]["path"],
+            r.desktop.paths().user_lua.to_string_lossy().as_ref()
+        );
+        // In a comment it doesn't count: uQ's own default.
+        user_lua(&r, "-- hl.gesture({ fingers = 3 })\n");
+        let v = r.desktop.explain("input").await.unwrap();
+        assert_eq!(v["gestures"]["source"], "default", "{v}");
+        assert!(v["gestures"]["stored"].is_null());
+        // A stored list is uQ's.
+        r.desktop
+            .set_section(
+                "input",
+                r#"{"gestures":[{"fingers":3,"direction":"horizontal","action":"workspace","enabled":true}]}"#,
+                Origin::Settings,
+            )
+            .await
+            .unwrap();
+        let v = r.desktop.explain("input").await.unwrap();
+        assert_eq!(v["gestures"]["source"], "uq", "{v}");
+        assert_eq!(v["gestures"]["stored"].as_array().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn explain_input_swipe_rows() {
+        let mut r = rig();
+        r.desktop
+            .set_section("input", r#"{"swipe":{"distance":400}}"#, Origin::Settings)
+            .await
+            .unwrap();
+        r.comp
+            .set_option("gestures:workspace_swipe_distance", serde_json::json!(400));
+        let v = r.desktop.explain("input").await.unwrap();
+        assert_eq!(v["swipe.distance"]["source"], "uq", "{v}");
+        // Something else changed it at runtime.
+        r.comp
+            .set_option("gestures:workspace_swipe_distance", serde_json::json!(250));
+        let v = r.desktop.explain("input").await.unwrap();
+        assert_eq!(v["swipe.distance"]["source"], "runtime", "{v}");
+        assert_eq!(v["swipe.distance"]["live"], 250);
     }
 
     #[tokio::test]

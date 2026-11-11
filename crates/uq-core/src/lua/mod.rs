@@ -9,16 +9,21 @@ use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::str::FromStr;
 
+mod gestures;
 mod input;
 mod keybinds;
 mod look;
 mod monitors;
 mod rules;
 mod startup;
+pub use gestures::{emit_gesture, emit_gestures};
 pub use input::emit_devices;
 pub use keybinds::{emit_bind, emit_binds};
 pub use look::{ANIMATION_LEAVES, CURVES};
-pub use monitors::{MAX_GREETER_MONITORS, emit_monitor_line, emit_monitors, greeter_monitors_lua};
+pub use monitors::{
+    MAX_GREETER_MONITORS, MonitorRender, emit_cursor, emit_monitor_line, emit_monitors,
+    greeter_monitors_lua, merge_planned, monitor_render, workspace_move_line,
+};
 pub use rules::{emit_layer_rule, emit_window_rule, emit_workspace_rules};
 pub use startup::{StartupRender, emit_startup_env, emit_xwayland, startup_render};
 
@@ -187,7 +192,9 @@ pub fn emit_generated_with_apps(
     let _ = writeln!(out, "    }},");
     look::emit_option_tables(&mut out, look, lo);
     input::emit_input(&mut out, &settings.mouse, &settings.input);
+    gestures::emit_swipe(&mut out, &settings.input.swipe);
     emit_xwayland(&mut out, startup);
+    emit_cursor(&mut out, &startup.monitors);
     let _ = writeln!(out, "}})");
     let monitors = emit_monitors(&settings.monitors);
     if !monitors.is_empty() {
@@ -197,6 +204,7 @@ pub fn emit_generated_with_apps(
     if !devices.is_empty() {
         let _ = write!(out, "\n-- Input devices\n{devices}");
     }
+    out.push_str(&emit_gestures(&settings.input));
     look::emit_animations(&mut out, look);
     // After base.lua's fixed size, so these win.
     let _ = writeln!(
@@ -215,7 +223,10 @@ pub fn emit_generated_with_apps(
         lua_string(&theme.icons.cursor_size.to_string())
     );
     emit_startup_env(&mut out, startup);
-    out.push_str(&emit_workspace_rules(layouts, &rules.workspace));
+    out.push_str(&emit_workspace_rules(
+        layouts,
+        &merge_planned(&rules.workspace, &startup.monitors.planned),
+    ));
     out.push_str(&rules::emit_app_block(app_rules));
     out.push_str(&rules::emit_window_block(&rules.window));
     out.push_str(&rules::emit_layer_block(&rules.layer));
@@ -232,6 +243,35 @@ mod tests {
 
     fn theme() -> Theme {
         Theme::from_toml(FIXTURE, "fixture", Variant::Dark).unwrap()
+    }
+
+    #[test]
+    fn cursor_table_when_primary_found() {
+        let gen_with = |monitors: MonitorRender| {
+            emit_generated(
+                &theme(),
+                &BTreeMap::new(),
+                &Rules::default(),
+                &crate::keybinds::Keybinds::default(),
+                &Settings::default(),
+                &StartupRender {
+                    monitors,
+                    ..StartupRender::default()
+                },
+            )
+        };
+        let plain = gen_with(MonitorRender::default());
+        assert!(!plain.contains("cursor ="), "{plain}");
+        let with = gen_with(MonitorRender {
+            default_monitor: Some("DP-1".into()),
+            ..MonitorRender::default()
+        });
+        let line = r#"    cursor = { default_monitor = "DP-1" },"#;
+        let at = with.find(line).expect("cursor table");
+        let close = with.find("\n})\n").expect("end of hl.config");
+        assert!(at < close, "inside the first hl.config: {with}");
+        assert_eq!(with.matches("hl.config(").count(), 1);
+        assert_eq!(with.replace(&format!("{line}\n"), ""), plain);
     }
 
     #[test]

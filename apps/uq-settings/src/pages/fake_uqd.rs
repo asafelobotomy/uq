@@ -24,6 +24,7 @@ mod autostart;
 mod binds;
 mod compat;
 mod devices;
+mod monitors;
 mod profiles;
 mod themes;
 mod windows;
@@ -276,7 +277,7 @@ impl FakeUqd {
 
     fn set_section(&self, domain: &str, json: &str, origin: &str) -> Result<(), FakeError> {
         if domain == "monitors" {
-            return Err(invalid("displays change through ApplyMonitors"));
+            return self.set_monitors_section(json, origin);
         }
         if let Some(text) = self.refuse_next.lock().unwrap().take() {
             return Err(FakeError::InvalidSetting(text));
@@ -330,9 +331,21 @@ impl FakeUqd {
         json: &str,
         #[zbus(signal_emitter)] e: SignalEmitter<'_>,
     ) -> Result<String, FakeError> {
-        let token = self.displays.apply(json)?;
+        let stored = self.state.lock().unwrap().settings.monitors.clone();
+        let token = self.displays.apply(json, &stored)?;
         let _ = Self::monitors_changed(&e).await;
         Ok(token)
+    }
+
+    async fn remember_monitors(
+        &self,
+        name: &str,
+        origin: &str,
+        #[zbus(signal_emitter)] e: SignalEmitter<'_>,
+    ) -> Result<String, FakeError> {
+        let id = self.remember(name, origin)?;
+        let _ = Self::monitors_changed(&e).await;
+        Ok(id)
     }
 
     async fn confirm_monitors(
@@ -565,6 +578,16 @@ impl FakeUqd {
                 None => json!({"source": source, "live": null, "stored": stored, "detail": null}),
             };
             out.insert(row.json_key().to_string(), entry);
+        }
+        if domain == "input" {
+            // Like uqd: whether the section holds a list of gestures; script a `user.lua`
+            // gesture with `Explain::set("input.gestures", {source, detail})`.
+            let stored = section.get("gestures").cloned().unwrap_or_default();
+            let source = if stored.is_null() { "default" } else { "uq" };
+            out.insert(
+                "gestures".into(),
+                json!({"source": source, "live": null, "stored": stored, "detail": null}),
+            );
         }
         let mut out = Value::Object(out);
         if domain == "compat" {

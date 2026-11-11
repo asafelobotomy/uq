@@ -151,7 +151,7 @@ static WALLPAPER_SETTINGS: [SearchEntry; 5] = [
     entry(
         "wallpaper-fit",
         "Wallpaper fit",
-        &["fill", "stretch", "center", "tile", "scale"],
+        &["fill", "stretch", "center", "tile", "scale", "span"],
     ),
     entry(
         "wallpaper-slideshow",
@@ -434,7 +434,7 @@ static KEYBINDS_SETTINGS: [SearchEntry; 5] = [
     ),
 ];
 
-static DISPLAYS_SETTINGS: [SearchEntry; 8] = [
+static DISPLAYS_SETTINGS: [SearchEntry; 14] = [
     entry(
         "display-arrangement",
         "Display arrangement",
@@ -496,9 +496,39 @@ static DISPLAYS_SETTINGS: [SearchEntry; 8] = [
             "hz",
         ],
     ),
+    entry(
+        "display-main",
+        "Main display",
+        &["main", "primary", "notifications"],
+    ),
+    entry(
+        "display-bar",
+        "Show the bar on",
+        &["bar", "panel", "screens"],
+    ),
+    entry(
+        "display-arrangements-auto",
+        "Switch arrangements when screens change",
+        &["profile", "dock", "hotplug", "automatic"],
+    ),
+    entry(
+        "display-remember",
+        "Remember for these screens",
+        &["save", "profile", "layout"],
+    ),
+    entry(
+        "display-workspaces",
+        "Workspaces across screens",
+        &["workspace", "monitor", "planner"],
+    ),
+    entry(
+        "display-workspaces-back",
+        "Move workspaces back when a screen returns",
+        &["workspace", "return", "dock"],
+    ),
 ];
 
-static INPUT_SETTINGS: [SearchEntry; 14] = [
+static INPUT_SETTINGS: [SearchEntry; 19] = [
     entry(
         "keyboard-layouts",
         "Keyboard layouts",
@@ -570,6 +600,53 @@ static INPUT_SETTINGS: [SearchEntry; 14] = [
         "device-overrides",
         "Settings for one pointing device",
         &["mouse", "touchpad", "trackball", "per device", "device"],
+    ),
+    entry(
+        "gestures",
+        "Touchpad gestures",
+        &[
+            "gesture",
+            "swipe",
+            "pinch",
+            "fingers",
+            "three fingers",
+            "four fingers",
+            "touchpad",
+            "trackpad",
+        ],
+    ),
+    entry(
+        "gesture-swipe-distance",
+        "Swipe distance",
+        &["swipe", "gesture", "workspace", "how far", "sensitivity"],
+    ),
+    entry(
+        "gesture-swipe-invert",
+        "Reverse swipe direction",
+        &[
+            "swipe",
+            "gesture",
+            "natural",
+            "invert",
+            "reverse",
+            "direction",
+        ],
+    ),
+    entry(
+        "gesture-swipe-create",
+        "Swipe past the last workspace to make a new one",
+        &[
+            "swipe",
+            "gesture",
+            "new workspace",
+            "create",
+            "empty workspace",
+        ],
+    ),
+    entry(
+        "gesture-swipe-cancel",
+        "How far to swipe before it switches",
+        &["swipe", "gesture", "cancel", "threshold", "halfway"],
     ),
 ];
 
@@ -1717,6 +1794,81 @@ mod tests {
         assert!(found("import a theme", "theme-import"));
         assert!(found("backup", "theme-export"));
         assert!(found("create", "theme-new"));
+    }
+
+    #[test]
+    fn display_settings_have_keywords() {
+        let page = find("displays").expect("the displays page is registered");
+        assert_eq!(page.settings.len(), 14);
+        for id in [
+            "display-main",
+            "display-bar",
+            "display-arrangements-auto",
+            "display-remember",
+            "display-workspaces",
+            "display-workspaces-back",
+        ] {
+            let s = page.settings.iter().find(|s| s.id == id).unwrap();
+            assert!(!s.keywords.is_empty(), "{id}");
+        }
+    }
+
+    #[test]
+    fn search_finds_main_display() {
+        let entries: Vec<_> = core_pages().iter().map(PageEntry::from).collect();
+        let found = |q: &str, id: &str| {
+            crate::search::search(&entries, q)
+                .iter()
+                .any(|h| h.page_id == "displays" && h.setting_id == id)
+        };
+        assert!(found("main display", "display-main"));
+        assert!(found("primary", "display-main"));
+        assert!(found("panel", "display-bar"));
+        assert!(found("dock", "display-arrangements-auto"));
+        assert!(found("remember", "display-remember"));
+        assert!(found("planner", "display-workspaces"));
+        assert!(found("return", "display-workspaces-back"));
+    }
+
+    #[test]
+    fn gesture_settings_have_keywords() {
+        let page = find("input").expect("the input page is registered");
+        assert_eq!(page.settings.len(), 19);
+        for (id, label) in [
+            ("gestures", "Touchpad gestures"),
+            ("gesture-swipe-distance", "Swipe distance"),
+            ("gesture-swipe-invert", "Reverse swipe direction"),
+            (
+                "gesture-swipe-create",
+                "Swipe past the last workspace to make a new one",
+            ),
+            (
+                "gesture-swipe-cancel",
+                "How far to swipe before it switches",
+            ),
+        ] {
+            let s = page.settings.iter().find(|s| s.id == id).unwrap();
+            assert_eq!(s.label, label);
+            assert!(!s.keywords.is_empty(), "{id}");
+        }
+    }
+
+    #[test]
+    fn search_finds_gestures() {
+        let entries: Vec<_> = core_pages().iter().map(PageEntry::from).collect();
+        let found = |q: &str, id: &str| {
+            crate::search::search(&entries, q)
+                .iter()
+                .any(|h| h.page_id == "input" && h.setting_id == id)
+        };
+        assert!(found("gesture", "gestures"));
+        assert!(found("swipe", "gestures"));
+        assert!(found("pinch", "gestures"));
+        assert!(found("three fingers", "gestures"));
+        assert!(found("swipe distance", "gesture-swipe-distance"));
+        assert!(found("natural", "gesture-swipe-invert"));
+        assert!(found("new workspace", "gesture-swipe-create"));
+        assert!(found("cancel", "gesture-swipe-cancel"));
     }
 
     #[test]

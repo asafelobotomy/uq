@@ -1,5 +1,6 @@
 //! The xwayland option and the session `hl.env` lines (Startup, and Apps and scaling pages).
 
+use super::MonitorRender;
 use super::lua_string;
 use crate::env;
 use crate::state::State;
@@ -14,6 +15,8 @@ pub struct StartupRender {
     pub env: Vec<(String, String)>,
     /// The third `hl.env` argument: whether children of Hyprland see them. Off in a dev session.
     pub export: bool,
+    /// The workspace plan and the default monitor, from one read of the live screens.
+    pub monitors: MonitorRender,
 }
 
 impl Default for StartupRender {
@@ -22,6 +25,7 @@ impl Default for StartupRender {
             zero_scaling: false,
             env: Vec::new(),
             export: true,
+            monitors: MonitorRender::default(),
         }
     }
 }
@@ -33,6 +37,7 @@ pub fn startup_render(state: &State, main: Option<f64>, dev_session: bool) -> St
             .switch(crate::compat::hypr::SwitchKey::SharpX11),
         env: env::session_env(&state.env, &state.compat, main),
         export: !dev_session,
+        monitors: MonitorRender::default(),
     }
 }
 
