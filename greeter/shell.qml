@@ -122,7 +122,7 @@ ShellRoot {
         id: userPaths
         property bool didStart: false
         onStarted: didStart = true
-        command: ["busctl", "--system", "--json=short", "call", "org.freedesktop.Accounts",
+        command: ["busctl", "--system", "--json=short", "--timeout=5", "call", "org.freedesktop.Accounts",
                   "/org/freedesktop/Accounts", "org.freedesktop.Accounts", "ListCachedUsers"]
         stdout: StdioCollector {
             onStreamFinished: {
@@ -138,15 +138,33 @@ ShellRoot {
     Process {
         id: userProps
         property string objectPath: ""
-        command: ["busctl", "--system", "--json=short", "call", "org.freedesktop.Accounts", objectPath,
+        // Exit and stdout arrive in either order; the next user starts once both are in (a
+        // Process can't be restarted while it is still running).
+        property bool gotExit: false
+        property bool gotOut: false
+        property string outText: ""
+        function conclude() {
+            if (!gotExit || !gotOut)
+                return;
+            gotExit = false;
+            gotOut = false;
+            var u = G.parseUserProps(outText);
+            if (u)
+                root.loadedUsers = root.loadedUsers.concat([u]);
+            root.nextUser();
+        }
+        command: ["busctl", "--system", "--json=short", "--timeout=5", "call", "org.freedesktop.Accounts", objectPath,
                   "org.freedesktop.DBus.Properties", "GetAll", "s", "org.freedesktop.Accounts.User"]
         stdout: StdioCollector {
             onStreamFinished: {
-                var u = G.parseUserProps(text);
-                if (u)
-                    root.loadedUsers = root.loadedUsers.concat([u]);
-                root.nextUser();
+                userProps.outText = text;
+                userProps.gotOut = true;
+                userProps.conclude();
             }
+        }
+        onExited: {
+            gotExit = true;
+            conclude();
         }
     }
 
