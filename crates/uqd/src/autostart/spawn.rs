@@ -44,8 +44,15 @@ pub trait Spawner: Send + Sync {
     async fn alive(&self, pid: u32, unit: &str) -> bool;
 
     /// The last `lines` journal lines of the run in `unit` tagged `tag`, from `since` (Unix
-    /// seconds) on. Empty when they can't be read.
-    async fn journal_tail(&self, unit: &str, tag: &str, since: i64, lines: usize) -> Vec<String>;
+    /// seconds) on. `None` when they couldn't be read (no journalctl, a failed start, the
+    /// timeout), which the runner doesn't cache; `Some(vec![])` means the run logged nothing.
+    async fn journal_tail(
+        &self,
+        unit: &str,
+        tag: &str,
+        since: i64,
+        lines: usize,
+    ) -> Option<Vec<String>>;
 }
 
 /// The variables uqd has as a systemd service that an app must not inherit (F35).
@@ -196,13 +203,15 @@ impl Spawner for SystemSpawner {
             .is_ok_and(|t| cgroup_has_unit(&t, unit))
     }
 
-    async fn journal_tail(&self, unit: &str, tag: &str, since: i64, lines: usize) -> Vec<String> {
-        let Some(journalctl) = &self.journalctl else {
-            return Vec::new();
-        };
-        let Ok(_permit) = self.tails.acquire().await else {
-            return Vec::new();
-        };
+    async fn journal_tail(
+        &self,
+        unit: &str,
+        tag: &str,
+        since: i64,
+        lines: usize,
+    ) -> Option<Vec<String>> {
+        let journalctl = self.journalctl.as_ref()?;
+        let _permit = self.tails.acquire().await.ok()?;
         let read = async {
             let mut child = tokio::process::Command::new(journalctl)
                 .args(journal_args(unit, tag, since, lines))
@@ -224,13 +233,13 @@ impl Spawner for SystemSpawner {
             let _ = child.wait().await;
             Some(buf)
         };
-        let Ok(Some(buf)) = tokio::time::timeout(JOURNAL_TIMEOUT, read).await else {
-            return Vec::new();
-        };
-        String::from_utf8_lossy(&buf)
-            .lines()
-            .map(str::to_string)
-            .collect()
+        let buf = tokio::time::timeout(JOURNAL_TIMEOUT, read).await.ok()??;
+        Some(
+            String::from_utf8_lossy(&buf)
+                .lines()
+                .map(str::to_string)
+                .collect(),
+        )
     }
 }
 
@@ -240,7 +249,7 @@ pub use fake::{FakeSpawner, SpawnCall};
 #[cfg(any(test, feature = "fake"))]
 mod fake {
     use super::*;
-    use std::collections::HashMap;
+    use std::collections::{BTreeSet, HashMap};
     use std::sync::Mutex;
     use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 
@@ -262,8 +271,13 @@ mod fake {
         pub systemd_run: PathBuf,
         pub calls: Mutex<Vec<SpawnCall>>,
         pub exits: Mutex<HashMap<String, ExitInfo>>,
-        pub alive: AtomicBool,
+        /// The `(pid, unit)` pairs `alive` answers true for.
+        pub live: Mutex<BTreeSet<(u32, String)>>,
+        /// `(pid, unit)` of every `alive` call.
+        pub alive_calls: Mutex<Vec<(u32, String)>>,
         pub journal: Mutex<Vec<String>>,
+        /// Journal reads fail (`None`) while this is set.
+        pub journal_fails: AtomicBool,
         pub journal_delay: Mutex<Option<Duration>>,
         /// `(unit, tag, since)` of every journal read.
         pub tails: Mutex<Vec<(String, String, i64)>>,
@@ -278,8 +292,10 @@ mod fake {
                 systemd_run: PathBuf::from("/fake/bin/systemd-run"),
                 calls: Mutex::default(),
                 exits: Mutex::default(),
-                alive: AtomicBool::new(false),
+                live: Mutex::default(),
+                alive_calls: Mutex::default(),
                 journal: Mutex::default(),
+                journal_fails: AtomicBool::new(false),
                 journal_delay: Mutex::default(),
                 tails: Mutex::default(),
                 tails_now: AtomicUsize::new(0),
@@ -296,6 +312,11 @@ mod fake {
 
         pub fn exit(&self, tag: &str, e: ExitInfo) {
             self.exits.lock().unwrap().insert(tag.to_string(), e);
+        }
+
+        /// Make `pid` alive in `unit`'s scope.
+        pub fn set_alive(&self, pid: u32, unit: &str) {
+            self.live.lock().unwrap().insert((pid, unit.to_string()));
         }
     }
 
@@ -330,8 +351,10 @@ mod fake {
             })
         }
 
-        async fn alive(&self, _pid: u32, _unit: &str) -> bool {
-            self.alive.load(Ordering::SeqCst)
+        async fn alive(&self, pid: u32, unit: &str) -> bool {
+            let key = (pid, unit.to_string());
+            self.alive_calls.lock().unwrap().push(key.clone());
+            self.live.lock().unwrap().contains(&key)
         }
 
         async fn journal_tail(
@@ -340,7 +363,7 @@ mod fake {
             tag: &str,
             since: i64,
             lines: usize,
-        ) -> Vec<String> {
+        ) -> Option<Vec<String>> {
             self.tails
                 .lock()
                 .unwrap()
@@ -352,8 +375,11 @@ mod fake {
                 tokio::time::sleep(d).await;
             }
             self.tails_now.fetch_sub(1, Ordering::SeqCst);
+            if self.journal_fails.load(Ordering::SeqCst) {
+                return None;
+            }
             let all = self.journal.lock().unwrap().clone();
-            all[all.len().saturating_sub(lines)..].to_vec()
+            Some(all[all.len().saturating_sub(lines)..].to_vec())
         }
     }
 }

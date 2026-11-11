@@ -1,6 +1,6 @@
 //! `ListAutostart`: the page's rows, from the plan and what the runner knows. Liveness is
 //! re-checked for entries an earlier uqd started (F15), and a failed run's last journal lines
-//! are read once, outside every lock, at most [`MAX_TAILS`](super::MAX_TAILS) at a time (F16).
+//! are read outside every lock and cached once they hold lines, at most [`MAX_TAILS`](super::MAX_TAILS) at a time (F16).
 
 use super::spawn::ExitInfo;
 use super::{MAX_LOG_LINES, SharedRunner, Status, lock};
@@ -75,7 +75,7 @@ pub async fn list(
                         let _permit = sem.acquire_owned().await.ok()?;
                         let lines = sp
                             .journal_tail(&run.unit, &tag_of(&run.unit), run.at, MAX_LOG_LINES)
-                            .await;
+                            .await?;
                         let start = lines.len().saturating_sub(MAX_LOG_LINES);
                         let lines: Vec<String> = lines[start..]
                             .iter()
@@ -93,9 +93,11 @@ pub async fn list(
                 fresh.push(got);
             }
         }
-        if !fresh.is_empty() {
+        // Only lines are cached: a read that failed or found nothing yet (journald may not
+        // have the stream indexed when the exit is first listed) is tried again next time.
+        if fresh.iter().any(|(_, v)| !v.is_empty()) {
             let mut r = lock(runner);
-            for (k, v) in &fresh {
+            for (k, v) in fresh.iter().filter(|(_, v)| !v.is_empty()) {
                 r.logs.insert(k.clone(), v.clone());
             }
         }

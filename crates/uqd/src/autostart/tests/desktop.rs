@@ -1,5 +1,6 @@
 use super::*;
 use crate::compositor::fake::FakeCompositor;
+use crate::dbus::SharedDesktop;
 use crate::service::Desktop;
 use crate::system::FakeSystem;
 use uq_core::history::Origin;
@@ -169,15 +170,50 @@ async fn disabled_runner_never_spawns() {
     let runner = Runner::shared(AutostartConfig::disabled());
     assert!(!runner.lock().unwrap().enabled());
     shell_ready(&d.desktop, &runner);
+    shell_ready(&d.desktop, &runner);
     tokio::time::sleep(Duration::from_secs(25)).await;
     {
         let guard = runner.lock().unwrap();
+        assert_eq!(guard.shell_ready_calls(), 2);
+        // It only counted: it never began a run, so it never scanned or wrote a record.
+        assert!(!guard.started);
+        assert!(guard.statuses.is_empty());
         assert_eq!(guard.spawns(), 0);
-        assert_eq!(guard.shell_ready_calls(), 1);
-        assert!(guard.started);
     }
+    assert!(!d.dir.path().join("run/uq/autostart-run.json").exists());
     let (plan, _) = plan_of(&d).await;
     assert_eq!(row(&runner, &plan, NM).await["status"], "not_started");
+}
+
+#[tokio::test(start_paused = true)]
+async fn waiting_entry_turned_off_does_not_start() {
+    let d = desktop_rig();
+    put_user(&d, NM, &app("nm-applet", ""));
+    put_user(&d, "keep.desktop", &app("keep", ""));
+    set_autostart(
+        &d,
+        r#"{"files":[{"id":"nm-applet.desktop","delay":10},{"id":"keep.desktop","delay":10}]}"#,
+    )
+    .await;
+    let r = rig();
+    shell_ready(&d.desktop, &r.runner);
+    tokio::time::sleep(Duration::from_secs(5)).await;
+    let (plan, _) = plan_of(&d).await;
+    assert_eq!(row(&r.runner, &plan, NM).await["status"], "waiting");
+    set_autostart(
+        &d,
+        r#"{"files":[{"id":"nm-applet.desktop","enabled":false,"delay":10},
+                     {"id":"keep.desktop","delay":10}]}"#,
+    )
+    .await;
+    tokio::time::sleep(Duration::from_secs(10)).await;
+    let calls = r.fake.calls();
+    assert_eq!(calls.len(), 1, "{calls:?}");
+    assert_eq!(calls[0].argv, ["keep"]);
+    let (plan, _) = plan_of(&d).await;
+    assert_eq!(row(&r.runner, &plan, NM).await["status"], "off");
+    let rec = record::Record::load(&record_path(r.dir.path()));
+    assert!(rec.ran && !rec.pending.contains(NM), "{rec:?}");
 }
 
 #[tokio::test]

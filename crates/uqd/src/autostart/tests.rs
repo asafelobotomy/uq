@@ -201,9 +201,17 @@ async fn runner_records_and_does_not_rerun_after_restart() {
     let again = runner_for(&fake2, r.dir.path(), Some(SESSION), false);
     start(&again, plan.clone()).await;
     assert!(fake2.calls().is_empty());
-    fake2.alive.store(true, Ordering::SeqCst);
+    let first = rec.started[NM].clone();
+    // Alive, but under another unit: not this run.
+    fake2.set_alive(first.pid, "app-uq-autostart-other-00000000");
+    assert_eq!(row(&again, &plan, NM).await["status"], "unknown_exit");
+    fake2.set_alive(first.pid, &first.unit);
     assert_eq!(row(&again, &plan, NM).await["status"], "running");
-    fake2.alive.store(false, Ordering::SeqCst);
+    assert_eq!(
+        fake2.alive_calls.lock().unwrap().last(),
+        Some(&(first.pid, first.unit.clone()))
+    );
+    fake2.live.lock().unwrap().clear();
     let v = row(&again, &plan, NM).await;
     assert_eq!(v["status"], "unknown_exit");
     assert_eq!(v["reason"], "Started earlier; finished");
@@ -232,8 +240,9 @@ async fn runner_new_session_skips_live_pid() {
     let plan = vec![entry(NM, &["nm-applet"], 0)];
     start(&r.runner, plan.clone()).await;
 
+    let first = record::Record::load(&record_path(r.dir.path())).started[NM].clone();
     let live = Arc::new(FakeSpawner::default());
-    live.alive.store(true, Ordering::SeqCst);
+    live.set_alive(first.pid, &first.unit);
     let next = runner_for(&live, r.dir.path(), Some("other_session"), false);
     start(&next, plan.clone()).await;
     assert!(live.calls().is_empty());
@@ -282,6 +291,7 @@ async fn runner_failed_entry_has_exit_and_log() {
 async fn journal_tail_is_cached_and_bounded() {
     let r = rig();
     *r.fake.journal_delay.lock().unwrap() = Some(Duration::from_millis(50));
+    *r.fake.journal.lock().unwrap() = vec!["boom".into()];
     let plan: Vec<Resolved> = (0..5)
         .map(|i| {
             r.fake
@@ -304,6 +314,71 @@ async fn journal_tail_is_cached_and_bounded() {
     rows(&r.runner, &plan).await;
     assert_eq!(r.fake.tails.lock().unwrap().len(), 5);
     assert!(r.fake.tails_max.load(Ordering::SeqCst) <= MAX_TAILS);
+}
+
+#[tokio::test]
+async fn failed_or_empty_journal_reads_are_not_cached() {
+    let r = rig();
+    r.fake.exit("uq-autostart-bad", ExitInfo::Code(1));
+    r.fake.journal_fails.store(true, Ordering::SeqCst);
+    let plan = vec![entry("bad.desktop", &["bad"], 0)];
+    start(&r.runner, plan.clone()).await;
+    let runner = r.runner.clone();
+    let p = plan.clone();
+    until(async || row(&runner, &p, "bad.desktop").await["status"] == "failed").await;
+    let tails = || r.fake.tails.lock().unwrap().len();
+    let n = tails();
+    // A read that failed shows no lines and is tried again.
+    assert_eq!(
+        row(&r.runner, &plan, "bad.desktop").await["log"],
+        serde_json::json!([])
+    );
+    assert_eq!(tails(), n + 1);
+    // So is one that found nothing yet.
+    r.fake.journal_fails.store(false, Ordering::SeqCst);
+    assert_eq!(
+        row(&r.runner, &plan, "bad.desktop").await["log"],
+        serde_json::json!([])
+    );
+    assert_eq!(tails(), n + 2);
+    // Lines, once read, are kept.
+    *r.fake.journal.lock().unwrap() = vec!["boom".into()];
+    let v = row(&r.runner, &plan, "bad.desktop").await;
+    assert_eq!(v["log"], serde_json::json!(["boom"]));
+    row(&r.runner, &plan, "bad.desktop").await;
+    assert_eq!(tails(), n + 3);
+}
+
+#[tokio::test(start_paused = true)]
+async fn restart_before_ran_starts_only_what_was_planned() {
+    let r = rig();
+    let plan = vec![entry(NM, &["nm-applet"], 300)];
+    let runner = r.runner.clone();
+    let first = tokio::spawn({
+        let plan = plan.clone();
+        async move { start(&runner, plan).await }
+    });
+    tokio::time::sleep(Duration::from_secs(10)).await;
+    let rec = record::Record::load(&record_path(r.dir.path()));
+    assert!(!rec.ran);
+    assert_eq!(rec.pending.iter().collect::<Vec<_>>(), [NM]);
+    first.abort();
+    // uqd restarts mid-delay; "new" was turned on since login.
+    let fake2 = Arc::new(FakeSpawner::default());
+    let again = runner_for(&fake2, r.dir.path(), Some(SESSION), false);
+    let plan = vec![
+        entry(NM, &["nm-applet"], 0),
+        entry("new.desktop", &["new"], 0),
+    ];
+    start(&again, plan.clone()).await;
+    let calls = fake2.calls();
+    assert_eq!(calls.len(), 1, "{calls:?}");
+    assert_eq!(calls[0].argv, ["nm-applet"]);
+    assert_eq!(
+        row(&again, &plan, "new.desktop").await["status"],
+        "not_started"
+    );
+    assert!(record::Record::load(&record_path(r.dir.path())).ran);
 }
 
 #[tokio::test]

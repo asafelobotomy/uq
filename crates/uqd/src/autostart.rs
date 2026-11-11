@@ -9,15 +9,17 @@
 mod list;
 mod record;
 pub mod spawn;
+mod trigger;
 
 pub use list::list;
+pub use trigger::{shell_ready, spawn_fallback};
 
-use crate::dbus::SharedDesktop;
-use crate::service::Event;
 use record::{Record, Started, valid_session};
 use spawn::{ExitInfo, Spawner, SystemSpawner, is_service_var};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::future::Future;
 use std::path::PathBuf;
+use std::pin::Pin;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 use tokio::sync::Semaphore;
@@ -35,6 +37,9 @@ const DEV_SESSION: &str = "Not started in a test session";
 const NO_SESSION: &str = "Not started: uQ couldn't tell which login this is";
 
 pub type SharedRunner = Arc<Mutex<Runner>>;
+
+/// Asks, after an entry's delay, whether it is still on now (L1): `true` to start it.
+pub type Recheck = Arc<dyn Fn(String) -> Pin<Box<dyn Future<Output = bool> + Send>> + Send + Sync>;
 
 /// What the runner may do. Only `main.rs` builds the system one (F1); `serve()` gets
 /// [`AutostartConfig::disabled`], which never starts a process.
@@ -130,6 +135,7 @@ pub struct Runner {
     record: Record,
     spawns: u32,
     tails: Arc<Semaphore>,
+    recheck: Option<Recheck>,
 }
 
 fn lock(r: &Mutex<Runner>) -> MutexGuard<'_, Runner> {
@@ -147,7 +153,13 @@ impl Runner {
             record: Record::default(),
             spawns: 0,
             tails: Arc::new(Semaphore::new(MAX_TAILS)),
+            recheck: None,
         }
+    }
+
+    /// How a delayed entry is checked again before it starts. Without one, it always starts.
+    pub fn set_recheck(&mut self, recheck: Recheck) {
+        self.recheck = Some(recheck);
     }
 
     pub fn shared(cfg: AutostartConfig) -> SharedRunner {
@@ -217,10 +229,12 @@ pub async fn start_once(
     let mut record = Record {
         session,
         ran: same && old.ran,
+        pending: BTreeSet::new(),
         started: BTreeMap::new(),
     };
     if same {
         record.started = old.started;
+        record.pending = old.pending;
     } else {
         for (id, s) in old.started {
             if spawner.alive(s.pid, &s.unit).await {
@@ -228,20 +242,29 @@ pub async fn start_once(
             }
         }
     }
+    // A same-login restart only finishes what the first run planned (F15): an entry turned
+    // on since login isn't in `pending`, so it waits for the next login.
     let jobs: Vec<Job> = if record.ran {
         tracing::info!("startup apps already ran this login; starting nothing");
         Vec::new()
     } else {
         plan.into_iter()
             .filter(|e| !record.started.contains_key(&e.id))
+            .filter(|e| !same || record.pending.contains(&e.id))
             .filter_map(|e| match e.plan {
-                Plan::Run { argv, cwd, delay } => {
-                    Some((e.id, argv, cwd.unwrap_or_else(|| "/".into()), delay))
-                }
+                // `Desktop::autostart_plan` always gives a working directory.
+                Plan::Run {
+                    argv,
+                    cwd: Some(cwd),
+                    delay,
+                } => Some((e.id, argv, cwd, delay)),
                 _ => None,
             })
             .collect()
     };
+    if !same {
+        record.pending = jobs.iter().map(|(id, ..)| id.clone()).collect();
+    }
     {
         let mut r = lock(runner);
         for (id, s) in &record.started {
@@ -260,7 +283,9 @@ pub async fn start_once(
             .filter(|(k, _)| !is_service_var(k))
             .collect(),
     );
+    let recheck = lock(runner).recheck.clone();
     let ctx = Ctx {
+        recheck,
         runner: runner.clone(),
         spawner,
         path: path.clone(),
@@ -281,6 +306,7 @@ pub async fn start_once(
 
 #[derive(Clone)]
 struct Ctx {
+    recheck: Option<Recheck>,
     runner: SharedRunner,
     spawner: Arc<dyn Spawner>,
     path: PathBuf,
@@ -298,6 +324,19 @@ fn now_secs() -> i64 {
 async fn run_one(ctx: Ctx, (id, argv, cwd, delay): Job) {
     if delay > 0 {
         tokio::time::sleep(Duration::from_secs(delay.into())).await;
+        if let Some(check) = &ctx.recheck
+            && !check(id.clone()).await
+        {
+            tracing::info!("startup app {id} was turned off during its delay; not starting it");
+            {
+                let mut r = lock(&ctx.runner);
+                r.statuses.remove(&id);
+                r.record.pending.remove(&id);
+                r.record.save(&ctx.path);
+            }
+            (ctx.emit)();
+            return;
+        }
     }
     let sid = unit_id(id.strip_suffix(".desktop").unwrap_or(&id));
     let unit = format!("app-uq-autostart-{sid}-{:08x}", random_suffix());
@@ -340,41 +379,6 @@ async fn run_one(ctx: Ctx, (id, argv, cwd, delay): Job) {
         lock(&ctx.runner).statuses.insert(id, status);
         (ctx.emit)();
     });
-}
-
-/// `ShellReady()`: count it, and start the run in a task unless it has started already.
-pub fn shell_ready(desktop: &SharedDesktop, runner: &SharedRunner) {
-    let go = {
-        let mut r = lock(runner);
-        r.shell_ready_calls += 1;
-        !r.started
-    };
-    if go {
-        tokio::spawn(run(desktop.clone(), runner.clone()));
-    }
-}
-
-/// The fallback (R5): start [`SHELL_WAIT`] after uqd starts if the shell never said so.
-pub fn spawn_fallback(desktop: SharedDesktop, runner: SharedRunner) -> tokio::task::JoinHandle<()> {
-    tokio::spawn(async move {
-        tokio::time::sleep(SHELL_WAIT).await;
-        run(desktop, runner).await;
-    })
-}
-
-async fn run(desktop: SharedDesktop, runner: SharedRunner) {
-    if lock(&runner).started {
-        return;
-    }
-    let (plan, env, events) = {
-        let d = desktop.lock().await;
-        let (plan, env) = d.autostart_plan();
-        (plan, env, d.events.clone())
-    };
-    start_once(&runner, plan, env, move || {
-        let _ = events.send(Event::AutostartChanged);
-    })
-    .await;
 }
 
 #[cfg(test)]

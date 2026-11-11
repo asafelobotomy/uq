@@ -2,7 +2,7 @@
 //! login already started, so a restarted uqd starts nothing twice.
 
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 /// One started entry.
@@ -20,6 +20,10 @@ pub struct Record {
     pub session: String,
     /// The runner handled every entry of this session.
     pub ran: bool,
+    /// The entries the first run of this session set out to start, written before any delay,
+    /// so a restart can tell them from entries turned on since login (F15).
+    #[serde(default)]
+    pub pending: BTreeSet<String>,
     pub started: BTreeMap<String, Started>,
 }
 
