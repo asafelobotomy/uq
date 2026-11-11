@@ -283,6 +283,10 @@ All notable changes to uQ are listed here. The format follows
   shares (two writes at once can no longer trip over each other) and syncs the folder after the
   rename, so a crash right after a save keeps it. A file that is a symlink is still replaced by
   a regular file, as before; this is now documented.
+- **An integration command that starts something in the background no longer times out.** The
+  runner used to wait for its output to close, which a background process it started keeps
+  open; it now ends the run when the command exits, keeping the output that arrives within
+  200 ms.
 
 ## [0.2.1] - 2026-11-10
 

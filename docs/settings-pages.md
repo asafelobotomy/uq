@@ -118,6 +118,9 @@ What is enforced, whatever the page does:
   closed and the command runs in its own process group.
 - Over its timeout or an output cap, the whole process group gets `SIGTERM`, then `SIGKILL` two
   seconds later.
+- The run ends when the command exits. Output still arriving 200 ms after that is dropped, so a
+  process it started in the background (and left holding stdout or stderr) doesn't hold up the
+  result; that process is left running.
 - One run per command at a time: a second `run` of the same `id` while one runs gets
   `{error: "already running"}`.
 - Nothing runs as root. A command that needs it uses your app's own polkit action; uQ's polkit

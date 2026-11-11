@@ -9,6 +9,9 @@
 //! - stdout is capped at 4 MiB and stderr at 64 KiB. Over a cap or over the timeout, the group
 //!   gets `SIGTERM`, then `SIGKILL` 2 s later, and the run is an error.
 //! - One run per (owner, command id) at a time: [`BusySet`].
+//! - A run ends when the command exits. Its output is whatever reached the pipes by then, plus
+//!   up to [`DRAIN_GRACE`] more; a background process it left holding them doesn't hold the
+//!   result up (or turn a finished command into a timeout).
 
 use std::collections::HashSet;
 use std::ffi::OsString;
@@ -28,6 +31,8 @@ pub const STDOUT_CAP: usize = 4 << 20;
 pub const STDERR_CAP: usize = 64 << 10;
 /// Between `SIGTERM` and `SIGKILL`.
 pub const KILL_GRACE: Duration = Duration::from_secs(2);
+/// After the command exits, how long its pipes may take to reach end of file.
+pub const DRAIN_GRACE: Duration = Duration::from_millis(200);
 /// How much of stderr goes to the journal and the error text (§5).
 pub const STDERR_LOG_BYTES: usize = 2048;
 
@@ -210,23 +215,41 @@ impl Runner {
             return Err(CommandError::Io("no pipes to the command".into()));
         };
         let timeout = Duration::from_millis(spec.timeout_ms);
+        let (mut out, mut err) = (Vec::new(), Vec::new());
         let work = async {
-            let (out, err) = tokio::try_join!(
-                read_capped(stdout, STDOUT_CAP, CommandError::StdoutTooLarge),
-                read_capped(stderr, STDERR_CAP, CommandError::StderrTooLarge),
-            )?;
-            let status = child
-                .wait()
-                .await
-                .map_err(|e| CommandError::Io(e.to_string()))?;
-            Ok::<_, CommandError>((out, err, status))
+            let reads = async {
+                tokio::try_join!(
+                    read_capped(stdout, STDOUT_CAP, CommandError::StdoutTooLarge, &mut out),
+                    read_capped(stderr, STDERR_CAP, CommandError::StderrTooLarge, &mut err),
+                )
+                .map(|_| ())
+            };
+            tokio::pin!(reads);
+            // Read while waiting for the exit, so a full pipe never blocks the command.
+            let mut drained = false;
+            let status = loop {
+                tokio::select! {
+                    r = &mut reads, if !drained => {
+                        r?;
+                        drained = true;
+                    }
+                    s = child.wait() => {
+                        break s.map_err(|e| CommandError::Io(e.to_string()))?;
+                    }
+                }
+            };
+            // A process the command started in the background may still hold the pipes open.
+            if !drained && let Ok(r) = tokio::time::timeout(DRAIN_GRACE, &mut reads).await {
+                r?;
+            }
+            Ok::<_, CommandError>(status)
         };
         let outcome = match tokio::time::timeout(timeout, work).await {
             Ok(r) => r,
             Err(_) => Err(CommandError::Timeout(spec.timeout_ms)),
         };
         match outcome {
-            Ok((out, err, status)) => finish(spec, out, err, status),
+            Ok(status) => finish(spec, out, err, status),
             Err(e) => {
                 if let Some(pgid) = pgid {
                     stop_group(pgid, &mut child, self.grace).await;
@@ -237,13 +260,14 @@ impl Runner {
     }
 }
 
-/// Read to the end, failing with `over` as soon as more than `cap` bytes arrive.
+/// Read to the end into `buf`, failing with `over` as soon as more than `cap` bytes arrive.
+/// What arrived stays in `buf` if the read is dropped first.
 async fn read_capped(
     mut r: impl AsyncRead + Unpin,
     cap: usize,
     over: CommandError,
-) -> Result<Vec<u8>, CommandError> {
-    let mut buf = Vec::new();
+    buf: &mut Vec<u8>,
+) -> Result<(), CommandError> {
     let mut chunk = [0u8; 16 * 1024];
     loop {
         let n = r
@@ -251,7 +275,7 @@ async fn read_capped(
             .await
             .map_err(|e| CommandError::Io(e.to_string()))?;
         if n == 0 {
-            return Ok(buf);
+            return Ok(());
         }
         if buf.len() + n > cap {
             return Err(over);
