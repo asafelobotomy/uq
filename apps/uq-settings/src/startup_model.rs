@@ -105,6 +105,7 @@ impl PageModel for StartupModel {
         monitors: false,
         profiles: true,
         autostart: true,
+        themes: false,
     };
 
     fn core(&self) -> &ModelCore<StartupState> {

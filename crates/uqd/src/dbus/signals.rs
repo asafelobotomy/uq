@@ -19,6 +19,7 @@ fn kind(ev: &Event) -> &'static str {
         Event::ProfileChanged(_) => "ProfileChanged",
         Event::PickRequested(_) => "PickRequested",
         Event::AutostartChanged => "AutostartChanged",
+        Event::ThemesChanged => "ThemesChanged",
     }
 }
 
@@ -67,6 +68,7 @@ pub(super) async fn forward(
             Event::ProfileChanged(id) => DesktopIface::profile_changed(e, id).await,
             Event::PickRequested(token) => DesktopIface::pick_requested(e, token).await,
             Event::AutostartChanged => DesktopIface::autostart_changed(e).await,
+            Event::ThemesChanged => DesktopIface::themes_changed(e).await,
             Event::LaunchCountsChanged(counts) => {
                 DesktopIface::launch_counts_changed(
                     e,

@@ -52,7 +52,7 @@ struct Report {
     notices: Vec<String>,
 }
 
-const NOT_RUNNING: &str = "Can't reach uQ's settings service. Is it running?";
+pub(crate) const NOT_RUNNING: &str = "Can't reach uQ's settings service. Is it running?";
 const FAILED: &str = "uQ's settings service couldn't do that.";
 
 fn rows(json: &str) -> Result<Vec<Row>, String> {
@@ -62,7 +62,7 @@ fn rows(json: &str) -> Result<Vec<Row>, String> {
 /// What a failed call says, in plain words.
 ///
 /// A missing service is checked first: the bus's own message for it names D-Bus.
-fn describe(err: zbus::Error) -> String {
+pub(crate) fn describe(err: zbus::Error) -> String {
     match err {
         e if uq_core::client::no_owner(&e) => NOT_RUNNING.into(),
         zbus::Error::MethodError(_, Some(msg), _) => msg,

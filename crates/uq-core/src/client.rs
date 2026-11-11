@@ -13,6 +13,21 @@ pub trait Desktop {
     /// Every write's last argument is its origin: `settings`, `uqctl`, `shell`, … ("" is unknown).
     fn set_theme(&self, name: &str, variant: &str, origin: &str) -> zbus::Result<()>;
     fn list_themes(&self) -> zbus::Result<Vec<String>>;
+    /// JSON `{themes: [{id, name, author, user, missing, active}], skipped, root_is_link}`.
+    fn list_theme_info(&self) -> zbus::Result<String>;
+    /// A theme as `.uqtheme` text; with `with_look`, also the current window look.
+    fn export_theme(&self, id: &str, with_look: bool) -> zbus::Result<String>;
+    /// Add a theme from `.uqtheme` text; returns its id. `Conflict` if it exists and `replace`
+    /// is false. It is not switched to.
+    fn import_theme(
+        &self,
+        text: &str,
+        replace: bool,
+        with_look: bool,
+        origin: &str,
+    ) -> zbus::Result<String>;
+    /// Remove one of the user's themes; JSON `{switched, profiles}`.
+    fn delete_theme(&self, id: &str, origin: &str) -> zbus::Result<String>;
     fn get_schedule(&self) -> zbus::Result<String>;
     fn set_schedule(&self, json: &str, origin: &str) -> zbus::Result<()>;
     fn get_settings(&self) -> zbus::Result<String>;
@@ -87,6 +102,9 @@ pub trait Desktop {
     /// A startup app's status changed; `ListAutostart` has the new list.
     #[zbus(signal)]
     fn autostart_changed(&self) -> zbus::Result<()>;
+    /// The user's themes changed; `ListThemeInfo` has the new list.
+    #[zbus(signal)]
+    fn themes_changed(&self) -> zbus::Result<()>;
 }
 
 /// The Settings app's single-instance interface. An empty `page_id` means "just raise".

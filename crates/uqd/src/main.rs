@@ -45,6 +45,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             _ = tick.tick() => {
                 shared.lock().await.flush_launch_counts();
                 shared.lock().await.refresh_files();
+                shared.lock().await.refresh_themes();
                 if let Err(e) = shared.lock().await.tick_schedule_at(chrono::Local::now()).await {
                     tracing::warn!("scheduled theme change failed: {e}");
                 }

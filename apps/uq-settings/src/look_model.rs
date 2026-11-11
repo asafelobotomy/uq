@@ -91,6 +91,7 @@ impl PageModel for LookModel {
         monitors: false,
         profiles: false,
         autostart: false,
+        themes: false,
     };
 
     fn core(&self) -> &ModelCore<LookState> {

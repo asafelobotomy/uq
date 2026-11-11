@@ -8,6 +8,10 @@ use std::str::FromStr;
 
 use crate::settings::Appearance;
 
+pub mod derive;
+pub mod uqtheme;
+pub mod user;
+
 #[derive(Debug, thiserror::Error)]
 pub enum ThemeError {
     #[error("bad colour {0:?} (expected #rrggbb)")]
@@ -163,6 +167,8 @@ pub struct Theme {
 #[serde(deny_unknown_fields)]
 struct ThemeFile {
     name: String,
+    #[serde(default)]
+    author: Option<String>,
     colors: Colors,
     ui: Ui,
     fonts: Fonts,
@@ -173,6 +179,16 @@ struct ThemeFile {
 impl Theme {
     /// Parse a theme file. `id` and `variant` come from the file's path, not its contents.
     pub fn from_toml(src: &str, id: &str, variant: Variant) -> Result<Theme, ThemeError> {
+        Self::from_toml_with_author(src, id, variant).map(|(t, _)| t)
+    }
+
+    /// [`Theme::from_toml`], and the file's optional `author` (which `Theme` doesn't hold, so
+    /// `tokens.json` stays as it was).
+    pub fn from_toml_with_author(
+        src: &str,
+        id: &str,
+        variant: Variant,
+    ) -> Result<(Theme, Option<String>), ThemeError> {
         let f: ThemeFile = toml::from_str(src).map_err(|e| {
             // Surface colour errors as BadColor so callers can match on them.
             let msg = e.message().to_string();
@@ -185,7 +201,7 @@ impl Theme {
                 }
             }
         })?;
-        Ok(Theme {
+        let theme = Theme {
             id: id.to_string(),
             name: f.name,
             variant,
@@ -194,7 +210,8 @@ impl Theme {
             fonts: f.fonts,
             icons: f.icons,
             terminal: f.terminal,
-        })
+        };
+        Ok((theme, f.author))
     }
 
     /// A copy with the user's appearance overrides applied; each `Some` replaces the theme's value.
@@ -222,6 +239,20 @@ impl Theme {
     }
 }
 
+/// What the theme list shows about one theme. `Theme` itself carries none of this, because it is
+/// written whole into `tokens.json`.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ThemeInfo {
+    pub id: String,
+    pub name: String,
+    pub author: Option<String>,
+    /// Made by the user (or imported), not shipped with uQ.
+    pub user: bool,
+    /// The theme is in use but its files are gone; uQ keeps the last good copy until another
+    /// theme is picked.
+    pub missing: bool,
+}
+
 /// The directory under the shipped themes directory that holds every variant's pre-rendered
 /// `tokens.json` for the greeter (`/usr/share/uq/themes/rendered/<id>-<variant>/`). Not a theme.
 pub const RENDERED_DIR: &str = "rendered";
@@ -230,12 +261,16 @@ pub const RENDERED_DIR: &str = "rendered";
 #[derive(Debug, Clone, Default)]
 pub struct ThemeRegistry {
     themes: BTreeMap<(String, Variant), Theme>,
+    info: BTreeMap<String, ThemeInfo>,
 }
 
 impl ThemeRegistry {
+    /// Load the system themes. Packages are trusted, so any bad theme fails the load. A folder
+    /// named like a user theme is skipped: user themes come from [`user::scan`].
     pub fn load_dir(dir: &Path) -> Result<Self, ThemeError> {
         let io = |e: std::io::Error| ThemeError::Io(format!("{}: {e}", dir.display()));
         let mut themes = BTreeMap::new();
+        let mut info = BTreeMap::new();
         let mut entries: Vec<_> = std::fs::read_dir(dir)
             .map_err(io)?
             .collect::<Result<_, _>>()
@@ -246,6 +281,10 @@ impl ThemeRegistry {
                 continue;
             }
             let id = entry.file_name().to_string_lossy().into_owned();
+            if id.starts_with(user::PREFIX) {
+                tracing::warn!("skipping system theme folder {id}: the user- prefix is reserved");
+                continue;
+            }
             for variant in Variant::ALL {
                 let path = entry.path().join(format!("{variant}.toml"));
                 let src = match std::fs::read_to_string(&path) {
@@ -255,17 +294,25 @@ impl ThemeRegistry {
                     }
                     Err(e) => return Err(io(e)),
                 };
-                let theme = Theme::from_toml(&src, &id, variant).map_err(|e| match e {
-                    ThemeError::Parse { message, .. } => ThemeError::Parse {
-                        path: path.clone(),
-                        message,
-                    },
-                    other => other,
-                })?;
+                let (theme, author) =
+                    Theme::from_toml_with_author(&src, &id, variant).map_err(|e| match e {
+                        ThemeError::Parse { message, .. } => ThemeError::Parse {
+                            path: path.clone(),
+                            message,
+                        },
+                        other => other,
+                    })?;
+                info.entry(id.clone()).or_insert_with(|| ThemeInfo {
+                    id: id.clone(),
+                    name: theme.name.clone(),
+                    author,
+                    user: false,
+                    missing: false,
+                });
                 themes.insert((id.clone(), variant), theme);
             }
         }
-        Ok(ThemeRegistry { themes })
+        Ok(ThemeRegistry { themes, info })
     }
 
     pub fn get(&self, id: &str, v: Variant) -> Option<&Theme> {
@@ -280,6 +327,64 @@ impl ThemeRegistry {
 
     pub fn iter(&self) -> impl Iterator<Item = &Theme> {
         self.themes.values()
+    }
+
+    pub fn info(&self, id: &str) -> Option<&ThemeInfo> {
+        self.info.get(id)
+    }
+
+    /// System themes first, then the user's, each by name (ignoring case).
+    pub fn infos(&self) -> Vec<&ThemeInfo> {
+        let mut v: Vec<&ThemeInfo> = self.info.values().collect();
+        v.sort_by_cached_key(|i| (i.user, i.name.to_lowercase(), i.id.clone()));
+        v
+    }
+
+    pub fn is_user(&self, id: &str) -> bool {
+        self.info.get(id).is_some_and(|i| i.user)
+    }
+
+    /// Swap in a fresh scan of the user's themes. If `keep` names a user theme the scan no
+    /// longer has (its folder was removed behind uqd's back), the old copy stays, marked
+    /// `missing`, so the active theme can still be rendered.
+    pub fn replace_user(&mut self, scan: user::UserScan, keep: Option<&str>) {
+        let old_info = self.info.clone();
+        let old_themes: Vec<_> = self
+            .themes
+            .iter()
+            .filter(|((id, _), _)| old_info.get(id).is_some_and(|i| i.user))
+            .map(|(k, t)| (k.clone(), t.clone()))
+            .collect();
+        self.themes
+            .retain(|(id, _), _| !old_info.get(id).is_some_and(|i| i.user));
+        self.info.retain(|_, i| !i.user);
+        for u in scan.themes {
+            let id = u.dark.id.clone();
+            self.info.insert(
+                id.clone(),
+                ThemeInfo {
+                    id: id.clone(),
+                    name: u.dark.name.clone(),
+                    author: u.author,
+                    user: true,
+                    missing: false,
+                },
+            );
+            self.themes.insert((id.clone(), Variant::Dark), u.dark);
+            self.themes.insert((id, Variant::Light), u.light);
+        }
+        if let Some(k) = keep
+            && !self.info.contains_key(k)
+            && let Some(mut i) = old_info.get(k).filter(|i| i.user).cloned()
+        {
+            i.missing = true;
+            self.info.insert(k.to_string(), i);
+            for (key, t) in old_themes {
+                if key.0 == k {
+                    self.themes.insert(key, t);
+                }
+            }
+        }
     }
 }
 
@@ -415,6 +520,93 @@ ansi = ["#282828","#cc241d","#98971a","#d79921","#458588","#b16286","#689d6a","#
             Variant::Light
         );
         assert!(reg.get("nope", Variant::Dark).is_none());
+    }
+
+    #[test]
+    fn author_is_optional_in_theme_files() {
+        let with = format!("author = \"Sam\"\n{FIXTURE}");
+        let (t, a) = Theme::from_toml_with_author(&with, "f", Variant::Dark).unwrap();
+        assert_eq!(a.as_deref(), Some("Sam"));
+        assert_eq!(t.name, "Fixture");
+        let (_, a) = Theme::from_toml_with_author(FIXTURE, "f", Variant::Dark).unwrap();
+        assert_eq!(a, None);
+        // `Theme` itself gains no field: tokens.json is its whole serialisation.
+        let json = serde_json::to_value(&t).unwrap();
+        assert!(json.get("author").is_none());
+    }
+
+    #[test]
+    fn load_dir_skips_user_prefixed_system_folders() {
+        let dir = tempfile::tempdir().unwrap();
+        for id in ["solo", "user-sneaky"] {
+            fs::create_dir(dir.path().join(id)).unwrap();
+            fs::write(dir.path().join(id).join("dark.toml"), FIXTURE).unwrap();
+            fs::write(dir.path().join(id).join("light.toml"), FIXTURE).unwrap();
+        }
+        let reg = ThemeRegistry::load_dir(dir.path()).unwrap();
+        assert_eq!(reg.ids(), vec!["solo"]);
+        assert!(reg.info("user-sneaky").is_none());
+    }
+
+    fn user_scan(names: &[&str]) -> (tempfile::TempDir, user::UserScan) {
+        let dir = tempfile::tempdir().unwrap();
+        for n in names {
+            let id = format!("user-{}", n.to_lowercase());
+            fs::create_dir(dir.path().join(&id)).unwrap();
+            for v in ["dark", "light"] {
+                let text = if v == "dark" {
+                    FIXTURE.replacen("Fixture", n, 1)
+                } else {
+                    fs::read_to_string(
+                        Path::new(env!("CARGO_MANIFEST_DIR"))
+                            .join("../../themes/gruvbox/light.toml"),
+                    )
+                    .unwrap()
+                    .replacen("Gruvbox", n, 1)
+                };
+                fs::write(dir.path().join(&id).join(format!("{v}.toml")), text).unwrap();
+            }
+        }
+        let scan = user::scan(dir.path());
+        (dir, scan)
+    }
+
+    #[test]
+    fn registry_infos_mark_user_and_missing() {
+        let sys = tempfile::tempdir().unwrap();
+        for (id, name) in [("zeta", "Zeta"), ("alpha", "alpha")] {
+            fs::create_dir(sys.path().join(id)).unwrap();
+            let text = FIXTURE.replacen("Fixture", name, 1);
+            fs::write(sys.path().join(id).join("dark.toml"), &text).unwrap();
+            fs::write(sys.path().join(id).join("light.toml"), &text).unwrap();
+        }
+        let mut reg = ThemeRegistry::load_dir(sys.path()).unwrap();
+        let (_keep, scan) = user_scan(&["Beta", "Apple"]);
+        assert_eq!(scan.themes.len(), 2, "{:?}", scan.skipped);
+        reg.replace_user(scan, None);
+        let order: Vec<_> = reg.infos().iter().map(|i| i.id.as_str()).collect();
+        assert_eq!(order, ["alpha", "zeta", "user-apple", "user-beta"]);
+        assert!(reg.is_user("user-beta") && !reg.is_user("zeta"));
+        assert!(reg.get("user-beta", Variant::Light).is_some());
+        assert!(!reg.info("user-beta").unwrap().missing);
+        assert_eq!(reg.ids().len(), 4);
+
+        // The folder vanishes: the active theme's last copy stays, marked missing.
+        reg.replace_user(user::UserScan::default(), Some("user-beta"));
+        let i = reg.info("user-beta").unwrap();
+        assert!(i.missing && i.user);
+        assert!(reg.get("user-beta", Variant::Dark).is_some());
+        assert!(reg.get("user-beta", Variant::Light).is_some());
+        assert!(reg.info("user-apple").is_none());
+        assert!(reg.get("user-apple", Variant::Dark).is_none());
+        // Keeping a system id or an unknown id changes nothing.
+        reg.replace_user(user::UserScan::default(), Some("zeta"));
+        assert!(reg.info("user-beta").is_none());
+        assert_eq!(reg.ids(), ["alpha", "zeta"]);
+        // A scan that has it again clears `missing`.
+        let (_k2, scan) = user_scan(&["Beta"]);
+        reg.replace_user(scan, Some("user-beta"));
+        assert!(!reg.info("user-beta").unwrap().missing);
     }
 
     #[test]

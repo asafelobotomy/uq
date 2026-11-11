@@ -185,6 +185,29 @@ TestCase {
         compare(U.themeList(null), []);
     }
 
+    // ListThemeInfo replies {themes: [{id, name, ...}]}: malformed gives [], a non-string name
+    // falls back to the id, and a long name is cut to 24 characters.
+    function test_theme_info_list() {
+        compare(U.themeInfoList(null), []);
+        compare(U.themeInfoList("x"), []);
+        compare(U.themeInfoList({}), []);
+        compare(U.themeInfoList({ themes: "a" }), []);
+        compare(U.themeInfoList({ themes: [
+            { id: "a", name: "Alpha" },
+            { id: "", name: "No id" },
+            { id: 3, name: "Number id" },
+            { id: "b", name: 7 },
+            { id: "c" },
+            null,
+            { id: "d", name: "x".repeat(40) }
+        ] }), [
+            { id: "a", name: "Alpha" },
+            { id: "b", name: "b" },
+            { id: "c", name: "c" },
+            { id: "d", name: "x".repeat(24) }
+        ]);
+    }
+
     // GetLayouts keys are "<id>" or "name:<name>" (SystemIsland's lookup); dwindle by default.
     function test_workspace_layout() {
         var m = { "3": "master", "name:web": "scrolling" };

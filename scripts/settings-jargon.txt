@@ -27,3 +27,8 @@ systemd-run
 desktop file
 hl.env
 exec
+tokens.json
+uqtheme
+ThemeRegistry
+contrast.rs
+WCAG

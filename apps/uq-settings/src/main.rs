@@ -34,6 +34,7 @@ mod session;
 mod shell_model;
 mod startup_model;
 mod system_lists;
+mod themes_model;
 mod wallpaper_model;
 mod window;
 mod xkb_lists;
