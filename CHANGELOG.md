@@ -13,7 +13,7 @@ All notable changes to uQ are listed here. The format follows
   change its keys (press them to capture, or pick them), turn it off, reset it, or put all back.
   Add your own shortcuts: open a uQ panel, a window or workspace action, a layout, start an app
   (through `uqctl launch`) or run a command in its own scope. Two shortcuts on the same keys are
-  refused, naming both. The lock recovery shortcut stays on. New **Switch to the next profile**
+  refused, naming both. New default **Open Spotlight for emoji** (Super + period; it works once the shell registers its emoji shortcut). The lock recovery shortcut stays on. New **Switch to the next profile**
   shortcut, and profiles can turn shortcuts on and off. `uqctl keys list|reset` works from a
   terminal. New `uqd` calls `ListBinds`, `PauseShortcuts` and `ResumeShortcuts`; `keybinds` is a
   `GetSection`/`SetSection` domain. A failed key capture never leaves shortcuts paused, and uqd

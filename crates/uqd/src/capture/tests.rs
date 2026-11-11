@@ -180,3 +180,18 @@ async fn capture_rejected_pause_reply_resumes() {
     assert!(b.pause(c.clone()).await.is_err());
     assert_eq!(evals(&c), [PAUSE, RESUME]);
 }
+
+#[tokio::test(start_paused = true)]
+async fn capture_failed_resume_keeps_the_timer() {
+    let (c, b) = (comp(), CaptureBroker::default());
+    let t = b.pause(c.clone()).await.unwrap();
+    *c.eval_timeouts.lock().unwrap() = 1;
+    assert!(b.resume(c.as_ref(), &t).await.is_err());
+    tokio::time::advance(Duration::from_secs(16)).await;
+    settle().await;
+    assert_eq!(
+        evals(&c),
+        [PAUSE, RESUME, RESUME],
+        "the timer put them back"
+    );
+}

@@ -174,8 +174,8 @@ first, keeping the original rollback point.
 - **Binds from `user.lua`:** uqd cannot parse them in general, so they are listed read-only and
   only if the user marks them with a `-- uq:bind` comment. Otherwise they are not shown.
 - **Fallback (slice 4, R1):** `base.lua` keeps copies of the defaults, and `generated.lua` starts
-  with `hl.unbind("all")` so they are replaced, never doubled. With a missing or rejected
-  `generated.lua`, the fallback shortcuts are live.
+  with `hl.unbind("all")` so they are replaced, never doubled. With a missing
+  `generated.lua`, the fallback shortcuts are live; a rejected write keeps the previous file.
 - **Override marker (slice 4, R5):** every rendered bind carries `description = "uq:<id>"`, which is
   how `hyprctl binds -j` tells uQ's binds from `user.lua`'s.
 - **Migration:** this replaces Phase 1/2 bind lines in `base.lua`. The plan includes a migration

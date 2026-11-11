@@ -14,6 +14,8 @@ Item {
             return meta ? "SUPER + Q" : "Q";
         if (key === Qt.Key_Space)
             return meta ? "SUPER + Space" : "Space";
+        if (key === Qt.Key_Z)
+            return (modifiers & Qt.ControlModifier) !== 0 ? "CTRL + Z" : "Z";
         return "";
     }
 
@@ -22,6 +24,25 @@ Item {
         KeyCapture {
             width: 300
             comboFrom: root.stub
+        }
+    }
+    Component {
+        id: undoComp
+        Item {
+            property alias undo: undoShortcut
+            width: 300
+            height: 100
+            property alias capture: kc
+            KeyCapture {
+                id: kc
+                width: 300
+                comboFrom: root.stub
+            }
+            Shortcut {
+                id: undoShortcut
+                sequence: "Ctrl+Z"
+                context: Qt.WindowShortcut
+            }
         }
     }
     Component {
@@ -40,6 +61,31 @@ Item {
         }
         function spy(c, name) {
             return createTemporaryObject(spyComp, root, { target: c, signalName: name });
+        }
+
+        // The review's M1: a mouse click must not leave focus on the button (Space would click it),
+        // and a window-level Ctrl+Z must not fire while listening.
+        function test_mouse_start_then_super_space_and_ctrl_z_are_captured() {
+            const host = createTemporaryObject(undoComp, root);
+            verify(host);
+            const c = host.capture;
+            const got = spy(c, "captured");
+            const fired = createTemporaryObject(spyComp, root, { target: host.undo, signalName: "activated" });
+            const button = findChild(c, "captureButton");
+            compare(button.focusPolicy, Qt.NoFocus);
+            mouseClick(button);
+            verify(c.listening);
+            verify(c.activeFocus);
+            keyPress(Qt.Key_Space, Qt.MetaModifier);
+            compare(got.count, 1);
+            compare(got.signalArguments[0][0], "SUPER + Space");
+            verify(!c.listening);
+            mouseClick(button);
+            verify(c.listening);
+            keyPress(Qt.Key_Z, Qt.ControlModifier);
+            compare(got.count, 2);
+            compare(got.signalArguments[1][0], "CTRL + Z");
+            compare(fired.count, 0);
         }
 
         function test_a_combo_is_captured_and_listening_ends() {

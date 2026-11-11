@@ -20,6 +20,22 @@ pub(super) const ONLY_ON_OFF: &str = "a profile can only turn a shortcut on or o
 /// Why a `[keybinds]` key that isn't a shortcut id is refused.
 pub(super) const NOT_AN_ID: &str = "isn't one of uQ's shortcuts";
 
+/// The refusal for a `[keybinds]` key that is no shortcut id: "Keyboard shortcuts: “SUPER + T”
+/// isn't one of uQ's shortcuts". The key is the person's text, so it is cut and has no control
+/// characters.
+fn not_an_id(id: &str) -> ProfileError {
+    let name: String = id.chars().filter(|c| !c.is_control()).take(40).collect();
+    let more = if id.chars().count() > 40 {
+        "\u{2026}"
+    } else {
+        ""
+    };
+    invalid(
+        "Keyboard shortcuts",
+        format!("\u{201c}{name}{more}\u{201d} {NOT_AN_ID}"),
+    )
+}
+
 /// Whether the shortcut `id` is on: one of uQ's unless an override turned it off, or one of your
 /// own by its switch. `None` when no shortcut has `id`.
 pub fn enabled_of(state: &State, id: &str) -> Option<bool> {
@@ -78,7 +94,7 @@ pub fn check_tree(tree: &Value) -> Result<(), ProfileError> {
     for (id, v) in map {
         let key = format!("keybinds.{}", plain(id));
         if defaults::default_of(id).is_none() && !valid_custom_id(id) {
-            return Err(invalid(key, NOT_AN_ID));
+            return Err(not_an_id(id));
         }
         if !v.is_boolean() {
             return Err(invalid(key, ONLY_ON_OFF));

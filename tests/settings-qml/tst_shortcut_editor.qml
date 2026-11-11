@@ -224,7 +224,7 @@ Item {
         }
 
         function test_a_mouse_button_default_only_offers_mouse_buttons() {
-            const e = make({ id: "uq.move", label: "Move a window", combo: "SUPER + mouse_left", combo_text: "Super + Left mouse button", enabled: true }, false);
+            const e = make({ id: "uq.move", label: "Move a window", combo: "SUPER + mouse:272", combo_text: "Super + Left mouse button", enabled: true }, false);
             // Only mouse buttons are offered, and a keyboard can't press one.
             verify(e.keyChoices.length > 0);
             verify(e.keyChoices.every(k => k.kind === "button"));

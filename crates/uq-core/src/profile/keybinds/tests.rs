@@ -60,17 +60,9 @@ fn keybinds_tree_validation() {
             "keybinds.uq.spotlight",
             ONLY_ON_OFF,
         ),
-        (
-            "[keybinds]\n\"uq.nope\" = true\n",
-            "keybinds.uq.nope",
-            NOT_AN_ID,
-        ),
-        ("[keybinds]\n\"k-ZZ\" = true\n", "keybinds.k-ZZ", NOT_AN_ID),
-        (
-            "[keybinds]\nterminal = true\n",
-            "keybinds.terminal",
-            NOT_AN_ID,
-        ),
+        ("[keybinds]\n\"uq.nope\" = true\n", "!uq.nope", NOT_AN_ID),
+        ("[keybinds]\n\"k-ZZ\" = true\n", "!k-ZZ", NOT_AN_ID),
+        ("[keybinds]\nterminal = true\n", "!terminal", NOT_AN_ID),
         (
             "[keybinds]\n\"uq.lock-recovery\" = false\n",
             "keybinds.uq.lock-recovery",
@@ -78,10 +70,19 @@ fn keybinds_tree_validation() {
         ),
     ] {
         let e = Profile::parse(&with(body)).unwrap_err();
-        assert_eq!(e, invalid(key, reason), "{body:?}");
         let text = e.to_string();
         assert!(!text.contains('\n'), "{text:?}");
-        assert_eq!(text, format!("A shortcut: {reason}"), "{body:?}");
+        if let Some(id) = key.strip_prefix('!') {
+            assert_eq!(e, not_an_id(id), "{body:?}");
+            assert_eq!(
+                text,
+                format!("Keyboard shortcuts: \u{201c}{id}\u{201d} {reason}"),
+                "{body:?}"
+            );
+        } else {
+            assert_eq!(e, invalid(key, reason), "{body:?}");
+            assert_eq!(text, format!("A shortcut: {reason}"), "{body:?}");
+        }
     }
     // Turning the recovery shortcut on is allowed, if pointless.
     assert!(Profile::parse(&with("[keybinds]\n\"uq.lock-recovery\" = true\n")).is_ok());
@@ -89,7 +90,18 @@ fn keybinds_tree_validation() {
     let e = Profile::parse(&with("[keybinds]\n\"uq.\\u001b[2Jx\" = true\n")).unwrap_err();
     let text = e.to_string();
     assert!(!text.chars().any(char::is_control), "{text:?}");
-    assert_eq!(text, format!("A shortcut: {NOT_AN_ID}"));
+    assert_eq!(
+        text,
+        format!("Keyboard shortcuts: \u{201c}uq.[2Jx\u{201d} {NOT_AN_ID}")
+    );
+    // A long key is cut.
+    let long = "x".repeat(60);
+    let e = Profile::parse(&with(&format!("[keybinds]\n\"{long}\" = true\n"))).unwrap_err();
+    assert!(
+        e.to_string()
+            .contains(&format!("{}\u{2026}", "x".repeat(40))),
+        "{e}"
+    );
 }
 
 #[test]

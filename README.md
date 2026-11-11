@@ -220,7 +220,7 @@ checks are in [docs/notes/settings-slice-b-live-check.md](docs/notes/settings-sl
 Every shortcut uQ sets up is listed here by what it does, with its keys, grouped as Apps and
 desktop, Windows, Workspaces, Sound and brightness, Media, and Profiles. The defaults:
 Open a terminal (Super + Return), Close the window (Super + Q), Float or tile the window
-(Super + V), Log out (Super + Shift + M), Open Spotlight (Super + Space), Open the app menu
+(Super + V), Log out (Super + Shift + M), Open Spotlight (Super + Space), Open Spotlight for emoji (Super + period; it needs the shell's emoji shortcut, which comes with the emoji picker), Open the app menu
 (tap Super), Open quick settings (Super + A), Open notifications (Super + N), Lock the screen
 (Super + L), Open the power menu (Super + Escape), the three layouts (Super + Alt + D, M and S),
 focus with Super + the arrows, workspaces 1 to 10 with Super + the number (Shift moves the
@@ -242,7 +242,7 @@ uqd refuses the same write over D-Bus. A shortcut in `user.lua` that you mark wi
 `-- uq:bind Name` comment is listed read-only, and a clash with it only warns. Unmarked binds in
 `user.lua` are not shown, and a `hl.unbind` there shows as "Overridden in user.lua, line N".
 
-**Change** listens for the new keys: while it waits, uQ's shortcuts are paused for at most
+**Press the keys…** in the shortcut editor listens for the new keys: while it waits, uQ's shortcuts are paused for at most
 15 seconds, so Super + Space can be pressed without opening Spotlight. `uqctl keys list` prints
 every shortcut and `uqctl keys reset <id>` or `--all` puts changes back. `base.lua` keeps a
 fallback copy of the defaults, so the shortcuts still work if `generated.lua` is missing. Manual

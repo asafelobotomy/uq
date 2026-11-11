@@ -66,6 +66,10 @@ FocusScope {
         capture.stop();
         capture.captured(combo);
     }
+    // While listening, no window or Kirigami shortcut (Ctrl+Z, Ctrl+Shift+Z...) may take the keys.
+    Keys.onShortcutOverride: event => {
+        event.accepted = capture.pressing;
+    }
     onActiveFocusChanged: if (!activeFocus) capture.stop()
 
     Timer {
@@ -81,6 +85,8 @@ FocusScope {
 
         QQC2.Button {
             objectName: "captureButton"
+            // The scope holds the focus, so Space and Return are keys to capture, not clicks.
+            focusPolicy: Qt.NoFocus
             enabled: capture.canStart || capture.pressing
             text: "Press the keys…"
             icon.name: "input-keyboard"

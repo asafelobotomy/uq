@@ -66,6 +66,11 @@ Kirigami.Dialog {
     readonly property var modifierNames: ["SUPER", "SHIFT", "CTRL", "ALT"]
     readonly property var keyChoices: (catalogue.keys || []).filter(k => allowedKinds.indexOf(k.kind) >= 0)
     readonly property var entries: kind === "launch" || kind === "command" ? [] : ((catalogue.actions || {})[kind] || [])
+    /// The line of the first user.lua shortcut on these keys, 0 when there is none.
+    readonly property int userLuaLine: {
+        const u = editor.verdict.user_lua;
+        return u && u.length > 0 && u[0] ? Number(u[0].line || 0) : 0;
+    }
     readonly property var currentEntry: entries[actionIndex] || null
     readonly property bool mayLock: currentEntry !== null && currentEntry.may_lock === true
     readonly property bool mayRepeat: currentEntry !== null && currentEntry.may_repeat === true
@@ -340,7 +345,7 @@ Kirigami.Dialog {
         UqLabel {
             objectName: "userLuaWarning"
             visible: editor.combo !== "" && (editor.verdict.user_lua || []).length > 0
-            text: "A shortcut in user.lua, line " + ((editor.verdict.user_lua || [{ line: 0 }])[0].line) + ", uses these keys too."
+            text: "A shortcut in user.lua, line " + editor.userLuaLine + ", uses these keys too."
             wrapMode: Text.Wrap
             opacity: 0.8
             Layout.fillWidth: true

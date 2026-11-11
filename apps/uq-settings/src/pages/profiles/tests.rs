@@ -500,7 +500,7 @@ async fn import_refuses_hostile_file() {
         (
             "binds.toml",
             b"format = 1\nid = \"x\"\nname = \"X\"\n[keybinds]\nterminal = true\n".to_vec(),
-            "A shortcut: isn't one of uQ's shortcuts",
+            "Keyboard shortcuts: \u{201c}terminal\u{201d} isn't one of uQ's shortcuts",
         ),
     ];
     for (name, bytes, message) in cases {
@@ -1017,7 +1017,10 @@ async fn import_and_export_keybinds_round_trip() {
         )
         .await;
         let e = out.error.expect(body);
-        assert!(e.starts_with("A shortcut"), "{e}");
+        assert!(
+            e.starts_with("A shortcut") || e.starts_with("Keyboard shortcuts"),
+            "{e}"
+        );
         assert!(!e.contains('\n'), "{e:?}");
     }
     assert!(stored(&r, "bad").is_none());

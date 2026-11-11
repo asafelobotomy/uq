@@ -241,7 +241,7 @@ impl KeybindsState {
             let mut bind = draft.as_object().cloned().unwrap_or_default();
             bind.remove("id");
             if text_of(draft, "name").trim().is_empty() {
-                bind.insert("name".into(), json!("Preview"));
+                bind.insert("name".into(), json!("This shortcut"));
             }
             if !bind.contains_key("action") {
                 let first = catalogue().into_iter().next().map(|(_, a)| a);

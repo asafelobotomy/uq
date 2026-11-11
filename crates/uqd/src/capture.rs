@@ -126,21 +126,37 @@ impl CaptureBroker {
     /// Switch back. A token that isn't the current pause's (forged, stale, replaced or timed
     /// out) is `InvalidArgument`, and nothing is dispatched.
     pub async fn resume(&self, comp: &dyn Compositor, token: &str) -> Result<(), DesktopError> {
-        {
+        let armed = {
             let mut g = lock(&self.slot);
             if !g.as_ref().is_some_and(|a| a.token == token) {
                 return Err(DesktopError::InvalidArgument(
                     "Shortcuts aren't paused for that token.".into(),
                 ));
             }
-            if let Some(a) = g.take() {
-                a.timer.abort();
+            g.take()
+        };
+        // The timer stays until the reset is known to have worked: if the reply fails, it is put
+        // back and tries again at its deadline, so shortcuts can't stay off.
+        match comp.eval(RESET).await {
+            Ok(()) | Err(CompositorError::NotRunning) => {
+                if let Some(a) = armed {
+                    a.timer.abort();
+                }
+                Ok(())
+            }
+            Err(e) => {
+                tracing::debug!("resuming shortcuts: {e}");
+                if let Some(a) = armed {
+                    let mut g = lock(&self.slot);
+                    if g.is_none() {
+                        *g = Some(a);
+                    } else {
+                        a.timer.abort();
+                    }
+                }
+                Err(down())
             }
         }
-        comp.eval(RESET).await.map_err(|e| {
-            tracing::debug!("resuming shortcuts: {e}");
-            down()
-        })
     }
 }
 
