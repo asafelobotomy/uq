@@ -24,7 +24,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Arc::new(Hyprland::from_env()),
         Arc::new(GSettings::default()),
     )?
-    .with_power(Arc::new(SystemPowerProfiles::default()));
+    .with_power(Arc::new(SystemPowerProfiles::default()))
+    .with_dev_session(std::env::var_os("UQ_DEV_SESSION").is_some());
     desktop.startup().await;
     let data_dirs = xdg_data_dirs();
     desktop.prune_launch_counts(&|id| desktop_file_installed(id, &data_dirs));
@@ -37,6 +38,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tokio::select! {
             _ = tick.tick() => {
                 shared.lock().await.flush_launch_counts();
+                shared.lock().await.refresh_overrides();
                 if let Err(e) = shared.lock().await.tick_schedule_at(chrono::Local::now()).await {
                     tracing::warn!("scheduled theme change failed: {e}");
                 }

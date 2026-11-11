@@ -1079,3 +1079,69 @@ async fn pick_does_not_hold_the_desktop_lock() {
     let reply = pending.await.unwrap().unwrap();
     assert!(reply.contains("cancelled"), "{reply}");
 }
+
+#[tokio::test]
+async fn startup_sections_over_dbus() {
+    let s = served().await;
+    let writes = [
+        ("env", r#"{"vars":[{"name":"FOO","value":"bar"}]}"#),
+        ("compat", r#"{"qt_wayland":true}"#),
+        (
+            "autostart",
+            r#"{"files":[{"id":"nm-applet.desktop","enabled":false,"delay":null}],"added":[]}"#,
+        ),
+    ];
+    for (domain, json) in writes {
+        let () = s
+            .proxy
+            .call("SetSection", &(domain, json, "settings"))
+            .await
+            .unwrap();
+        let got: String = s.proxy.call("GetSection", &(domain,)).await.unwrap();
+        let got: serde_json::Value = serde_json::from_str(&got).unwrap();
+        let sent: serde_json::Value = serde_json::from_str(json).unwrap();
+        for (k, v) in sent.as_object().unwrap() {
+            assert_eq!(&got[k], v, "{domain}.{k}");
+        }
+    }
+    let g = std::fs::read_to_string(&s.paths.generated_lua).unwrap();
+    assert!(g.contains(r#"hl.env("FOO", "bar", true)"#), "{g}");
+    assert!(
+        g.contains(r#"hl.env("QT_QPA_PLATFORM", "wayland;xcb", true)"#),
+        "{g}"
+    );
+    let env_d = s.paths.startup.config_home.join("environment.d/60-uq.conf");
+    let env_d = std::fs::read_to_string(env_d).unwrap();
+    assert!(env_d.contains("FOO='bar'"), "{env_d}");
+
+    let explain = |domain: &'static str| {
+        let proxy = s.proxy.clone();
+        async move {
+            let e: String = proxy.call("Explain", &(domain,)).await.unwrap();
+            serde_json::from_str::<serde_json::Value>(&e).unwrap()
+        }
+    };
+    assert_eq!(explain("env").await["vars.FOO"]["source"], "uq");
+    let compat = explain("compat").await;
+    assert_eq!(compat["qt_wayland"]["source"], "uq");
+    assert_eq!(compat["sharp_x11"]["source"], "default");
+    assert_eq!(
+        explain("autostart").await["nm-applet.desktop"]["source"],
+        "uq"
+    );
+
+    let err = s
+        .proxy
+        .call::<_, _, ()>(
+            "SetSection",
+            &(
+                "compat",
+                r#"{"apps":[{"id":"code.desktop","platform":"x11","elsewhere":true}]}"#,
+                "settings",
+            ),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(error_name(&err), "org.uq.Desktop1.Error.InvalidSetting");
+    assert_eq!(error_message(&err), "uQ can't find this app's file.");
+}
