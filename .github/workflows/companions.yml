@@ -1,0 +1,70 @@
+name: Companion pages
+
+# Checks every companion app's uq/ folder against this uQ, so a change to the page loader that
+# would break an installed page shows up here. It never gates unrelated pull requests.
+on:
+  schedule:
+    - cron: '17 4 * * 1'
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'docs/settings-pages.md'
+      - 'docs/integrating.md'
+      - 'templates/**'
+      - 'crates/uq-core/src/integration/**'
+      - 'apps/uq-settings/src/plugins.rs'
+      - 'apps/uq-settings/src/plugin_host.rs'
+      - 'apps/uq-settings/qml/PluginPage.qml'
+      - 'apps/uq-settings/qml/components/PluginContext.qml'
+      - 'apps/uq-settings/qml/components/CommandConfirmDialog.qml'
+      - 'crates/uqctl/src/integrations.rs'
+      - 'scripts/check-companion-pages.sh'
+      - '.github/workflows/companions.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          repository: asafelobotomy/scdr
+          ref: main
+          path: companions/scdr
+          persist-credentials: false
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          repository: asafelobotomy/crumbs
+          ref: main
+          path: companions/crumbs
+          persist-credentials: false
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          repository: asafelobotomy/noti-fi
+          ref: main
+          path: companions/noti-fi
+          persist-credentials: false
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          repository: asafelobotomy/XZram
+          ref: main
+          path: companions/xzram
+          persist-credentials: false
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          repository: asafelobotomy/scale_tail
+          ref: main
+          path: companions/scale_tail
+          persist-credentials: false
+      - name: Build uqctl
+        run: cargo build -j 2 -p uqctl --locked
+      - name: Check each companion's pages
+        run: |
+          scripts/check-companion-pages.sh target/debug/uqctl \
+            companions/scdr/uq companions/crumbs/uq companions/noti-fi/uq \
+            companions/xzram/uq companions/scale_tail/uq

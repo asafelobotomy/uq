@@ -9,6 +9,15 @@ All notable changes to uQ are listed here. The format follows
 
 ### Added
 
+- **Pages from scdr, crumBS, noti-fi, XZram and scale_tail in Settings.** **Scheduling** shows
+  whether scdr is on, pauses and resumes it, and edits per-app rules and the scheduler.
+  **Storage and cleanup** shows disk use, cleans caches and leftovers, puts a cleanup back and
+  uninstalls apps. **Notifications** sets do not disturb, automatic do-not-disturb and how much
+  history noti-fi keeps. **Memory and swap** changes the zram size and algorithm and the
+  swappiness. **Tailscale** connects, picks an exit node, accepts routes and signs out. The pages
+  ship with those apps (update the app to get its page) and appear under **Apps** when the app is
+  installed. New optional dependencies `xzram` and `scale_tail`. A weekly check runs each app's
+  page against uQ (`.github/workflows/companions.yml`).
 - **Display arrangements, the main display, and touchpad gestures.** The Displays page can
   **Remember for these screens**: each arrangement is matched by the make, model and serial of
   every connected screen (not by port), and when screens are plugged in or out uqd switches to

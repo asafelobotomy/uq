@@ -423,6 +423,29 @@ them sooner. This spec proposes:
   sources and §3 history don't cover them. The pages use the same row and label components, so
   they look and behave like uQ's own pages. `page.toml` gains no new keys.
 
+**Implemented by slice E** (plan `2026-11-11-uq-settings-slice-e-companion-pages.md`). All five pages
+ship from their apps' own `uq/` folders: Scheduling (scdr), Storage and cleanup (crumBS),
+Notifications (noti-fi), Memory and swap (XZram) and Tailscale (scale_tail). Deviations from the
+proposal above:
+
+1. Writes. scdr writes over D-Bus (`SetSettings`, `SetRoleEnabled`, `Pause`, `Resume`), with the
+   confirmation in the page; no `scdrctl settings`. XZram writes over D-Bus too (`ApplyNowZram`,
+   `ApplyNowSysctl`). crumBS and Tailscale go through their CLIs, as proposed.
+2. noti-fi gained two CLI calls for the page: `notify settings --json` and `notify set`.
+3. The noti-fi page has no do-not-disturb schedule, because noti-fi has none. It offers the
+   automatic do-not-disturb it has (full screen, screen sharing) and focus modes.
+4. Per-app rules on the noti-fi page are read-only; editing them stays in noti-fi.
+5. Pages follow changes through manifest watches instead of polling: scdrd's PropertiesChanged
+   signal, crumBS's history file and noti-fi's state and rules files. Only the Tailscale page
+   polls (every 5 s while shown), because Tailscale has nothing a manifest can watch.
+6. scdr: no "try a scheduler" and no per-power-profile scheduler choice on the page.
+7. Page ids are the app names (`scdr`, `crumbs`, `noti-fi`, `xzram`, `scale-tail`), not the page
+   titles in the table.
+8. XZram: no swap-file management on the page (it stays in XZram, with a link to open it).
+9. Tailscale: no automatic connect on the page, the sign-in link is shown as selectable text with
+   a Copy button, and a refused write tells the user to run `sudo tailscale set --operator=$USER`
+   once.
+
 ## 9. Quality rules for every page
 
 These come from KDE and COSMIC complaints, and a lint or test checks each one where it can.

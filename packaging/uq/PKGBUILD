@@ -32,6 +32,8 @@ optdepends=(
   'noti-fi: notification backend'
   'fprintd: fingerprint unlock'
   'crum-bs: uninstall apps with their leftovers and clean up storage'
+  'xzram: the Memory and swap page in Settings'
+  'scale_tail: the Tailscale page and quick-settings tile'
   'greetd: the uQ login screen (run0 uqctl greeter enable)'
   'networkmanager-openvpn: OpenVPN connections on the Network settings page'
   'sound-theme-freedesktop: the test sound on the Sound settings page'
