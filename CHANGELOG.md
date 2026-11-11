@@ -101,6 +101,14 @@ All notable changes to uQ are listed here. The format follows
   `uqd` gains `ListAutostart`, `ShellReady` and an `AutostartChanged` signal, and the `env`,
   `compat` and `autostart` sections use `GetSection` / `SetSection`. `uqctl launch <desktop-id>`
   launches an app the way uQ's launcher does.
+- **Settings helper.** A small system service, `uq-settings-helper`, lets Settings change a few
+  system-wide things after you confirm with an administrator password: what the lid and power
+  button do, and the login screen's theme, wallpaper, monitor layout and auto-login. Each change
+  writes one fixed file and accepts only a fixed list of values; it never restarts logind (the
+  lid and power-button change applies at its next reload). The wallpaper is copied as-is, up to
+  20 MiB, and never opened as an image. Turning auto-login on or off asks for the password every
+  time. It starts when needed, runs in a tight sandbox with no special privileges beyond root's
+  own files, and quits after 30 seconds without use.
 
 ### Changed
 

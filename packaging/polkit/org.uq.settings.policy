@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<!-- The actions uq-settings-helper checks before it writes a system file. -->
+<policyconfig>
+  <vendor>uQ</vendor>
+  <vendor_url>https://github.com/asafelobotomy/uq</vendor_url>
+
+  <action id="org.uq.settings.power">
+    <description>Change what the lid and power button do</description>
+    <message>Authentication is required to change what the lid and power button do.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.uq.settings.greeter">
+    <description>Change the login screen</description>
+    <message>Authentication is required to change the login screen.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+  </action>
+
+  <action id="org.uq.settings.autologin">
+    <description>Change automatic login</description>
+    <message>Authentication is required to change automatic login.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+  </action>
+</policyconfig>
