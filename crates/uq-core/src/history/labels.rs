@@ -121,6 +121,21 @@ fn input(key: &str) -> Option<String> {
 
 /// `outputs.<output>.<field>`, where `position` has `x` and `y` leaves.
 fn monitors(key: &str) -> Option<String> {
+    let fixed = match key {
+        "primary.make" | "primary.model" | "primary.serial" => Some("Main display"),
+        "auto_profiles" => Some("Switch arrangements when screens change"),
+        "bar.show" => Some("Show the bar on"),
+        "bar.on" => Some("Screens with a bar"),
+        "workspaces.strategy" => Some("Workspaces across screens"),
+        "workspaces.count" => Some("Planned workspaces"),
+        "workspaces.manual" => Some("Workspaces on each screen"),
+        "workspaces.move_back" => Some("Move workspaces back when a screen returns"),
+        "profiles" => Some("Saved display arrangements"),
+        _ => None,
+    };
+    if let Some(f) = fixed {
+        return Some(f.into());
+    }
     let rest = key.strip_prefix("outputs.")?;
     let (output, what) = if let Some(o) = rest.strip_suffix(".position.x") {
         (o, "Position (across)")
@@ -151,8 +166,9 @@ mod tests {
     use crate::lua::Layout;
     use crate::schedule::Schedule;
     use crate::settings::{
-        AccelProfile, DeviceOverride, ForceSplit, KbLayout, Location, NewStatus, Orientation,
-        OutputConfig, Position, ProviderPref,
+        AccelProfile, BarChoice, BarShow, DeviceOverride, ForceSplit, KbLayout, Location,
+        ManualSlot, MonitorId, MonitorProfile, NewStatus, Orientation, OutputConfig, Position,
+        ProviderPref, SavedOutput, Strategy, WorkspacePlan,
     };
     use crate::state::State;
     use std::path::PathBuf;
@@ -252,6 +268,37 @@ mod tests {
                 },
             );
         }
+        let dell = MonitorId {
+            make: "Dell Inc.".into(),
+            model: "DELL U2720Q".into(),
+            serial: "ABC123".into(),
+        };
+        let m = &mut s.monitors;
+        m.primary = Some(dell.clone());
+        m.auto_profiles = false;
+        m.bar = BarChoice {
+            show: BarShow::Chosen,
+            on: vec![dell.clone()],
+        };
+        m.workspaces = WorkspacePlan {
+            strategy: Strategy::Manual,
+            count: 8,
+            manual: vec![ManualSlot {
+                workspace: 2,
+                monitor: dell.clone(),
+            }],
+            move_back: false,
+        };
+        m.profiles = vec![MonitorProfile {
+            id: "m-7f2c".into(),
+            name: "Desk".into(),
+            outputs: vec![SavedOutput {
+                monitor: dell,
+                hint: "DP-1".into(),
+                config: OutputConfig::default(),
+            }],
+            workspaces: Some(WorkspacePlan::default()),
+        }];
         st.layouts.insert("2".into(), Layout::Scrolling);
         st.set_section(
             "rules",

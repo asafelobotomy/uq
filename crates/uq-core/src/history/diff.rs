@@ -131,6 +131,19 @@ pub fn summarize(domain: &str, before: &Value, after: &Value, labels: Labels) ->
     if domain == crate::integration::rules::DOMAIN {
         return crate::integration::rules::summary(before, after);
     }
+    if domain == "monitors" {
+        return crate::settings::monitors_summary(before, after, labels);
+    }
+    summarize_leaves(domain, before, after, labels)
+}
+
+/// The generic body of [`summarize`]: one line naming at most three changed leaves.
+pub(crate) fn summarize_leaves(
+    domain: &str,
+    before: &Value,
+    after: &Value,
+    labels: Labels,
+) -> String {
     let (b, a) = (leaf_map(domain, before), leaf_map(domain, after));
     let keys: BTreeSet<&String> = b.keys().chain(a.keys()).collect();
     let changed: Vec<String> = keys

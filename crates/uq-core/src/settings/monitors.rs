@@ -11,7 +11,16 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 
+mod extras;
+mod identity;
 mod live;
+mod parse;
+pub(crate) mod summary;
+pub use extras::{
+    BarChoice, BarShow, ManualSlot, MonitorProfile, SavedOutput, Strategy, WorkspacePlan,
+    clean_name, valid_profile_id,
+};
+pub use identity::{MonitorId, counts_in_sets};
 pub use live::{LiveOutput, parse_live, stays_visible};
 
 const MAX_OUTPUTS: usize = 16;
@@ -191,15 +200,74 @@ fn lenient_outputs<'de, D: serde::Deserializer<'de>>(
         .collect())
 }
 
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+/// The layout (`outputs`) and, beside it, the main display, the bar choice, the workspace
+/// planner and the saved arrangements. A default key is not written to `state.toml`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Monitors {
     #[serde(deserialize_with = "lenient_outputs")]
     pub outputs: BTreeMap<String, OutputConfig>,
+    /// The main display; `None` means "none chosen".
+    #[serde(skip_serializing_if = "Option::is_none", deserialize_with = "lenient")]
+    pub primary: Option<MonitorId>,
+    /// Switch to a saved arrangement when the connected screens change.
+    #[serde(
+        skip_serializing_if = "extras::is_true",
+        deserialize_with = "extras::lenient_true"
+    )]
+    pub auto_profiles: bool,
+    #[serde(
+        skip_serializing_if = "extras::is_default",
+        deserialize_with = "lenient"
+    )]
+    pub bar: BarChoice,
+    #[serde(
+        skip_serializing_if = "extras::is_default",
+        deserialize_with = "lenient"
+    )]
+    pub workspaces: WorkspacePlan,
+    #[serde(
+        skip_serializing_if = "Vec::is_empty",
+        deserialize_with = "extras::lenient_list"
+    )]
+    pub profiles: Vec<MonitorProfile>,
+}
+
+impl Default for Monitors {
+    fn default() -> Self {
+        Self {
+            outputs: BTreeMap::new(),
+            primary: None,
+            auto_profiles: true,
+            bar: BarChoice::default(),
+            workspaces: WorkspacePlan::default(),
+            profiles: Vec::new(),
+        }
+    }
 }
 
 impl Monitors {
-    pub const FIELDS: [&str; 1] = ["outputs"];
+    pub const FIELDS: [&str; 6] = [
+        "outputs",
+        "primary",
+        "auto_profiles",
+        "bar",
+        "workspaces",
+        "profiles",
+    ];
+
+    /// Whether the layout (`outputs`) is the same; the other keys are not compared.
+    pub fn layout_eq(&self, other: &Monitors) -> bool {
+        self.outputs == other.outputs
+    }
+
+    /// These settings with `outputs` replaced.
+    pub fn with_layout(&self, outputs: BTreeMap<String, OutputConfig>) -> Monitors {
+        Monitors {
+            outputs,
+            ..self.clone()
+        }
+    }
 
     /// Every rule: at most 16 outputs, valid names and values, and mirrors that point at a
     /// different output which doesn't mirror another (an output with no entry is fine).
@@ -231,7 +299,12 @@ impl Monitors {
                 }
             }
         }
-        Ok(())
+        if let Some(p) = &self.primary {
+            p.check("monitors.primary")?;
+        }
+        self.bar.validate("monitors.bar")?;
+        self.workspaces.validate("monitors.workspaces")?;
+        parse::validate_profiles(&self.profiles)
     }
 
     /// Parse a whole `monitors` section strictly: unknown keys, wrong types and rule breaks
@@ -257,6 +330,24 @@ impl Monitors {
                 }
             }
             Some(_) => return Err(invalid("monitors.outputs", "expected an object")),
+        }
+        match obj.get("primary") {
+            None | Some(Value::Null) => {}
+            Some(p) => out.primary = Some(parse::parse_id("monitors.primary", p)?),
+        }
+        match obj.get("auto_profiles") {
+            None | Some(Value::Null) => {}
+            Some(Value::Bool(b)) => out.auto_profiles = *b,
+            Some(_) => return Err(invalid("monitors.auto_profiles", "expected true or false")),
+        }
+        if let Some(b) = obj.get("bar").filter(|b| !b.is_null()) {
+            out.bar = parse::parse_bar(b)?;
+        }
+        if let Some(w) = obj.get("workspaces").filter(|w| !w.is_null()) {
+            out.workspaces = parse::parse_workspaces("monitors.workspaces", w)?;
+        }
+        if let Some(p) = obj.get("profiles").filter(|p| !p.is_null()) {
+            out.profiles = parse::parse_profiles(p)?;
         }
         out.validate()?;
         Ok(out)
@@ -302,9 +393,25 @@ impl Monitors {
                 cfg.mirror_of = None;
             }
         }
-        (Self { outputs }, errors)
+        let primary = extras::repaired_primary(self.primary, &mut errors);
+        let bar = extras::repaired_bar(self.bar, &mut errors);
+        let workspaces = extras::repaired_workspaces(self.workspaces, &mut errors);
+        let profiles = extras::repaired_profiles(self.profiles, &mut errors);
+        (
+            Self {
+                outputs,
+                primary,
+                auto_profiles: self.auto_profiles,
+                bar,
+                workspaces,
+                profiles,
+            },
+            errors,
+        )
     }
 }
 
+#[cfg(test)]
+mod extras_tests;
 #[cfg(test)]
 mod tests;
