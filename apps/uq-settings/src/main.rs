@@ -21,6 +21,7 @@ mod displays_model;
 mod history_model;
 mod input_model;
 mod instance;
+mod keybinds_model;
 mod look_model;
 mod model_core;
 mod pages;

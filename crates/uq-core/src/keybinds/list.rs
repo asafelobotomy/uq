@@ -108,7 +108,8 @@ pub fn list(kb: &Keybinds, user_lua: Option<&str>) -> Value {
         acts[group]
             .as_array_mut()
             .expect("the four groups are lists")
-            .push(json!({ "label": a.text(), "action": a }));
+            .push(json!({ "label": a.text(), "action": a,
+                         "may_lock": a.may_lock(), "may_repeat": a.may_repeat() }));
     }
     json!({
         "binds": binds,
@@ -208,6 +209,21 @@ mod tests {
                 .any(|a| a["action"] == json!({"kind": "uq", "name": "settings"}))
         );
         assert_eq!(v["actions"]["window"][0]["label"], "Closes the window");
+        // What the editor offers as switches comes from the same limits the write checks (R7).
+        let find = |group: &str, name: &str| {
+            v["actions"][group]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|a| a["action"]["name"] == name)
+                .unwrap()
+                .clone()
+        };
+        assert_eq!(find("shell", "vol-up")["may_lock"], true);
+        assert_eq!(find("shell", "vol-up")["may_repeat"], true);
+        assert_eq!(find("shell", "spotlight")["may_lock"], false);
+        assert_eq!(find("uq", "terminal")["may_repeat"], false);
+        assert_eq!(find("uq", "media")["may_lock"], true);
         assert_eq!(
             v["limits"],
             json!({"custom": 100, "name": 100, "command": 1024})

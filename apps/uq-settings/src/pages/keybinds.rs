@@ -6,10 +6,10 @@
 //! under the write lock, origin `settings`). uqd checks the keys and the conflicts again on
 //! every write; [`KeybindsState::check`] runs the same check on a draft as you type, with no
 //! D-Bus call, so the editor can warn before Save.
-#![allow(dead_code, reason = "used by keybinds_model, added with the page")]
 
 pub mod capture;
 
+use std::path::PathBuf;
 use std::sync::Mutex as StdMutex;
 
 use serde_json::{Map, Value, json};
@@ -19,6 +19,7 @@ use uq_core::keybinds::actions::catalogue;
 use uq_core::keybinds::{Keybinds, combo, defaults};
 use uq_core::settings::SettingError;
 
+use crate::desktop_entries;
 use crate::pages::runner::{PageLogic, parse_json, patch_section};
 
 pub use capture::combo_from_qt;
@@ -73,6 +74,8 @@ pub struct KeybindsState {
     /// Edits read-modify-write the section, so one at a time.
     write: Mutex<()>,
     shown: StdMutex<Shown>,
+    /// Where the installed apps are read from, for "Start an app".
+    app_dirs: Vec<PathBuf>,
     /// The last `keybinds` section and `ListBinds` read from uqd, for `check`.
     last: StdMutex<(Value, Value)>,
 }
@@ -140,10 +143,15 @@ fn text_of<'a>(v: &'a Value, key: &str) -> &'a str {
 
 impl KeybindsState {
     pub fn new(conn: zbus::Connection) -> Self {
+        Self::with_dirs(conn, desktop_entries::default_dirs())
+    }
+
+    pub fn with_dirs(conn: zbus::Connection, app_dirs: Vec<PathBuf>) -> Self {
         Self {
             conn,
             write: Mutex::new(()),
             shown: StdMutex::new(Shown::default()),
+            app_dirs,
             last: StdMutex::new((Value::Null, Value::Null)),
         }
     }
@@ -360,8 +368,8 @@ impl KeybindsState {
     }
 }
 
-/// The state is the snapshot: `{groups, custom, user_lua, section, capture, catalogue, limits,
-/// notice}`.
+/// The state is the snapshot: `{groups, custom, user_lua, section, capture, catalogue, apps,
+/// limits, notice}`.
 impl PageLogic for KeybindsState {
     type Op = Op;
 
@@ -403,7 +411,28 @@ impl PageLogic for KeybindsState {
             Err(_) => json!({}),
         };
         *self.last.lock().unwrap() = (section, list.clone());
-        Ok(self.view(&list, &explained))
+        let dirs = self.app_dirs.clone();
+        let apps = tokio::task::spawn_blocking(move || desktop_entries::scan(&dirs))
+            .await
+            .map_err(|e| failure(format!("reading the installed apps failed: {e}")))?;
+        let mut view = self.view(&list, &explained);
+        // Your own shortcuts carry what the editor needs to change them: the stored entry.
+        let stored = self.last.lock().unwrap().0.clone();
+        for row in view["custom"].as_array_mut().into_iter().flatten() {
+            let id = row["id"].clone();
+            row["raw"] = stored["custom"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .find(|b| b["id"] == id)
+                .cloned()
+                .unwrap_or(Value::Null);
+        }
+        view["apps"] = apps
+            .into_iter()
+            .map(|a| json!({"id": a.id, "name": a.name, "icon": a.icon}))
+            .collect();
+        Ok(view)
     }
 }
 
@@ -428,6 +457,7 @@ impl KeybindsState {
             "enabled": bind["enabled"], "is_default": bind["is_default"], "changed": changed,
             "can_disable": bind["can_disable"], "action_text": bind["action_text"],
             "source": source, "line": e["detail"].get("line").cloned().unwrap_or(Value::Null),
+            "path": e["detail"].get("path").cloned().unwrap_or(Value::Null),
             "profile": profile})
     }
 

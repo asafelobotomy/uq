@@ -8,7 +8,7 @@ use uq_core::test_bus::{connect, private_bus};
 
 async fn rig() -> (Rig, KeybindsState) {
     let r = fake_uqd::rig(State::default()).await;
-    let page = KeybindsState::new(r.client.clone());
+    let page = KeybindsState::with_dirs(r.client.clone(), Vec::new());
     (r, page)
 }
 
@@ -82,7 +82,7 @@ async fn rebind_disable_reset_round_trip() {
     assert_eq!(row(&out.state, "uq.close")["enabled"], false);
     assert_eq!(row(&out.state, "uq.close")["changed"], true);
     // Reopening gives the same snapshot (§9's round trip).
-    let reopened = KeybindsState::new(r.client.clone());
+    let reopened = KeybindsState::with_dirs(r.client.clone(), Vec::new());
     assert_eq!(
         op(&reopened, Op::Refresh).await.state["groups"],
         out.state["groups"]
@@ -536,6 +536,7 @@ async fn row_source_comes_from_explain() {
     let out = op(&page, Op::Refresh).await;
     assert_eq!(row(&out.state, "uq.close")["source"], "user_lua");
     assert_eq!(row(&out.state, "uq.close")["line"], 7);
+    assert_eq!(row(&out.state, "uq.close")["path"], "/u/user.lua");
     assert_eq!(row(&out.state, "uq.float")["line"], Value::Null);
     // A failed Explain only drops the sources.
     r.explain.fail();
@@ -547,7 +548,7 @@ async fn row_source_comes_from_explain() {
 #[tokio::test]
 async fn uqd_down_gives_empty_state_without_an_error() {
     let bus = private_bus();
-    let page = KeybindsState::new(connect(&bus).await);
+    let page = KeybindsState::with_dirs(connect(&bus).await, Vec::new());
     let out = op(&page, Op::Refresh).await;
     assert_eq!(
         out,
@@ -583,4 +584,50 @@ async fn uqd_down_gives_empty_state_without_an_error() {
     // check() with nothing read says so plainly instead of guessing.
     let v = page.check(&json!({"combo": "SUPER + F9"}));
     assert_eq!(v["valid"], false);
+}
+
+#[tokio::test]
+async fn installed_apps_are_offered_for_start_an_app() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("firefox.desktop"),
+        "[Desktop Entry]\nType=Application\nName=Firefox\nIcon=firefox\nExec=firefox %u\n",
+    )
+    .unwrap();
+    let r = fake_uqd::rig(State::default()).await;
+    let page = KeybindsState::with_dirs(r.client.clone(), vec![dir.path().to_path_buf()]);
+    let out = op(&page, Op::Refresh).await;
+    assert_eq!(
+        out.state["apps"],
+        json!([{"id": "firefox.desktop", "name": "Firefox", "icon": "firefox"}])
+    );
+    // And a shortcut that starts it saves as the action the editor builds.
+    let bind = json!({"name": "Browser", "combo": "SUPER + SHIFT + P",
+        "action": {"kind": "launch", "app": "firefox.desktop"}});
+    let out = op(&page, Op::SaveCustom { bind }).await;
+    assert_eq!(out.error, None);
+    assert_eq!(out.state["custom"][0]["action_text"], "Starts Firefox");
+}
+
+/// The settings QML tests feed the shortcut editor a few rows of the catalogue; each must still
+/// be in the real one.
+#[test]
+fn fixture_is_a_slice_of_the_catalogue() {
+    let file = include_str!("../../../../../tests/settings-qml/fixtures/keybinds_catalogue.js");
+    let lead = "var catalogue = ";
+    let start = file.find(lead).expect("the fixture sets `catalogue`") + lead.len();
+    let body = file[start..].trim_end().trim_end_matches(';');
+    let fixture: Value = serde_json::from_str(body).expect("the fixture is JSON");
+    let real = uq_core::keybinds::list::list(&Keybinds::default(), None);
+    for key in fixture["keys"].as_array().unwrap() {
+        assert!(real["keys"].as_array().unwrap().contains(key), "{key}");
+    }
+    for (group, rows) in fixture["actions"].as_object().unwrap() {
+        for row in rows.as_array().unwrap() {
+            assert!(
+                real["actions"][group].as_array().unwrap().contains(row),
+                "update tests/settings-qml/fixtures/keybinds_catalogue.js: {row}"
+            );
+        }
+    }
 }
