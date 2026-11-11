@@ -676,3 +676,61 @@ async fn variants_keep_their_own_kind() {
         dracula.light.colors.bg.hex()
     );
 }
+
+/// What the QML tests' fixture holds.
+const FIXTURE: &str = include_str!("../../../../../tests/settings-qml/fixtures/themes.js");
+
+fn fixture(name: &str) -> Value {
+    let lead = format!("var {name} = ");
+    let start = FIXTURE.find(&lead).expect("the fixture sets it") + lead.len();
+    let rest = &FIXTURE[start..];
+    let end = rest
+        .find("\n;")
+        .expect("the fixture ends it with a `;` line");
+    serde_json::from_str(&rest[..end]).expect("the fixture is JSON")
+}
+
+/// The theme editor's QML tests feed it a copy of a session and its preview; they must not
+/// drift from what the page logic says for a new theme made from Gruvbox.
+#[tokio::test]
+async fn fixture_matches_the_editor_session_and_preview() {
+    let (_r, page, _d) = rig().await;
+    let out = run(
+        &page,
+        Op::OpenEditor {
+            from: "gruvbox".into(),
+            edit: false,
+        },
+    )
+    .await;
+    assert_eq!(
+        fixture("editor"),
+        out.state["editor"],
+        "update tests/settings-qml/fixtures/themes.js"
+    );
+    assert_eq!(
+        fixture("preview"),
+        page.preview(&draft(&out.state, "Gruvbox copy")),
+        "update tests/settings-qml/fixtures/themes.js"
+    );
+}
+
+#[tokio::test]
+#[ignore = "prints the fixture"]
+async fn print_fixture() {
+    let (_r, page, _d) = rig().await;
+    let out = run(
+        &page,
+        Op::OpenEditor {
+            from: "gruvbox".into(),
+            edit: false,
+        },
+    )
+    .await;
+    let pretty = |v: &Value| serde_json::to_string_pretty(v).unwrap();
+    println!("var editor = {}\n;", pretty(&out.state["editor"]));
+    println!(
+        "var preview = {}\n;",
+        pretty(&page.preview(&draft(&out.state, "Gruvbox copy")))
+    );
+}

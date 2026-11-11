@@ -39,6 +39,8 @@ fn main() {
         QmlFile::from("qml/components/EnvVarRow.qml"),
         QmlFile::from("qml/components/AppFixDialog.qml"),
         QmlFile::from("qml/components/AddStartupDialog.qml"),
+        QmlFile::from("qml/components/ThemeChip.qml"),
+        QmlFile::from("qml/components/ThemeEditor.qml"),
         QmlFile::from("qml/pages/AppearancePage.qml"),
         QmlFile::from("qml/pages/AppsScalingPage.qml"),
         QmlFile::from("qml/pages/DisplaysPage.qml"),

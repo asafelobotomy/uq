@@ -65,9 +65,15 @@ impl Session {
         }
     }
 
-    /// `{base, edit, id, name, author, colors: {dark: {bg…bad}, light: {…}}}`.
+    /// `{base, edit, id, name, author, keys: [{key, label}], colors: {dark: {bg…bad}, light:
+    /// {…}}}`. `keys` is the catalogue the editor's rows come from.
     pub fn json(&self) -> Value {
+        let keys: Vec<Value> = KEYS
+            .iter()
+            .map(|(key, label)| json!({"key": key, "label": label}))
+            .collect();
         json!({
+            "keys": keys,
             "base": self.base,
             "edit": self.edit,
             "id": self.id,
