@@ -314,6 +314,53 @@ impl DesktopIface {
         Ok(self.desktop.lock().await.get_profile(id)?)
     }
 
+    /// The themes as JSON: `{themes: [{id, name, author, user, missing, active}], skipped:
+    /// [{folder?, reason}], root_is_link}`. Looks at the user's themes folder first.
+    async fn list_theme_info(&self) -> Result<String, UqError> {
+        let info = self.desktop.lock().await.theme_info();
+        serde_json::to_string(&info).map_err(|e| UqError::Io(e.to_string()))
+    }
+
+    /// A theme as `.uqtheme` text; with `with_look`, also the current window look.
+    async fn export_theme(&self, id: &str, with_look: bool) -> Result<String, UqError> {
+        Ok(self.desktop.lock().await.export_theme(id, with_look)?)
+    }
+
+    /// Add a theme from `.uqtheme` text and return its id. It is not switched to. `Conflict`
+    /// when the id exists and `replace` is false. With `with_look`, the file's window look is
+    /// written too, as `origin`'s change.
+    async fn import_theme(
+        &self,
+        text: &str,
+        replace: bool,
+        with_look: bool,
+        origin: &str,
+    ) -> Result<String, UqError> {
+        // Before the lock, so a huge text never makes anyone wait.
+        if text.len() as u64 > uq_core::theme::uqtheme::MAX_FILE_BYTES {
+            return Err(UqError::InvalidArgument(
+                "The file is too big to be a theme.".into(),
+            ));
+        }
+        Ok(self
+            .desktop
+            .lock()
+            .await
+            .import_theme(text, replace, with_look, Origin::parse(origin))
+            .await?)
+    }
+
+    /// Remove one of the user's themes. Returns `{switched, profiles}` as JSON.
+    async fn delete_theme(&self, id: &str, origin: &str) -> Result<String, UqError> {
+        let out = self
+            .desktop
+            .lock()
+            .await
+            .delete_theme(id, Origin::parse(origin))
+            .await?;
+        serde_json::to_string(&out).map_err(|e| UqError::Io(e.to_string()))
+    }
+
     /// Save a profile from its file text and return its id. `Conflict` when the id exists and
     /// `replace` is false. Changes no setting.
     async fn set_profile(&self, toml: &str, replace: bool) -> Result<String, UqError> {
@@ -354,6 +401,10 @@ impl DesktopIface {
     async fn shell_ready(&self) {
         crate::autostart::shell_ready(&self.desktop, &self.runner);
     }
+
+    /// The user's themes changed; `ListThemeInfo` has the new list.
+    #[zbus(signal)]
+    async fn themes_changed(e: &SignalEmitter<'_>) -> zbus::Result<()>;
 
     /// A startup app's status changed; `ListAutostart` has the new list.
     #[zbus(signal)]
