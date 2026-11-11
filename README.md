@@ -134,6 +134,10 @@ Profiles use `ListProfiles` (JSON), `GetProfile(id)` (the TOML text), `SetProfil
 (returns the id; `Conflict` if it exists and `replace` is false), `DeleteProfile(id)`,
 `ApplyProfile(id)` and `ProfileOff()` (both return a JSON report), and a `ProfileChanged(id)`
 signal, sent when the profile that's on or the list of profiles changes (`""` for none).
+Keyboard shortcuts use `GetSection("keybinds")` / `SetSection("keybinds", json, origin)` and the
+`SectionChanged` signal. `ListBinds()` returns uQ's shortcuts with your changes, your own, the
+marked `user.lua` binds and the key and action lists (JSON); `PauseShortcuts()` and
+`ResumeShortcuts()` pause and resume them for key capture (at most 15 s).
 Window rules use `GetSection("rules")` / `SetSection("rules", json, origin)`, like any section,
 and so do startup apps (`"autostart"`), environment variables (`"env"`) and Apps and scaling
 (`"compat"`); there is no separate write call for them. `ListAutostart()` returns each startup
@@ -152,7 +156,7 @@ holds only the settings you put in it, and only those change when it's on. It ca
 from Look and layouts, Appearance (including the theme, light or dark, and fonts), Shell and
 Wallpaper, and one power mode (Power saver, Balanced or Performance). Only one profile is on at a
 time. A profile can turn window rules and panel rules on and off (see the Window rules page
-below). Keybinds aren't part of profiles yet.
+below) and keyboard shortcuts on and off (see the Keyboard shortcuts page below).
 
 **New profile** starts from the settings you changed lately, or from the current settings of the
 pages you tick; **Add settings** adds more later, each with the value it has now. The app can't
@@ -194,19 +198,55 @@ next login: nothing starts or stops when you turn a profile on, and apps that ar
 keep their environment.
 
 Switch from the quick-settings **Profile** row (it shows only when you have profiles; **Normal**
-is Back to normal), from the page, or with `uqctl profile`. To switch with a key, add this to
-`user.lua` (the keybinds page will bring a setting for it later):
+is Back to normal), from the page, or with `uqctl profile`. To switch with a key, set **Switch to
+the next profile** on the Keyboard shortcuts page.
 
-```lua
-hl.bind("SUPER + ALT + P", hl.dsp.exec_cmd("uqctl profile next"))
-```
+A profile can also turn keyboard shortcuts on and off, and nothing more: it names each shortcut by
+its id (`[keybinds]` then `"uq.close" = false`, or `"k-3f9c" = true` for one of your own). It
+can't set keys, add a shortcut or carry a command, and import refuses anything else with a plain
+message. A shortcut of yours that is not on this computer is left out with a notice. A profile that
+would make two shortcuts share keys is refused as a whole; **Back to normal** leaves a shortcut off
+if turning it on would now clash, and names the shortcut it clashes with.
 
 **Export** and `uqctl profile export` write a TOML file with a header comment and `format = 1`
 (`id`, `name`, optional `icon`, then the settings as tables). **Import** checks every setting
 and refuses a file that is over 64 KiB, isn't text, has an unknown setting or a value out of
-range, or has `[keybinds]`, with a plain
+range, or has a `[keybinds]` entry that isn't a shortcut switch, with a plain
 message and nothing saved. Turning on a profile whose theme has since been uninstalled is refused and changes nothing; if the theme you used before a profile has been uninstalled since, Back to normal uses uQ's default theme and says so. Importing saves no restore point, since no setting changes. Manual
 checks are in [docs/notes/settings-slice-b-live-check.md](docs/notes/settings-slice-b-live-check.md).
+
+#### Keyboard shortcuts page
+
+Every shortcut uQ sets up is listed here by what it does, with its keys, grouped as Apps and
+desktop, Windows, Workspaces, Sound and brightness, Media, and Profiles. The defaults:
+Open a terminal (Super + Return), Close the window (Super + Q), Float or tile the window
+(Super + V), Log out (Super + Shift + M), Open Spotlight (Super + Space), Open the app menu
+(tap Super), Open quick settings (Super + A), Open notifications (Super + N), Lock the screen
+(Super + L), Open the power menu (Super + Escape), the three layouts (Super + Alt + D, M and S),
+focus with Super + the arrows, workspaces 1 to 10 with Super + the number (Shift moves the
+window), the scratchpad (Super + S, Shift moves), Super + the wheel for the next and previous
+workspace, Super + left and right mouse buttons to move and resize, and the volume, microphone,
+brightness and media keys. **Switch to the next profile** has no keys until you give it some.
+
+**Change** a shortcut's keys, turn it **off**, **Reset** it to its default, or **Put all back**
+for every change at once (your own shortcuts are kept). **Add a shortcut** makes one of your own,
+with an action: a uQ panel, a window or workspace action, a layout, **Start an app** (the app
+starts through `uqctl launch`, so its Apps and scaling fix applies) or **Run a command**. A command
+runs in its own systemd scope, so it doesn't die with uqd and its quotes are kept as typed. Two
+options, "Also over the lock screen" and "Repeat while held", are offered only for actions
+where they make sense (volume and brightness, for example). The lock recovery shortcut
+(Super + Ctrl + L) can be given other keys but can't be turned off.
+
+Two shortcuts on the same keys are refused, naming both: the editor says so before you save, and
+uqd refuses the same write over D-Bus. A shortcut in `user.lua` that you mark with a trailing
+`-- uq:bind Name` comment is listed read-only, and a clash with it only warns. Unmarked binds in
+`user.lua` are not shown, and a `hl.unbind` there shows as "Overridden in user.lua, line N".
+
+**Change** listens for the new keys: while it waits, uQ's shortcuts are paused for at most
+15 seconds, so Super + Space can be pressed without opening Spotlight. `uqctl keys list` prints
+every shortcut and `uqctl keys reset <id>` or `--all` puts changes back. `base.lua` keeps a
+fallback copy of the defaults, so the shortcuts still work if `generated.lua` is missing. Manual
+checks are in [docs/notes/settings-slice4-live-check.md](docs/notes/settings-slice4-live-check.md).
 
 #### Window rules page
 

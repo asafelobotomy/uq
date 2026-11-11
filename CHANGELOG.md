@@ -9,6 +9,15 @@ All notable changes to uQ are listed here. The format follows
 
 ### Added
 
+- **Keyboard shortcuts.** A Keyboard shortcuts page lists every uQ shortcut by what it does:
+  change its keys (press them to capture, or pick them), turn it off, reset it, or put all back.
+  Add your own shortcuts: open a uQ panel, a window or workspace action, a layout, start an app
+  (through `uqctl launch`) or run a command in its own scope. Two shortcuts on the same keys are
+  refused, naming both. The lock recovery shortcut stays on. New **Switch to the next profile**
+  shortcut, and profiles can turn shortcuts on and off. `uqctl keys list|reset` works from a
+  terminal. New `uqd` calls `ListBinds`, `PauseShortcuts` and `ResumeShortcuts`; `keybinds` is a
+  `GetSection`/`SetSection` domain. A failed key capture never leaves shortcuts paused, and uqd
+  resets the capture state at start.
 - **Your own themes: make, import, export and delete.** The Appearance page has **New theme from
   this one…** (seven colours per version, live contrast check, a version that is hard to read
   can't be saved), **Import…**, **Export…** and **Delete…**, and shows the theme names. Themes

@@ -116,7 +116,10 @@ Hyprland render into new sections of `generated.lua`, which is verified before i
   config.
 - `ApplyMonitors(s json) → s token` and `ConfirmMonitors(s token)`.
 - `ListBinds() → s`: defaults, overrides, customs, and read-only binds from `user.lua` where known.
-- Signals: `SectionChanged(s domain, s json)`, `MonitorsChanged`, `BindsChanged`.
+- `PauseShortcuts()` and `ResumeShortcuts()`: key capture pauses uQ's shortcuts for at most 15 s
+  (slice 4, R11).
+- Signals: `SectionChanged(s domain, s json)`, `MonitorsChanged`. Slice 4 has no `BindsChanged`:
+  `SectionChanged("keybinds")` is the change signal (R12).
 
 **Monitor apply and revert:**
 
@@ -170,6 +173,11 @@ first, keeping the original rollback point.
   Hyprland's key names, with the list taken from the pinned source at plan time.
 - **Binds from `user.lua`:** uqd cannot parse them in general, so they are listed read-only and
   only if the user marks them with a `-- uq:bind` comment. Otherwise they are not shown.
+- **Fallback (slice 4, R1):** `base.lua` keeps copies of the defaults, and `generated.lua` starts
+  with `hl.unbind("all")` so they are replaced, never doubled. With a missing or rejected
+  `generated.lua`, the fallback shortcuts are live.
+- **Override marker (slice 4, R5):** every rendered bind carries `description = "uq:<id>"`, which is
+  how `hyprctl binds -j` tells uQ's binds from `user.lua`'s.
 - **Migration:** this replaces Phase 1/2 bind lines in `base.lua`. The plan includes a migration
   test that checks the rendered default table equals the old binds.
 
