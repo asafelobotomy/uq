@@ -1,20 +1,33 @@
 #!/usr/bin/env bash
-# uQ Settings live checks (slices A–D): the parts of docs/notes/settings-slice-*-live-check.md that
-# don't need a person, run against the uqd and Hyprland of the session this runs in.
+# uQ Settings live checks: the parts of docs/notes/settings-slice-*-live-check.md that don't need a
+# person, run against the uqd and Hyprland of the session this runs in. Each check id starts with
+# its slice's letters; checks/<file>.sh says which items of its note stay manual, and why.
+#
+#   SA  checks/a-trust.sh       slice A: trust, History, restore points
+#   SB  checks/b-profiles.sh    slice B: profiles
+#   SC  checks/c-rules.sh       slice C: window, panel and workspace rules
+#   SD  checks/d-startup.sh     slice D: startup apps, environment, apps and scaling
+#   SG  checks/g-themes.sh      slice G: your own themes (.uqtheme import, export, delete)
+#   SK  checks/k-keybinds.sh    Phase 3 slice 4: keyboard shortcuts
+#   SF  checks/f-displays.sh    slice F: display arrangements, main display, workspace planner,
+#                               touchpad gestures
+#   SE  checks/e-companions.sh  slice E: pages from other apps (`uqctl integrations`)
 #
 #   tests/live/run.sh [--only REGEX] [--list] [--slow] [--yes]
 #
 #   --only RE   run only the checks whose id matches the extended regex RE (e.g. '^SB' or 'SA[13]')
 #   --list      print the checks and what each needs, run nothing
-#   --slow      also run the checks that wait for a clock (the light/dark schedule hold, ~3 min)
+#   --slow      also run the checks that wait for a clock (the light/dark schedule hold, 15 s
+#               timers; ~5 min in all)
 #   --yes       run on a real desktop without asking first
 #
 # Where it runs: a real uQ desktop, the test VM's guest (tests/vm/checks/60-settings.sh copies it
 # there) and the CI sandbox (tests/live/sandbox.sh: a private bus and a headless Hyprland). A check
 # that needs something this session lacks (Hyprland, systemd, root, power-profiles-daemon) is N/A.
 #
-# What it changes: settings, profiles, rules and files under ~/.config and ~/.local/share, all of
-# which it puts back. Before the first check it saves a restore point ("Before the live checks")
+# What it changes: settings, profiles, rules, shortcuts, display arrangements, user themes and
+# files under ~/.config and ~/.local/share, all of which it puts back (the display checks also add
+# a headless output with `hyprctl output create headless uqlive-hp`, and remove it again). Before the first check it saves a restore point ("Before the live checks")
 # and copies user.lua; at the end it restores that point, puts user.lua back and removes every
 # file and profile it made. History keeps the changes (marked "from Settings" or "from the
 # terminal"), as it would after a manual check.

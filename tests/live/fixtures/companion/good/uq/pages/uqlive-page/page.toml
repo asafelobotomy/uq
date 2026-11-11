@@ -1,0 +1,15 @@
+uq_api = 1
+id = "uqlive-page"
+name = "uqlive Page"
+qml = "Page.qml"
+keywords = ["uqlive", "boost"]
+
+[[setting]]
+id = "boost"
+label = "Boost mode"
+keywords = ["boost"]
+
+[[command]]
+id = "status"
+argv = ["/usr/bin/uqlive-not-installed", "status"]
+output = "text"

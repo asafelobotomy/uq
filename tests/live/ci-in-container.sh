@@ -18,6 +18,6 @@ su tester -c "set -e
     cd /src
     cargo build --locked -p uqd -p uqctl
     export LIBSEAT_BACKEND=seatd UQ_LIVE_OUT=/src/target/uq-live
-    timeout 900 tests/live/sandbox.sh --slow $*" || rc=$?
+    timeout 1500 tests/live/sandbox.sh --slow $*" || rc=$?
 kill %1 2>/dev/null || true
 exit "$rc"

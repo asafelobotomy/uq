@@ -1,5 +1,7 @@
 # Settings slice G (your own themes): manual live check
 
+> Automated part: `tests/live/run.sh --only '^SG'` (`tests/live/checks/g-themes.sh`; also CI's settings-live job). The header of that file lists the items below that it leaves to a person, and why.
+
 Run on a real Hyprland session with uQ installed (and a second machine or home for item 1). Not
 CI. Tick each item. Before you start, note `user.lua`'s modification time:
 `stat -c %y ~/.config/hypr/uq/user.lua`. It must be the same at the end (item 10).

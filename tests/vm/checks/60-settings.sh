@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# Settings slices A–D in the VM (docs/notes/settings-slice-{a,b,c,d}-live-check.md).
+# Settings slices A–G, keybinds and E in the VM (docs/notes/settings-slice-*-live-check.md).
 #
 # Every check of tests/live runs here as its own VM check (same id): the suite is copied into the
 # guest and runs there as uqtest against the installed uQ, with root (sudo) for the checks that add
@@ -11,7 +11,7 @@
 #   SD1l  Startup apps at login: started in app.slice, a failing one, a delay, one turned off; a uqd
 #         restart starts nothing twice (logs uqtest out and in)
 #
-#   tests/vm/run.sh --only '^S[ABCD]'
+#   tests/vm/run.sh --only '^S[ABCDGKFE]'
 
 LIVE_GUEST=/tmp/live
 live_copied=0

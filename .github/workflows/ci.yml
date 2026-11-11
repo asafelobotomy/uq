@@ -83,8 +83,8 @@ jobs:
             -v "$GITHUB_WORKSPACE:/src" archlinux:latest bash /src/scripts/smoke-in-container.sh
 
   settings-live:
-    # The Settings live checks (tests/live) against this checkout's uqd and a headless Hyprland on
-    # the uQ config, on vkms like the smoke job. The checks that need a person, a login or real
+    # The Settings live checks (tests/live: slices A–G, keybinds and E) against this checkout's uqd
+    # and a headless Hyprland on the uQ config, on vkms like the smoke job. The checks that need a person, a login or real
     # hardware run in the test VM (tests/vm) or on the real desktop (docs/notes).
     runs-on: ubuntu-latest
     timeout-minutes: 30

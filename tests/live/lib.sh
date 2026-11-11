@@ -143,6 +143,22 @@ cleanup_check() {
         bus DeleteProfile s "$p" >/dev/null 2>&1
     done
     pkill -f "uqlive-win" 2>/dev/null
+    theme_cleanup
+    kb_cleanup
+    fd_cleanup
+    return 0
+}
+
+# theme_cleanup: the user themes a check made (ids user-uqlive-*), through uqd and then by folder.
+theme_cleanup() {
+    local id d dir=${XDG_DATA_HOME:-$HOME/.local/share}/uq/themes
+    for id in $(bus ListThemeInfo 2>/dev/null | jq -r '.themes[] | select(.user) | .id' 2>/dev/null | grep "^user-$LIVE_PREFIX"); do
+        "$UQCTL" theme delete "$id" >/dev/null 2>&1
+    done
+    [ -L "$dir" ] && return 0
+    for d in "$dir"/user-"$LIVE_PREFIX"*; do
+        if [ -e "$d" ] || [ -L "$d" ]; then rm -rf -- "$d"; fi
+    done
     return 0
 }
 

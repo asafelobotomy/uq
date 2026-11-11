@@ -1,5 +1,7 @@
 # Settings slice 4 (keyboard shortcuts): manual live check
 
+> Automated part: `tests/live/run.sh --only '^SK'` (`tests/live/checks/k-keybinds.sh`; also CI's settings-live job). The header of that file lists the items below that it leaves to a person, and why.
+
 Run on a real Hyprland session, once on 0.56.2 and once on 0.57.x, with uQ installed. Not CI, not
 a private bus. Tick each item. The app is `uq-settings` (`uqctl settings keybinds`). Before you
 start, note `user.lua`'s modification time: `stat -c %y ~/.config/hypr/uq/user.lua`. It must be the
