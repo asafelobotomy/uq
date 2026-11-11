@@ -88,7 +88,7 @@ async fn confirm_saves_once() {
     let now = Instant::now();
     let (token, deadline) = r.desktop.apply_monitors(SCALE, now).await.unwrap();
     assert_eq!(token.len(), 32);
-    assert_eq!(deadline, now + REVERT_AFTER);
+    assert!(deadline >= now + REVERT_AFTER && deadline <= Instant::now() + REVERT_AFTER);
     let evals: Vec<_> = r
         .comp
         .calls()
@@ -140,15 +140,15 @@ async fn timeout_reverts() {
     let before = files(&r);
     let entries = journal_len(&r);
     let now = Instant::now();
-    let (token, _) = r.desktop.apply_monitors(SCALE, now).await.unwrap();
+    let (token, deadline) = r.desktop.apply_monitors(SCALE, now).await.unwrap();
     drain(&mut r.events);
     assert!(
         !r.desktop
-            .expire_monitors(&token, now + Duration::from_secs(14))
+            .expire_monitors(&token, deadline - Duration::from_secs(1))
             .await
     );
     assert!(r.desktop.pending.is_some());
-    assert!(r.desktop.expire_monitors(&token, now + REVERT_AFTER).await);
+    assert!(r.desktop.expire_monitors(&token, deadline).await);
     let calls = r.comp.calls();
     let eval = calls.iter().position(|c| c.starts_with("eval ")).unwrap();
     assert_eq!(calls[eval + 1..], ["reload".to_string()], "{calls:?}");
@@ -162,7 +162,23 @@ async fn timeout_reverts() {
             .await
             .is_err()
     );
-    assert!(!r.desktop.expire_monitors(&token, now + REVERT_AFTER).await);
+    assert!(!r.desktop.expire_monitors(&token, deadline).await);
+}
+
+/// The window is counted from when the candidate is live: time spent checking the config
+/// (seconds on a slow machine) must not shorten it.
+#[tokio::test]
+async fn window_starts_when_the_candidate_is_live() {
+    let mut r = rig().await;
+    let received = Instant::now() - Duration::from_secs(10);
+    let (token, deadline) = r.desktop.apply_monitors(SCALE, received).await.unwrap();
+    assert!(deadline >= received + REVERT_AFTER + Duration::from_secs(9));
+    assert!(
+        !r.desktop
+            .expire_monitors(&token, received + REVERT_AFTER)
+            .await
+    );
+    assert_eq!(r.desktop.pending.as_ref().unwrap().deadline, deadline);
 }
 
 #[tokio::test]

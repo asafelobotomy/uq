@@ -49,7 +49,7 @@ vm_boot() {
         -drive file="$disk",if=virtio,format=qcow2,discard=unmap \
         -drive file="$seed",if=virtio,format=raw,readonly=on \
         -nic user,model=virtio-net-pci,hostfwd=tcp:127.0.0.1:"$VM_SSH_PORT"-:22 \
-        -device "$(vm_gpu)" \
+        -device "$(vm_gpu)" ${UQVM_GPU2:+-device "$UQVM_GPU2"} \
         -device virtio-keyboard-pci -device virtio-tablet-pci \
         -audiodev none,id=snd0 -device ich9-intel-hda -device hda-duplex,audiodev=snd0 \
         -display none -vga none \
@@ -62,7 +62,8 @@ vm_boot() {
 
 # The guest GPU: virtio-gpu (2D, no GL) when this QEMU has it (Arch: qemu-hw-display-virtio-gpu),
 # else bochs-display (a plain KMS framebuffer; qemu-base has it built in). Either way the guest
-# renders with mesa's llvmpipe and QMP screendump sees the scanout. UQVM_GPU overrides.
+# renders with mesa's llvmpipe and QMP screendump sees the scanout. UQVM_GPU overrides; UQVM_GPU2
+# adds a second display device (e.g. bochs-display,xres=1280,yres=800) for two-output checks.
 vm_gpu() {
     if [ -n "${UQVM_GPU:-}" ]; then echo "$UQVM_GPU"
     elif qemu-system-x86_64 -device help 2>/dev/null | grep -q '"virtio-gpu-pci"'; then

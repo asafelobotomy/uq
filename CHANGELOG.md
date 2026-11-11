@@ -115,6 +115,9 @@ All notable changes to uQ are listed here. The format follows
 
 ### Fixed
 
+- **Displays: the 15 s to keep a change starts when it shows.** uqd counted the window from
+  when the request arrived, before the config check (up to 10 s) and the apply, so on a slow or
+  busy machine a new layout could show for a second or two before reverting.
 - **`uqctl setup` on a fresh install.** An unedited copy of Hyprland's stock `hyprland.lua`
   (written by Hyprland on first start, by hyprland-welcome, or by bindle's installer) is no
   longer treated as the user's own config. It is moved to `hyprland.lua.stock` and replaced
