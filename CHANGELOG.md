@@ -279,6 +279,10 @@ All notable changes to uQ are listed here. The format follows
 - **Removing the auto-login user turns auto-login off.** The login screen no longer goes on
   trying to log in an account that's gone; if turning it off is refused, the Users page says so.
   `uq-settings-helper` also refuses auto-login for a locked or expired account.
+- **Safer file writes.** Every all-or-nothing write in uQ now uses a temp file no other write
+  shares (two writes at once can no longer trip over each other) and syncs the folder after the
+  rename, so a crash right after a save keeps it. A file that is a symlink is still replaced by
+  a regular file, as before; this is now documented.
 
 ## [0.2.1] - 2026-11-10
 
