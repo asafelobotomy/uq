@@ -287,7 +287,7 @@ pub fn escape_value(v: &str) -> String {
 }
 
 /// Undo the key-value escapes of the desktop-entry format (`\s \n \t \r \\`).
-fn unescape_value(v: &str) -> String {
+pub(crate) fn unescape_value(v: &str) -> String {
     let mut out = String::with_capacity(v.len());
     let mut it = v.chars();
     while let Some(c) = it.next() {

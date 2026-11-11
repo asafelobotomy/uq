@@ -2,6 +2,7 @@
 
 mod bridge;
 mod greeter_cmd;
+mod integrations;
 mod launch_cmd;
 mod profile_cmd;
 mod render_themes;
@@ -114,6 +115,11 @@ enum Cmd {
     Launch { id: String },
     /// Run the shell's JSON-lines bridge on stdin/stdout (started by the shell, not by hand).
     Bridge,
+    /// Widgets, settings pages, launcher providers and app actions from other apps.
+    Integrations {
+        #[command(subcommand)]
+        cmd: IntegrationsCmd,
+    },
     /// Install uQ's ~/.config/hypr/hyprland.lua (never overwrites an existing one). Safe to run
     /// unattended and repeatedly. Exit 0: uQ's config is in place; 1: error (e.g. uq not
     /// installed); 2: refused as root; 3: your own hyprland.lua was kept.
@@ -139,6 +145,21 @@ enum Cmd {
     /// greeter, with uqd's renderer.
     #[command(hide = true)]
     RenderThemes(render_themes::Args),
+}
+
+#[derive(Subcommand)]
+enum IntegrationsCmd {
+    /// Everything uQ found under /usr/share/uq/: kind, id, shown/hidden/invalid, source and why.
+    List {
+        /// Print one JSON array instead.
+        #[arg(long)]
+        json: bool,
+        /// Read this directory instead of /usr/share/uq (laid out the same way).
+        #[arg(long, hide = true, value_name = "DIR")]
+        root: Option<std::path::PathBuf>,
+    },
+    /// Check an app's uq/ folder before packaging. Exit 0: clean; 1: problems listed.
+    Check { dir: std::path::PathBuf },
 }
 
 #[derive(Subcommand)]
@@ -383,6 +404,7 @@ async fn run(cmd: Cmd) -> Result<(), String> {
         Cmd::Setup { .. }
         | Cmd::RenderThemes(_)
         | Cmd::Greeter { .. }
+        | Cmd::Integrations { .. }
         | Cmd::Bridge
         | Cmd::Settings { .. }
         | Cmd::Profile { .. }
@@ -472,6 +494,13 @@ async fn main() -> ExitCode {
     }
     if let Cmd::RenderThemes(args) = cli.cmd {
         return render_themes::main(&args);
+    }
+    if let Cmd::Integrations { cmd } = cli.cmd {
+        // Local files, plus a bounded look at the bus for `requires.bus_name`.
+        return match cmd {
+            IntegrationsCmd::List { json, root } => integrations::list(json, root).await,
+            IntegrationsCmd::Check { dir } => integrations::check(&dir),
+        };
     }
     if let Cmd::Settings { page, setting } = cli.cmd {
         return settings_app::main(
@@ -600,6 +629,29 @@ mod tests {
         })
         .unwrap_err();
         assert!(err.contains("7am"), "{err}");
+    }
+
+    #[test]
+    fn cli_parses_integrations() {
+        assert!(matches!(
+            Cli::try_parse_from(["uqctl", "integrations", "list", "--json"])
+                .unwrap()
+                .cmd,
+            Cmd::Integrations {
+                cmd: IntegrationsCmd::List {
+                    json: true,
+                    root: None
+                }
+            }
+        ));
+        assert!(matches!(
+            Cli::try_parse_from(["uqctl", "integrations", "check", "uq"])
+                .unwrap()
+                .cmd,
+            Cmd::Integrations {
+                cmd: IntegrationsCmd::Check { .. }
+            }
+        ));
     }
 
     #[test]

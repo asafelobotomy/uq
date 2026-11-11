@@ -121,6 +121,21 @@ All notable changes to uQ are listed here. The format follows
   20 MiB, and never opened as an image. Turning auto-login on or off asks for the password every
   time. It starts when needed, runs in a tight sandbox with no special privileges beyond root's
   own files, and quits after 30 seconds without use.
+- **Settings pages from other apps can do more.** A page's `page.toml` can now list fixed
+  commands it may run (`[[command]]`), conditions for it to show (`[requires]`: a program in
+  `/usr/bin`, a running service) and the one D-Bus object it talks to (`[dbus]`, on the session
+  or system bus). The page gets `ctx.command.run` and `ctx.dbus.call` / `ctx.dbus.get`; a
+  command marked `confirm` asks "Are you sure?" with the page's own question first. Commands
+  run without a shell, with a clean environment, time limits and output limits. A page's id
+  must now match its folder name. Pages installed or removed while Settings is open appear or
+  go within a second or two. Writing one: `docs/settings-pages.md` and
+  `templates/settings-page/`.
+- **`uqctl integrations`.** `uqctl integrations list [--json]` shows every widget, settings
+  page, launcher provider and app action uQ found under `/usr/share/uq/`, whether it shows, and
+  why not. `uqctl integrations check <dir>` checks an app's `uq/` folder before packaging (the
+  layout, every file, the plain-text rule, that each command's program exists).
+- **Launcher providers can be started on demand.** A `.provider` file may say
+  `Activatable=true` (read now; starting such providers when the launcher opens comes next).
 
 ### Changed
 

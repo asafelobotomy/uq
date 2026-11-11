@@ -449,6 +449,7 @@ mod tests {
             name: "P".into(),
             prefix: prefix.map(String::from),
             source_dir: "/x".into(),
+            activatable: false,
         }
     }
 

@@ -1,0 +1,36 @@
+# A uQ Settings page. Copy this folder to your app's uq/pages/<id>/ and rename <id> everywhere.
+# Installed to /usr/share/uq/settings/pages/<id>/ by your app's package.
+# Reference: docs/settings-pages.md in the uQ repository.
+uq_api = 1
+id = "example"                   # [a-z0-9-]{1,40}, must equal the folder name
+name = "Example"                 # shown in the sidebar under Apps
+icon = "applications-utilities"  # a theme icon name
+qml = "Page.qml"                 # a file in this folder
+keywords = ["example", "demo"]
+
+# Rows that Settings search finds; open the page with the row highlighted.
+[[setting]]
+id = "status"
+label = "Example status"
+keywords = ["state"]
+
+# Show the page only while these hold (both optional).
+[requires]
+bins = ["example"]               # /usr/bin/example must exist
+# bus_name = "org.example.Example1"   # ...and this name must have an owner
+
+# What ctx.command.run() may run. argv[0] lives in /usr/bin or /usr/lib; no shell is involved.
+[[command]]
+id = "status"
+argv = ["/usr/bin/example", "status", "--json"]
+output = "json"                  # "json" | "text" | "none"
+timeout_ms = 3000                # default 10000, at most 600000
+
+[[command]]
+id = "forget"
+argv = ["/usr/bin/example", "forget"]
+output = "none"
+# Appended after argv, each matching its pattern in full and never starting with '-'.
+args = [{ name = "item", pattern = "^[A-Za-z0-9._-]{1,64}$" }]
+# Asked before running; %s is the first argument, shown as plain text.
+confirm = "Forget %s? This can't be undone."

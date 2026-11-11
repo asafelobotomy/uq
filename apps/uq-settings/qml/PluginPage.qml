@@ -1,6 +1,7 @@
 // Loads a plugin's page file, only when this item is created (the page is shown). A QML error
 // in the plugin shows an ErrorCard instead of taking the app down. Free of the `App` singleton:
-// everything comes in as properties.
+// everything comes in as properties. The page's root item gets `ctx` (PluginContext: theme,
+// command, dbus) and, as in Phase 3, `theme` and `highlight`, each if it declares them.
 import QtQuick
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
@@ -16,6 +17,11 @@ Item {
     property var theme: ({})
     /// The row to flash, for pages that have `SettingRow`s.
     property string highlight
+    /// The page's id (page.toml), which its commands and D-Bus requests are checked against.
+    property string pageId
+    /// The PluginHost singleton; null (as in tests) makes every request fail with an error.
+    property var host: null
+    readonly property alias context: context
     readonly property bool failed: loader.status === Loader.Error
     readonly property string errorText: failed ? describe() : ""
 
@@ -37,7 +43,23 @@ Item {
                 item.theme = page.theme;
             if (item && "highlight" in item)
                 item.highlight = Qt.binding(() => page.highlight);
+            if (item && "ctx" in item)
+                item.ctx = Qt.binding(() => context.ctx);
         }
+    }
+
+    PluginContext {
+        id: context
+        host: page.host
+        pageId: page.pageId
+        theme: page.theme
+        onConfirmNeeded: (request, text) => confirmDialog.ask(request, text)
+    }
+
+    CommandConfirmDialog {
+        id: confirmDialog
+        objectName: "commandConfirm"
+        onAnswered: (request, confirmed) => context.answer(request, confirmed)
     }
 
     ErrorCard {

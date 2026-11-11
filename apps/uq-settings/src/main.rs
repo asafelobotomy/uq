@@ -24,6 +24,7 @@ mod instance;
 mod look_model;
 mod model_core;
 mod pages;
+mod plugin_host;
 mod plugins;
 mod profiles_model;
 mod registry;
@@ -84,6 +85,9 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+    // Plugin pages: their commands and D-Bus requests run on this runtime, and pages installed
+    // or removed while the app is open come and go (Phase 4 spec §2.3).
+    plugin_host::set_runtime(runtime.handle().clone());
     let _session = match &args.screenshots {
         Some(dir) => {
             app::post(Event::ScreenshotDir(dir.display().to_string()));
@@ -117,6 +121,10 @@ fn main() -> ExitCode {
             }
         },
     };
+
+    if args.screenshots.is_none() {
+        plugins::watch(runtime.handle(), |pages| app::post(Event::Plugins(pages)));
+    }
 
     cxx_qt::init_qml_module!("org.uq.settings");
     // The KDE desktop style draws through the Qt widget style, so Kvantum themes it.
