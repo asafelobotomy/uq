@@ -253,6 +253,8 @@ All notable changes to uQ are listed here. The format follows
 - **A slow session bus or uqd no longer holds up the shell's start.** The bridge gives up on
   connecting, subscribing and asking for uqd after 2 seconds and tries again later, and sends
   `Hello` after at most 2 seconds of waiting for Welcome's status (the shell asks again).
+- **`uqctl history | head` no longer panics.** uqctl stops quietly when the program reading its
+  output closes the pipe.
 
 ## [0.2.1] - 2026-11-10
 

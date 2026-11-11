@@ -251,3 +251,24 @@ fn list_reads_a_tree_laid_out_like_usr_share_uq() {
     assert!(ok);
     assert_eq!(out.trim(), "no integrations installed");
 }
+
+/// `uqctl integrations list | head` (or any reader that has gone): stdout is a pipe whose read
+/// end is already closed. uqctl stops quietly instead of panicking on the broken pipe.
+#[test]
+fn closed_stdout_pipe_is_not_a_panic() {
+    let dir = tempfile::tempdir().unwrap();
+    good_folder(&dir.path().join("share/uq"));
+    let (reader, writer) = std::io::pipe().unwrap();
+    drop(reader);
+    let out = Command::new(env!("CARGO_BIN_EXE_uqctl"))
+        .args(["integrations", "list", "--root"])
+        .arg(dir.path().join("share/uq"))
+        .env("DBUS_SESSION_BUS_ADDRESS", "unix:path=/nonexistent")
+        .stdout(writer)
+        .output()
+        .unwrap();
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(!err.contains("panicked"), "{err}");
+    assert!(!err.contains("Broken pipe"), "{err}");
+    assert!(out.status.success(), "{:?} {err}", out.status);
+}

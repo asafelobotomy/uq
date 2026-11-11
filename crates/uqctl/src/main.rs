@@ -471,9 +471,31 @@ async fn pin(proxy: &zbus::Proxy<'_>, cmd: PinCmd) -> Result<(), String> {
     }
 }
 
+/// `uqctl history | head` closes stdout early; `println!` then panics. Treat that like SIGPIPE
+/// would: quietly stop (exit 0). Not for `bridge`, which writes through tokio and ends on its
+/// own when the shell goes away.
+fn quiet_broken_pipe() {
+    let default = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let msg = info
+            .payload()
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| info.payload().downcast_ref::<&str>().copied())
+            .unwrap_or_default();
+        if msg.starts_with("failed printing to std") && msg.contains("Broken pipe") {
+            std::process::exit(0);
+        }
+        default(info);
+    }));
+}
+
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> ExitCode {
     let cli = Cli::parse();
+    if !matches!(cli.cmd, Cmd::Bridge { .. }) {
+        quiet_broken_pipe();
+    }
     if let Cmd::Setup { apps, json, quiet } = cli.cmd {
         // Local files only: no uqd, no timeout.
         return setup::main(apps, json, quiet);
