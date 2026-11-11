@@ -21,8 +21,12 @@ use uq_core::profile::{
 };
 use uq_core::rules::Rules;
 
+use crate::desktop_entries;
 use crate::pages::runner::{PageLogic, parse_json};
 use crate::registry;
+use startup::Startup;
+
+mod startup;
 
 /// The icons a profile can have, offered by the page.
 pub const ICONS: [&str; 7] = [
@@ -140,6 +144,8 @@ impl Shown {
 
 pub struct ProfilesState {
     conn: zbus::Connection,
+    /// Where installed apps are looked up, to name app fixes.
+    app_dirs: Vec<PathBuf>,
     /// Edits read-modify-write a profile, so one at a time.
     write: Mutex<()>,
     shown: StdMutex<Shown>,
@@ -153,9 +159,12 @@ fn profile_error(e: ProfileError) -> zbus::Error {
     failure(e.to_string())
 }
 
-/// Whether a profile can hold keys of journal domain `domain`. For `rules`, only the switches.
+/// Whether a profile can hold keys of journal domain `domain`. For `rules`, only the switches;
+/// for startup apps, variables and app fixes, only what a profile can set (`startup.rs`).
 fn holds_journal_domain(domain: &str) -> bool {
-    matches!(domain, "theme" | "rules") || from_journal(domain, &[]).is_some()
+    matches!(domain, "theme" | "rules")
+        || startup::DOMAINS.contains(&domain)
+        || from_journal(domain, &[]).is_some()
 }
 
 /// The journal domains a profile's keys come from.
@@ -167,7 +176,12 @@ fn profile_journal_domains() -> Vec<&'static str> {
             .filter(|(_, k)| {
                 matches!(
                     k,
-                    DomainKind::Section | DomainKind::Appearance | DomainKind::Rules
+                    DomainKind::Section
+                        | DomainKind::Appearance
+                        | DomainKind::Rules
+                        | DomainKind::Env
+                        | DomainKind::Compat
+                        | DomainKind::Autostart
                 )
             })
             .map(|(d, _)| *d),
@@ -187,19 +201,30 @@ async fn current(proxy: &DesktopProxy<'_>, journal_domains: &[&str]) -> zbus::Re
         true => read_rules(proxy).await?,
         false => Rules::default(),
     };
-    current_with(proxy, journal_domains, &rules).await
+    let startup = match journal_domains.iter().any(|d| startup::DOMAINS.contains(d)) {
+        true => Startup::read(proxy, Vec::new()).await?,
+        false => Startup::default(),
+    };
+    current_with(proxy, journal_domains, &rules, &startup).await
 }
 
-/// [`current`] with the rules already read. Every window and panel rule's switch is a key.
+/// [`current`] with the rules and the startup settings already read. Every window and panel
+/// rule's switch is a key, and every startup key a profile can hold.
 async fn current_with(
     proxy: &DesktopProxy<'_>,
     journal_domains: &[&str],
     rules: &Rules,
+    startup: &Startup,
 ) -> zbus::Result<Vec<Key>> {
     let mut out: Vec<Key> = Vec::new();
     for &domain in journal_domains {
-        if domain == "rules" {
-            for k in rule_keys(rules) {
+        let special = match domain {
+            "rules" => rule_keys(rules),
+            d if startup::DOMAINS.contains(&d) => startup.keys(d),
+            _ => Vec::new(),
+        };
+        if domain == "rules" || startup::DOMAINS.contains(&domain) {
+            for k in special {
                 if !out.iter().any(|o| o.domain == k.domain && o.path == k.path) {
                     out.push(k);
                 }
@@ -252,16 +277,30 @@ async fn with_values(
                 path,
                 value: value.clone(),
             }),
+            // A variable that isn't set now: the profile removes it.
+            None if domain == "env" && path.len() == 1 => found.push(Key {
+                domain,
+                path,
+                value: Value::Bool(false),
+            }),
             None => skipped += 1,
         }
     }
     Ok((found, skipped))
 }
 
-/// `{domain, path, label, text}` for the page. A rule switch is named from `rules`.
-fn key_json(domain: &str, path: &[String], value: &Value, rules: &Rules) -> Value {
+/// `{domain, path, label, text}` for the page. A rule switch is named from `rules`; startup
+/// apps and fixes by the names `startup` knows.
+fn key_json(
+    domain: &str,
+    path: &[String],
+    value: &Value,
+    rules: &Rules,
+    startup: &Startup,
+) -> Value {
     let label = match (domain, path) {
         ("rules", [id]) => rule_label(rules, id),
+        (d, _) if startup::DOMAINS.contains(&d) => startup.label(domain, path),
         _ => key_label(domain, path),
     };
     json!({
@@ -279,8 +318,13 @@ fn icon_of(icon: &str) -> Option<String> {
 
 impl ProfilesState {
     pub fn new(conn: zbus::Connection) -> Self {
+        Self::with_dirs(conn, desktop_entries::default_dirs())
+    }
+
+    pub fn with_dirs(conn: zbus::Connection, app_dirs: Vec<PathBuf>) -> Self {
         Self {
             conn,
+            app_dirs,
             write: Mutex::new(()),
             shown: StdMutex::new(Shown::default()),
         }
@@ -479,7 +523,13 @@ impl PageLogic for ProfilesState {
             Op::Delete { id } => proxy.delete_profile(&id).await,
             Op::Export { id, path } => {
                 let text = proxy.get_profile(&id).await?;
-                atomic_write(&path, &text).map_err(|e| failure(format!("Can't save the file: {e}")))
+                atomic_write(&path, &text)
+                    .map_err(|e| failure(format!("Can't save the file: {e}")))?;
+                // Variables can hold things like tokens; the file carries them as they are.
+                if Profile::parse(&text).is_ok_and(|p| p.values.contains_key("env")) {
+                    self.notice(startup::EXPORT_NOTICE.to_string());
+                }
+                Ok(())
             }
             Op::Import { path, replace } => self.import(&proxy, &path, replace).await,
         }
@@ -488,8 +538,11 @@ impl PageLogic for ProfilesState {
     async fn snapshot(&self) -> zbus::Result<Value> {
         let proxy = DesktopProxy::new(&self.conn).await?;
         let list = parse_json(&proxy.list_profiles().await?)?;
-        // Read once: it names the rule switches and gives their current values.
+        // Read once: they name the rule switches, startup apps and fixes, and give their
+        // current values.
         let rules = read_rules(&proxy).await?;
+        let apps = Startup::installed(self.app_dirs.clone()).await;
+        let startup = Startup::read(&proxy, apps).await?;
         let mut profiles = Vec::new();
         let mut active = String::new();
         for summary in list.as_array().into_iter().flatten() {
@@ -507,7 +560,7 @@ impl PageLogic for ProfilesState {
             let keys: Vec<Value> = p
                 .keys()
                 .iter()
-                .map(|k| key_json(&k.domain, &k.path, &k.value, &rules))
+                .map(|k| key_json(&k.domain, &k.path, &k.value, &rules, &startup))
                 .collect();
             profiles.push(json!({
                 "id": p.id,
@@ -518,11 +571,12 @@ impl PageLogic for ProfilesState {
                 "keys": keys,
             }));
         }
-        let available: Vec<Value> = current_with(&proxy, &profile_journal_domains(), &rules)
-            .await?
-            .iter()
-            .map(|k| key_json(&k.domain, &k.path, &k.value, &rules))
-            .collect();
+        let available: Vec<Value> =
+            current_with(&proxy, &profile_journal_domains(), &rules, &startup)
+                .await?
+                .iter()
+                .map(|k| key_json(&k.domain, &k.path, &k.value, &rules, &startup))
+                .collect();
         let pages: Vec<Value> = registry::core_pages()
             .iter()
             .filter(|p| p.domains.iter().any(|d| holds_journal_domain(d)))
@@ -552,3 +606,6 @@ impl PageLogic for ProfilesState {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod startup_tests;

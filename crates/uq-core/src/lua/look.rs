@@ -156,14 +156,20 @@ pub(super) fn emit_animations(out: &mut String, look: &Look) {
 
 #[cfg(test)]
 mod tests {
-    use super::super::emit_generated;
+    use super::super::{StartupRender, emit_generated};
     use crate::settings::{ForceSplit, Look, NewStatus, Orientation, Settings};
     use crate::theme::{Theme, Variant, tests::FIXTURE};
     use std::collections::BTreeMap;
 
     fn render(s: &Settings) -> String {
         let t = Theme::from_toml(FIXTURE, "fixture", Variant::Dark).unwrap();
-        emit_generated(&t, &BTreeMap::new(), &crate::rules::Rules::default(), s)
+        emit_generated(
+            &t,
+            &BTreeMap::new(),
+            &crate::rules::Rules::default(),
+            s,
+            &StartupRender::default(),
+        )
     }
 
     /// Cut from base.lua before the move, byte for byte.

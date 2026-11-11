@@ -3,36 +3,11 @@
 
 mod common;
 
-use common::{Bridge, Bus, private_bus};
+use common::{Bridge, private_bus, serve_uqd};
 use serde_json::{Value, json};
-use std::path::PathBuf;
-use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::AsyncWriteExt;
-use uqd::compositor::fake::FakeCompositor;
-use uqd::dbus::{NAME, serve};
-use uqd::service::Desktop;
-use uqd::system::FakeSystem;
-
-async fn serve_uqd(bus: &Bus, root: &std::path::Path) -> zbus::Connection {
-    let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let mut paths = uq_core::paths::Paths::under(root);
-    paths.themes_dir = repo.join("themes");
-    paths.templates_dir = repo.join("templates");
-    let desktop = Desktop::new(
-        paths,
-        Arc::new(FakeCompositor::running()),
-        Arc::new(FakeSystem::default()),
-    )
-    .unwrap();
-    serve(
-        zbus::connection::Builder::address(bus.address.as_str()).unwrap(),
-        desktop,
-    )
-    .await
-    .unwrap()
-    .0
-}
+use uqd::dbus::NAME;
 
 #[tokio::test]
 async fn bridge_forwards_set_theme() {
@@ -324,4 +299,59 @@ async fn bridge_forwards_pick_requests_and_done() {
     // Wrong shapes are refused before reaching uqd; an unknown outcome is uqd's refusal.
     assert!(b.call(3, "PickDone", json!([token])).await["err"].is_string());
     assert!(b.call(4, "PickDone", json!([token, "bogus"])).await["err"].is_string());
+}
+
+/// How many times the served uqd has been told the shell is up.
+async fn ready_calls(uqd: &zbus::Connection) -> u32 {
+    let iface = uqd
+        .object_server()
+        .interface::<_, uqd::dbus::DesktopIface>("/org/uq/Desktop1")
+        .await
+        .unwrap();
+    let runner = iface.get().await.runner().clone();
+    runner.lock().unwrap().shell_ready_calls()
+}
+
+async fn wait_ready_calls(uqd: &zbus::Connection, want: u32) {
+    for _ in 0..100 {
+        if ready_calls(uqd).await == want {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    assert_eq!(ready_calls(uqd).await, want);
+}
+
+/// R5, F39: `Hello` is the bridge's own line, so only the shell's first request means it is up;
+/// each `UqdUp` after that tells the new uqd again.
+#[tokio::test]
+async fn bridge_calls_shell_ready_after_first_request() {
+    let bus = private_bus();
+    let dir = tempfile::tempdir().unwrap();
+    let uqd = serve_uqd(&bus, dir.path()).await;
+    let mut b = Bridge::start(&bus);
+    assert_eq!(b.next().await["data"]["uqd_up"], true);
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert_eq!(ready_calls(&uqd).await, 0);
+
+    assert_eq!(b.call(1, "Ping", json!([])).await["ok"], "pong");
+    wait_ready_calls(&uqd, 1).await;
+    // Later requests don't repeat it.
+    assert_eq!(b.call(2, "Ping", json!([])).await["ok"], "pong");
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert_eq!(ready_calls(&uqd).await, 1);
+
+    uqd.release_name(NAME).await.unwrap();
+    b.event("UqdDown").await;
+    uqd.request_name(NAME).await.unwrap();
+    b.event("UqdUp").await;
+    wait_ready_calls(&uqd, 2).await;
+
+    // The shell can't call either of the bridge's own uqd calls.
+    let r = b.call(3, "ShellReady", json!([])).await;
+    assert_eq!(r["err"], "unknown call ShellReady");
+    let r = b.call(4, "GetSection", json!(["compat"])).await;
+    assert_eq!(r["err"], "unknown call GetSection");
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert_eq!(ready_calls(&uqd).await, 2);
 }

@@ -238,11 +238,15 @@ fn section_round_trip() {
             "shell",
             "monitors",
             "input",
-            "rules"
+            "rules",
+            "env",
+            "compat",
+            "autostart"
         ]
     );
     assert!(!renders_section("monitors") && renders_section("input"));
-    assert!(renders_section("rules"));
+    assert!(renders_section("rules") && renders_section("env") && renders_section("compat"));
+    assert!(!renders_section("autostart"));
 }
 
 #[test]

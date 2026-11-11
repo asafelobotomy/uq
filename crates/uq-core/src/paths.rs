@@ -33,6 +33,89 @@ pub struct Paths {
     /// `/usr/share/hypr/hyprland.lua`: Hyprland's stock config. A copy of it in `main_lua` is not
     /// the user's own work, so `uqctl setup` may replace it.
     pub hypr_default: PathBuf,
+    /// The XDG folders the Startup page reads and writes (autostart, applications, runtime).
+    pub startup: StartupPaths,
+}
+
+/// The XDG base directories autostart and launcher lookups use. `Paths::under` puts every one
+/// inside the test root, so no test reads or writes the real home (F1).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StartupPaths {
+    /// `$XDG_CONFIG_HOME`, default `~/.config`.
+    pub config_home: PathBuf,
+    /// `$XDG_CONFIG_DIRS`, default `/etc/xdg`.
+    pub config_dirs: Vec<PathBuf>,
+    /// `$XDG_DATA_HOME`, default `~/.local/share`.
+    pub data_home: PathBuf,
+    /// `$XDG_DATA_DIRS`, default `/usr/local/share:/usr/share`.
+    pub data_dirs: Vec<PathBuf>,
+    /// `$XDG_RUNTIME_DIR`; `None` when unset.
+    pub runtime_dir: Option<PathBuf>,
+    /// `$HOME`: an autostart entry's working directory when it names none.
+    pub home: PathBuf,
+}
+
+impl StartupPaths {
+    /// Resolve from an environment lookup. Relative values are ignored, as the XDG base
+    /// directory spec asks.
+    pub fn from_vars(get: impl Fn(&str) -> Option<String>) -> StartupPaths {
+        let abs = |k: &str| get(k).map(PathBuf::from).filter(|p| p.is_absolute());
+        let list = |k: &str, default: &str| {
+            let dirs: Vec<PathBuf> = get(k)
+                .unwrap_or_default()
+                .split(':')
+                .map(PathBuf::from)
+                .filter(|p| p.is_absolute())
+                .collect();
+            if dirs.is_empty() {
+                default.split(':').map(PathBuf::from).collect()
+            } else {
+                dirs
+            }
+        };
+        let home = PathBuf::from(get("HOME").unwrap_or_else(|| "/".into()));
+        StartupPaths {
+            config_home: abs("XDG_CONFIG_HOME").unwrap_or_else(|| home.join(".config")),
+            config_dirs: list("XDG_CONFIG_DIRS", "/etc/xdg"),
+            data_home: abs("XDG_DATA_HOME").unwrap_or_else(|| home.join(".local/share")),
+            data_dirs: list("XDG_DATA_DIRS", "/usr/local/share:/usr/share"),
+            runtime_dir: abs("XDG_RUNTIME_DIR"),
+            home,
+        }
+    }
+
+    /// Everything under one root, for tests.
+    pub fn under(root: &Path) -> StartupPaths {
+        StartupPaths {
+            config_home: root.join("config"),
+            config_dirs: vec![root.join("xdg")],
+            data_home: root.join("data"),
+            data_dirs: vec![root.join("share-dirs")],
+            runtime_dir: Some(root.join("run")),
+            home: root.join("home"),
+        }
+    }
+
+    /// The user's autostart folder.
+    pub fn user_autostart(&self) -> PathBuf {
+        self.config_home.join("autostart")
+    }
+
+    /// The system autostart folders, in lookup order.
+    pub fn system_autostart(&self) -> Vec<PathBuf> {
+        self.config_dirs
+            .iter()
+            .map(|d| d.join("autostart"))
+            .collect()
+    }
+
+    /// The applications folders, data home first, in lookup order.
+    pub fn app_dirs(&self) -> Vec<PathBuf> {
+        std::iter::once(&self.data_home)
+            .chain(&self.data_dirs)
+            .map(|d| d.join("applications"))
+            .collect()
+    }
 }
 
 impl Paths {
@@ -57,6 +140,7 @@ impl Paths {
             &state,
             &data,
             Path::new("/usr/share/hypr/hyprland.lua"),
+            StartupPaths::from_vars(get),
         )
     }
 
@@ -67,10 +151,17 @@ impl Paths {
             &root.join("state"),
             &root.join("share"),
             &root.join("hypr-share/hyprland.lua"),
+            StartupPaths::under(root),
         )
     }
 
-    fn build(config: &Path, state: &Path, data: &Path, hypr_default: &Path) -> Paths {
+    fn build(
+        config: &Path,
+        state: &Path,
+        data: &Path,
+        hypr_default: &Path,
+        startup: StartupPaths,
+    ) -> Paths {
         let hypr_dir = config.join("hypr");
         Paths {
             main_lua: hypr_dir.join("hyprland.lua"),
@@ -87,6 +178,7 @@ impl Paths {
             themes_dir: data.join("themes"),
             templates_dir: data.join("templates"),
             hypr_default: hypr_default.to_path_buf(),
+            startup,
         }
     }
 }
@@ -145,5 +237,60 @@ mod tests {
         ] {
             assert!(path.starts_with("/tmp/r"), "{path:?}");
         }
+    }
+
+    #[test]
+    fn paths_under_sandboxes_startup() {
+        let root = Path::new("/tmp/r");
+        let s = Paths::under(root).startup;
+        let mut all = vec![&s.config_home, &s.data_home, &s.home];
+        all.extend(&s.config_dirs);
+        all.extend(&s.data_dirs);
+        all.extend(&s.runtime_dir);
+        assert_eq!(all.len(), 6);
+        for path in all {
+            assert!(path.starts_with(root), "{path:?}");
+        }
+        assert!(s.user_autostart().starts_with(root));
+        for d in s.system_autostart().iter().chain(&s.app_dirs()) {
+            assert!(d.starts_with(root), "{d:?}");
+        }
+    }
+
+    #[test]
+    fn startup_from_vars() {
+        let p = Paths::from_vars(|k| match k {
+            "HOME" => Some("/home/u".into()),
+            "XDG_CONFIG_DIRS" => Some("/a::relative:/b".into()),
+            "XDG_RUNTIME_DIR" => Some("/run/user/1".into()),
+            "XDG_DATA_HOME" => Some("/dh".into()),
+            _ => None,
+        });
+        let s = &p.startup;
+        assert_eq!(s.home, PathBuf::from("/home/u"));
+        assert_eq!(s.config_home, PathBuf::from("/home/u/.config"));
+        assert_eq!(s.config_dirs, [PathBuf::from("/a"), PathBuf::from("/b")]);
+        assert_eq!(s.data_home, PathBuf::from("/dh"));
+        assert_eq!(
+            s.data_dirs,
+            [
+                PathBuf::from("/usr/local/share"),
+                PathBuf::from("/usr/share")
+            ]
+        );
+        assert_eq!(s.runtime_dir, Some(PathBuf::from("/run/user/1")));
+        assert_eq!(
+            s.user_autostart(),
+            PathBuf::from("/home/u/.config/autostart")
+        );
+        assert_eq!(
+            s.system_autostart(),
+            [PathBuf::from("/a/autostart"), PathBuf::from("/b/autostart")]
+        );
+        assert_eq!(s.app_dirs()[0], PathBuf::from("/dh/applications"));
+        let d = Paths::from_vars(|k| (k == "HOME").then(|| "/home/u".to_string())).startup;
+        assert_eq!(d.config_dirs, [PathBuf::from("/etc/xdg")]);
+        assert_eq!(d.data_home, PathBuf::from("/home/u/.local/share"));
+        assert_eq!(d.runtime_dir, None);
     }
 }

@@ -132,12 +132,16 @@ impl PageModel for ProfilesModel {
             "shell",
             "wallpaper",
             "rules",
+            "env",
+            "compat",
+            "autostart",
         ],
         theme: true,
         settings: false,
         history: true,
         monitors: false,
         profiles: true,
+        autostart: false,
     };
 
     fn core(&self) -> &ModelCore<ProfilesState> {

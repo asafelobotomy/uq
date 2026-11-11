@@ -50,6 +50,15 @@ pub fn label(domain: &str, key: &str) -> Option<String> {
         ("rules", "window") => "Window rules",
         ("rules", "layer") => "Panel rules",
         ("rules", "workspace") => "Workspace rules",
+        ("env", "vars") => "Environment variables",
+        ("compat", "sharp_x11") => "Sharp X11 apps",
+        ("compat", "electron_wayland") => "Run Electron apps on Wayland",
+        ("compat", "chromium_wayland") => "Run Chromium-based browsers on Wayland",
+        ("compat", "qt_wayland") => "Qt apps prefer Wayland",
+        ("compat", "steam_scale") => "Steam UI scale",
+        ("compat", "apps") => "App fixes",
+        ("autostart", "files") => "Startup apps",
+        ("autostart", "added") => "Apps and commands you added to startup",
         ("wallpaper", k) => return wallpaper(k),
         ("input", k) => return input(k),
         ("monitors", k) => return monitors(k),
@@ -250,6 +259,28 @@ mod tests {
                     "match": {"namespace": "x"}, "effects": {"blur": true}}],
                 "workspace": [{"workspace": "3", "persistent": true}],
             }),
+        )
+        .unwrap();
+        st.set_section(
+            "env",
+            serde_json::json!({"vars": [{"name": "GDK_BACKEND", "value": "x11"}]}),
+        )
+        .unwrap();
+        st.set_section(
+            "compat",
+            serde_json::json!({"sharp_x11": true, "electron_wayland": true,
+                "chromium_wayland": true, "qt_wayland": true, "steam_scale": true,
+                "apps": [{"id": "code.desktop", "platform": "wayland", "scale": 1.5,
+                    "env": [{"name": "FOO", "value": "1"}], "args": ["--x"],
+                    "elsewhere": true}]}),
+        )
+        .unwrap();
+        st.set_section(
+            "autostart",
+            serde_json::json!({"files": [{"id": "nm-applet.desktop", "enabled": false,
+                    "delay": 5}],
+                "added": [{"name": "Sync", "app": "syncthing.desktop", "delay": 10},
+                    {"name": "Backup", "argv": ["backup", "--quiet"], "enabled": false}]}),
         )
         .unwrap();
         let schedules = [

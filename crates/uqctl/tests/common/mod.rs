@@ -113,3 +113,77 @@ impl Bridge {
         }
     }
 }
+
+/// A Hyprland socket stand-in under its own runtime dir: it answers `ok` to every request and
+/// hands each request's text to `rx`.
+pub struct FakeHypr {
+    pub runtime: tempfile::TempDir,
+    pub rx: tokio::sync::mpsc::UnboundedReceiver<String>,
+}
+
+pub const HYPR_SIG: &str = "SIG";
+
+impl FakeHypr {
+    pub fn start() -> FakeHypr {
+        use tokio::io::AsyncReadExt;
+        let runtime = tempfile::tempdir().unwrap();
+        let dir = runtime.path().join("hypr").join(HYPR_SIG);
+        std::fs::create_dir_all(&dir).unwrap();
+        let l = tokio::net::UnixListener::bind(dir.join(".socket.sock")).unwrap();
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        tokio::spawn(async move {
+            while let Ok((mut s, _)) = l.accept().await {
+                let mut buf = vec![0u8; 64 * 1024];
+                let n = s.read(&mut buf).await.unwrap_or(0);
+                let _ = tx.send(String::from_utf8_lossy(&buf[..n]).into_owned());
+                let _ = s.write_all(b"ok").await;
+            }
+        });
+        FakeHypr { runtime, rx }
+    }
+
+    /// The variables that point a child at this socket.
+    pub fn env(&self) -> Vec<(&'static str, std::ffi::OsString)> {
+        vec![
+            ("XDG_RUNTIME_DIR", self.runtime.path().into()),
+            ("HYPRLAND_INSTANCE_SIGNATURE", HYPR_SIG.into()),
+        ]
+    }
+
+    pub async fn next(&mut self, within: Duration) -> Option<String> {
+        tokio::time::timeout(within, self.rx.recv())
+            .await
+            .ok()
+            .flatten()
+    }
+}
+
+/// A real uqd `Desktop` with fakes, served on `bus` with its state under `root`.
+pub async fn serve_uqd(bus: &Bus, root: &std::path::Path) -> zbus::Connection {
+    let repo = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut paths = uq_core::paths::Paths::under(root);
+    paths.themes_dir = repo.join("themes");
+    paths.templates_dir = repo.join("templates");
+    let desktop = uqd::service::Desktop::new(
+        paths,
+        std::sync::Arc::new(uqd::compositor::fake::FakeCompositor::running()),
+        std::sync::Arc::new(uqd::system::FakeSystem::default()),
+    )
+    .unwrap();
+    uqd::dbus::serve(
+        zbus::connection::Builder::address(bus.address.as_str()).unwrap(),
+        desktop,
+    )
+    .await
+    .unwrap()
+    .0
+}
+
+/// A session-bus connection to `bus` for typed calls.
+pub async fn connect(bus: &Bus) -> zbus::Connection {
+    zbus::connection::Builder::address(bus.address.as_str())
+        .unwrap()
+        .build()
+        .await
+        .unwrap()
+}

@@ -85,6 +85,7 @@ impl PageModel for AppearanceModel {
         history: false,
         monitors: false,
         profiles: false,
+        autostart: false,
     };
 
     fn core(&self) -> &ModelCore<AppearanceState> {

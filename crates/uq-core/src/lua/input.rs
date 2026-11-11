@@ -116,14 +116,20 @@ pub fn emit_devices(i: &InputSettings) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::super::emit_generated;
+    use super::super::{StartupRender, emit_generated};
     use crate::settings::{DeviceOverride, KbLayout, Settings, TouchpadSettings};
     use crate::theme::{Theme, Variant, tests::FIXTURE};
     use std::collections::BTreeMap;
 
     fn render(s: &Settings) -> String {
         let t = Theme::from_toml(FIXTURE, "fixture", Variant::Dark).unwrap();
-        emit_generated(&t, &BTreeMap::new(), &crate::rules::Rules::default(), s)
+        emit_generated(
+            &t,
+            &BTreeMap::new(),
+            &crate::rules::Rules::default(),
+            s,
+            &StartupRender::default(),
+        )
     }
 
     #[test]
@@ -137,6 +143,7 @@ mod tests {
             &rules,
             &crate::rules::Rules::default(),
             &Settings::default(),
+            &StartupRender::default(),
         );
         let golden =
             std::fs::read_to_string(root.join("tests/golden/generated/default.lua")).unwrap();

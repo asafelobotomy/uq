@@ -854,6 +854,24 @@ async fn desktop_proxy_matches_the_interface() {
         .unwrap()
         .unwrap();
     assert_eq!(signal.args().unwrap().id, "");
+
+    // `serve()`'s runner never starts anything, but counts `ShellReady` (F1, F39).
+    let _autostart_changed = proxy.receive_autostart_changed().await.unwrap();
+    proxy.shell_ready().await.unwrap();
+    let rows: Vec<serde_json::Value> =
+        serde_json::from_str(&proxy.list_autostart().await.unwrap()).unwrap();
+    assert!(rows.is_empty(), "{rows:?}");
+    let iface = s
+        ._server
+        .0
+        .object_server()
+        .interface::<_, uqd::dbus::DesktopIface>(PATH)
+        .await
+        .unwrap();
+    let runner = iface.get().await.runner().clone();
+    let r = runner.lock().unwrap();
+    assert!(!r.enabled());
+    assert_eq!(r.shell_ready_calls(), 1);
 }
 
 #[tokio::test]
@@ -1078,4 +1096,222 @@ async fn pick_does_not_hold_the_desktop_lock() {
     other.pick_done(&token, "cancel").await.unwrap();
     let reply = pending.await.unwrap().unwrap();
     assert!(reply.contains("cancelled"), "{reply}");
+}
+
+#[tokio::test]
+async fn startup_sections_over_dbus() {
+    let s = served().await;
+    let writes = [
+        ("env", r#"{"vars":[{"name":"FOO","value":"bar"}]}"#),
+        ("compat", r#"{"qt_wayland":true}"#),
+        (
+            "autostart",
+            r#"{"files":[{"id":"nm-applet.desktop","enabled":false,"delay":null}],"added":[]}"#,
+        ),
+    ];
+    for (domain, json) in writes {
+        let () = s
+            .proxy
+            .call("SetSection", &(domain, json, "settings"))
+            .await
+            .unwrap();
+        let got: String = s.proxy.call("GetSection", &(domain,)).await.unwrap();
+        let got: serde_json::Value = serde_json::from_str(&got).unwrap();
+        let sent: serde_json::Value = serde_json::from_str(json).unwrap();
+        for (k, v) in sent.as_object().unwrap() {
+            assert_eq!(&got[k], v, "{domain}.{k}");
+        }
+    }
+    let g = std::fs::read_to_string(&s.paths.generated_lua).unwrap();
+    assert!(g.contains(r#"hl.env("FOO", "bar", true)"#), "{g}");
+    assert!(
+        g.contains(r#"hl.env("QT_QPA_PLATFORM", "wayland;xcb", true)"#),
+        "{g}"
+    );
+    let env_d = s.paths.startup.config_home.join("environment.d/60-uq.conf");
+    let env_d = std::fs::read_to_string(env_d).unwrap();
+    assert!(env_d.contains("FOO='bar'"), "{env_d}");
+
+    let explain = |domain: &'static str| {
+        let proxy = s.proxy.clone();
+        async move {
+            let e: String = proxy.call("Explain", &(domain,)).await.unwrap();
+            serde_json::from_str::<serde_json::Value>(&e).unwrap()
+        }
+    };
+    assert_eq!(explain("env").await["vars.FOO"]["source"], "uq");
+    let compat = explain("compat").await;
+    assert_eq!(compat["qt_wayland"]["source"], "uq");
+    assert_eq!(compat["sharp_x11"]["source"], "default");
+    assert_eq!(
+        explain("autostart").await["nm-applet.desktop"]["source"],
+        "uq"
+    );
+
+    let err = s
+        .proxy
+        .call::<_, _, ()>(
+            "SetSection",
+            &(
+                "compat",
+                r#"{"apps":[{"id":"code.desktop","platform":"x11","elsewhere":true}]}"#,
+                "settings",
+            ),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(error_name(&err), "org.uq.Desktop1.Error.InvalidSetting");
+    assert_eq!(error_message(&err), "uQ can't find this app's file.");
+}
+
+/// uqd served with a fake autostart spawner, with `files` in the user's autostart folder.
+struct AutostartServed {
+    _dir: tempfile::TempDir,
+    _bus: uq_core::test_bus::Bus,
+    _server: (zbus::Connection, uqd::dbus::SharedDesktop),
+    fake: Arc<uqd::autostart::spawn::FakeSpawner>,
+    proxy: uq_core::client::DesktopProxy<'static>,
+}
+
+async fn autostart_served(
+    files: &[(&str, &str)],
+    fake: uqd::autostart::spawn::FakeSpawner,
+) -> AutostartServed {
+    let dir = tempfile::tempdir().unwrap();
+    let bus = private_bus();
+    let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut paths = uq_core::paths::Paths::under(&dir.path().join("root"));
+    paths.themes_dir = repo.join("themes");
+    paths.templates_dir = repo.join("templates");
+    let folder = paths.startup.user_autostart();
+    std::fs::create_dir_all(&folder).unwrap();
+    for (id, text) in files {
+        std::fs::write(folder.join(id), text).unwrap();
+    }
+    let desktop = Desktop::new(
+        paths,
+        Arc::new(FakeCompositor::running()),
+        Arc::new(FakeSystem::default()),
+    )
+    .unwrap();
+    let fake = Arc::new(fake);
+    let cfg = uqd::autostart::AutostartConfig::new(
+        fake.clone(),
+        dir.path().join("run/uq/autostart-run.json"),
+        Some("test_session".into()),
+        false,
+    );
+    let server = uqd::dbus::serve_with(
+        zbus::connection::Builder::address(bus.address.as_str()).unwrap(),
+        desktop,
+        cfg,
+    )
+    .await
+    .unwrap();
+    let client = zbus::connection::Builder::address(bus.address.as_str())
+        .unwrap()
+        .build()
+        .await
+        .unwrap();
+    let proxy = uq_core::client::DesktopProxy::new(&client).await.unwrap();
+    AutostartServed {
+        _dir: dir,
+        _bus: bus,
+        _server: server,
+        fake,
+        proxy,
+    }
+}
+
+const NM_APPLET: &str = "[Desktop Entry]\nType=Application\nName=Network\nExec=nm-applet\n";
+
+async fn autostart_rows(p: &uq_core::client::DesktopProxy<'_>) -> Vec<serde_json::Value> {
+    serde_json::from_str(&p.list_autostart().await.unwrap()).unwrap()
+}
+
+#[tokio::test]
+async fn list_autostart_over_dbus() {
+    let s = autostart_served(&[("nm-applet.desktop", NM_APPLET)], Default::default()).await;
+    let () = s
+        .proxy
+        .set_section(
+            "autostart",
+            r#"{"added":[{"name":"Backup","argv":["backup","--quiet"],"enabled":false}]}"#,
+            "settings",
+        )
+        .await
+        .unwrap();
+    let rows = autostart_rows(&s.proxy).await;
+    assert_eq!(rows.len(), 2, "{rows:?}");
+    assert_eq!(rows[0]["id"], "nm-applet.desktop");
+    assert_eq!(rows[0]["name"], "Network");
+    assert_eq!(rows[0]["source"], "yours");
+    assert_eq!(rows[0]["can_toggle"], true);
+    assert_eq!(rows[0]["status"], "not_started");
+    assert!(rows[0].get("argv").is_none());
+    assert_eq!(rows[1]["source"], "added");
+    assert_eq!(rows[1]["status"], "off");
+    assert_eq!(rows[1]["argv"], serde_json::json!(["backup", "--quiet"]));
+
+    s.proxy.shell_ready().await.unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while autostart_rows(&s.proxy).await[0]["status"] != "running" {
+        assert!(std::time::Instant::now() < deadline, "never running");
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    let calls = s.fake.calls();
+    assert_eq!(calls.len(), 1);
+    assert_eq!(calls[0].argv, ["nm-applet"]);
+}
+
+#[tokio::test]
+async fn autostart_changed_signal() {
+    let s = autostart_served(&[("nm-applet.desktop", NM_APPLET)], Default::default()).await;
+    let mut changed = s.proxy.receive_autostart_changed().await.unwrap();
+    s.proxy.shell_ready().await.unwrap();
+    tokio::time::timeout(std::time::Duration::from_secs(5), changed.next())
+        .await
+        .expect("no AutostartChanged")
+        .unwrap();
+}
+
+#[tokio::test]
+async fn list_autostart_does_not_hold_the_desktop_lock() {
+    let fake = uqd::autostart::spawn::FakeSpawner::default();
+    fake.exit(
+        "uq-autostart-nm-applet",
+        uqd::autostart::spawn::ExitInfo::Code(3),
+    );
+    *fake.journal_delay.lock().unwrap() = Some(std::time::Duration::from_secs(2));
+    *fake.journal.lock().unwrap() = vec!["boom".into()];
+    let s = autostart_served(&[("nm-applet.desktop", NM_APPLET)], fake).await;
+    let mut changed = s.proxy.receive_autostart_changed().await.unwrap();
+    s.proxy.shell_ready().await.unwrap();
+    // Waiting, running, failed.
+    for _ in 0..3 {
+        tokio::time::timeout(std::time::Duration::from_secs(5), changed.next())
+            .await
+            .expect("no AutostartChanged")
+            .unwrap();
+    }
+    let lister = s.proxy.clone();
+    let listing = tokio::spawn(async move { autostart_rows(&lister).await });
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    assert_eq!(
+        s.fake.tails.lock().unwrap().len(),
+        1,
+        "the journal read began"
+    );
+    let look = s.proxy.get_section("look").await.unwrap();
+    tokio::time::timeout(
+        std::time::Duration::from_secs(1),
+        s.proxy.set_section("look", &look, "test"),
+    )
+    .await
+    .expect("SetSection blocked while ListAutostart read the journal")
+    .unwrap();
+    let rows = listing.await.unwrap();
+    assert_eq!(rows[0]["status"], "failed");
+    assert_eq!(rows[0]["exit"], 3);
+    assert_eq!(rows[0]["log"], serde_json::json!(["boom"]));
 }

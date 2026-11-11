@@ -1,6 +1,9 @@
 //! uqd's persisted desktop state (`~/.local/state/uq/state.toml`).
 
 use crate::atomic::atomic_write;
+use crate::autostart::Autostart;
+use crate::compat::Compat;
+use crate::env::Env;
 use crate::lua::Layout;
 use crate::rules::Rules;
 use crate::schedule::Schedule;
@@ -23,6 +26,15 @@ pub struct State {
     /// Window, panel and workspace rules; each entry loads on its own.
     #[serde(default)]
     pub rules: Rules,
+    /// Environment variables for the session; each entry loads on its own.
+    #[serde(default)]
+    pub env: Env,
+    /// Apps and scaling: the switches and the per-app fixes; each fix loads on its own.
+    #[serde(default)]
+    pub compat: Compat,
+    /// Startup apps: choices about the XDG entries, and the user's own; each loads on its own.
+    #[serde(default)]
+    pub autostart: Autostart,
     /// The scheduled transition uqd last applied; a manual change holds until a newer one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub schedule_mark: Option<chrono::DateTime<chrono::Utc>>,
@@ -65,6 +77,9 @@ impl Default for State {
             schedule: Schedule::Off,
             layouts: BTreeMap::new(),
             rules: Rules::default(),
+            env: Env::default(),
+            compat: Compat::default(),
+            autostart: Autostart::default(),
             schedule_mark: None,
             settings: Settings::default(),
             launch_counts: BTreeMap::new(),
@@ -122,6 +137,9 @@ impl State {
         state.settings = valid;
         state.layouts = crate::settings::repair_rules(std::mem::take(&mut state.layouts));
         state.rules = std::mem::take(&mut state.rules).repaired();
+        state.env = std::mem::take(&mut state.env).repaired();
+        state.compat = std::mem::take(&mut state.compat).repaired();
+        state.autostart = std::mem::take(&mut state.autostart).repaired();
         Ok(state)
     }
 
@@ -153,6 +171,15 @@ impl State {
         if domain == "rules" {
             return Ok(serde_json::to_value(&self.rules).expect("rules serialise"));
         }
+        if domain == "env" {
+            return Ok(self.env.section());
+        }
+        if domain == "compat" {
+            return Ok(self.compat.section());
+        }
+        if domain == "autostart" {
+            return Ok(self.autostart.section());
+        }
         if domain != "layouts" {
             return self.settings.section(domain);
         }
@@ -172,6 +199,18 @@ impl State {
     ) -> Result<(), SettingError> {
         if domain == "rules" {
             self.rules = Rules::from_section(&value, &self.rules)?;
+            return Ok(());
+        }
+        if domain == "env" {
+            self.env = Env::from_section(&value)?;
+            return Ok(());
+        }
+        if domain == "compat" {
+            self.compat = Compat::from_section(&value)?;
+            return Ok(());
+        }
+        if domain == "autostart" {
+            self.autostart = Autostart::from_section(&value, &self.autostart)?;
             return Ok(());
         }
         if domain != "layouts" {
@@ -303,6 +342,34 @@ mod tests {
                 ("special:magic".into(), Layout::Master),
             ]),
             rules: Rules::default(),
+            env: Env {
+                vars: vec![crate::env::Var {
+                    name: "GDK_BACKEND".into(),
+                    value: "x11".into(),
+                }],
+            },
+            compat: Compat {
+                sharp_x11: true,
+                apps: vec![crate::compat::AppFix {
+                    scale: Some(1.5),
+                    ..crate::compat::AppFix::new("code.desktop")
+                }],
+                ..Compat::default()
+            },
+            autostart: Autostart {
+                files: vec![crate::autostart::FileChoice {
+                    id: "nm-applet.desktop".into(),
+                    enabled: Some(false),
+                    delay: None,
+                }],
+                added: vec![crate::autostart::Added::Command {
+                    id: "a-0b12".into(),
+                    name: "Backup check".into(),
+                    argv: vec!["backup-check".into(), "--quiet".into()],
+                    enabled: true,
+                    delay: Some(10),
+                }],
+            },
             schedule_mark: None,
             settings: Settings::default(),
             launch_counts: BTreeMap::new(),

@@ -185,7 +185,10 @@ profile = "performance"   # power-profiles-daemon; the only non-uqd key in v1
 
 - **What a profile can hold:** `look`, `layouts`, `appearance` (theme, variant, fonts), `shell`,
   `wallpaper`, `keybinds` (enable or disable named binds only), `rules` (enable or disable named
-  rules only), plus `power.profile`.
+  rules only), `env` (set a variable, or remove it while the profile is on), `compat` (the five
+  switches, and a fix's Run on and Size) and `autostart` (an existing entry's on/off and delay),
+  plus `power.profile`. A profile never adds a startup entry or command, launch options or a
+  launcher file; startup changes take effect at the next login.
 - **Applying.** uqd saves an automatic restore point, remembers the values of the keys the
   profile touches, then applies the overlay as one validated write with origin
   `profile:<id>`. At most one profile is active.
@@ -444,7 +447,8 @@ These come from KDE and COSMIC complaints, and a lint or test checks each one wh
 **D-Bus summary** (all on `org.uq.Desktop1`): `Explain`, `ListHistory`, `Undo`,
 `ListRestorePoints`, `SaveRestorePoint`, `DeleteRestorePoint`, `Restore`, `ListProfiles`,
 `GetProfile`, `SetProfile`, `DeleteProfile`, `ApplyProfile`, `ProfileOff`, `PickWindow → s`,
-`ListAutostart`, `SetAutostart`. Signals: `HistoryChanged`, `ProfileChanged(s id)`,
+`ListAutostart`, `ShellReady`; the `autostart`, `env` and `compat` sections are written with
+`SetSection("autostart" | "env" | "compat", json, origin)`. Signals: `HistoryChanged`, `ProfileChanged(s id)`,
 `AutostartChanged`.
 
 **Security.**

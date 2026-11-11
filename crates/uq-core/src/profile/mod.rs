@@ -7,6 +7,7 @@
 mod active;
 mod overlay;
 mod rules;
+mod startup;
 mod store;
 
 pub use active::{clear_active, load_active, save_active};
@@ -17,6 +18,11 @@ pub use overlay::{
 pub use rules::{
     check_tree, enabled_of, mark_rules, missing_rules, missing_rules_notice, rule_keys, rule_label,
     rule_toggles, set_enabled,
+};
+pub use startup::{
+    TOO_MANY_FIXES, TOO_MANY_VARS, check_autostart_tree, check_compat_tree, check_env_tree,
+    emptied_elsewhere, kept_fix_notice, mark_startup, missing_startup, missing_startup_notice,
+    startup_keys, startup_keys_of, startup_label, startup_notice,
 };
 pub use store::ProfileStore;
 
@@ -48,11 +54,17 @@ pub enum DomainKind {
     Power,
     /// The on/off switch of existing window and panel rules, by id (`rules.rs`).
     Rules,
+    /// Environment variables by name: set to a value, or removed with `false` (`startup.rs`).
+    Env,
+    /// The Apps and scaling switches and each fix's platform and size (`startup.rs`).
+    Compat,
+    /// An existing startup entry's on/off and delay, by id (`startup.rs`).
+    Autostart,
     /// In the format, refused until a later version of uQ can apply it.
     Reserved,
 }
 
-pub const PROFILE_DOMAINS: [(&str, DomainKind); 8] = [
+pub const PROFILE_DOMAINS: [(&str, DomainKind); 11] = [
     ("look", DomainKind::Section),
     ("layouts", DomainKind::Section),
     ("shell", DomainKind::Section),
@@ -61,6 +73,9 @@ pub const PROFILE_DOMAINS: [(&str, DomainKind); 8] = [
     ("power", DomainKind::Power),
     ("keybinds", DomainKind::Reserved),
     ("rules", DomainKind::Rules),
+    ("env", DomainKind::Env),
+    ("compat", DomainKind::Compat),
+    ("autostart", DomainKind::Autostart),
 ];
 
 fn kind_of(domain: &str) -> Option<DomainKind> {
@@ -113,6 +128,20 @@ pub enum ProfileError {
     Empty,
     #[error("A profile can hold up to 500 settings.")]
     TooManyKeys,
+    #[error("{}", TOO_MANY_VARS)]
+    TooManyVars,
+    #[error("{}", TOO_MANY_FIXES)]
+    TooManyFixes,
+    #[error(
+        "Turning the profile off would put back a variable it removed, making more than 100 \
+         environment variables. Remove one on the Startup page first."
+    )]
+    OffTooManyVars,
+    #[error(
+        "Turning the profile off would put back an app fix it removed, making more than 100 app \
+         fixes. Remove one on the Apps and scaling page first."
+    )]
+    OffTooManyFixes,
 }
 
 /// Text from an imported file with its control characters left out, so an error can't carry a
@@ -123,10 +152,23 @@ fn plain(text: &str) -> String {
 
 /// The plain label of a dotted `domain.path` key, for the text of an `Invalid` error.
 fn invalid_label(key: &str) -> String {
-    match key.split_once('.') {
-        Some((domain, rest)) => key_label(domain, &[rest.to_string()]),
-        None => key.to_string(),
-    }
+    let Some((domain, rest)) = key.split_once('.') else {
+        return key.to_string();
+    };
+    // Ids hold dots, so the path is cut from the ends: `apps.<id>.<field>`, `<id>.<field>`.
+    let s = |v: &str| v.to_string();
+    let path = match (domain, rest.strip_prefix("apps.")) {
+        ("compat", Some(fix)) => match fix.rsplit_once('.') {
+            Some((id, f)) if id.ends_with(".desktop") => vec![s("apps"), s(id), s(f)],
+            _ => vec![s("apps")],
+        },
+        ("autostart", _) => match rest.rsplit_once('.') {
+            Some((id, f)) if startup::startup_id_ok(id) => vec![s(id), s(f)],
+            _ => vec![s(rest)],
+        },
+        _ => vec![s(rest)],
+    };
+    key_label(domain, &path)
 }
 
 fn invalid(key: impl Into<String>, reason: impl Into<String>) -> ProfileError {
@@ -255,6 +297,16 @@ impl Profile {
         if let Some(tree) = self.values.get("rules") {
             // Not written to a default `State`, which has no rules to switch.
             check_tree(tree)?;
+        }
+        // Nor these: a default `State` has no startup entries, and a variable's limit depends
+        // on the computer it's applied on.
+        for (domain, tree) in &self.values {
+            match kind_of(domain) {
+                Some(DomainKind::Env) => check_env_tree(tree)?,
+                Some(DomainKind::Compat) => check_compat_tree(tree)?,
+                Some(DomainKind::Autostart) => check_autostart_tree(tree)?,
+                _ => {}
+            }
         }
         for (domain, kind) in PROFILE_DOMAINS {
             if !matches!(kind, DomainKind::Section | DomainKind::Appearance) {
@@ -419,6 +471,9 @@ pub fn read_leaf(state: &State, domain: &str, path: &[String]) -> Option<Value> 
             history::get_path(&state.section(domain).ok()?, path)?.clone()
         }
         (DomainKind::Rules, [id]) => Value::Bool(enabled_of(state, id)?),
+        (DomainKind::Env | DomainKind::Compat | DomainKind::Autostart, _) => {
+            startup::read_leaf(state, domain, path)?
+        }
         _ => return None,
     };
     (!v.is_null() && !v.is_object()).then_some(v)
@@ -434,6 +489,12 @@ pub fn write_leaves(
     let kind = kind_of(domain).ok_or_else(|| SettingError::UnknownKey(domain.to_string()))?;
     if kind == DomainKind::Rules {
         return write_rule_leaves(state, leaves);
+    }
+    if matches!(
+        kind,
+        DomainKind::Env | DomainKind::Compat | DomainKind::Autostart
+    ) {
+        return startup::write_leaves(state, domain, leaves);
     }
     let (mut theme, mut variant) = (None, None);
     let mut section_leaves = Vec::new();
@@ -524,6 +585,7 @@ pub fn key_label(domain: &str, path: &[String]) -> String {
         ("rules", _) if path.len() == 1 => Some("A rule".to_string()),
         ("appearance", "theme" | "variant") => history::label("theme", &dotted),
         ("power", "profile") => Some("Power mode".to_string()),
+        ("env" | "compat" | "autostart", _) => Some(startup::fallback_label(domain, path)),
         _ => history::label(domain, &dotted),
     }
     .unwrap_or(dotted)
@@ -540,6 +602,9 @@ pub fn power_label(mode: &str) -> &str {
 
 /// A value as a person reads it.
 pub fn value_text(domain: &str, path: &[String], v: &Value) -> String {
+    if let Some(text) = startup::startup_value_text(domain, path, v) {
+        return text;
+    }
     match v {
         Value::String(s) if domain == "power" && path == ["profile"] => power_label(s).to_string(),
         Value::String(s) => s.clone(),
@@ -793,6 +858,34 @@ profile = "performance"
             .unwrap(),
         );
         assert_eq!(p.validate(), Err(ProfileError::TooManyKeys));
+    }
+
+    #[test]
+    fn profile_holds_startup_domains() {
+        let body = "[env]\nFOO = \"bar\"\nOLD = false\n[compat]\nsharp_x11 = true\n\
+                    [compat.apps.\"code.desktop\"]\nplatform = \"x11\"\nscale = 1.5\n\
+                    [autostart.\"nm-applet.desktop\"]\nenabled = false\n\
+                    [autostart.\"a-3f9c\"]\ndelay = 10\n";
+        let p = Profile::parse(&with(body)).unwrap();
+        assert_eq!(p.keys().len(), 7);
+        assert_eq!(Profile::parse(&p.to_toml()), Ok(p.clone()));
+        // 501 keys across the three is too many, as anywhere.
+        let mut big = p;
+        let vars: Map<String, Value> = (0..300).map(|i| (format!("V{i}"), json!("x"))).collect();
+        big.values.insert("env".into(), Value::Object(vars));
+        let ids: Map<String, Value> = (0..197)
+            .map(|i| (format!("e{i}.desktop"), json!({"enabled": true})))
+            .collect();
+        big.values.insert("autostart".into(), Value::Object(ids));
+        assert_eq!(big.keys().len(), 300 + 3 + 197);
+        assert_eq!(big.validate(), Ok(()));
+        let mut over = big.clone();
+        over.with_key(Key {
+            domain: "autostart".into(),
+            path: vec!["e0.desktop".into(), "delay".into()],
+            value: json!(1),
+        });
+        assert_eq!(over.validate(), Err(ProfileError::TooManyKeys));
     }
 
     #[test]

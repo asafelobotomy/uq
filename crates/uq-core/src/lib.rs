@@ -1,7 +1,11 @@
 //! uQ core library: theme model, renderers, Lua emitter, state and schedule.
 pub mod atomic;
+pub mod autostart;
 pub mod client;
+pub mod compat;
 pub mod contrast;
+pub mod desktop_entry;
+pub mod env;
 pub mod history;
 pub mod launcher_providers;
 pub mod lua;
@@ -11,6 +15,7 @@ pub mod render;
 pub mod rules;
 pub mod schedule;
 pub mod settings;
+pub mod startup_explain;
 pub mod state;
 pub mod stub;
 #[cfg(feature = "test-bus")]

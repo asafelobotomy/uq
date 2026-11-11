@@ -37,6 +37,9 @@ impl Desktop {
         let mut next = self.state.clone();
         next.set_section(domain, value)
             .map_err(|e| DesktopError::InvalidSetting(e.to_string()))?;
+        if domain == "compat" {
+            self.check_compat_files(&next)?;
+        }
         self.commit_section(domain, next, origin).await
     }
 

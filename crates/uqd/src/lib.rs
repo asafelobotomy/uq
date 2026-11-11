@@ -1,6 +1,8 @@
 //! uqd: the uQ session daemon.
+pub mod autostart;
 pub mod compositor;
 pub mod dbus;
+mod files;
 pub mod hypr;
 mod monitors;
 pub mod pick;
@@ -9,6 +11,7 @@ mod profiles;
 mod rules;
 mod sections;
 pub mod service;
+mod startup;
 pub mod system;
 
 /// Helpers for tests that write a script and then execute it.

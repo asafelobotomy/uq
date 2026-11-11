@@ -271,6 +271,15 @@ pub static OPTIONS: &[OptionRow] = &[
         "Icon theme",
         "icon-theme",
     ),
+    // `xwayland:force_zero_scaling`: ConfigValues.cpp line 549 at v0.56.2, line 653 at v0.57.0
+    // (see `crate::compat::hypr`).
+    hypr(
+        "compat.sharp_x11",
+        "sharp-x11",
+        "Sharp X11 apps",
+        crate::compat::hypr::XWAYLAND_ZERO_SCALING,
+        Dflt,
+    ),
 ];
 
 /// The rows of one section, in [`OPTIONS`] order.
@@ -322,6 +331,8 @@ pub fn expected(row: &OptionRow, state: &State, theme: &Theme) -> Option<Value> 
         "appearance.cursor_theme" => Some(Value::from(t.icons.cursor_theme.clone())),
         "appearance.cursor_size" => num(t.icons.cursor_size),
         "appearance.icon_theme" => Some(Value::from(t.icons.theme.clone())),
+        // Off renders nothing, so Hyprland's own default is all there is to read back (F6).
+        "compat.sharp_x11" => state.compat.sharp_x11.then_some(Value::Bool(true)),
         _ => None,
     }
 }
@@ -408,6 +419,39 @@ pub fn find_workspace_rule_in_user_lua(text: &str, selector: &str) -> Option<u32
         let line = strip_lua_comment(line);
         (line.contains("workspace_rule") && (line.contains(&dq) || line.contains(&sq)))
             .then(|| u32::try_from(n + 1).unwrap_or(u32::MAX))
+    })
+}
+
+/// The 1-based line of `user.lua` with an `hl.env(` call that names variable `name` in quotes.
+/// Comments are ignored.
+pub fn find_env_in_user_lua(text: &str, name: &str) -> Option<u32> {
+    text.lines().enumerate().find_map(|(n, line)| {
+        let line = strip_lua_comment(line);
+        let mut from = 0;
+        while let Some(i) = line[from..].find("hl.env") {
+            let start = from + i;
+            from = start + 1;
+            if line[..start].chars().next_back().is_some_and(is_ident) {
+                continue;
+            }
+            let Some(rest) = line[start + "hl.env".len()..]
+                .trim_start()
+                .strip_prefix('(')
+            else {
+                continue;
+            };
+            let rest = rest.trim_start();
+            let Some(q) = rest.chars().next().filter(|c| matches!(c, '"' | '\'')) else {
+                continue;
+            };
+            if rest[1..]
+                .strip_prefix(name)
+                .is_some_and(|r| r.starts_with(q))
+            {
+                return Some(u32::try_from(n + 1).unwrap_or(u32::MAX));
+            }
+        }
+        None
     })
 }
 
@@ -597,6 +641,8 @@ mod tests {
                 "cursor_size": 24, "icon_theme": "D"}),
         )
         .unwrap();
+        st.set_section("compat", json!({"sharp_x11": true}))
+            .unwrap();
         let mut keys = std::collections::HashSet::new();
         for row in OPTIONS {
             assert!(keys.insert(row.key), "duplicate {}", row.key);
@@ -685,5 +731,30 @@ mod tests {
             expected(row("layouts.dwindle.force_split"), &st, &theme),
             Some(json!(2))
         );
+    }
+
+    #[test]
+    fn compat_sharp_x11_row_expected() {
+        let theme = Theme::from_toml(
+            crate::theme::tests::FIXTURE,
+            "fixture",
+            crate::theme::Variant::Dark,
+        )
+        .unwrap();
+        let row = OPTIONS
+            .iter()
+            .find(|r| r.key == "compat.sharp_x11")
+            .expect("the compat.sharp_x11 row");
+        assert_eq!(row.setting_id, "sharp-x11");
+        assert_eq!(row.label, "Sharp X11 apps");
+        assert_eq!(row.hypr, Some(crate::compat::hypr::XWAYLAND_ZERO_SCALING));
+        assert_eq!(row.null_source, NullSource::Default);
+        let mut st = State::default();
+        // Off renders nothing, so there is nothing to read back (F6).
+        assert_eq!(expected(row, &st, &theme), None);
+        st.set_section("compat", json!({"sharp_x11": true}))
+            .unwrap();
+        assert_eq!(expected(row, &st, &theme), Some(json!(true)));
+        assert_eq!(label_for("compat", "sharp_x11"), Some("Sharp X11 apps"));
     }
 }

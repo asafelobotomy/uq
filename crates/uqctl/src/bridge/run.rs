@@ -133,7 +133,7 @@ mod tests {
         let argv = ["sh", "-c", "echo hi"].map(String::from);
         assert_eq!(
             crate::bridge::launch::scope_command("run", &argv, 0xff),
-            "systemd-run --user --scope --collect --unit=app-uq-run-000000ff -- 'sh' '-c' 'echo hi'"
+            "systemd-run --user --scope --collect --slice=app.slice --unit=app-uq-run-000000ff -- 'sh' '-c' 'echo hi'"
         );
     }
 }

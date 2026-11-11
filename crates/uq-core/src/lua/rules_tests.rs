@@ -1,5 +1,5 @@
 use super::*;
-use crate::lua::{emit_generated, emit_workspace_rule};
+use crate::lua::{StartupRender, emit_generated, emit_workspace_rule};
 use crate::rules::{LayerMatch, Rules, WindowMatch};
 use crate::settings::Settings;
 use crate::theme::{Theme, Variant, tests::FIXTURE};
@@ -151,7 +151,13 @@ fn rules_keep_list_order() {
         ],
         ..Default::default()
     };
-    let out = emit_generated(&theme(), &Default::default(), &rules, &Settings::default());
+    let out = emit_generated(
+        &theme(),
+        &Default::default(),
+        &rules,
+        &Settings::default(),
+        &StartupRender::default(),
+    );
     let pos: Vec<usize> = ["uq:r-0003", "uq:r-7f2c", "uq:r-0001"]
         .iter()
         .map(|n| out.find(n).expect(n))
@@ -176,7 +182,13 @@ fn panel_block_comes_last() {
         )],
         ..Default::default()
     };
-    let out = emit_generated(&theme(), &Default::default(), &rules, &Settings::default());
+    let out = emit_generated(
+        &theme(),
+        &Default::default(),
+        &rules,
+        &Settings::default(),
+        &StartupRender::default(),
+    );
     assert!(out.ends_with("blur = true })\n"), "{out}");
     assert!(out.find("-- Window rules") < out.find("-- Panel rules"));
 }
@@ -301,7 +313,13 @@ fn hostile_strings_stay_inside_lua_strings() {
         layer: vec![l],
         workspace: vec![ws],
     };
-    let out = emit_generated(&theme(), &Default::default(), &rules, &Settings::default());
+    let out = emit_generated(
+        &theme(),
+        &Default::default(),
+        &rules,
+        &Settings::default(),
+        &StartupRender::default(),
+    );
     assert!(!out.contains("EVILNAME"), "{out}");
     let lines: Vec<&str> = out.lines().filter(|l| l.contains("_rule({")).collect();
     assert_eq!(lines.len(), 3, "{out}");

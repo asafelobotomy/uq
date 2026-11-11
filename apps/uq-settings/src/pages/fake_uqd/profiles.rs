@@ -2,13 +2,14 @@
 //! same uq-core functions. There is no power service: a profile's power mode always gives the
 //! notice uqd gives when the service is missing.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex};
 
 use serde_json::json;
 use uq_core::profile::{
-    self, ActiveProfile, MAX_PROFILES, Profile, ProfileError, missing_rules, missing_rules_notice,
-    power_notice, turn_off,
+    self, ActiveProfile, MAX_PROFILES, Profile, ProfileError, emptied_elsewhere, kept_fix_notice,
+    missing_rules, missing_rules_notice, missing_startup, missing_startup_notice, power_notice,
+    startup_notice, turn_off,
 };
 
 use super::{FakeError, FakeUqd, now};
@@ -119,6 +120,15 @@ impl FakeProfiles {
             return Err(FakeError::UnknownTheme(theme));
         }
         let old = self.active.lock().unwrap().clone();
+        // The startup ids "found in the folders" are the scripted `ListAutostart` rows.
+        let found: Vec<String> = uqd
+            .autostart
+            .rows
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|r| r["id"].as_str().map(str::to_string))
+            .collect();
         let mut done = None;
         uqd.write(&format!("profile:{id}"), |s| {
             let (base, kept) = match &old {
@@ -127,15 +137,26 @@ impl FakeProfiles {
             };
             // Like uqd: counted against the settings the profile goes over.
             let missing = missing_rules(&base, &p);
-            let (next, memo) = profile::apply(&base, &p, now()).map_err(refused)?;
+            let known: BTreeSet<String> = found
+                .iter()
+                .cloned()
+                .chain(base.autostart.added.iter().map(|a| a.id().to_string()))
+                .collect();
+            let startup = missing_startup(&known, &p);
+            let kept_fixes = emptied_elsewhere(&base, &p).len();
+            let (next, memo) = profile::apply(&base, &p, &known, now()).map_err(refused)?;
             *s = next;
-            done = Some((kept, memo, missing));
+            done = Some((kept, memo, missing, startup, kept_fixes));
             Ok(())
         })?;
-        let (kept, memo, missing) = done.expect("a write that succeeded ran its edit");
+        let (kept, memo, missing, startup, kept_fixes) =
+            done.expect("a write that succeeded ran its edit");
         let notices: Vec<String> = (missing > 0)
             .then(|| missing_rules_notice(missing))
             .into_iter()
+            .chain((startup > 0).then(|| missing_startup_notice(startup)))
+            .chain((kept_fixes > 0).then(|| kept_fix_notice(kept_fixes)))
+            .chain(startup_notice(&p))
             .chain(p.power().map(|_| power_notice(NO_POWER)))
             .collect();
         *self.active.lock().unwrap() = Some(memo);

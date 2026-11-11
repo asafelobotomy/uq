@@ -14,7 +14,7 @@ use uq_core::history::{
     AutoReason, Entry, Journal, MAX_ENTRIES, Origin, PointKind, RestorePoint, RestoreStore, diff,
     revert_changed,
 };
-use uq_core::lua::{Layout, emit_generated, emit_workspace_rule, lua_string};
+use uq_core::lua::{Layout, emit_generated, emit_workspace_rule, lua_string, startup_render};
 use uq_core::paths::Paths;
 use uq_core::profile::{ActiveProfile, ProfileStore, holds, load_active};
 use uq_core::render::{RenderedFiles, kvantum_base, render};
@@ -23,6 +23,7 @@ use uq_core::settings::{
     SECTION_DOMAINS, Settings, provenance, renders_config, renders_section, set_rule,
     valid_pinned_id,
 };
+use uq_core::startup_explain::FileReport;
 use uq_core::state::State;
 use uq_core::theme::{ThemeRegistry, Variant};
 
@@ -57,6 +58,8 @@ pub enum Event {
     ProfileChanged(String),
     /// A window pick started; the token goes to the shell, which answers `PickDone`.
     PickRequested(String),
+    /// A startup app's status changed: `ListAutostart` has the new picture.
+    AutostartChanged,
 }
 
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
@@ -129,6 +132,12 @@ pub struct Desktop {
     pub(crate) profiles: ProfileStore,
     /// The profile that is on, and what it replaced; kept in `paths.profile_active`.
     pub(crate) active: Option<ActiveProfile>,
+    /// A `uq-dev session` (`UQ_DEV_SESSION`, R20).
+    pub(crate) dev_session: bool,
+    /// The main screen's scale the installed config was rendered with (R13).
+    pub(crate) main_scale: Option<f64>,
+    /// What the file sync last found (`crate::startup`).
+    pub(crate) files: FileReport,
 }
 
 /// `explain`'s dotted key as a profile path.
@@ -158,6 +167,9 @@ fn domain_label(domain: &str) -> &'static str {
         "look" => "Look",
         "layouts" => "Layouts",
         "rules" => "Window rules",
+        "env" => "The list of environment variables",
+        "compat" => "Apps and scaling",
+        "autostart" => "The list of startup apps",
         "wallpaper" => "Wallpaper",
         "shell" => "Shell",
         "settings" => "A setting",
@@ -174,6 +186,8 @@ pub(crate) struct Candidate {
     pub(crate) path: PathBuf,
     /// The theme resolved for `next`, so `install` needs no second lookup.
     pub(crate) theme: uq_core::theme::Theme,
+    /// The main screen's scale `generated` was rendered with (F4).
+    pub(crate) main_scale: Option<f64>,
 }
 
 /// Launch counts stop here per app.
@@ -256,6 +270,9 @@ impl Desktop {
             power_timeout: POWER_TIMEOUT,
             profiles,
             active,
+            dev_session: false,
+            main_scale: None,
+            files: FileReport::default(),
         })
     }
 
@@ -475,6 +492,7 @@ impl Desktop {
         if crashed_mid_apply {
             let _ = self.events.send(Event::MonitorsChanged);
         }
+        self.sync_all_files();
     }
 
     pub async fn set_theme(
@@ -669,6 +687,9 @@ impl Desktop {
         if domain == "rules" {
             return Ok(self.explain_rules());
         }
+        if matches!(domain, "env" | "autostart") {
+            return Ok(self.explain_startup(domain, Value::Null));
+        }
         let section = self
             .state
             .section(domain)
@@ -739,7 +760,11 @@ impl Desktop {
                 json!({ "source": source, "live": live, "stored": stored, "detail": detail }),
             );
         }
-        Ok(Value::Object(out))
+        let out = Value::Object(out);
+        Ok(match domain {
+            "compat" => self.explain_startup(domain, out),
+            _ => out,
+        })
     }
 
     /// The first [`USER_LUA_SCAN_LIMIT`] bytes of `user.lua`, decoded lossily; `None` if unreadable.
@@ -872,6 +897,7 @@ impl Desktop {
         next.save(&self.paths.state_file)
             .map_err(io_err("saving state"))?;
         let old = std::mem::replace(&mut self.state, next);
+        self.sync_files(&old);
         // A schedule tick keeps the last entry ids, so it never moves the undo target.
         if origin == Origin::Schedule {
             return Ok(());
@@ -968,7 +994,18 @@ impl Desktop {
         };
         let files = render(&theme, &self.paths.templates_dir, base)
             .map_err(|e| DesktopError::Io(e.to_string()))?;
-        let generated = emit_generated(&theme, &next.layouts, &next.rules, &next.settings);
+        let main_scale = if next.compat.sharp_x11 || next.compat.steam_scale {
+            self.main_scale_for(next).await
+        } else {
+            None
+        };
+        let generated = emit_generated(
+            &theme,
+            &next.layouts,
+            &next.rules,
+            &next.settings,
+            &startup_render(next, main_scale, self.dev_session),
+        );
 
         self.ensure_user_lua()?;
         let path = self
@@ -1005,6 +1042,7 @@ impl Desktop {
             generated,
             path,
             theme,
+            main_scale,
         })
     }
 
@@ -1023,7 +1061,10 @@ impl Desktop {
                 std::fs::rename(&c.path, &self.paths.generated_lua)
                     .map_err(io_err("installing generated.lua"))
             })
-            .and_then(|()| self.persist(next, origin));
+            .and_then(|()| {
+                self.main_scale = c.main_scale;
+                self.persist(next, origin)
+            });
         if let Err(e) = committed {
             let _ = std::fs::remove_file(&c.path);
             return Err(e);

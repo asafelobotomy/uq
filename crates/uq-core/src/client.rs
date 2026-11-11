@@ -62,6 +62,11 @@ pub trait Desktop {
     fn apply_profile(&self, id: &str) -> zbus::Result<String>;
     /// JSON report, with `active` empty.
     fn profile_off(&self) -> zbus::Result<String>;
+    /// JSON array of the startup apps: `{id, name, icon, source, enabled, can_toggle, delay,
+    /// status, reason?, exit?, signal?, log?, argv?}`.
+    fn list_autostart(&self) -> zbus::Result<String>;
+    /// The shell is up; uqd starts the startup apps once per login. Returns at once.
+    fn shell_ready(&self) -> zbus::Result<()>;
 
     #[zbus(signal)]
     fn section_changed(&self, domain: &str, json: &str) -> zbus::Result<()>;
@@ -79,6 +84,9 @@ pub trait Desktop {
     /// The active profile, or `""`; also sent when the list of profiles changes.
     #[zbus(signal)]
     fn profile_changed(&self, id: &str) -> zbus::Result<()>;
+    /// A startup app's status changed; `ListAutostart` has the new list.
+    #[zbus(signal)]
+    fn autostart_changed(&self) -> zbus::Result<()>;
 }
 
 /// The Settings app's single-instance interface. An empty `page_id` means "just raise".

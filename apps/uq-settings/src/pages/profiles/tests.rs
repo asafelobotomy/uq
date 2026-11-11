@@ -564,8 +564,10 @@ async fn snapshot_lists_available_keys_pages_and_icons() {
             {"id": "appearance", "name": "Appearance"},
             {"id": "look", "name": "Look and layouts"},
             {"id": "wallpaper", "name": "Wallpaper"},
+            {"id": "apps-scaling", "name": "Apps and scaling"},
             {"id": "shell", "name": "Shell"},
             {"id": "rules", "name": "Window rules"},
+            {"id": "startup", "name": "Startup"},
         ])
     );
     let available = st["available"].as_array().unwrap();

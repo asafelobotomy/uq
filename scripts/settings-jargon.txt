@@ -18,3 +18,12 @@ xwayland
 namespace
 hl.window_rule
 layerrule
+xdg
+environment.d
+ozone
+force_zero_scaling
+systemd
+systemd-run
+desktop file
+hl.env
+exec

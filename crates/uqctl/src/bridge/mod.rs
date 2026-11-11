@@ -4,9 +4,9 @@
 //! `Outbound` over an mpsc channel, so concurrent replies and events never interleave mid-line.
 
 mod calc;
-mod desktop_entry;
+pub(crate) mod desktop_entry;
 mod dispatch;
-mod launch;
+pub(crate) mod launch;
 mod locknotify;
 mod logind;
 pub(crate) mod net;
@@ -14,8 +14,8 @@ mod notifowner;
 mod power;
 pub mod protocol;
 mod providers;
-mod run;
-mod uqd;
+pub(crate) mod run;
+pub(crate) mod uqd;
 
 use protocol::{Inbound, MAX_LINE, Outbound, Rejected, encode, read_lines};
 use serde_json::{Value, json};
@@ -228,9 +228,16 @@ where
     );
     let slots = Arc::new(Semaphore::new(MAX_IN_FLIGHT));
     let mut requests = tokio::task::JoinSet::new();
+    let mut shell_seen = false;
     while let Some(item) = in_rx.recv().await {
         match item {
             Ok(Inbound::Request { id, call, args }) => {
+                if !shell_seen {
+                    // `Hello` is ours, so the shell's first request is what shows it is up (R5).
+                    shell_seen = true;
+                    let link = link.clone();
+                    requests.spawn(async move { link.shell_ready().await });
+                }
                 let Ok(permit) = slots.clone().acquire_owned().await else {
                     break;
                 };

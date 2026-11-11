@@ -82,6 +82,25 @@ All notable changes to uQ are listed here. The format follows
   profile can turn them on and off. `uqd` gains the `rules` section, `PickWindow`, `PickDone`,
   `ListWindows` and a `PickRequested` signal. uQ never writes `user.lua`; name a rule
   `uq:<id>` there to override it.
+- **Startup apps, environment variables and app scaling.** A Startup page (under System) lists
+  the apps in the autostart folders, with a status for each (Running, Waiting, Failed with its
+  last output, and so on), a start delay, and add-an-app-or-command (run without a shell). uqd now
+  starts them once per session, each in its own scope under `app.slice` with its output in the
+  journal, and a restarted uqd starts nothing new. Turning off a system entry writes a hidden
+  copy marked `X-uQ-Autostart=true`; your own files are never edited. Environment variables set
+  here go to Hyprland and `~/.config/environment.d/60-uq.conf`. An Apps and scaling page has five
+  switches (Sharp X11 apps, Electron on Wayland, Chromium-based browsers on Wayland, Qt apps prefer
+  Wayland, Steam UI scale), a Blurry right now list and per-app fixes (Run on, Size, extra
+  variables and options), which also apply to autostart. "Also when started from other
+  launchers" writes a desktop-file override marked `X-uQ-Override=true`, and Chromium-based
+  browsers get a flags file with a marker line. uQ never writes through a symlink and never edits
+  or deletes a file it didn't mark; it replaces its own `60-uq.conf` whatever it holds. All three
+  domains have history, undo and restore points, and a profile can hold environment variables,
+  the switches, a fix's Run on and Size, and an existing startup app's on/off and delay (never a
+  new command, launch options or a launcher file; startup changes apply at next login).
+  `uqd` gains `ListAutostart`, `ShellReady` and an `AutostartChanged` signal, and the `env`,
+  `compat` and `autostart` sections use `GetSection` / `SetSection`. `uqctl launch <desktop-id>`
+  launches an app the way uQ's launcher does.
 
 ### Changed
 
