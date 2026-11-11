@@ -665,13 +665,35 @@ fn hostile_env_runs_as_one_call_each() {
         "{text}{}",
         String::from_utf8_lossy(&out.stderr)
     );
-    // The mock's own checks (the payload would show up as an exec_cmd) pass and it loads.
+    // The mock prints "ok N", then one line per call and per string argument. Our three
+    // variables are three `hl.env` calls with the literal values, back to back, and the payload
+    // never reaches an `hl.exec_cmd`.
     assert!(text.starts_with("ok "), "{text}");
-    // Locally: exactly one `hl.env` per variable in the file (3 here, 3 cursor lines).
-    let file = std::fs::read_to_string(&p.generated_lua).unwrap();
-    assert_eq!(file.matches("hl.env(").count(), 6, "{file}");
-    assert!(!text.contains("hl.exec_cmd:x"), "{text}");
-    assert!(!text.contains("hl.exec_cmd:\"x"), "{text}");
+    let lines: Vec<&str> = text.lines().collect();
+    let want = [
+        "hl.env",
+        "hl.env:GDK_SCALE",
+        "hl.env:2",
+        "hl.env",
+        "hl.env:MOZ_ENABLE_WAYLAND",
+        "hl.env:1",
+        "hl.env",
+        "hl.env:QUOTED",
+        "hl.env:\") hl.exec_cmd(\"x",
+    ];
+    assert!(lines.windows(want.len()).any(|w| w == want), "{text}");
+    assert_eq!(
+        lines.iter().filter(|l| **l == "hl.env").count(),
+        9,
+        "{text}"
+    );
+    assert!(
+        !lines
+            .iter()
+            .any(|l| l.starts_with("hl.exec_cmd:") && l.contains("\"x")),
+        "{text}"
+    );
+    assert!(!lines.contains(&"hl.exec_cmd:x"), "{text}");
 }
 
 #[test]

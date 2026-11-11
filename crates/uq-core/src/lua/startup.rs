@@ -118,6 +118,26 @@ mod tests {
     }
 
     #[test]
+    fn startup_render_follows_state() {
+        use crate::compat::hypr::SwitchKey;
+        let mut st = State::default();
+        st.env.vars.push(crate::env::Var {
+            name: "A".into(),
+            value: "1".into(),
+        });
+        let off = startup_render(&st, Some(1.5), false);
+        assert!(!off.zero_scaling);
+        assert_eq!(off.env, vec![("A".to_string(), "1".to_string())]);
+        st.compat.set_switch(SwitchKey::SharpX11, true);
+        let on = startup_render(&st, Some(1.5), true);
+        assert!(on.zero_scaling);
+        assert!(!on.export);
+        assert_eq!(on.env, env::session_env(&st.env, &st.compat, Some(1.5)));
+        let gdk = crate::compat::launch::gdk_scale(1.5).to_string();
+        assert!(on.env.contains(&("GDK_SCALE".to_string(), gdk)));
+    }
+
+    #[test]
     fn no_env_block_when_empty() {
         let mut out = String::new();
         emit_startup_env(&mut out, &StartupRender::default());
