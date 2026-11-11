@@ -113,7 +113,6 @@ package() {
   install -Dm644 packaging/dbus/org.uq.SettingsHelper1.conf "$pkgdir/usr/share/dbus-1/system.d/org.uq.SettingsHelper1.conf"
   install -Dm644 packaging/uq-settings-helper.service "$pkgdir/usr/lib/systemd/system/uq-settings-helper.service"
   install -Dm644 packaging/polkit/org.uq.settings.policy "$pkgdir/usr/share/polkit-1/actions/org.uq.settings.policy"
-  install -Dm644 packaging/tmpfiles/uq.conf "$pkgdir/usr/lib/tmpfiles.d/uq.conf"
   # The helper's unit makes these writable only if they exist.
   install -dm755 "$pkgdir/etc/uq" "$pkgdir/etc/systemd/logind.conf.d"
   # Plugin settings pages are read from here (one directory per page); none ship with uQ itself.

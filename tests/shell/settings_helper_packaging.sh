@@ -11,7 +11,7 @@ unit="$root/packaging/uq-settings-helper.service"
 svc="$root/packaging/dbus/org.uq.SettingsHelper1.service"
 conf="$root/packaging/dbus/org.uq.SettingsHelper1.conf"
 policy="$root/packaging/polkit/org.uq.settings.policy"
-tmpfiles="$root/packaging/tmpfiles/uq.conf"
+tmpfiles="$root/packaging/tmpfiles/uq-greeter.conf"
 pkgbuild="$root/packaging/uq/PKGBUILD"
 for f in "$unit" "$svc" "$conf" "$policy" "$tmpfiles"; do
     [ -f "$f" ] || { no "${f#"$root"/} missing"; }
@@ -100,7 +100,6 @@ for line in \
     'install -Dm644 packaging/dbus/org.uq.SettingsHelper1.conf "$pkgdir/usr/share/dbus-1/system.d/org.uq.SettingsHelper1.conf"' \
     'install -Dm644 packaging/uq-settings-helper.service "$pkgdir/usr/lib/systemd/system/uq-settings-helper.service"' \
     'install -Dm644 packaging/polkit/org.uq.settings.policy "$pkgdir/usr/share/polkit-1/actions/org.uq.settings.policy"' \
-    'install -Dm644 packaging/tmpfiles/uq.conf "$pkgdir/usr/lib/tmpfiles.d/uq.conf"' \
     'install -dm755 "$pkgdir/etc/uq" "$pkgdir/etc/systemd/logind.conf.d"'; do
     grep -qF "  $line" "$pkgbuild" || no "PKGBUILD lacks: $line"
 done
