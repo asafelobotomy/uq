@@ -389,6 +389,11 @@ Themes load only from `$UQ_DATA_DIR/themes` (`/usr/share/uq/themes`) today.
   list at once through inotify. Files over 64 KiB are refused, as is anything outside the schema.
   Name text goes through `UqLabel`.
 - **Delete** removes a user theme. If it's the active theme, uQ switches to the default first.
+- **As built (slice G).** A theme's folder is named by its full id (`user-<slug>`). There is no
+  inotify: uqd reloads right after its own import, save and delete, and finds a folder copied in
+  by hand within 60 s or when `ListThemeInfo` is called (deviation). Editing one of the user's
+  own themes is allowed and saves through `ImportTheme`. The window look of an import is
+  journalled with the caller's origin, not `import`.
 
 ## 8. Companion app pages, moved earlier
 
@@ -447,9 +452,9 @@ These come from KDE and COSMIC complaints, and a lint or test checks each one wh
 **D-Bus summary** (all on `org.uq.Desktop1`): `Explain`, `ListHistory`, `Undo`,
 `ListRestorePoints`, `SaveRestorePoint`, `DeleteRestorePoint`, `Restore`, `ListProfiles`,
 `GetProfile`, `SetProfile`, `DeleteProfile`, `ApplyProfile`, `ProfileOff`, `PickWindow → s`,
-`ListAutostart`, `ShellReady`; the `autostart`, `env` and `compat` sections are written with
+`ListAutostart`, `ShellReady`, `ListThemeInfo`, `ExportTheme`, `ImportTheme`, `DeleteTheme`; the `autostart`, `env` and `compat` sections are written with
 `SetSection("autostart" | "env" | "compat", json, origin)`. Signals: `HistoryChanged`, `ProfileChanged(s id)`,
-`AutostartChanged`.
+`AutostartChanged`, `ThemesChanged`. `uqctl theme` gains `delete`.
 
 **Security.**
 

@@ -122,6 +122,10 @@ installing `/usr/share/uq/settings/pages/<id>/page.toml` with a QML file. Settin
 available over D-Bus as `GetSection` / `SetSection` on `uqd`. Every write method there
 (`SetSection`, `SetSetting`, `SetTheme`, `SetLayout`, `SetSchedule`) takes a last `origin` string
 that the history records; `""` records as unknown.
+Themes use `ListThemeInfo()` (JSON with names, which are yours, and any folders skipped),
+`ExportTheme(id, with_look)` (the `.uqtheme` text), `ImportTheme(text, replace, with_look,
+origin)` (returns the id; `Conflict` if it exists and `replace` is false), `DeleteTheme(id,
+origin)` (JSON `{switched, profiles}`) and a `ThemesChanged` signal.
 Profiles use `ListProfiles` (JSON), `GetProfile(id)` (the TOML text), `SetProfile(toml, replace)`
 (returns the id; `Conflict` if it exists and `replace` is false), `DeleteProfile(id)`,
 `ApplyProfile(id)` and `ProfileOff()` (both return a JSON report), and a `ProfileChanged(id)`
@@ -329,6 +333,27 @@ removed. In the app, Ctrl+Z and Ctrl+Shift+Z undo and redo your own changes this
 `user.lua` or was changed while running, with **Re-apply** to put uQ's value back. uQ never
 writes to `user.lua`. Manual checks are in
 [docs/notes/settings-slice-a-live-check.md](docs/notes/settings-slice-a-live-check.md).
+
+#### Your own themes
+
+The **Theme** row on the Appearance page shows the themes that come with uQ and your own, tagged
+**Yours**. Your themes live in `~/.local/share/uq/themes/user-<name>/` as `dark.toml` and
+`light.toml`; the `user-` prefix means one can never replace a theme that comes with uQ. Theme
+files are data only: uQ refuses a file over 64 KiB, names with special characters, values out of
+range, text that is hard to read (4.5 to 1 contrast, in both versions) and a missing dark or
+light version, and it never runs anything from one. **New theme from this one…** opens an editor
+with seven colours per version (background, panels, text, accent, good, warning, bad); the rest
+of the palette is worked out from them, and a version that is hard to read can't be saved.
+**Export…** writes a `.uqtheme` file with the theme and its name, and with the box ticked your
+window gaps, corners and effects. It never holds your wallpaper or your font and cursor picks.
+**Import…** saves a restore point first, adds the theme and does not switch to it (**Use it now**
+does). **Delete…** removes one of yours; if it is the active theme, uQ switches to its default
+theme first, and the profiles that use it are named. A folder you copy into the themes folder
+appears within a minute, or when you open the Appearance page. In a `uq-dev` session, import and
+delete are not available. `uqctl theme list --long`, `uqctl theme import <file> [--replace]
+[--with-look]`, `uqctl theme export <id> [file]` and `uqctl theme delete <id>` do the same from
+a terminal. Manual checks are in
+[docs/notes/settings-slice-g-live-check.md](docs/notes/settings-slice-g-live-check.md).
 
 ### Launchers
 
