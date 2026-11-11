@@ -50,7 +50,7 @@ fn dirs_with(files: &[(&str, &str)]) -> (tempfile::TempDir, Dirs) {
     for (n, c) in files {
         std::fs::write(apps.join(n), c).unwrap();
     }
-    let d = Dirs(vec![t.path().join("none/applications"), apps]);
+    let d = Dirs::new(Some(t.path().join("none/applications")), vec![apps]);
     (t, d)
 }
 
@@ -65,6 +65,7 @@ fn desktop_id_plans_scope_and_records() {
         &d,
         1,
         &RunState::default(),
+        None,
         None,
     )
     .unwrap();
@@ -82,6 +83,7 @@ fn htop_plan(d: &Dirs, terminal: Option<&str>) -> Plan {
         0,
         &RunState::default(),
         terminal,
+        None,
     )
     .unwrap()
 }
@@ -112,6 +114,7 @@ fn terminal_apps_get_kitty_by_default_and_bad_entries_refuse() {
                 &d,
                 0,
                 &RunState::default(),
+                None,
                 None
             )
             .is_err(),
@@ -125,6 +128,7 @@ fn terminal_apps_get_kitty_by_default_and_bad_entries_refuse() {
             &d,
             0,
             &RunState::default(),
+            None,
             None,
         )
         .unwrap_err();
@@ -207,12 +211,13 @@ fn hostile_terminal_entry_stays_argv() {
 
 #[test]
 fn argv_and_run_id_and_junk() {
-    let d = Dirs(vec![]);
+    let d = Dirs::new(None, vec![]);
     let p = plan(
         Some(&json!({"argv":["/usr/bin/foot","-e","a b"]})),
         &d,
         2,
         &RunState::default(),
+        None,
         None,
     )
     .unwrap();
@@ -223,17 +228,17 @@ fn argv_and_run_id_and_junk() {
     assert_eq!(p.record, None);
     let mut runs = RunState::default();
     run_item("> echo hi", 7, &mut runs).unwrap();
-    let p = plan(Some(&json!({"run_id":"run-7"})), &d, 3, &runs, None).unwrap();
+    let p = plan(Some(&json!({"run_id":"run-7"})), &d, 3, &runs, None, None).unwrap();
     assert_eq!(
         p.command,
         "systemd-run --user --scope --collect --slice=app.slice --unit=app-uq-run-00000003 -- 'sh' '-c' 'echo hi'"
     );
     assert_eq!(p.record, None);
     assert_eq!(
-        plan(Some(&json!({"run_id":"run-8"})), &d, 0, &runs, None).unwrap_err(),
+        plan(Some(&json!({"run_id":"run-8"})), &d, 0, &runs, None, None).unwrap_err(),
         "unknown run id"
     );
-    assert!(plan(Some(&json!({"run_id":5})), &d, 0, &runs, None).is_err());
+    assert!(plan(Some(&json!({"run_id":5})), &d, 0, &runs, None, None).is_err());
     for bad in [
         json!({"argv":[]}),
         json!({"argv":[1]}),
@@ -241,11 +246,11 @@ fn argv_and_run_id_and_junk() {
         json!("x"),
     ] {
         assert!(
-            plan(Some(&bad), &d, 0, &RunState::default(), None).is_err(),
+            plan(Some(&bad), &d, 0, &RunState::default(), None, None).is_err(),
             "{bad}"
         );
     }
-    assert!(plan(None, &d, 0, &RunState::default(), None).is_err());
+    assert!(plan(None, &d, 0, &RunState::default(), None, None).is_err());
 }
 
 #[tokio::test]

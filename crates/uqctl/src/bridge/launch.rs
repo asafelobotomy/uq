@@ -4,10 +4,15 @@
 //! the app is never a child of the shell or the bridge. Every argument is single-quoted for the
 //! shell that `exec_cmd` uses, and the whole string is then Lua-escaped.
 
-use super::desktop_entry::{Dirs, binary_exists, parse_entry, parse_exec, unit_id};
+use super::desktop_entry::{
+    Dirs, FieldCtx, LaunchEntry, binary_exists, exec_argv, normalise_id, parse_entry, parse_exec,
+    unit_id, valid_desktop_id,
+};
 use super::uqd::Link;
 use serde_json::Value;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::time::Duration;
+use uq_core::compat::{AppFix, Compat};
 pub use uq_core::desktop_entry::random_suffix;
 use uq_core::lua::lua_string;
 use uq_core::settings::{provider_enabled, valid_pinned_id};
@@ -77,12 +82,63 @@ fn terminal_prefix(dirs: &Dirs, terminal: Option<&str>) -> Vec<String> {
     argv
 }
 
+/// How long a launch waits for uqd's fixes before going ahead without one (F2).
+pub const FIX_WAIT: Duration = Duration::from_millis(500);
+
+/// The source a marked override names, when it may be launched with the fix instead (R19, F20):
+/// exactly `<d>/applications/<id>` for a data dir `d` other than the data home, and a regular
+/// file. Anything else is `None`, and the override runs as written.
+pub fn valid_source(dirs: &Dirs, id: &str, source: &str) -> Option<PathBuf> {
+    if !valid_desktop_id(id) {
+        return None;
+    }
+    let path = PathBuf::from(source);
+    let file = normalise_id(id);
+    let ok = dirs
+        .system
+        .iter()
+        .filter(|d| dirs.home.as_ref() != Some(*d))
+        .any(|d| d.join(&file) == path);
+    let regular = std::fs::metadata(&path).is_ok_and(|m| m.is_file());
+    (ok && regular).then_some(path)
+}
+
+fn read_launch_entry(id: &str, path: &Path) -> Result<LaunchEntry, String> {
+    let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    parse_entry(&text).map_err(|e| format!("{id}: {e}"))
+}
+
+/// The file to launch and whether the fix still applies to it. A marked override already
+/// carries a fix, so it is never given one again (R19): with a fix, its own valid source is
+/// launched instead; otherwise the override runs as written.
+fn resolve<'f>(
+    dirs: &Dirs,
+    id: &str,
+    fix: Option<&'f AppFix>,
+) -> Result<(PathBuf, LaunchEntry, Option<&'f AppFix>), String> {
+    let path = dirs.find(id).ok_or_else(|| format!("no app called {id}"))?;
+    let entry = read_launch_entry(id, &path)?;
+    if !entry.uq_override {
+        return Ok((path, entry, fix));
+    }
+    let source = fix.and(entry.uq_source.as_deref()).and_then(|s| {
+        let p = valid_source(dirs, id, s)?;
+        let e = read_launch_entry(id, &p).ok().filter(|e| !e.uq_override)?;
+        Some((p, e))
+    });
+    Ok(match source {
+        Some((p, e)) => (p, e, fix),
+        None => (path, entry, None),
+    })
+}
+
 pub fn plan(
     arg: Option<&Value>,
     dirs: &Dirs,
     rand: u32,
     runs: &super::run::RunState,
     terminal: Option<&str>,
+    fix: Option<&AppFix>,
 ) -> Result<Plan, String> {
     let obj = arg
         .and_then(Value::as_object)
@@ -124,24 +180,44 @@ pub fn plan(
     if !valid_pinned_id(id) {
         return Err(format!("invalid desktop id {id:?}"));
     }
-    let path = dirs
-        .find(id)
-        .ok_or_else(|| format!("no desktop entry {id}"))?;
-    let text = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-    let entry = parse_entry(&text).map_err(|e| format!("{id}: {e}"))?;
+    // The order is fixed (F2): the file (R19), TryExec, Exec, the terminal, the fix, the scope.
+    let (path, entry, fix) = resolve(dirs, id, fix)?;
     if let Some(t) = &entry.try_exec
         && !binary_exists(t)
     {
         return Err(format!("{id}: TryExec {t} not found"));
     }
-    let mut argv = parse_exec(&entry.exec).map_err(|e| format!("{id}: {e}"))?;
+    let path = path.to_string_lossy();
+    let ctx = FieldCtx {
+        icon: entry.icon.as_deref().filter(|i| !i.is_empty()),
+        name: entry.name.as_deref(),
+        path: Some(&path),
+    };
+    let mut argv = exec_argv(&entry.exec, &ctx).map_err(|e| format!("{id}: {e}"))?;
     if entry.terminal {
         argv.splice(0..0, terminal_prefix(dirs, terminal));
     }
+    // A fix that can't be applied safely is left out: the app still starts (Review Focus 5).
+    let argv = uq_core::compat::launch::argv(fix, &normalise_id(id), argv.clone()).unwrap_or(argv);
     Ok(Plan {
         command: scope_command(id.strip_suffix(".desktop").unwrap_or(id), &argv, rand),
         record: Some(id.to_string()),
     })
+}
+
+/// The fix uqd holds for `id`, fetched for one launch. uqd down, slow (over [`FIX_WAIT`]) or
+/// answering garbage gives `None`: a launch never fails over a fix.
+pub async fn fix_for(link: &Link, id: &str) -> Option<AppFix> {
+    let args = [Value::String("compat".into())];
+    let call = link.call("GetSection", &args);
+    let v = tokio::time::timeout(FIX_WAIT, call).await.ok()?.ok()?;
+    fix_in(v, id)
+}
+
+/// The fix for `id` in a `compat` section (read leniently, as uqd loads its state).
+pub fn fix_in(section: Value, id: &str) -> Option<AppFix> {
+    let compat: Compat = serde_json::from_value(section).ok()?;
+    compat.fix_for(id).cloned()
 }
 
 /// Send a plan to Hyprland; Ok means Hyprland accepted the eval.
@@ -171,6 +247,15 @@ pub async fn launch(
         .borrow()
         .as_ref()
         .and_then(|s| s.shell.terminal.clone());
+    let id = args
+        .first()
+        .and_then(|a| a.get("desktop_id"))
+        .and_then(Value::as_str)
+        .filter(|id| valid_pinned_id(id));
+    let fix = match id {
+        Some(id) => fix_for(link, id).await,
+        None => None,
+    };
     let plan = {
         let runs = runs.lock().unwrap_or_else(|e| e.into_inner());
         plan(
@@ -179,6 +264,7 @@ pub async fn launch(
             random_suffix(),
             &runs,
             terminal.as_deref(),
+            fix.as_ref(),
         )?
     };
     dispatch(&HyprSocket::from_env(), &plan).await?;
@@ -194,3 +280,7 @@ pub async fn launch(
 #[cfg(test)]
 #[path = "launch_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "launch_fix_tests.rs"]
+mod fix_tests;

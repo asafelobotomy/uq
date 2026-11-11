@@ -20,6 +20,8 @@ pub const DOWN: &str = "uqd is not running";
 /// `Reload` can take about 12 s inside uqd (verify + reload); never wait forever.
 const CALL_TIMEOUT: Duration = Duration::from_secs(20);
 const POLL: Duration = Duration::from_secs(5);
+/// `ShellReady` returns at once in uqd; a watch loop never waits longer than this on it.
+const READY_WAIT: Duration = Duration::from_secs(2);
 
 /// The bridge's view of uqd: a (lazily established) bus connection plus whether the name is owned.
 pub struct Link {
@@ -30,6 +32,8 @@ pub struct Link {
     first: Mutex<Option<Subs>>,
     /// The latest settings seen (from `GetSettings` and `SettingsChanged`); None until known.
     settings: watch::Sender<Option<Settings>>,
+    /// The shell has sent its first request, so each uqd that appears is told it is up (R5).
+    shell_up: AtomicBool,
 }
 
 struct Subs {
@@ -100,6 +104,7 @@ impl Link {
             up: AtomicBool::new(up),
             first: Mutex::new(first),
             settings: watch::channel(None).0,
+            shell_up: AtomicBool::new(false),
         }
     }
 
@@ -116,12 +121,26 @@ impl Link {
         }
     }
 
-    /// Record a state change, tell the shell, and learn the settings when uqd appears.
+    /// Record a state change, tell the shell, and learn the settings when uqd appears. A uqd
+    /// that appears after the shell's first request is told the shell is up (R5).
     async fn state_changed(&self, tx: &mpsc::Sender<Outbound>, up: bool) -> bool {
         if up {
             self.refresh_settings().await;
         }
-        emit_state(tx, up).await
+        let sent = emit_state(tx, up).await;
+        if up && self.shell_up.load(Ordering::SeqCst) {
+            // uqd answers at once; never hold up the watch loop for long.
+            let _ = tokio::time::timeout(READY_WAIT, self.call("ShellReady", &[])).await;
+        }
+        sent
+    }
+
+    /// The shell's first request has been read: tell uqd the shell is up, once (later calls
+    /// do nothing). Errors are ignored; a uqd that appears later is told on its `UqdUp`.
+    pub async fn shell_ready(&self) {
+        if !self.shell_up.swap(true, Ordering::SeqCst) {
+            let _ = self.call("ShellReady", &[]).await;
+        }
     }
 
     pub fn is_up(&self) -> bool {
@@ -331,6 +350,9 @@ enum Request {
     ApplyProfile(String),
     ProfileOff,
     PickDone(String, String),
+    /// The bridge's own calls; the shell can't make them (`handle()` doesn't pass them on).
+    GetSection(String),
+    ShellReady,
 }
 
 fn string_arg(args: &[Value], i: usize, what: &str) -> Result<String, String> {
@@ -360,6 +382,11 @@ impl Request {
             "GetLaunchCounts" => (0, Request::GetLaunchCounts),
             "ListProfiles" => (0, Request::ListProfiles),
             "ProfileOff" => (0, Request::ProfileOff),
+            "ShellReady" => (0, Request::ShellReady),
+            "GetSection" => {
+                arity(call, args, 1)?;
+                (1, Request::GetSection(string_arg(args, 0, "domain")?))
+            }
             "SetTheme" => {
                 arity(call, args, 2)?;
                 (
@@ -477,6 +504,11 @@ impl Request {
                 report(proxy.call("ApplyProfile", &(id,)).await.map_err(describe)?)
             }
             Request::ProfileOff => report(proxy.call("ProfileOff", &()).await.map_err(describe)?),
+            Request::GetSection(d) => {
+                let s: String = proxy.call("GetSection", &(d,)).await.map_err(describe)?;
+                serde_json::from_str(&s).map_err(|e| format!("bad section: {e}"))
+            }
+            Request::ShellReady => unit(proxy.call("ShellReady", &()).await),
         }
     }
 }
@@ -529,6 +561,22 @@ mod tests {
         assert!(Request::parse("ApplyProfile", &[json!("a"), json!("b")]).is_err());
         assert!(Request::parse("ProfileOff", &[]).is_ok());
         assert!(Request::parse("ProfileOff", &[json!("x")]).is_err());
+    }
+
+    #[test]
+    fn request_parse_accepts_get_section_and_shell_ready() {
+        assert!(matches!(
+            Request::parse("GetSection", &[json!("compat")]),
+            Ok(Request::GetSection(d)) if d == "compat"
+        ));
+        assert!(Request::parse("GetSection", &[]).is_err());
+        assert!(Request::parse("GetSection", &[json!(1)]).is_err());
+        assert!(Request::parse("GetSection", &[json!("a"), json!("b")]).is_err());
+        assert!(matches!(
+            Request::parse("ShellReady", &[]),
+            Ok(Request::ShellReady)
+        ));
+        assert!(Request::parse("ShellReady", &[json!("x")]).is_err());
     }
 
     #[test]

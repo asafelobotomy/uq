@@ -1,6 +1,7 @@
 //! uqctl: command-line client for uqd (`org.uq.Desktop1`).
 
 mod bridge;
+mod launch_cmd;
 mod profile_cmd;
 mod settings_app;
 mod settings_cmd;
@@ -106,6 +107,9 @@ enum Cmd {
     },
     /// Re-render every config file from uqd's state.
     Reload,
+    /// Start an app by its desktop id (e.g. `org.mozilla.firefox`), as the shell does: with its
+    /// fix from Apps and scaling, in its own scope.
+    Launch { id: String },
     /// Run the shell's JSON-lines bridge on stdin/stdout (started by the shell, not by hand).
     Bridge,
     /// Install uQ's ~/.config/hypr/hyprland.lua (never overwrites an existing one). Safe to run
@@ -361,7 +365,11 @@ async fn run(cmd: Cmd) -> Result<(), String> {
             .call::<_, _, ()>("ClearLaunchCounts", &())
             .await
             .map_err(describe)?,
-        Cmd::Setup { .. } | Cmd::Bridge | Cmd::Settings { .. } | Cmd::Profile { .. } => {
+        Cmd::Setup { .. }
+        | Cmd::Bridge
+        | Cmd::Settings { .. }
+        | Cmd::Profile { .. }
+        | Cmd::Launch { .. } => {
             unreachable!("handled before connecting")
         }
     }
@@ -447,6 +455,10 @@ async fn main() -> ExitCode {
             setting.as_deref().unwrap_or(""),
         )
         .await;
+    }
+    if let Cmd::Launch { id } = &cli.cmd {
+        // Bounded inside: uqd gets 500 ms, Hyprland its own request timeout.
+        return launch_cmd::run(id).await;
     }
     if matches!(cli.cmd, Cmd::Bridge) {
         // Long-lived: no timeout; ends on stdin EOF.
