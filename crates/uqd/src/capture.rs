@@ -8,9 +8,11 @@
 //!
 //! The broker lives outside the desktop lock (on the D-Bus interface, as the pick broker does),
 //! so waiting never blocks a write, and the timer is its own task, so it still fires if the
-//! page crashed.
+//! page crashed. The timer is armed before the switch is sent, so a switch Hyprland applied but
+//! never answered can't strand the shortcuts; and `Desktop::startup` always resets the submap, so
+//! a restart of uqd mid-capture can't either.
 
-use crate::compositor::Compositor;
+use crate::compositor::{Compositor, CompositorError};
 use crate::service::DesktopError;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -64,19 +66,13 @@ impl CaptureBroker {
     ///
     /// Takes the compositor by `Arc` because the timer task owns one.
     pub async fn pause(&self, comp: Arc<dyn Compositor>) -> Result<String, DesktopError> {
-        comp.eval(&format!(
-            "hl.dispatch(hl.dsp.submap({}))",
-            lua_string(CAPTURE_SUBMAP)
-        ))
-        .await
-        .map_err(|e| {
-            tracing::debug!("pausing shortcuts: {e}");
-            down()
-        })?;
+        // Arm first: Hyprland may apply the switch and still fail to answer in time, so from
+        // here on shortcuts can never stay off without a timer that puts them back.
         let token = crate::monitors::new_token()?;
         // The deadline is fixed now, not when the task is first polled.
         let deadline = tokio::time::Instant::now() + self.timeout;
         let (slot, mine) = (self.slot.clone(), token.clone());
+        let timer_comp = comp.clone();
         let timer = tokio::spawn(async move {
             tokio::time::sleep_until(deadline).await;
             let ours = {
@@ -88,7 +84,7 @@ impl CaptureBroker {
                     false
                 }
             };
-            if ours && let Err(e) = comp.eval(RESET).await {
+            if ours && let Err(e) = timer_comp.eval(RESET).await {
                 tracing::warn!("resuming shortcuts after the timeout: {e}");
             }
         });
@@ -98,6 +94,31 @@ impl CaptureBroker {
             timer,
         }) {
             old.timer.abort();
+        }
+        let sent = comp
+            .eval(&format!(
+                "hl.dispatch(hl.dsp.submap({}))",
+                lua_string(CAPTURE_SUBMAP)
+            ))
+            .await;
+        if let Err(e) = sent {
+            tracing::debug!("pausing shortcuts: {e}");
+            // Not running: nothing was switched, so nothing stays armed. Any other failure (a
+            // reply that came too late or wasn't `ok`) may still have been applied: put the
+            // shortcuts back now, and if that fails too the timer tries again.
+            let undone = match e {
+                CompositorError::NotRunning => true,
+                _ => comp.eval(RESET).await.is_ok(),
+            };
+            if undone {
+                let mut g = lock(&self.slot);
+                if g.as_ref().is_some_and(|a| a.token == token)
+                    && let Some(a) = g.take()
+                {
+                    a.timer.abort();
+                }
+            }
+            return Err(down());
         }
         Ok(token)
     }

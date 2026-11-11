@@ -59,6 +59,18 @@ fn override_state(o: &Value) -> String {
     }
 }
 
+/// Whether `a` and `b` differ in nothing but their `enabled` switch.
+fn enabled_only(a: &Value, b: &Value) -> bool {
+    let norm = |v: &Value| {
+        let mut v = v.clone();
+        if let Some(m) = v.as_object_mut() {
+            m.remove("enabled");
+        }
+        v
+    };
+    norm(a) == norm(b)
+}
+
 fn override_lines(before: &Value, after: &Value, lines: &mut Vec<String>) {
     let (b, a) = (items(before, "overrides"), items(after, "overrides"));
     let find = |side: &[Value], id: &str| side.iter().position(|o| text(o, "id") == id);
@@ -79,6 +91,8 @@ fn override_lines(before: &Value, after: &Value, lines: &mut Vec<String>) {
                 Some(old) if !on(old) && on(o) && o.get("combo").is_none() => {
                     "back to its default".to_string()
                 }
+                // Only the switch differs: it keeps its keys, so say it's on again.
+                Some(old) if !on(old) && on(o) && enabled_only(old, o) => "turned on".to_string(),
                 _ => override_state(o),
             };
             lines.push(format!("“{}” {state}", default_label(id)));
@@ -182,6 +196,14 @@ mod tests {
                 &json!({"overrides": []})
             ),
             "“Close the window” back to its default"
+        );
+        // Back on with the keys it had: "turned on", not "now uses".
+        assert_eq!(
+            s(
+                &json!({"overrides": [{"id": "uq.spotlight", "combo": "SUPER + K", "enabled": false}]}),
+                &json!({"overrides": [{"id": "uq.spotlight", "combo": "SUPER + K"}]})
+            ),
+            "“Open Spotlight” turned on"
         );
         let term = json!({"kind": "uq", "name": "terminal"});
         let shot = custom("k-0001", "Screenshot", term.clone());

@@ -204,17 +204,26 @@ fn dashed_table_keys(lua: &str) -> Vec<String> {
                     i += 1;
                 }
             }
-            '"' => {
+            '[' if b.get(i + 1) == Some(&'[') => {
+                // A long-bracket string: skipped whole.
+                i += 2;
+                while i < b.len() && !(b[i] == ']' && b.get(i + 1) == Some(&']')) {
+                    i += 1;
+                }
+                i += 2;
+                code.push_str("\"\"");
+            }
+            q @ ('"' | '\'') => {
                 let start = i + 1;
                 i += 1;
-                while i < b.len() && b[i] != '"' {
+                while i < b.len() && b[i] != q {
                     i += if b[i] == '\\' { 2 } else { 1 };
                 }
                 let text: String = b[start..i.min(b.len())].iter().collect();
                 let before = code.trim_end().ends_with('[');
                 let after = b[(i + 1).min(b.len())..].iter().collect::<String>();
                 if before && after.trim_start().starts_with("]") && text.contains('-') {
-                    bad.push(format!("[\"{text}\"]"));
+                    bad.push(format!("[{q}{text}{q}]"));
                 }
                 code.push_str("\"\"");
                 i += 1;
@@ -261,6 +270,12 @@ fn dashed_key_scanner_finds_the_slips() {
         dashed_table_keys("hl.bind(\"K\", d, { [\"non-consuming\"] = true })"),
         ["[\"non-consuming\"]"]
     );
+    assert_eq!(
+        dashed_table_keys("hl.bind('K', d, { ['non-consuming'] = true })"),
+        ["['non-consuming']"]
+    );
+    let fine = "x = { s = 'a-b = c', t = [[a-b = c]] }\n";
+    assert!(dashed_table_keys(fine).is_empty());
     let fine =
         "-- a-b = 1\nx = { gaps_in = -1, [\"ok\"] = 2, s = \"a-b = c\" }\nif a == b then end\n";
     assert!(

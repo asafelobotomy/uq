@@ -148,3 +148,35 @@ async fn capture_timeout_is_configurable() {
     settle().await;
     assert_eq!(evals(&c), [PAUSE, RESUME]);
 }
+
+#[tokio::test(start_paused = true)]
+async fn capture_late_pause_answer_still_resumes() {
+    // Hyprland applied the switch but the reply never came: shortcuts must not stay off.
+    let (c, b) = (comp(), CaptureBroker::default());
+    *c.eval_timeouts.lock().unwrap() = 1;
+    let e = b.pause(c.clone()).await.unwrap_err();
+    assert!(matches!(&e, DesktopError::Io(_)), "{e:?}");
+    assert_eq!(evals(&c), [PAUSE, RESUME], "put back at once");
+    tokio::time::advance(Duration::from_secs(60)).await;
+    settle().await;
+    assert_eq!(evals(&c).len(), 2, "and the timer is gone");
+}
+
+#[tokio::test(start_paused = true)]
+async fn capture_failed_pause_and_failed_reset_still_resumes_by_timer() {
+    let (c, b) = (comp(), CaptureBroker::default());
+    *c.eval_timeouts.lock().unwrap() = 2;
+    assert!(b.pause(c.clone()).await.is_err());
+    assert_eq!(evals(&c), [PAUSE, RESUME]);
+    tokio::time::advance(Duration::from_secs(16)).await;
+    settle().await;
+    assert_eq!(evals(&c), [PAUSE, RESUME, RESUME], "the timer tried again");
+}
+
+#[tokio::test(start_paused = true)]
+async fn capture_rejected_pause_reply_resumes() {
+    let (c, b) = (comp(), CaptureBroker::default());
+    *c.eval_error.lock().unwrap() = Some("weird".into());
+    assert!(b.pause(c.clone()).await.is_err());
+    assert_eq!(evals(&c), [PAUSE, RESUME]);
+}

@@ -492,6 +492,15 @@ impl Desktop {
 
     /// Ensure `user.lua` exists (never overwriting it), then render everything from state.
     pub async fn startup(&mut self) {
+        // A restart in the middle of a key capture would leave Hyprland in the empty
+        // `uq_capture` submap, with every shortcut off and no token to resume. Always leave it.
+        if let Err(e) = self
+            .comp
+            .eval("hl.dispatch(hl.dsp.submap(\"reset\"))")
+            .await
+        {
+            tracing::debug!("leaving the capture submap at start-up: {e}");
+        }
         if let Err(e) = self.ensure_user_lua() {
             tracing::warn!("{e}");
         }
@@ -1637,6 +1646,17 @@ mod tests {
                 .unwrap()
                 .contains("Graphite (dark)")
         );
+    }
+
+    #[tokio::test]
+    async fn startup_always_leaves_the_capture_submap() {
+        let mut r = rig();
+        r.desktop.startup().await;
+        let calls = r.comp.calls();
+        let at = calls
+            .iter()
+            .position(|c| c == "eval hl.dispatch(hl.dsp.submap(\"reset\"))");
+        assert_eq!(at, Some(0), "{calls:?}");
     }
 
     #[tokio::test]

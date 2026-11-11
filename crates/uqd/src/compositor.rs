@@ -210,6 +210,8 @@ pub mod fake {
         pub binds_json: Mutex<String>,
         /// `Some(msg)` makes the next `eval` return `Rejected(msg)`, once.
         pub eval_error: Mutex<Option<String>>,
+        /// The next this many `eval`s return `Timeout`.
+        pub eval_timeouts: Mutex<u32>,
         /// `Some(msg)` makes the next `reload` return `Rejected(msg)`, once.
         pub reload_error: Mutex<Option<String>>,
         /// What `get_option` answers per option path; a missing path is `Rejected`.
@@ -258,6 +260,13 @@ pub mod fake {
         }
         async fn eval(&self, lua: &str) -> Result<(), CompositorError> {
             self.record(format!("eval {lua}"))?;
+            {
+                let mut n = self.eval_timeouts.lock().unwrap();
+                if *n > 0 {
+                    *n -= 1;
+                    return Err(CompositorError::Timeout("eval".into()));
+                }
+            }
             match self.eval_error.lock().unwrap().take() {
                 Some(msg) => Err(CompositorError::Rejected(msg)),
                 None => Ok(()),
