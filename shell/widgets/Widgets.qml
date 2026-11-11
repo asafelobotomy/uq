@@ -70,7 +70,7 @@ QtObject {
         if (name === "WidgetProps" && data.props && typeof data.props === "object")
             props(data.widget, data.props);
         else if (name === "WidgetSignal" && typeof data.member === "string")
-            widgetSignal(data.widget, data.member, Array.isArray(data.args) ? data.args : []);
+            widgetSignal(data.widget, data.member, W.toList(data.args));
     }
 
     property Connections conn: Connections {

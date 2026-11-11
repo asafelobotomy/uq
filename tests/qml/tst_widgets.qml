@@ -127,6 +127,22 @@ TestCase {
         verify(W.mayLoad(reg, "y", 70000), "per widget");
     }
 
+    // Lists that crossed a `var` signal parameter arrive as sequences Array.isArray() rejects.
+    signal relay(var v)
+    property var relayed
+    function test_to_list_accepts_relayed_sequences() {
+        compare(W.toList(["a", 1]), ["a", 1]);
+        compare(W.toList(null), []);
+        compare(W.toList("ab"), []);
+        compare(W.toList({ length: "x" }), []);
+        relayed = undefined;
+        var got = function (v) { relayed = v; };
+        relay.connect(got);
+        relay({ args: ["x", true] });
+        relay.disconnect(got);
+        compare(W.toList(relayed.args), ["x", true]);
+    }
+
     function test_props_merge_makes_new_objects() {
         var a = { A: 1 };
         var b = W.mergeProps(a, { B: 2 });

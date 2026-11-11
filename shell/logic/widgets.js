@@ -15,6 +15,16 @@ function _str(v, max) {
 
 // The `Widgets` event data as a clean list, by order then id. Entries of the wrong shape are
 // dropped; a widget with a URL other than a local file is dropped too.
+// A list that may have crossed a `var` signal parameter: Qt hands it on as a sequence that
+// Array.isArray() rejects. Anything else is an empty list.
+function toList(v) {
+    if (Array.isArray(v))
+        return v;
+    if (v === null || typeof v !== "object" || typeof v.length !== "number")
+        return [];
+    return Array.prototype.slice.call(v);
+}
+
 function widgets(data) {
     if (!Array.isArray(data))
         return [];
