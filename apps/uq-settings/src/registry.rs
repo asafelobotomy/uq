@@ -429,7 +429,7 @@ static KEYBINDS_SETTINGS: [SearchEntry; 5] = [
     ),
 ];
 
-static DISPLAYS_SETTINGS: [SearchEntry; 8] = [
+static DISPLAYS_SETTINGS: [SearchEntry; 14] = [
     entry(
         "display-arrangement",
         "Display arrangement",
@@ -490,6 +490,36 @@ static DISPLAYS_SETTINGS: [SearchEntry; 8] = [
             "adaptive sync",
             "hz",
         ],
+    ),
+    entry(
+        "display-main",
+        "Main display",
+        &["main", "primary", "notifications"],
+    ),
+    entry(
+        "display-bar",
+        "Show the bar on",
+        &["bar", "panel", "screens"],
+    ),
+    entry(
+        "display-arrangements-auto",
+        "Switch arrangements when screens change",
+        &["profile", "dock", "hotplug", "automatic"],
+    ),
+    entry(
+        "display-remember",
+        "Remember for these screens",
+        &["save", "profile", "layout"],
+    ),
+    entry(
+        "display-workspaces",
+        "Workspaces across screens",
+        &["workspace", "monitor", "planner"],
+    ),
+    entry(
+        "display-workspaces-back",
+        "Move workspaces back when a screen returns",
+        &["workspace", "return", "dock"],
     ),
 ];
 
@@ -1722,6 +1752,40 @@ mod tests {
         assert!(found("import a theme", "theme-import"));
         assert!(found("backup", "theme-export"));
         assert!(found("create", "theme-new"));
+    }
+
+    #[test]
+    fn display_settings_have_keywords() {
+        let page = find("displays").expect("the displays page is registered");
+        assert_eq!(page.settings.len(), 14);
+        for id in [
+            "display-main",
+            "display-bar",
+            "display-arrangements-auto",
+            "display-remember",
+            "display-workspaces",
+            "display-workspaces-back",
+        ] {
+            let s = page.settings.iter().find(|s| s.id == id).unwrap();
+            assert!(!s.keywords.is_empty(), "{id}");
+        }
+    }
+
+    #[test]
+    fn search_finds_main_display() {
+        let entries: Vec<_> = core_pages().iter().map(PageEntry::from).collect();
+        let found = |q: &str, id: &str| {
+            crate::search::search(&entries, q)
+                .iter()
+                .any(|h| h.page_id == "displays" && h.setting_id == id)
+        };
+        assert!(found("main display", "display-main"));
+        assert!(found("primary", "display-main"));
+        assert!(found("panel", "display-bar"));
+        assert!(found("dock", "display-arrangements-auto"));
+        assert!(found("remember", "display-remember"));
+        assert!(found("planner", "display-workspaces"));
+        assert!(found("return", "display-workspaces-back"));
     }
 
     #[test]

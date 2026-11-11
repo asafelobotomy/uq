@@ -6,7 +6,6 @@
 //! never part of these writes: it changes only through apply and keep. Output names come from
 //! the page; each is turned into the screen's identity (make, model, serial) from the live
 //! list, because the connector (`DP-1`) moves between ports.
-#![cfg_attr(not(test), allow(dead_code, reason = "wired by its model in Task 12"))]
 
 use std::collections::BTreeSet;
 

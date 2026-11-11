@@ -50,43 +50,35 @@ pub enum Op {
     /// Put the old layout back now; the draft stays, to be fixed.
     Revert,
     /// Choose the main display by its connector name (`None` = none chosen).
-    #[cfg_attr(not(test), allow(dead_code, reason = "wired by its model in Task 12"))]
     SetMain {
         output: Option<String>,
     },
     /// Where the bar shows: `all`, `main` or `chosen` (then on the named displays).
-    #[cfg_attr(not(test), allow(dead_code, reason = "wired by its model in Task 12"))]
     SetBar {
         show: String,
         outputs: Vec<String>,
     },
     /// Switch to a saved arrangement when the screens change.
-    #[cfg_attr(not(test), allow(dead_code, reason = "wired by its model in Task 12"))]
     SetAutoSwitch(bool),
     /// How workspaces spread over the screens: `off`, `sequential`, `interleave` or `manual`.
-    #[cfg_attr(not(test), allow(dead_code, reason = "wired by its model in Task 12"))]
     SetPlan {
         strategy: String,
         count: u8,
         move_back: bool,
     },
     /// Put one workspace on a display, or back to no choice (`None`).
-    #[cfg_attr(not(test), allow(dead_code, reason = "wired by its model in Task 12"))]
     SetManual {
         workspace: u8,
         output: Option<String>,
     },
     /// Save the screens connected now, with their layout, under `name`.
-    #[cfg_attr(not(test), allow(dead_code, reason = "wired by its model in Task 12"))]
     Remember {
         name: String,
     },
-    #[cfg_attr(not(test), allow(dead_code, reason = "wired by its model in Task 12"))]
     Rename {
         id: String,
         name: String,
     },
-    #[cfg_attr(not(test), allow(dead_code, reason = "wired by its model in Task 12"))]
     Forget {
         id: String,
     },
