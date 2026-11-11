@@ -180,16 +180,22 @@ fn print_human(paths: &Paths, r: &Report, kvantum: bool) {
     }
 }
 
-/// `uqctl setup [--apps] [--json]`.
-pub fn main(apps: bool, as_json: bool) -> ExitCode {
+/// `uqctl setup [--apps] [--json | --quiet]`. `--quiet` prints nothing on success (errors still
+/// reach stderr), for `uq-session`, which runs it at every login that lacks the stub.
+pub fn main(apps: bool, as_json: bool, quiet: bool) -> ExitCode {
     let paths = Paths::from_env();
     let kvantum = kvantum_base(Path::new("/usr/share/Kvantum")).is_some();
     match run_setup(&paths, apps, kvantum, current_uid()) {
         Ok(r) => {
             if as_json {
                 println!("{}", report_json(&r));
-            } else {
+            } else if !quiet {
                 print_human(&paths, &r, kvantum);
+            } else if r.exit_code() == EXIT_KEPT_USER_CONFIG {
+                eprintln!(
+                    "uqctl: {} is your own file and was kept; uQ is not set up in it",
+                    r.main_lua.display()
+                );
             }
             ExitCode::from(r.exit_code())
         }

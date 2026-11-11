@@ -76,6 +76,9 @@ package() {
   install -Dm755 target/release/uqd "$pkgdir/usr/bin/uqd"
   install -Dm755 target/release/uqctl "$pkgdir/usr/bin/uqctl"
   install -Dm755 scripts/uq-dev "$pkgdir/usr/bin/uq-dev"
+  # The uQ session entry: runs `uqctl setup` on first login, then Hyprland.
+  install -Dm755 packaging/uq-session "$pkgdir/usr/bin/uq-session"
+  install -Dm644 packaging/uq.desktop "$pkgdir/usr/share/wayland-sessions/uq.desktop"
   install -Dm644 config/hypr/base.lua "$pkgdir/usr/share/uq/hypr/base.lua"
   install -dm755 "$pkgdir/usr/share/uq"
   cp -r --no-preserve=ownership themes templates "$pkgdir/usr/share/uq/"

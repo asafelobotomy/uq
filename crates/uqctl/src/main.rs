@@ -123,6 +123,9 @@ enum Cmd {
         /// Print the outcome as one JSON object on stdout (for installers such as bindle).
         #[arg(long)]
         json: bool,
+        /// Print nothing on success; errors still go to stderr (for `uq-session` at login).
+        #[arg(long, conflicts_with = "json")]
+        quiet: bool,
     },
 }
 
@@ -445,9 +448,9 @@ async fn pin(proxy: &zbus::Proxy<'_>, cmd: PinCmd) -> Result<(), String> {
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> ExitCode {
     let cli = Cli::parse();
-    if let Cmd::Setup { apps, json } = cli.cmd {
+    if let Cmd::Setup { apps, json, quiet } = cli.cmd {
         // Local files only: no uqd, no timeout.
-        return setup::main(apps, json);
+        return setup::main(apps, json, quiet);
     }
     if let Cmd::Settings { page, setting } = cli.cmd {
         return settings_app::main(
@@ -532,7 +535,8 @@ mod tests {
             Cli::try_parse_from(["uqctl", "setup"]).unwrap().cmd,
             Cmd::Setup {
                 apps: false,
-                json: false
+                json: false,
+                quiet: false
             }
         ));
         assert!(matches!(
@@ -541,9 +545,17 @@ mod tests {
                 .cmd,
             Cmd::Setup {
                 apps: true,
-                json: false
+                json: false,
+                quiet: false
             }
         ));
+        assert!(matches!(
+            Cli::try_parse_from(["uqctl", "setup", "--quiet"])
+                .unwrap()
+                .cmd,
+            Cmd::Setup { quiet: true, .. }
+        ));
+        assert!(Cli::try_parse_from(["uqctl", "setup", "--quiet", "--json"]).is_err());
     }
 
     #[test]
