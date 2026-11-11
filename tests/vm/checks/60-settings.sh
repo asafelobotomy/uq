@@ -198,7 +198,13 @@ c_SD1l() {
     vgsh 'pkill -fx "sleep 600"'; sleep 1
     vg systemctl --user restart uqd; sleep 4
     note "login row after killing it and restarting uqd: $(g_row uqlive-login.desktop)"
-    [ "$(g_status uqlive-login.desktop)" = exited ] || bad "expected the killed app to read finished; observed $(g_row uqlive-login.desktop)"
+    # uqd adopted the app on the first restart, so it can't know the exit code: unknown_exit,
+    # shown as "finished" (exited if it saw the exit itself).
+    case "$(g_status uqlive-login.desktop)" in
+        exited|unknown_exit) [[ $(g_row uqlive-login.desktop | jq -r .reason) == *finished* ]] ||
+            bad "expected the killed app's reason to say finished; observed $(g_row uqlive-login.desktop)" ;;
+        *) bad "expected the killed app to read finished; observed $(g_row uqlive-login.desktop)" ;;
+    esac
     vgsh 'pkill -fx "sleep 601"; rm -f ~/.config/autostart/uqlive-*.desktop'
     g_restore "$p"
 }
