@@ -3,6 +3,7 @@
 mod bridge;
 mod greeter_cmd;
 mod integrations;
+mod keys_cmd;
 mod launch_cmd;
 mod profile_cmd;
 mod render_themes;
@@ -12,6 +13,7 @@ mod setup;
 mod theme_cmd;
 
 use clap::{Parser, Subcommand};
+use keys_cmd::KeysCmd;
 use profile_cmd::ProfileCmd;
 use serde_json::Value;
 use settings_cmd::{
@@ -87,6 +89,11 @@ enum Cmd {
     Profile {
         #[command(subcommand)]
         cmd: ProfileCmd,
+    },
+    /// Keyboard shortcuts: list them, or put uQ's own back to their default keys.
+    Keys {
+        #[command(subcommand)]
+        cmd: KeysCmd,
     },
     /// Open the Settings app, optionally on a page and a setting (e.g. `uqctl settings wallpaper`).
     Settings {
@@ -259,6 +266,11 @@ async fn run(cmd: Cmd) -> Result<(), String> {
     if let Cmd::Profile { cmd } = cmd {
         return profile_cmd::run(&profile_cmd::connect().await?, cmd).await;
     }
+    if let Cmd::Keys { cmd } = cmd {
+        let lines = keys_cmd::run(&profile_cmd::connect().await?, cmd).await?;
+        lines.iter().for_each(|l| println!("{l}"));
+        return Ok(());
+    }
     if let Cmd::Theme { cmd } = cmd {
         return theme_cmd::run(&profile_cmd::connect().await?, cmd).await;
     }
@@ -383,6 +395,7 @@ async fn run(cmd: Cmd) -> Result<(), String> {
         | Cmd::Bridge
         | Cmd::Settings { .. }
         | Cmd::Profile { .. }
+        | Cmd::Keys { .. }
         | Cmd::Theme { .. }
         | Cmd::Launch { .. } => {
             unreachable!("handled before connecting")
