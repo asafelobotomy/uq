@@ -1,0 +1,6 @@
+uq_api = 1
+id = "gate-widget"
+name = "Gate widget"
+slot = "bar"
+qml = "Widget.qml"
+order = 50

@@ -1,0 +1,4 @@
+# Installed to /usr/share/dbus-1/services/org.example.Provider.service by your app's package.
+[D-BUS Service]
+Name=org.example.Provider
+Exec=/usr/bin/example-provider

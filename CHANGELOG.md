@@ -141,6 +141,51 @@ All notable changes to uQ are listed here. The format follows
   fonts become `--uq-*` CSS properties and update live when the theme changes. Bad values are
   ignored, and without uQ the app's own theme applies. The README has the Tauri and Electron
   recipes and a version check for vendored copies.
+- **System pages in Settings.** Power, Users, Date and time, Region, Default apps and About join
+  Startup under System, and a Login screen page appears when uQ is your login screen. They talk
+  to the system's own services, so they work even when uQ's settings service isn't running.
+  Changes that need an administrator ask for the password; cancelling leaves the setting as it
+  was, and a missing service is shown as "Not available" with the package to install.
+  - **Power:** power mode, battery charge, time left and health, and what closing the lid (also
+    while plugged in) or pressing the power button does. Those three are saved by the settings
+    helper and take effect after a restart; without the helper they are hidden with a note.
+  - **Users:** change a person's name, picture, password or account type, add people and remove
+    them (with or without their files). Removing needs the user name typed; you can't remove
+    yourself or the last administrator, or make the last administrator a standard user.
+    Password boxes are emptied after every try, and passwords are hashed before they leave the
+    app.
+  - **Login screen:** the login screen's theme (or "same as mine", copied when saved),
+    wallpaper (yours, a picture up to 20 MiB, or none), your display layout, hiding the user
+    list, reduce motion, and auto-login, with a warning that anyone at the computer gets your
+    session and that it's only for fully encrypted disks. The Users page links here. Without
+    the settings helper it is view-only.
+  - **Date and time:** time zone, setting the time from the network or by hand, and the bar's
+    24-hour clock.
+  - **Region:** system language, formats (dates, numbers, money, measurements, paper) and the
+    text console's keyboard layout.
+  - **Default apps:** web browser, email, files, text editor, pictures, videos, music, PDF
+    documents and the terminal. Only the choices you make change your `mimeapps.list`; every
+    other line in it stays.
+  - **About:** the computer's name (editable), system, kernel, processor, graphics, memory, and
+    the uQ, Hyprland and Quickshell versions.
+  `Activatable=true`. When Spotlight or the app menu opens, uQ asks the session bus to start each
+  such provider that isn't running (at most once every 30 seconds each, never while you type), so
+  a provider no longer has to run all the time. Results still come only from running providers,
+  so the first keystrokes after a cold start may miss them.
+- **Widgets from other apps.** An app can add a small widget to the bar (an icon in the Status
+  island; up to four, the rest under a "…" button) or a tile to a new **Apps** group at the bottom
+  of quick settings, by installing a folder to `/usr/share/uq/shell/widgets/`. Widgets appear
+  and go a second or two after their package is installed or removed, without logging out, and
+  only while what they need (a program, a running service) is there. A widget that fails to load
+  or breaks is hidden on its own and tried again a minute later; it never takes the bar down. A
+  widget can only call the D-Bus methods and run the commands its `widget.toml` lists.
+- **App actions.** Right-clicking an app in Spotlight or the app menu lists actions other apps
+  added for it, such as "Uninstall…" or "Check for update". The action runs as its file says,
+  in your terminal when it asks for one; the clicked app's id is the only thing filled in.
+- **Writing integrations.** `docs/integrating.md` covers all four ways an app can plug into uQ
+  (theme, settings page, widget, launcher provider and app actions), what uQ checks, and a
+  checklist for each. New templates: `templates/widget/` and `templates/provider/` (a small Rust
+  launcher provider that quits after a minute without use).
 
 ### Changed
 

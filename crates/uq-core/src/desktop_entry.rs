@@ -362,6 +362,8 @@ pub struct Entry {
     pub uq_override: bool,
     pub uq_source: Option<String>,
     pub uq_autostart: bool,
+    /// `MimeType`: the file types the app opens.
+    pub mime_types: Vec<String>,
 }
 
 /// Read the `[Desktop Entry]` group; the last occurrence of a key wins.
@@ -402,6 +404,7 @@ pub fn read_entry(text: &str) -> Entry {
             "X-uQ-Override" => e.uq_override = b,
             "X-uQ-Source" => e.uq_source = s(),
             "X-uQ-Autostart" => e.uq_autostart = b,
+            "MimeType" => e.mime_types = split_list(v),
             _ => {}
         }
     }

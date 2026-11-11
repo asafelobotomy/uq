@@ -2112,6 +2112,7 @@ dependencies = [
 name = "uq-settings"
 version = "0.2.1"
 dependencies = [
+ "async-trait",
  "clap",
  "cxx",
  "cxx-qt",
@@ -2125,6 +2126,7 @@ dependencies = [
  "tokio",
  "toml",
  "uq-core",
+ "uq-settings-helper",
  "zbus",
 ]
 

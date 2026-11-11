@@ -168,7 +168,7 @@ impl Requires {
 }
 
 /// Which message bus a `[dbus]` table talks to.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Deserialize, serde::Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Bus {
     #[default]

@@ -70,6 +70,7 @@ PanelWindow {
     function wipe() {
         audio.wipe();
         network.wipe();
+        apps.wipe();
         flick.contentY = 0;
     }
 
@@ -177,6 +178,12 @@ PanelWindow {
                 }
 
                 PowerGroup {
+                    Layout.fillWidth: true
+                }
+
+                // Tiles from other apps; hidden while there are none.
+                AppsGroup {
+                    id: apps
                     Layout.fillWidth: true
                 }
 

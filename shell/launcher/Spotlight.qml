@@ -65,6 +65,7 @@ PanelWindow {
     }
 
     function wipe() {
+        actionMenu.close();
         debounce.stop();
         deadline.stop();
         copied.stop();
@@ -392,7 +393,17 @@ PanelWindow {
                                         id: rowMouse
                                         anchors.fill: parent
                                         hoverEnabled: true
-                                        onClicked: root.activateClicked(sec.index, row.index)
+                                        acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                        onClicked: function (mouse) {
+                                            if (mouse.button === Qt.RightButton) {
+                                                // App actions from other apps (Phase 4 §2.4.2).
+                                                if (row.isApp)
+                                                    actionMenu.openAt(row, mouse.x, mouse.y,
+                                                                      String(row.modelData.id || ""));
+                                            } else {
+                                                root.activateClicked(sec.index, row.index);
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -419,6 +430,12 @@ PanelWindow {
                 color: Theme.textMuted
                 font.pixelSize: Theme.fontSize - 1
             }
+        }
+
+        AppActionMenu {
+            id: actionMenu
+            onDone: Surfaces.close()
+            onOpenChanged: if (!open && root.shown) field.forceActiveFocus()
         }
     }
 }

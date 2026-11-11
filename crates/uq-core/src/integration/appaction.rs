@@ -47,12 +47,14 @@ pub struct AppAction {
     pub terminal: bool,
 }
 
-/// `^[A-Za-z0-9._-]{1,200}\.desktop$` (§2.4.2).
+/// `^[A-Za-z0-9._-]{1,200}\.desktop$` (§2.4.2), not starting with `-` or `.`: `%d` is a whole
+/// argument, so it must never read as an option.
 pub fn valid_desktop_id(id: &str) -> bool {
     let Some(stem) = id.strip_suffix(".desktop") else {
         return false;
     };
     (1..=200).contains(&stem.len())
+        && !stem.starts_with(['-', '.'])
         && stem
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))
@@ -315,12 +317,15 @@ mod tests {
             ".desktop",
             "x",
             &format!("{}.desktop", "a".repeat(201)),
+            // `%d` may follow no flag at all, so it must never look like an option.
+            "-x.desktop",
+            "-rf.desktop",
+            ".hidden.desktop",
         ] {
             assert!(a.argv(bad).is_err(), "{bad:?}");
             assert!(!a.matches(bad), "{bad:?}");
         }
-        // A leading '-' is allowed by the pattern, but stays one whole argument after a flag.
-        assert_eq!(a.argv("-x.desktop").unwrap().len(), 4);
+        assert_eq!(a.argv("x-.desktop").unwrap().len(), 4);
     }
 
     #[test]

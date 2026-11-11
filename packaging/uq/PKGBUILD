@@ -83,6 +83,11 @@ package() {
   install -Dm644 config/hypr/base.lua "$pkgdir/usr/share/uq/hypr/base.lua"
   install -dm755 "$pkgdir/usr/share/uq"
   cp -r --no-preserve=ownership themes templates "$pkgdir/usr/share/uq/"
+  # templates/ also holds the integration templates (widget, settings page, provider) as
+  # reference copies; never a build of the provider example.
+  rm -rf "$pkgdir/usr/share/uq/templates/provider/target" \
+    "$pkgdir/usr/share/uq/templates/provider/Cargo.lock" \
+    "$pkgdir/usr/share/uq/templates/provider/.gitignore"
   # Every theme variant's tokens.json, rendered by uqd's renderer, for the greeter (it never reads
   # a home directory). The themes loader skips this rendered/ directory.
   target/release/uqctl render-themes --themes themes --templates templates \
