@@ -427,7 +427,6 @@ local KNOWN_OPTS = __KNOWN_OPTS__
 local GESTURE_FIELDS = __GESTURE_FIELDS__
 local GESTURE_DIRS = __GESTURE_DIRS__
 local calls = {}
-local gestures = {}
 -- exec_cmd strings seen while a given hl.on("<event>", fn) callback runs.
 local hook, in_hook = nil, {}
 -- What each returned proxy stands for, e.g. `hl.dsp.global(uq:spotlight)`, and every hl.bind
@@ -489,7 +488,6 @@ local function proxy(name)
         elseif type(a) ~= "string" then
           error("hl.gesture needs an action")
         end
-        gestures[#gestures + 1] = t.fingers .. " " .. t.direction .. " " .. tostring(t.mods)
       end
       -- generated.lua starts its shortcuts with hl.unbind("all"): base.lua's fallback copies go.
       if name == "hl.unbind" and args[1] == "all" then binds = {} end
@@ -1562,6 +1560,22 @@ fn monitor_plan() -> StartupRender {
     }
 }
 
+/// `rules()` plus a rule for workspace 3 with `gaps_in` and no monitor: the plan gives it a
+/// monitor and it keeps `gaps_in`.
+fn plan_rules() -> Rules {
+    let mut r = rules();
+    r.workspace.push(WorkspaceRule {
+        workspace: "3".into(),
+        monitor: None,
+        default: None,
+        persistent: None,
+        gaps_in: Some(4),
+        gaps_out: None,
+        border_size: None,
+    });
+    r
+}
+
 /// The plan renders one `hl.workspace_rule` per selector and the cursor table runs. Runs
 /// under the Lua mock (CI, or locally with a `lua` on PATH).
 #[test]
@@ -1578,7 +1592,7 @@ fn monitor_plan_runs_under_the_lua_mock() {
     let gen_ = emit_generated(
         t,
         &layouts(),
-        &rules(),
+        &plan_rules(),
         &keybinds(),
         &settings(),
         &monitor_plan(),
@@ -1601,6 +1615,10 @@ fn monitor_plan_runs_under_the_lua_mock() {
     for ws in ["1", "2", "3", "4"] {
         assert!(selectors.contains(&ws), "{ws} in {selectors:?}");
     }
+    assert!(
+        gen_.contains(r#"hl.workspace_rule({ workspace = "3", monitor = "DP-2", default = true, gaps_in = 4 })"#),
+        "{gen_}"
+    );
     let (p, _) = tree(&dir.path().join("monitor-plan"), &gen_);
     let out = Command::new(&lua)
         .arg(&mock)
@@ -1626,7 +1644,7 @@ fn monitor_plan_passes_hyprland_verify() {
     let gen_ = emit_generated(
         t,
         &layouts(),
-        &rules(),
+        &plan_rules(),
         &keybinds(),
         &settings(),
         &monitor_plan(),

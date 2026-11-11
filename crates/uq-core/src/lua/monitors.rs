@@ -5,6 +5,7 @@ use super::lua_string;
 use crate::rules::WorkspaceRule;
 use crate::settings::plan::{Planned, plan, roles, screens};
 use crate::settings::{LiveOutput, Monitors, OutputConfig, valid_output_name};
+use std::collections::BTreeSet;
 
 /// One `hl.monitor({ ... })` line. A disabled output carries nothing else. Otherwise an unset
 /// mode, position or scale is written out as `preferred`, `auto`, `auto`: Hyprland would reuse
@@ -88,20 +89,30 @@ pub fn emit_cursor(out: &mut String, r: &MonitorRender) {
 /// workspace order, so there is still one call per selector.
 pub fn merge_planned(rules: &[WorkspaceRule], planned: &[Planned]) -> Vec<WorkspaceRule> {
     let mut out = rules.to_vec();
-    for p in planned {
+    // A monitor opens on one workspace: a `default` the person already set on a monitor means
+    // the plan adds no second one there.
+    let mut has_default: BTreeSet<String> = out
+        .iter()
+        .filter(|r| r.default == Some(true))
+        .filter_map(|r| r.monitor.clone())
+        .collect();
+    for p in planned.iter().filter(|p| valid_output_name(&p.output)) {
         let sel = p.workspace.to_string();
-        let default = p.default.then_some(true);
         match out.iter_mut().find(|r| r.workspace == sel) {
             Some(r) => {
                 r.monitor.get_or_insert_with(|| p.output.clone());
-                if r.default.is_none() {
-                    r.default = default;
+                if r.default.is_none()
+                    && p.default
+                    && r.monitor.as_deref() == Some(p.output.as_str())
+                    && has_default.insert(p.output.clone())
+                {
+                    r.default = Some(true);
                 }
             }
             None => out.push(WorkspaceRule {
                 workspace: sel,
                 monitor: Some(p.output.clone()),
-                default,
+                default: (p.default && has_default.insert(p.output.clone())).then_some(true),
                 persistent: None,
                 gaps_in: None,
                 gaps_out: None,
@@ -265,5 +276,38 @@ mod tests {
             workspace_move_line(3, "a\"b"),
             r#"hl.dsp.workspace.move({ workspace = "3", monitor = "a\"b" })"#
         );
+    }
+
+    #[test]
+    fn merge_escapes_and_checks_names() {
+        let plan = |ws: u8, out: &str| Planned {
+            workspace: ws,
+            output: out.into(),
+            default: true,
+        };
+        // A name that isn't a valid output name is never planned.
+        let merged = merge_planned(&[], &[plan(1, "a\"b"), plan(2, "DP-1")]);
+        assert_eq!(merged.len(), 1);
+        assert_eq!(merged[0].workspace, "2");
+        // A user's own default on a monitor means the plan adds none there.
+        let user = WorkspaceRule {
+            workspace: "2".into(),
+            monitor: Some("DP-1".into()),
+            default: Some(true),
+            persistent: None,
+            gaps_in: None,
+            gaps_out: None,
+            border_size: None,
+        };
+        let merged = merge_planned(
+            &[user],
+            &[plan(1, "DP-1"), plan(3, "DP-2"), plan(4, "DP-2")],
+        );
+        let defaults: Vec<&str> = merged
+            .iter()
+            .filter(|r| r.default == Some(true))
+            .map(|r| r.workspace.as_str())
+            .collect();
+        assert_eq!(defaults, ["2", "3"], "{merged:?}");
     }
 }

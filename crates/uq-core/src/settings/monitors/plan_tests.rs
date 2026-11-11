@@ -518,3 +518,80 @@ fn main_scale_unchanged_without_primary() {
     assert_eq!(main_scale(&[]), None);
     assert_eq!(fallback_main(&[a, b]).unwrap().name, "DP-1");
 }
+
+#[test]
+fn screens_follow_stored_mirror() {
+    let mut mirrored_live = out("DP-2", "B", 2560, 0);
+    mirrored_live.mirror_of = Some("DP-1".into());
+    let live = [out("DP-1", "A", 0, 0), out("DP-2", "B", 2560, 0)];
+    // A candidate that turns mirroring on: the mirror leaves the plan, the cursor and the bar.
+    let mut m = Monitors {
+        primary: Some(mid("B")),
+        workspaces: WorkspacePlan {
+            strategy: Strategy::Sequential,
+            count: 4,
+            ..WorkspacePlan::default()
+        },
+        ..Monitors::default()
+    };
+    m.outputs.insert(
+        "DP-2".into(),
+        OutputConfig {
+            mirror_of: Some("DP-1".into()),
+            ..OutputConfig::default()
+        },
+    );
+    let lay = overlay(&live, &m);
+    let shown = screens(&m, &live);
+    let names: Vec<&str> = shown.iter().map(|o| o.name.as_str()).collect();
+    assert_eq!(names, ["DP-1"]);
+    assert!(
+        plan(&m.workspaces, &screens(&m, &live)).is_empty(),
+        "one screen plans nothing"
+    );
+    let r = roles(&m, &lay);
+    assert_eq!((r.primary.as_str(), r.main.as_str()), ("", "DP-1"));
+    let render = crate::lua::monitor_render(&m, &lay);
+    assert_eq!(render.default_monitor, None);
+    // Three screens: the mirror gets no workspace.
+    let three = [live[0].clone(), live[1].clone(), out("DP-3", "C", 5120, 0)];
+    let got = plan(&m.workspaces, &screens(&m, &three));
+    assert!(got.iter().all(|p| p.output != "DP-2"), "{got:?}");
+    // A stored entry without a mirror un-mirrors a live mirror.
+    let mut plain = Monitors::default();
+    plain.outputs.insert("DP-2".into(), OutputConfig::default());
+    let names: Vec<String> = screens(&plain, &[live[0].clone(), mirrored_live])
+        .into_iter()
+        .map(|o| o.name)
+        .collect();
+    assert_eq!(names, ["DP-1", "DP-2"]);
+}
+
+#[test]
+fn roles_chosen_bar_skips_mirrors_and_headless() {
+    let mut mir = out("DP-2", "B", 2560, 0);
+    mir.mirror_of = Some("DP-1".into());
+    let live = [out("DP-1", "A", 0, 0), mir, out("HEADLESS-1", "A", 0, 0)];
+    let m = Monitors {
+        bar: BarChoice {
+            show: BarShow::Chosen,
+            on: vec![mid("A"), mid("B")],
+        },
+        ..Monitors::default()
+    };
+    assert_eq!(roles(&m, &live).bar, Some(vec!["DP-1".to_string()]));
+}
+
+#[test]
+fn invalid_connector_names_are_never_planned() {
+    let live = [
+        out("DP-1", "A", 0, 0),
+        out("DP 2", "B", 2560, 0),
+        out("DP-3", "C", 5120, 0),
+    ];
+    let names: Vec<String> = screens(&Monitors::default(), &live)
+        .into_iter()
+        .map(|o| o.name)
+        .collect();
+    assert_eq!(names, ["DP-1", "DP-3"]);
+}

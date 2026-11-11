@@ -5,14 +5,15 @@
 use super::{
     BarShow, LiveOutput, MonitorId, MonitorProfile, Monitors, OutputConfig, Position, SavedOutput,
     SettingError, Strategy, WorkspacePlan, clean_name, clean_text, counts_in_sets, extras, invalid,
-    valid_profile_id,
+    valid_output_name, valid_profile_id,
 };
 use crate::rules::fresh_prefixed;
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 
 /// The live outputs with the stored layout laid over them: stored position, scale and on/off
-/// win, so a stored value counts before Hyprland has it.
+/// win (mirroring too, which `generated.lua` renders only from the stored entry), so a stored
+/// value counts before Hyprland has it.
 pub fn overlay(live: &[LiveOutput], stored: &Monitors) -> Vec<LiveOutput> {
     live.iter()
         .cloned()
@@ -27,6 +28,8 @@ pub fn overlay(live: &[LiveOutput], stored: &Monitors) -> Vec<LiveOutput> {
                 if let Some(on) = c.enabled {
                     o.disabled = !on;
                 }
+                // The stored entry decides mirroring after the reload.
+                o.mirror_of = c.mirror_of.clone();
             }
             o
         })
@@ -207,7 +210,12 @@ pub fn remember(
 pub fn screens(m: &Monitors, live: &[LiveOutput]) -> Vec<LiveOutput> {
     let mut s: Vec<LiveOutput> = overlay(live, m)
         .into_iter()
-        .filter(|o| !o.disabled && o.mirror_of.is_none() && counts_in_sets(&o.name))
+        .filter(|o| {
+            !o.disabled
+                && o.mirror_of.is_none()
+                && counts_in_sets(&o.name)
+                && valid_output_name(&o.name)
+        })
         .collect();
     s.sort_by(|a, b| (a.x, a.y, &a.name).cmp(&(b.x, b.y, &b.name)));
     s
@@ -306,7 +314,12 @@ pub fn roles(m: &Monitors, live: &[LiveOutput]) -> Roles {
         BarShow::Chosen => {
             let on: Vec<String> = live
                 .iter()
-                .filter(|o| !o.disabled && m.bar.on.contains(&MonitorId::of(o)))
+                .filter(|o| {
+                    !o.disabled
+                        && o.mirror_of.is_none()
+                        && counts_in_sets(&o.name)
+                        && m.bar.on.contains(&MonitorId::of(o))
+                })
                 .map(|o| o.name.clone())
                 .collect();
             (!on.is_empty()).then_some(on)
