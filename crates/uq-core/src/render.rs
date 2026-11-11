@@ -20,6 +20,11 @@ pub enum RenderError {
     BadKvantumBase(String),
     #[error("template {name}: {message}")]
     Template { name: String, message: String },
+    #[error("{path}: {source}")]
+    Write {
+        path: PathBuf,
+        source: std::io::Error,
+    },
 }
 
 /// (template file in `templates_dir`, output path in the theme directory)
@@ -88,6 +93,32 @@ pub fn render(
         out.insert(PathBuf::from(rel), body);
     }
     Ok(RenderedFiles(out))
+}
+
+/// Render every theme variant's `tokens.json` into `out/<id>-<variant>/tokens.json`, for the
+/// greeter, which can't read a user's rendered theme (spec phase 5 §2.2). Same renderer and
+/// templates as uqd, with no appearance overrides. Returns the files written, sorted.
+pub fn prerender_tokens(
+    themes: &crate::theme::ThemeRegistry,
+    templates_dir: &Path,
+    out: &Path,
+) -> Result<Vec<PathBuf>, RenderError> {
+    let mut written = Vec::new();
+    for theme in themes.iter() {
+        let files = render(theme, templates_dir, None)?;
+        let body = &files.0[Path::new("tokens.json")];
+        let dir = out.join(format!("{}-{}", theme.id, theme.variant));
+        let path = dir.join("tokens.json");
+        let write_err = |source| RenderError::Write {
+            path: path.clone(),
+            source,
+        };
+        std::fs::create_dir_all(&dir).map_err(write_err)?;
+        std::fs::write(&path, body).map_err(write_err)?;
+        written.push(path);
+    }
+    written.sort();
+    Ok(written)
 }
 
 #[cfg(test)]

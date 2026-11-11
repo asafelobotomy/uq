@@ -3,6 +3,7 @@
 mod bridge;
 mod launch_cmd;
 mod profile_cmd;
+mod render_themes;
 mod settings_app;
 mod settings_cmd;
 mod setup;
@@ -127,6 +128,10 @@ enum Cmd {
         #[arg(long, conflicts_with = "json")]
         quiet: bool,
     },
+    /// Packaging: render every theme variant's tokens.json into OUT/<id>-<variant>/ for the
+    /// greeter, with uqd's renderer.
+    #[command(hide = true)]
+    RenderThemes(render_themes::Args),
 }
 
 #[derive(Subcommand)]
@@ -369,6 +374,7 @@ async fn run(cmd: Cmd) -> Result<(), String> {
             .await
             .map_err(describe)?,
         Cmd::Setup { .. }
+        | Cmd::RenderThemes(_)
         | Cmd::Bridge
         | Cmd::Settings { .. }
         | Cmd::Profile { .. }
@@ -451,6 +457,9 @@ async fn main() -> ExitCode {
     if let Cmd::Setup { apps, json, quiet } = cli.cmd {
         // Local files only: no uqd, no timeout.
         return setup::main(apps, json, quiet);
+    }
+    if let Cmd::RenderThemes(args) = cli.cmd {
+        return render_themes::main(&args);
     }
     if let Cmd::Settings { page, setting } = cli.cmd {
         return settings_app::main(

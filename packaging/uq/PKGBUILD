@@ -82,6 +82,10 @@ package() {
   install -Dm644 config/hypr/base.lua "$pkgdir/usr/share/uq/hypr/base.lua"
   install -dm755 "$pkgdir/usr/share/uq"
   cp -r --no-preserve=ownership themes templates "$pkgdir/usr/share/uq/"
+  # Every theme variant's tokens.json, rendered by uqd's renderer, for the greeter (it never reads
+  # a home directory). The themes loader skips this rendered/ directory.
+  target/release/uqctl render-themes --themes themes --templates templates \
+    "$pkgdir/usr/share/uq/themes/rendered"
   # The whole shell tree (QML, shell/core/qmldir, logic/*.js).
   find shell -type f -exec install -Dm644 {} "$pkgdir/usr/share/uq/{}" \;
   # The lock instance (its own Quickshell config). lock/core, lock/logic and lock/auth are
