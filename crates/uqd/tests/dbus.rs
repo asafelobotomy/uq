@@ -1044,6 +1044,71 @@ async fn keybinds_section_and_list_binds_over_dbus() {
     assert_eq!(explained[format!("binds.{id}")]["source"], "uq");
 }
 
+#[tokio::test]
+async fn pause_and_resume_over_dbus() {
+    let dir = tempfile::tempdir().unwrap();
+    let bus = private_bus();
+    let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut paths = uq_core::paths::Paths::under(&dir.path().join("root"));
+    paths.themes_dir = repo.join("themes");
+    paths.templates_dir = repo.join("templates");
+    let comp = Arc::new(FakeCompositor::running());
+    let desktop = Desktop::new(paths, comp.clone(), Arc::new(FakeSystem::default())).unwrap();
+    let _server = serve(
+        zbus::connection::Builder::address(bus.address.as_str()).unwrap(),
+        desktop,
+    )
+    .await
+    .unwrap();
+    let client = zbus::connection::Builder::address(bus.address.as_str())
+        .unwrap()
+        .build()
+        .await
+        .unwrap();
+    let proxy = zbus::Proxy::new(&client, NAME, PATH, IFACE).await.unwrap();
+    let evals = || -> Vec<String> {
+        comp.calls()
+            .into_iter()
+            .filter(|c| c.starts_with("eval"))
+            .collect()
+    };
+
+    let token: String = proxy.call("PauseShortcuts", &()).await.unwrap();
+    assert_eq!(token.len(), 32);
+    // A forged token is refused, and the pause stays.
+    let err = proxy
+        .call::<_, _, ()>("ResumeShortcuts", &("nope",))
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("InvalidArgument"), "{err}");
+    assert_eq!(evals().len(), 1);
+    // The desktop isn't locked meanwhile.
+    let () = proxy
+        .call("SetSection", &("look", r#"{"gaps_in":7}"#, "settings"))
+        .await
+        .unwrap();
+    let () = proxy
+        .call("ResumeShortcuts", &(token.as_str(),))
+        .await
+        .unwrap();
+    let e = evals();
+    assert!(
+        e[0].contains("uq_capture") && e.last().unwrap().contains("\"reset\""),
+        "{e:?}"
+    );
+
+    // The typed proxy has both calls too; Hyprland down is a plain error.
+    let typed = uq_core::client::DesktopProxy::new(&client).await.unwrap();
+    let t = typed.pause_shortcuts().await.unwrap();
+    typed.resume_shortcuts(&t).await.unwrap();
+    *comp.running.lock().unwrap() = false;
+    let err = typed.pause_shortcuts().await.unwrap_err();
+    assert!(
+        err.to_string().contains("Hyprland isn't answering"),
+        "{err}"
+    );
+}
+
 async fn pick_server() -> (
     uq_core::test_bus::Bus,
     zbus::Connection,

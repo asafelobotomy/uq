@@ -55,6 +55,8 @@ pub struct DesktopIface {
     desktop: SharedDesktop,
     /// Outside the desktop lock: a pick waits for the user, and writes must still go through.
     picks: crate::pick::PickBroker,
+    /// Outside the desktop lock as well: a pause waits up to 15 s for the page.
+    captures: crate::capture::CaptureBroker,
     /// Outside the desktop lock too: a list may read the journal.
     runner: SharedRunner,
 }
@@ -261,6 +263,20 @@ impl DesktopIface {
     /// `-- uq:bind`. Writes go through `SetSection("keybinds", …)`.
     async fn list_binds(&self) -> Result<String, UqError> {
         Ok(self.desktop.lock().await.list_binds()?)
+    }
+
+    /// Pause every shortcut for up to 15 s, so the page can see a combo that is already bound.
+    /// Returns a token for `ResumeShortcuts`. A second call replaces the first pause. Fails
+    /// plainly when Hyprland isn't answering; the page then asks for the keys to be typed.
+    async fn pause_shortcuts(&self) -> Result<String, UqError> {
+        let comp = self.desktop.lock().await.comp.clone();
+        Ok(self.captures.pause(comp).await?)
+    }
+
+    /// Bring the shortcuts back. A token that isn't the current pause's is `InvalidArgument`.
+    async fn resume_shortcuts(&self, token: &str) -> Result<(), UqError> {
+        let comp = self.desktop.lock().await.comp.clone();
+        Ok(self.captures.resume(comp.as_ref(), token).await?)
     }
 
     /// Let the user click a window (spec §5). Returns JSON `{status, window?}`: `picked` (with
@@ -502,6 +518,7 @@ pub async fn serve_with(
             DesktopIface {
                 desktop: shared.clone(),
                 picks: crate::pick::PickBroker::default(),
+                captures: crate::capture::CaptureBroker::default(),
                 runner: runner.clone(),
             },
         )?

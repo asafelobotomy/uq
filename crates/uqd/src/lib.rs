@@ -1,5 +1,6 @@
 //! uqd: the uQ session daemon.
 pub mod autostart;
+pub mod capture;
 pub mod compositor;
 pub mod dbus;
 mod files;
