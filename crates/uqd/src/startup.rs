@@ -6,8 +6,12 @@
 use crate::files::{self, MarkerKind};
 use crate::service::{Desktop, DesktopError};
 use serde_json::Value;
-use uq_core::autostart::scan::read_folders;
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
+use uq_core::autostart::Added;
+use uq_core::autostart::scan::{Plan, Resolved, read_capped, read_folders, resolve};
 use uq_core::compat::launch::main_scale;
+use uq_core::desktop_entry::{normalise_id, valid_desktop_id};
 use uq_core::env::{environment_d_lines, session_env};
 use uq_core::settings::{LiveOutput, parse_live};
 use uq_core::startup_explain::{
@@ -30,10 +34,6 @@ impl Desktop {
 
     /// The variables an autostarted app gets on top of uqd's own (F19): the theme's cursor
     /// lines, as `generated.lua` renders them, then the session variables.
-    #[cfg_attr(
-        not(test),
-        allow(dead_code, reason = "the autostart runner uses it in Task 8")
-    )]
     pub(crate) fn child_env(&self) -> Vec<(String, String)> {
         let mut out = Vec::new();
         if let Some(t) = self.themes.get(&self.state.theme, self.state.variant) {
@@ -49,6 +49,53 @@ impl Desktop {
             self.main_scale,
         ));
         out
+    }
+
+    /// The run plan and the page's rows for startup apps, with the variables an autostarted
+    /// app gets on top of uqd's own (F19). Reads the folders, so the runner calls it once, under
+    /// the desktop lock, and drops the lock before running anything. A run's working directory
+    /// is its absolute, existing `Path=`, else the home folder.
+    pub(crate) fn autostart_plan(&self) -> (Vec<Resolved>, Vec<(String, String)>) {
+        let paths = &self.paths.startup;
+        let found = read_folders(&paths.user_autostart(), &paths.system_autostart());
+        let app_dirs = paths.app_dirs();
+        let apps = |id: &str| -> Option<(PathBuf, String)> {
+            if !valid_desktop_id(id) {
+                return None;
+            }
+            let file = normalise_id(id);
+            app_dirs.iter().find_map(|d| {
+                let p = d.join(&file);
+                read_capped(&p).map(|t| (p, t))
+            })
+        };
+        let mut plan = resolve(
+            &found,
+            &self.state.autostart,
+            &self.state.compat,
+            &apps,
+            &program_exists,
+        );
+        for e in &mut plan {
+            if let Plan::Run { cwd, .. } = &mut e.plan {
+                let dir = cwd.take().filter(|p| p.is_dir());
+                *cwd = Some(dir.unwrap_or_else(|| paths.home.clone()));
+            }
+        }
+        (plan, self.child_env())
+    }
+
+    /// The argv of each added command, by id, for `ListAutostart`.
+    pub(crate) fn autostart_commands(&self) -> BTreeMap<String, Vec<String>> {
+        self.state
+            .autostart
+            .added
+            .iter()
+            .filter_map(|a| match a {
+                Added::Command { id, argv, .. } => Some((id.clone(), argv.clone())),
+                Added::App { .. } => None,
+            })
+            .collect()
     }
 
     /// The main screen's scale for `next` (R13, F4): Hyprland's outputs from one
@@ -233,6 +280,19 @@ impl Desktop {
             _ => explain_autostart(st, &self.files),
         }
     }
+}
+
+/// `TryExec`: an absolute path to a file, or a file of that name in an absolute entry of uqd's
+/// own `PATH`.
+fn program_exists(name: &str) -> bool {
+    if name.contains('/') {
+        return Path::new(name).is_absolute() && Path::new(name).is_file();
+    }
+    std::env::var_os("PATH").is_some_and(|p| {
+        std::env::split_paths(&p)
+            .filter(|d| d.is_absolute())
+            .any(|d| d.join(name).is_file())
+    })
 }
 
 #[cfg(test)]

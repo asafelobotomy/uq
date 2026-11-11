@@ -58,6 +58,8 @@ pub enum Event {
     ProfileChanged(String),
     /// A window pick started; the token goes to the shell, which answers `PickDone`.
     PickRequested(String),
+    /// A startup app's status changed: `ListAutostart` has the new picture.
+    AutostartChanged,
 }
 
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]

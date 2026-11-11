@@ -1,5 +1,6 @@
 //! `org.uq.Desktop1` on the session bus (spec §2.2).
 
+use crate::autostart::{AutostartConfig, Runner, SharedRunner};
 use crate::service::{Desktop, DesktopError, Event};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -8,6 +9,8 @@ use uq_core::history::Origin;
 use uq_core::schedule::Schedule;
 use uq_core::theme::Variant;
 use zbus::object_server::SignalEmitter;
+
+mod signals;
 
 pub const NAME: &str = "org.uq.Desktop1";
 pub const PATH: &str = "/org/uq/Desktop1";
@@ -52,6 +55,15 @@ pub struct DesktopIface {
     desktop: SharedDesktop,
     /// Outside the desktop lock: a pick waits for the user, and writes must still go through.
     picks: crate::pick::PickBroker,
+    /// Outside the desktop lock too: a list may read the journal.
+    runner: SharedRunner,
+}
+
+impl DesktopIface {
+    /// The autostart runner, for tests that check what the shell told uqd (F39).
+    pub fn runner(&self) -> &SharedRunner {
+        &self.runner
+    }
 }
 
 /// Every write takes a last `origin` argument (`settings`, `uqctl`, `shell`, …; "" is unknown),
@@ -324,6 +336,29 @@ impl DesktopIface {
         serde_json::to_string(&report).map_err(|e| UqError::Io(e.to_string()))
     }
 
+    /// The startup apps as a JSON array of `{id, name, icon, source, enabled, can_toggle,
+    /// delay, status, reason?, exit?, signal?, log?, argv?}` (spec §7.3). `status` is
+    /// `waiting`, `running`, `exited`, `failed`, `off`, `skipped`, `not_started` or
+    /// `unknown_exit`; `argv` is there only for added commands. The folders are read under the
+    /// desktop lock, the journal outside it.
+    async fn list_autostart(&self) -> Result<String, UqError> {
+        let (plan, commands) = {
+            let d = self.desktop.lock().await;
+            (d.autostart_plan().0, d.autostart_commands())
+        };
+        let rows = crate::autostart::list(&self.runner, &plan, &commands).await;
+        serde_json::to_string(&rows).map_err(|e| UqError::Io(e.to_string()))
+    }
+
+    /// The shell is up: start the startup apps if this login hasn't yet. Returns at once.
+    async fn shell_ready(&self) {
+        crate::autostart::shell_ready(&self.desktop, &self.runner);
+    }
+
+    /// A startup app's status changed; `ListAutostart` has the new list.
+    #[zbus(signal)]
+    async fn autostart_changed(e: &SignalEmitter<'_>) -> zbus::Result<()>;
+
     /// A pick began; the shell shows its overlay and answers `PickDone(token, …)`.
     #[zbus(signal)]
     async fn pick_requested(e: &SignalEmitter<'_>, token: &str) -> zbus::Result<()>;
@@ -380,13 +415,26 @@ async fn revert_timer(shared: SharedDesktop, token: String, deadline: std::time:
         .await;
 }
 
-/// Claim the bus name, export the interface and forward service events as signals.
+/// Claim the bus name, export the interface and forward service events as signals. The
+/// autostart runner is disabled: it never starts a process (F1).
 pub async fn serve(
     builder: zbus::connection::Builder<'_>,
     desktop: Desktop,
 ) -> zbus::Result<(zbus::Connection, SharedDesktop)> {
-    let mut events = desktop.subscribe();
+    serve_with(builder, desktop, AutostartConfig::disabled()).await
+}
+
+/// [`serve`] with an autostart runner: with a spawner, it starts the startup apps on
+/// `ShellReady`, or [`SHELL_WAIT`](crate::autostart::SHELL_WAIT) after this call.
+pub async fn serve_with(
+    builder: zbus::connection::Builder<'_>,
+    desktop: Desktop,
+    cfg: AutostartConfig,
+) -> zbus::Result<(zbus::Connection, SharedDesktop)> {
+    let events = desktop.subscribe();
     let shared: SharedDesktop = Arc::new(Mutex::new(desktop));
+    let enabled = cfg.has_spawner();
+    let runner = Runner::shared(cfg);
     let conn = builder
         .name(NAME)?
         .serve_at(
@@ -394,66 +442,18 @@ pub async fn serve(
             DesktopIface {
                 desktop: shared.clone(),
                 picks: crate::pick::PickBroker::default(),
+                runner: runner.clone(),
             },
         )?
         .build()
         .await?;
+    if enabled {
+        crate::autostart::spawn_fallback(shared.clone(), runner);
+    }
     let iface = conn
         .object_server()
         .interface::<_, DesktopIface>(PATH)
         .await?;
-    tokio::spawn(async move {
-        loop {
-            let ev = match events.recv().await {
-                Ok(ev) => ev,
-                Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
-                    tracing::warn!("dropped {n} desktop events");
-                    continue;
-                }
-                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
-            };
-            let e = iface.signal_emitter();
-            let res = match &ev {
-                Event::ThemeChanged {
-                    name,
-                    variant,
-                    tokens_path,
-                } => {
-                    DesktopIface::theme_changed(
-                        e,
-                        name,
-                        variant.as_str(),
-                        &tokens_path.to_string_lossy(),
-                    )
-                    .await
-                }
-                Event::LayoutChanged { workspace, layout } => {
-                    DesktopIface::layout_changed(e, workspace, layout.as_str()).await
-                }
-                Event::ConfigError(msg) => DesktopIface::config_error(e, msg).await,
-                Event::SettingsChanged(settings) => match serde_json::to_string(settings) {
-                    Ok(json) => DesktopIface::settings_changed(e, &json).await,
-                    Err(err) => Err(zbus::Error::Failure(err.to_string())),
-                },
-                Event::SectionChanged { domain, json } => {
-                    DesktopIface::section_changed(e, domain, json).await
-                }
-                Event::HistoryChanged => DesktopIface::history_changed(e).await,
-                Event::MonitorsChanged => DesktopIface::monitors_changed(e).await,
-                Event::ProfileChanged(id) => DesktopIface::profile_changed(e, id).await,
-                Event::PickRequested(token) => DesktopIface::pick_requested(e, token).await,
-                Event::LaunchCountsChanged(counts) => {
-                    DesktopIface::launch_counts_changed(
-                        e,
-                        counts.iter().map(|(k, v)| (k.clone(), *v)).collect(),
-                    )
-                    .await
-                }
-            };
-            if let Err(err) = res {
-                tracing::warn!("emitting {ev:?}: {err}");
-            }
-        }
-    });
+    tokio::spawn(signals::forward(iface, events));
     Ok((conn, shared))
 }
