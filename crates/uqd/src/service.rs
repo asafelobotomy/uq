@@ -952,6 +952,7 @@ impl Desktop {
         // Whether Welcome ran is not part of a restore point's settings.
         next.welcome = self.state.welcome;
         self.commit(next, Change::Theme, Origin::Restore).await?;
+        self.sync_x11_primary_now().await;
         self.announce_all();
         // The restored settings aren't the profile's any more, and neither is its power mode,
         // which a restore point doesn't hold: put it back as "Back to normal" does (K2: a

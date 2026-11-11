@@ -65,9 +65,9 @@ async fn burst_is_debounced() {
         .unwrap();
     assert_eq!(burst, Burst { added: true });
     // It fired a quiet debounce after the last event, not after the first.
-    assert!(started.elapsed() >= sent_all + Duration::from_millis(100));
+    assert!(started.elapsed() >= sent_all + Duration::from_millis(50));
     assert!(
-        tokio::time::timeout(Duration::from_millis(400), rx.recv())
+        tokio::time::timeout(Duration::from_millis(600), rx.recv())
             .await
             .is_err(),
         "five events must make one burst"

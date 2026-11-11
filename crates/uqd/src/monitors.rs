@@ -180,11 +180,13 @@ impl Desktop {
         origin: Origin,
     ) -> Result<(), DesktopError> {
         let candidate = self.take_matching(token)?.candidate.clone();
+        // Keep saves the layout only (R7); anything else changed during the window stays.
         let mut next = self.state.clone();
-        next.settings.monitors = candidate;
+        next.settings.monitors = self.state.settings.monitors.with_layout(candidate.outputs);
         self.commit_section("monitors", next, origin).await?;
         self.pending = None;
         let _ = std::fs::remove_file(self.marker_path());
+        self.sync_x11_primary_now().await;
         let _ = self.events.send(Event::MonitorsChanged);
         self.after_window().await;
         Ok(())
@@ -257,6 +259,7 @@ impl Desktop {
         if let Err(e) = self.comp.reload().await {
             tracing::warn!("applying the restored displays: {e}");
         }
+        self.sync_x11_primary_now().await;
         Ok(())
     }
 

@@ -9,21 +9,42 @@ use std::collections::BTreeSet;
 use uq_core::history::Origin;
 use uq_core::lua::workspace_move_line;
 use uq_core::settings::{
-    LiveOutput, MonitorId, Monitors, Strategy, clean_text_spaced, parse_live, plan, stays_visible,
-    valid_output_name,
+    LiveOutput, MonitorId, Monitors, Strategy, clean_text_spaced, counts_in_sets, parse_live, plan,
+    stays_visible, valid_output_name,
 };
 
 /// What uqd remembers between screen changes.
 #[derive(Debug, Default)]
 pub(crate) struct HotplugState {
     /// The screens and stored settings the matcher last handled; the same again is no work.
-    pub last_set: Option<(Vec<MonitorId>, Monitors)>,
+    /// `None` until uqd's first match at startup.
+    pub last_set: Option<Handled>,
     /// A screen change came while a display change was waiting: whether any of them was an add.
     pub held: Option<bool>,
     /// Arrangements already reported as unusable for the current set of screens.
     pub notified: BTreeSet<String>,
     /// The connector last given to `xrandr`.
     pub last_primary: Option<String>,
+}
+
+/// What the matcher last saw. Arrangements switch only when `ids` changes (R18).
+#[derive(Debug, Clone)]
+pub(crate) struct Handled {
+    /// The connected screens by identity (sorted).
+    pub ids: Vec<MonitorId>,
+    /// Which connector each screen is on (sorted), so twins swapping ports are noticed.
+    pub conns: Vec<(String, MonitorId)>,
+    pub stored: Monitors,
+}
+
+fn connectors(live: &[LiveOutput]) -> Vec<(String, MonitorId)> {
+    let mut v: Vec<(String, MonitorId)> = live
+        .iter()
+        .filter(|o| counts_in_sets(&o.name))
+        .map(|o| (o.name.clone(), MonitorId::of(o)))
+        .collect();
+    v.sort();
+    v
 }
 
 const NOT_USED: &str = "Display arrangement not used";
@@ -45,15 +66,32 @@ impl Desktop {
                 return;
             }
         };
-        let set = plan::connected_set(&live);
-        match &self.hotplug.last_set {
-            Some((s, m)) if *s == set && *m == self.state.settings.monitors => return,
-            Some((s, _)) if *s == set => {}
-            _ => self.hotplug.notified.clear(),
+        let ids = plan::connected_set(&live);
+        let conns = connectors(&live);
+        let startup = self.hotplug.last_set.is_none();
+        let set_changed = match &self.hotplug.last_set {
+            Some(h) if h.conns == conns && h.stored == self.state.settings.monitors => return,
+            Some(h) => h.ids != ids,
+            None => true,
+        };
+        if set_changed {
+            self.hotplug.notified.clear();
         }
-        let wrote = self.switch_arrangement(&live).await;
-        if !wrote && self.state.settings.monitors.workspaces.strategy != Strategy::Off {
-            // The plan follows the new set; nothing in the state changes.
+        // A saved arrangement replaces the layout only when the screens are not the same ones
+        // as last time (a kept, undone or restored layout must survive). At startup, the
+        // stored layout already covering every screen means the set did not change while uqd
+        // was stopped.
+        let may_switch = if startup {
+            !covers(&self.state.settings.monitors, &live)
+        } else {
+            set_changed
+        };
+        let wrote = may_switch && self.switch_arrangement(&live).await;
+        if wrote {
+            self.hotplug.notified.clear();
+        }
+        if !wrote && needs_render(&self.state) {
+            // The plan and the main display follow the new screens; nothing in the state changes.
             let state = self.state.clone();
             if let Err(e) = self.commit(state, Change::Reload, Origin::Hotplug).await {
                 tracing::warn!("planning workspaces for the new screens: {e}");
@@ -63,7 +101,11 @@ impl Desktop {
             self.move_workspaces_back(&live).await;
         }
         self.sync_x11_primary(&live).await;
-        self.hotplug.last_set = Some((set, self.state.settings.monitors.clone()));
+        self.hotplug.last_set = Some(Handled {
+            ids,
+            conns,
+            stored: self.state.settings.monitors.clone(),
+        });
         let _ = self.events.send(Event::MonitorsChanged);
     }
 
@@ -113,7 +155,9 @@ impl Desktop {
                 p.name,
                 clean_text_spaced(&reason, 200)
             );
-            self.notifier.notify(NOT_USED, &body).await;
+            // Outside the desktop lock: a slow bus must not hold it.
+            let notifier = self.notifier.clone();
+            tokio::spawn(async move { notifier.notify(NOT_USED, &body).await });
         }
         false
     }
@@ -181,12 +225,39 @@ impl Desktop {
         }
     }
 
-    /// [`sync_x11_primary`](Self::sync_x11_primary) after a write that may have changed it.
+    /// After a commit that may have changed the main display or the layout (Keep, undo,
+    /// restore, a main-display change): re-apply the X11 primary, and record the screens so
+    /// the burst this change causes is not mistaken for new screens.
     pub(crate) async fn sync_x11_primary_now(&mut self) {
-        if let Ok(j) = self.comp.monitors().await {
-            self.sync_x11_primary(&parse_live(&j)).await;
+        let Ok(j) = self.comp.monitors().await else {
+            return;
+        };
+        let live = parse_live(&j);
+        self.sync_x11_primary(&live).await;
+        if self.hotplug.last_set.is_some() {
+            self.hotplug.last_set = Some(Handled {
+                ids: plan::connected_set(&live),
+                conns: connectors(&live),
+                stored: self.state.settings.monitors.clone(),
+            });
         }
     }
+}
+
+/// Whether the stored layout has an entry for every connected screen.
+fn covers(m: &Monitors, live: &[LiveOutput]) -> bool {
+    live.iter()
+        .filter(|o| counts_in_sets(&o.name))
+        .all(|o| m.outputs.contains_key(&o.name))
+}
+
+/// Whether a render reads the screens (the planner, a chosen main display, scaling compat).
+fn needs_render(state: &uq_core::state::State) -> bool {
+    let m = &state.settings.monitors;
+    m.workspaces.strategy != Strategy::Off
+        || m.primary.is_some()
+        || state.compat.sharp_x11
+        || state.compat.steam_scale
 }
 
 #[cfg(test)]

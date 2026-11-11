@@ -12,7 +12,8 @@ All notable changes to uQ are listed here. The format follows
 - **Display arrangements, the main display, and touchpad gestures.** The Displays page can
   **Remember for these screens**: each arrangement is matched by the make, model and serial of
   every connected screen (not by port), and when screens are plugged in or out uqd switches to
-  the one for the new set within about 2 seconds, with no prompt; **Switch arrangements when
+  the one for the new set within about 2 seconds, with no prompt (only when the set of screens
+  changes, so a layout you keep stays until then); **Switch arrangements when
   screens change** turns it off, and automatic switches aren't recorded in History. A **main
   display** gets notifications, the volume pop-up and Spotlight, starts the session, and is the X11
   primary when `xrandr` is installed (new optional dependency `xorg-xrandr`). **Span across

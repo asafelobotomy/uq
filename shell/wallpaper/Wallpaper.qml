@@ -147,9 +147,22 @@ PanelWindow {
         }
         repeat: true
         running: win.clocked && win.slideList.length > 1
+        // `interval` is worked out when `tick` changes, so start from a fresh one.
+        onRunningChanged: if (running) win.tick++
         onTriggered: {
             win.syncSlide();
             win.tick++;
+        }
+    }
+    // After resume the monotonic timer may wake up to one interval late: name the slide now and
+    // re-arm on the next boundary.
+    Connections {
+        target: Bridge
+        function onPrepareForSleep(sleeping) {
+            if (!sleeping && win.clocked) {
+                win.syncSlide();
+                win.tick++;
+            }
         }
     }
 

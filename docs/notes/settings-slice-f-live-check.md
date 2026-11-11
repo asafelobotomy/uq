@@ -14,6 +14,11 @@ errors.
   screen, Keep, and Remember it as "Laptop". Docked, arrange the three screens, Keep, Remember as
   "Desk". Unplug: within 2 s the laptop layout is back with no dialog. Plug in: "Desk" is back
   within 2 s. **History** shows the two Remembers and no hotplug entries.
+- [ ] **1b. A kept layout stays.** With "Desk" docked, Keep a different layout (for example turn one
+  screen off), wait 5 s: it stays, and so it does after undoing it in History. Log out and in with
+  the same screens: the kept layout is still there (uqd switches on login only when the stored
+  layout doesn't list every connected screen). Plug or unplug a screen: the saved arrangement for
+  the new set applies.
 - [ ] **2. Port swap.** Swap the two external cables (or dock ports). "Desk" still applies and each
   screen keeps its own position and scale. With two identical screens, record which way round they
   came back.
