@@ -177,7 +177,7 @@ async fn blurry_heading_states() {
         "Your screens aren't scaled, so nothing is blurry."
     );
     assert_eq!(BLURRY, "These older apps may look blurry.");
-    assert_eq!(SHARP_ON, "Older apps open now");
+    assert_eq!(SHARP_ON, "These older apps are open right now.");
 
     // A disabled output's scale doesn't count.
     {

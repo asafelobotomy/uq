@@ -30,7 +30,7 @@ use crate::pages::startup::rows::section_error;
 
 /// The heading over "Blurry right now", by `(scaled, sharp_on)`.
 pub const BLURRY: &str = "These older apps may look blurry.";
-pub const SHARP_ON: &str = "Older apps open now";
+pub const SHARP_ON: &str = "These older apps are open right now.";
 pub const NOT_SCALED: &str = "Your screens aren't scaled, so nothing is blurry.";
 /// How many window names a reopen note lists.
 const REOPEN_NAMES: usize = 3;
