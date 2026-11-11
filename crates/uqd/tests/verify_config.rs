@@ -391,6 +391,11 @@ end
 local function opt(b, k) return type(b.opts) == "table" and b.opts[k] or nil end
 local spotlight = bind_for("hl.dsp.global(uq:spotlight)")
 if spotlight.key ~= "SUPER + Space" then error("uq:spotlight is bound to " .. tostring(spotlight.key)) end
+local emoji = bind_for("hl.dsp.global(uq:emoji)")
+if emoji.key ~= "SUPER + period" then error("uq:emoji is bound to " .. tostring(emoji.key)) end
+for _, b in ipairs(binds) do
+  if b.key == "SUPER + period" and b ~= emoji then error("SUPER + period is also bound to " .. b.dsp) end
+end
 local appmenu = bind_for("hl.dsp.global(uq:appmenu)")
 if appmenu.key ~= "SUPER + SUPER_L" then error("uq:appmenu is bound to " .. tostring(appmenu.key)) end
 if opt(appmenu, "release") ~= true then error("the uq:appmenu bind needs release = true (tap SUPER)") end
@@ -408,7 +413,7 @@ if power.key ~= "SUPER + Escape" then error("uq:power-menu is bound to " .. tost
 for _, b in ipairs(binds) do
   if b.key == "SUPER + Escape" and b ~= power then error("SUPER + Escape is also bound to " .. b.dsp) end
 end
-for _, b in ipairs({spotlight, appmenu, quick, notif, lock, power}) do
+for _, b in ipairs({spotlight, emoji, appmenu, quick, notif, lock, power}) do
   if opt(b, "locked") then error(b.dsp .. " must not be locked") end
 end
 local osd_keys = {
@@ -441,6 +446,7 @@ fn base_lua_launcher_binds_are_not_locked() {
     let base = std::fs::read_to_string(repo().join("config/hypr/base.lua")).unwrap();
     for name in [
         "uq:spotlight",
+        "uq:emoji",
         "uq:appmenu",
         "uq:quick-settings",
         "uq:notif-centre",

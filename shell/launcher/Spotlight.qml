@@ -233,6 +233,14 @@ PanelWindow {
             if (surface === "spotlight")
                 root.wipe();
         }
+        // The emoji bind: start at ":" as if typed, so the search runs as usual.
+        function onPrefill(surface, text) {
+            if (surface !== "spotlight")
+                return;
+            field.text = text;
+            root.edited(field.text);
+            Qt.callLater(field.forceActiveFocus);
+        }
     }
 
     Timer { id: debounce; interval: 70; onTriggered: root.runSearch() }

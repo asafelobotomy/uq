@@ -7,16 +7,17 @@ import "../notif"
 import "../session"
 
 // Everything that opens the launchers from outside the bar, routed to Surfaces: the Hyprland
-// global shortcuts (base.lua binds `uq:spotlight`, `uq:appmenu`, `uq:quick-settings` and
+// global shortcuts (base.lua binds `uq:spotlight`, `uq:emoji`, `uq:appmenu`, `uq:quick-settings` and
 // `uq:notif-centre`, the last routed to NotifBackend, `uq:lock`, routed to Session, and
 // `uq:power-menu`) and the shell IPC target `uq`. No windows in here, so it also loads headless (tests/shell/bar_loads.sh).
 // Shortcuts and IPC pass no screen, so a surface opens on Hyprland.focusedMonitor.
 Scope {
     id: root
 
-    // True once all six shortcuts and the IPC handler exist with the names base.lua and the
+    // True once all seven shortcuts and the IPC handler exist with the names base.lua and the
     // README use (tests/shell/bar_loads.sh prints it).
     readonly property bool routed: spotlightKey.appid === "uq" && spotlightKey.name === "spotlight"
+        && emojiKey.appid === "uq" && emojiKey.name === "emoji"
         && appMenuKey.appid === "uq" && appMenuKey.name === "appmenu"
         && quickSettingsKey.appid === "uq" && quickSettingsKey.name === "quick-settings"
         && notifCentreKey.appid === "uq" && notifCentreKey.name === "notif-centre"
@@ -33,6 +34,16 @@ Scope {
         name: "spotlight"
         description: "Open or close Spotlight"
         onPressed: Surfaces.ipc("toggle", "spotlight")
+    }
+
+    // SUPER+.: Spotlight opened at ":", the emoji search (Phase 4 spec §3.2). Already open, its
+    // query becomes ":".
+    GlobalShortcut {
+        id: emojiKey
+        appid: "uq"
+        name: "emoji"
+        description: "Open Spotlight to search for emoji"
+        onPressed: Surfaces.openWith("spotlight", ":")
     }
 
     // Tapping SUPER is a `release = true` bind, which Hyprland fires only on the key release

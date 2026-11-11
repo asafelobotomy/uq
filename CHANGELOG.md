@@ -9,6 +9,9 @@ All notable changes to uQ are listed here. The format follows
 
 ### Added
 
+- **Emoji key.** `Super + .` opens Spotlight with `:` already typed, the emoji search an emoji
+  provider such as emobie answers. Pressed while Spotlight is open, it starts the search over at
+  `:`. The bind is `uq:emoji` in `base.lua`.
 - **Your own themes: make, import, export and delete.** The Appearance page has **New theme from
   this one…** (seven colours per version, live contrast check, a version that is hard to read
   can't be saved), **Import…**, **Export…** and **Delete…**, and shows the theme names. Themes
