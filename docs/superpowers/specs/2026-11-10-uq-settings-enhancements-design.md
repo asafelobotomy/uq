@@ -184,7 +184,7 @@ profile = "performance"   # power-profiles-daemon; the only non-uqd key in v1
 ```
 
 - **What a profile can hold:** `look`, `layouts`, `appearance` (theme, variant, fonts), `shell`,
-  `wallpaper`, `keybinds` (enable or disable named binds only), `rules` (enable or disable named
+  `wallpaper`, `keybinds` (turn a named shortcut on or off by its id, nothing else: no keys, no new shortcut, no command; slice 4, R15), `rules` (enable or disable named
   rules only), `env` (set a variable, or remove it while the profile is on), `compat` (the five
   switches, and a fix's Run on and Size) and `autostart` (an existing entry's on/off and delay),
   plus `power.profile`. A profile never adds a startup entry or command, launch options or a

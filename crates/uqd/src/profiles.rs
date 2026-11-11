@@ -11,8 +11,9 @@ use std::io::ErrorKind;
 use uq_core::history::{AutoReason, Origin, PointKind};
 use uq_core::profile::{
     self, ActiveProfile, Kept, MAX_PROFILES, PowerMemo, Profile, ProfileError, clear_active,
-    emptied_elsewhere, kept_fix_notice, key_label, missing_rules, missing_rules_notice,
-    missing_startup, missing_startup_notice, power_notice, save_active, startup_notice, turn_off,
+    emptied_elsewhere, kept_fix_notice, key_label, missing_binds, missing_binds_notice,
+    missing_rules, missing_rules_notice, missing_startup, missing_startup_notice, power_notice,
+    save_active, startup_notice, turn_off,
 };
 use uq_core::state::State;
 
@@ -155,6 +156,10 @@ impl Desktop {
         let missing = missing_rules(&base, &p);
         if missing > 0 {
             notices.push(missing_rules_notice(missing));
+        }
+        let missing = missing_binds(&base, &p);
+        if missing > 0 {
+            notices.push(missing_binds_notice(missing));
         }
         // Startup apps by id, found in the folders now (F14's bounded read) or added.
         let known = self.startup_known(&base);

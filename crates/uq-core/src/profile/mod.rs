@@ -5,12 +5,20 @@
 //! passes: size, TOML, `format`, id, name, icon, domains, the power mode and every value.
 
 mod active;
+mod keybinds;
 mod overlay;
 mod rules;
 mod startup;
 mod store;
 
 pub use active::{clear_active, load_active, save_active};
+// `enabled_of`, `set_enabled` and `check_tree` are the rules' above, so the shortcuts' go by
+// longer names.
+pub use keybinds::{
+    bind_keys, bind_label, bind_toggles, check_tree as check_bind_tree,
+    enabled_of as bind_enabled_of, mark_binds, missing_binds, missing_binds_notice,
+    set_enabled as set_bind_enabled,
+};
 pub use overlay::{
     ActiveProfile, Kept, KeyMemo, PowerMemo, apply, changed_since, from_journal, holds, next_after,
     turn_off,
@@ -60,7 +68,9 @@ pub enum DomainKind {
     Compat,
     /// An existing startup entry's on/off and delay, by id (`startup.rs`).
     Autostart,
-    /// In the format, refused until a later version of uQ can apply it.
+    /// The on/off switch of existing keyboard shortcuts, by id (`keybinds.rs`).
+    Keybinds,
+    /// In the format, refused until a later version of uQ can apply it. No domain is this now.
     Reserved,
 }
 
@@ -71,7 +81,7 @@ pub const PROFILE_DOMAINS: [(&str, DomainKind); 11] = [
     ("wallpaper", DomainKind::Section),
     ("appearance", DomainKind::Appearance),
     ("power", DomainKind::Power),
-    ("keybinds", DomainKind::Reserved),
+    ("keybinds", DomainKind::Keybinds),
     ("rules", DomainKind::Rules),
     ("env", DomainKind::Env),
     ("compat", DomainKind::Compat),
@@ -298,6 +308,10 @@ impl Profile {
             // Not written to a default `State`, which has no rules to switch.
             check_tree(tree)?;
         }
+        if let Some(tree) = self.values.get("keybinds") {
+            // Nor shortcuts of your own: only ids and on/off are checked here.
+            keybinds::check_tree(tree)?;
+        }
         // Nor these: a default `State` has no startup entries, and a variable's limit depends
         // on the computer it's applied on.
         for (domain, tree) in &self.values {
@@ -471,6 +485,7 @@ pub fn read_leaf(state: &State, domain: &str, path: &[String]) -> Option<Value> 
             history::get_path(&state.section(domain).ok()?, path)?.clone()
         }
         (DomainKind::Rules, [id]) => Value::Bool(enabled_of(state, id)?),
+        (DomainKind::Keybinds, [id]) => Value::Bool(keybinds::enabled_of(state, id)?),
         (DomainKind::Env | DomainKind::Compat | DomainKind::Autostart, _) => {
             startup::read_leaf(state, domain, path)?
         }
@@ -489,6 +504,9 @@ pub fn write_leaves(
     let kind = kind_of(domain).ok_or_else(|| SettingError::UnknownKey(domain.to_string()))?;
     if kind == DomainKind::Rules {
         return write_rule_leaves(state, leaves);
+    }
+    if kind == DomainKind::Keybinds {
+        return keybinds::write_leaves(state, leaves);
     }
     if matches!(
         kind,
@@ -583,6 +601,7 @@ pub fn key_label(domain: &str, path: &[String]) -> String {
     let dotted = path.join(".");
     match (domain, dotted.as_str()) {
         ("rules", _) if path.len() == 1 => Some("A rule".to_string()),
+        ("keybinds", _) if path.len() == 1 => Some("A shortcut".to_string()),
         ("appearance", "theme" | "variant") => history::label("theme", &dotted),
         ("power", "profile") => Some("Power mode".to_string()),
         ("env" | "compat" | "autostart", _) => Some(startup::fallback_label(domain, path)),
@@ -757,11 +776,10 @@ profile = "performance"
     }
 
     #[test]
-    fn refuses_reserved_domains_for_now() {
-        assert_eq!(
-            err(&with("[keybinds]\n\"uq.spotlight\" = false\n")),
-            ProfileError::NeedsNewer("keybinds".into())
-        );
+    fn keybinds_domain_holds_shortcut_switches() {
+        let p = Profile::parse(&with("[keybinds]\n\"uq.spotlight\" = false\n")).unwrap();
+        assert_eq!(p.values["keybinds"], json!({"uq.spotlight": false}));
+        // The "newer version" refusal stays for a future domain; no domain uses it now.
         assert!(
             ProfileError::NeedsNewer("keybinds".into())
                 .to_string()

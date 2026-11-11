@@ -754,3 +754,45 @@ async fn unknown_rule_id_is_a_notice() {
     // The file keeps the id.
     assert!(r.desktop.get_profile("quiet").unwrap().contains(other));
 }
+
+#[tokio::test]
+async fn profile_turns_a_shortcut_off_and_back() {
+    let mut r = rig().await;
+    add(
+        &mut r,
+        "format = 1\nid = \"quiet\"\nname = \"Quiet\"\n[keybinds]\n\"uq.close\" = false\n",
+    )
+    .await;
+    let g = std::fs::read_to_string(&r.desktop.paths().generated_lua).unwrap();
+    assert!(g.contains("uq:uq.close"), "{g}");
+    let before = journal_len(&r);
+    let report = r.desktop.apply_profile("quiet").await.unwrap();
+    assert!(report.notices.is_empty(), "{report:?}");
+    let entries = r.desktop.history(1000);
+    let new = &entries[..entries.len() - before];
+    assert_eq!(new.len(), 1, "{new:?}");
+    assert_eq!(new[0].domain, "keybinds");
+    assert_eq!(new[0].origin, "profile:quiet");
+    assert_eq!(new[0].summary, "“Close the window” turned off");
+    let g = std::fs::read_to_string(&r.desktop.paths().generated_lua).unwrap();
+    assert!(!g.contains("uq:uq.close"), "{g}");
+    let rows = r.desktop.explain_keybinds().await;
+    assert_eq!(rows["binds.uq.close"]["source"], "profile");
+    let report = r.desktop.profile_off().await.unwrap();
+    assert!(report.kept.is_empty(), "{report:?}");
+    let g = std::fs::read_to_string(&r.desktop.paths().generated_lua).unwrap();
+    assert!(g.contains("uq:uq.close"), "{g}");
+}
+
+#[tokio::test]
+async fn unknown_shortcut_id_is_a_notice() {
+    let mut r = rig().await;
+    add(
+        &mut r,
+        "format = 1\nid = \"quiet\"\nname = \"Quiet\"\n[keybinds]\n\"uq.close\" = false\n\"k-ffff\" = true\n",
+    )
+    .await;
+    let report = r.desktop.apply_profile("quiet").await.unwrap();
+    assert_eq!(report.notices.len(), 1, "{report:?}");
+    assert!(report.notices[0].contains("shortcut"), "{report:?}");
+}

@@ -264,12 +264,14 @@ fn section_round_trip() {
             "env",
             "compat",
             "autostart",
+            "keybinds",
             "integration_rules"
         ]
     );
     assert!(!renders_section("monitors") && renders_section("input"));
     assert!(renders_section("rules") && renders_section("env") && renders_section("compat"));
     assert!(!renders_section("autostart"));
+    assert!(renders_section("keybinds"));
 }
 
 #[test]

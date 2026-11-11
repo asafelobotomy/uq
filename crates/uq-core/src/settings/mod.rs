@@ -63,7 +63,7 @@ pub fn renders_config(key: &str) -> bool {
 }
 
 /// Whole-section domains handled by [`Settings::section`] / [`Settings::set_section`].
-pub const SECTION_DOMAINS: [&str; 12] = [
+pub const SECTION_DOMAINS: [&str; 13] = [
     "appearance",
     "wallpaper",
     "look",
@@ -75,6 +75,7 @@ pub const SECTION_DOMAINS: [&str; 12] = [
     "env",
     "compat",
     "autostart",
+    "keybinds",
     "integration_rules",
 ];
 
@@ -92,6 +93,7 @@ pub fn renders_section(domain: &str) -> bool {
             | "rules"
             | "env"
             | "compat"
+            | "keybinds"
             | "integration_rules"
     )
 }

@@ -132,6 +132,7 @@ impl PageModel for ProfilesModel {
             "shell",
             "wallpaper",
             "rules",
+            "keybinds",
             "env",
             "compat",
             "autostart",

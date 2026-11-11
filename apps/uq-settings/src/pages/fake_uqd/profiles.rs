@@ -8,8 +8,8 @@ use std::sync::{Arc, Mutex};
 use serde_json::json;
 use uq_core::profile::{
     self, ActiveProfile, MAX_PROFILES, Profile, ProfileError, emptied_elsewhere, kept_fix_notice,
-    missing_rules, missing_rules_notice, missing_startup, missing_startup_notice, power_notice,
-    startup_notice, turn_off,
+    missing_binds, missing_binds_notice, missing_rules, missing_rules_notice, missing_startup,
+    missing_startup_notice, power_notice, startup_notice, turn_off,
 };
 
 use super::{FakeError, FakeUqd, now};
@@ -137,6 +137,7 @@ impl FakeProfiles {
             };
             // Like uqd: counted against the settings the profile goes over.
             let missing = missing_rules(&base, &p);
+            let binds = missing_binds(&base, &p);
             let known: BTreeSet<String> = found
                 .iter()
                 .cloned()
@@ -146,14 +147,15 @@ impl FakeProfiles {
             let kept_fixes = emptied_elsewhere(&base, &p).len();
             let (next, memo) = profile::apply(&base, &p, &known, now()).map_err(refused)?;
             *s = next;
-            done = Some((kept, memo, missing, startup, kept_fixes));
+            done = Some((kept, memo, missing, binds, startup, kept_fixes));
             Ok(())
         })?;
-        let (kept, memo, missing, startup, kept_fixes) =
+        let (kept, memo, missing, binds, startup, kept_fixes) =
             done.expect("a write that succeeded ran its edit");
         let notices: Vec<String> = (missing > 0)
             .then(|| missing_rules_notice(missing))
             .into_iter()
+            .chain((binds > 0).then(|| missing_binds_notice(binds)))
             .chain((startup > 0).then(|| missing_startup_notice(startup)))
             .chain((kept_fixes > 0).then(|| kept_fix_notice(kept_fixes)))
             .chain(startup_notice(&p))

@@ -51,6 +51,8 @@ pub fn label(domain: &str, key: &str) -> Option<String> {
         ("rules", "window") => "Window rules",
         ("rules", "layer") => "Panel rules",
         ("rules", "workspace") => "Workspace rules",
+        ("keybinds", "overrides") => "uQ's shortcuts",
+        ("keybinds", "custom") => "Your own shortcuts",
         ("env", "vars") => "Environment variables",
         ("compat", "sharp_x11") => "Sharp X11 apps",
         ("compat", "electron_wayland") => "Run Electron apps on Wayland",
@@ -286,6 +288,16 @@ mod tests {
         )
         .unwrap();
         st.set_section(
+            "keybinds",
+            serde_json::json!({"overrides": [
+                    {"id": "uq.spotlight", "combo": "SUPER + K"},
+                    {"id": "uq.close", "enabled": false}],
+                "custom": [{"id": "k-3f9c", "name": "Screenshot",
+                    "combo": "SUPER + SHIFT + P", "action":
+                    {"kind": "command", "command": "grim shot.png"}}]}),
+        )
+        .unwrap();
+        st.set_section(
             "integration_rules",
             serde_json::json!({"enabled": ["romforge.emulators"]}),
         )
@@ -421,5 +433,24 @@ mod tests {
         let changes = crate::history::diff(&old, &new, &label);
         let lines: Vec<_> = changes.iter().map(|c| c.summary.as_str()).collect();
         assert_eq!(lines, ["Window rule “Pavucontrol floats” added"]);
+    }
+
+    #[test]
+    fn keybinds_summary_uses_labels() {
+        let old = State::default();
+        let mut new = old.clone();
+        new.set_section(
+            "keybinds",
+            serde_json::json!({"overrides": [{"id": "uq.spotlight", "combo": "SUPER + K"}],
+                "custom": [{"name": "Screenshot", "combo": "SUPER + SHIFT + P",
+                    "action": {"kind": "command", "command": "grim shot.png"}}]}),
+        )
+        .unwrap();
+        let changes = crate::history::diff(&old, &new, &label);
+        let lines: Vec<_> = changes.iter().map(|c| c.summary.as_str()).collect();
+        assert_eq!(
+            lines,
+            ["“Open Spotlight” now uses Super + K, Shortcut “Screenshot” added"]
+        );
     }
 }

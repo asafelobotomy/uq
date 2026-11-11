@@ -500,7 +500,7 @@ async fn import_refuses_hostile_file() {
         (
             "binds.toml",
             b"format = 1\nid = \"x\"\nname = \"X\"\n[keybinds]\nterminal = true\n".to_vec(),
-            "This profile turns keyboard shortcuts on or off, which this version of uQ can't do yet.",
+            "Keyboard shortcuts: \u{201c}terminal\u{201d} isn't one of uQ's shortcuts",
         ),
     ];
     for (name, bytes, message) in cases {
@@ -567,6 +567,7 @@ async fn snapshot_lists_available_keys_pages_and_icons() {
             {"id": "apps-scaling", "name": "Apps and scaling"},
             {"id": "shell", "name": "Shell"},
             {"id": "rules", "name": "Window rules"},
+            {"id": "keybinds", "name": "Keyboard shortcuts"},
             {"id": "startup", "name": "Startup"},
         ])
     );
@@ -883,6 +884,144 @@ async fn import_and_export_rules_round_trip() {
         )
         .await;
         assert_eq!(out.error.as_deref(), Some(message), "{body}");
+    }
+    assert!(stored(&r, "bad").is_none());
+}
+
+/// One of your own shortcuts, off, beside uQ's own.
+fn binds_state() -> State {
+    let mut st = state();
+    st.set_section(
+        "keybinds",
+        json!({"custom": [{"id": "k-00a1", "name": "Shot", "combo": "SUPER + F9",
+            "enabled": false, "action": {"kind": "shell", "name": "lock"}}]}),
+    )
+    .unwrap();
+    st
+}
+
+async fn binds_rig() -> (Rig, ProfilesState) {
+    let r = fake_uqd::rig(binds_state()).await;
+    let page = ProfilesState::new(r.client.clone());
+    (r, page)
+}
+
+const BINDS_QUIET: &str = "format = 1\nid = \"quiet\"\nname = \"Quiet\"\n[keybinds]\n\"uq.close\" = false\n\"k-00a1\" = true\n";
+
+fn bind_keys_of(list: &Value) -> Vec<Value> {
+    list.as_array()
+        .unwrap()
+        .iter()
+        .filter(|k| k["domain"] == "keybinds")
+        .cloned()
+        .collect()
+}
+
+#[tokio::test]
+async fn shortcuts_offered_in_add_settings() {
+    let (_r, page) = binds_rig().await;
+    let out = run(&page, Op::Refresh).await;
+    assert_eq!(out.error, None);
+    let keys = bind_keys_of(&out.state["available"]);
+    assert!(
+        keys.contains(&json!({"domain": "keybinds", "path": ["uq.close"],
+        "label": "Close the window", "text": "On"})),
+        "{keys:?}"
+    );
+    assert!(
+        keys.contains(&json!({"domain": "keybinds", "path": ["k-00a1"],
+        "label": "Shortcut \u{201c}Shot\u{201d}", "text": "Off"})),
+        "{keys:?}"
+    );
+    let pages = out.state["pages"].as_array().unwrap();
+    assert!(pages.contains(&json!({"id": "keybinds", "name": "Keyboard shortcuts"})));
+}
+
+#[tokio::test]
+async fn create_from_keybinds_page() {
+    let (r, page) = binds_rig().await;
+    let out = run(
+        &page,
+        Op::CreateFromPages {
+            name: "Keys".into(),
+            icon: String::new(),
+            pages: s(&["keybinds"]),
+        },
+    )
+    .await;
+    assert_eq!(out.error, None);
+    let p = stored(&r, "keys").unwrap();
+    assert_eq!(p.values.len(), 1, "{:?}", p.values);
+    let t = &p.values["keybinds"];
+    assert_eq!(t["k-00a1"], json!(false));
+    assert_eq!(t["uq.close"], json!(true));
+    // Applying it turns your own shortcut off again and leaves the rest as they were.
+    let out = run(&page, Op::Apply { id: "keys".into() }).await;
+    assert_eq!(out.error, None);
+    assert_eq!(out.state["report"]["notices"], json!([]));
+}
+
+#[tokio::test]
+async fn missing_shortcut_is_labelled_and_a_notice() {
+    let (r, page) = binds_rig().await;
+    seed(&r, &BINDS_QUIET.replace("k-00a1", "k-ffff"));
+    let out = run(&page, Op::Apply { id: "quiet".into() }).await;
+    assert_eq!(out.error, None);
+    assert_eq!(
+        out.state["report"]["notices"],
+        json!(["1 shortcut in this profile isn't on this computer, so it was left out."])
+    );
+}
+
+#[tokio::test]
+async fn import_and_export_keybinds_round_trip() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("quiet.toml");
+    let (r, page) = binds_rig().await;
+    let original = seed(&r, BINDS_QUIET);
+    let out = run(
+        &page,
+        Op::Export {
+            id: "quiet".into(),
+            path: file.clone(),
+        },
+    )
+    .await;
+    assert_eq!(out.error, None);
+    let text = std::fs::read_to_string(&file).unwrap();
+    assert_eq!(Profile::parse(&text).unwrap(), original);
+    r.profiles.store.lock().unwrap().clear();
+    let out = run(
+        &page,
+        Op::Import {
+            path: file.clone(),
+            replace: false,
+        },
+    )
+    .await;
+    assert_eq!(out.error, None);
+    assert_eq!(stored(&r, "quiet").unwrap(), original);
+    for body in [
+        "\"uq.close\" = \"off\"\n",
+        "\"uq.lock-recovery\" = false\n",
+        "\"uq.nope\" = true\n",
+    ] {
+        let hostile = format!("format = 1\nid = \"bad\"\nname = \"Bad\"\n[keybinds]\n{body}");
+        std::fs::write(&file, hostile).unwrap();
+        let out = run(
+            &page,
+            Op::Import {
+                path: file.clone(),
+                replace: true,
+            },
+        )
+        .await;
+        let e = out.error.expect(body);
+        assert!(
+            e.starts_with("A shortcut") || e.starts_with("Keyboard shortcuts"),
+            "{e}"
+        );
+        assert!(!e.contains('\n'), "{e:?}");
     }
     assert!(stored(&r, "bad").is_none());
 }

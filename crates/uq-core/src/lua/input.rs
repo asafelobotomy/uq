@@ -127,6 +127,7 @@ mod tests {
             &t,
             &BTreeMap::new(),
             &crate::rules::Rules::default(),
+            &crate::keybinds::Keybinds::default(),
             s,
             &StartupRender::default(),
         )
@@ -142,6 +143,7 @@ mod tests {
             theme,
             &rules,
             &crate::rules::Rules::default(),
+            &crate::keybinds::Keybinds::default(),
             &Settings::default(),
             &StartupRender::default(),
         );

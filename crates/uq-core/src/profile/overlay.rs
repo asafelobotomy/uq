@@ -4,10 +4,11 @@
 //! it. A profile remembers, per key, what it replaced (`before`) and what it wrote (`set`), so
 //! "Back to normal" only puts back keys that still hold what the profile set.
 
+use super::keybinds::{clash_if_on, set_enabled_in};
 use super::{
-    DomainKind, Profile, ProfileError, TOO_MANY_FIXES, TOO_MANY_VARS, emptied_elsewhere,
-    enabled_of, key_label, kind_of, leaves, read_leaf, rule_label, rule_toggles, startup_keys,
-    startup_label, write_leaves,
+    DomainKind, Profile, ProfileError, TOO_MANY_FIXES, TOO_MANY_VARS, bind_label, bind_toggles,
+    emptied_elsewhere, enabled_of, key_label, kind_of, leaves, read_leaf, rule_label, rule_toggles,
+    startup_keys, startup_label, write_leaves,
 };
 use crate::history::{self, Entry};
 use crate::settings::SettingError;
@@ -101,6 +102,10 @@ pub fn apply(
             Some(DomainKind::Rules) => {
                 matches!(k.path.as_slice(), [id] if enabled_of(current, id).is_some())
             }
+            // A shortcut of your own from another computer isn't here: no write, no memo.
+            Some(DomainKind::Keybinds) => {
+                matches!(k.path.as_slice(), [id] if super::bind_enabled_of(current, id).is_some())
+            }
             Some(DomainKind::Autostart) => k.path.first().is_some_and(|id| known.contains(id)),
             Some(DomainKind::Compat) => {
                 !matches!(k.path.as_slice(), [apps, id, _] if apps == "apps" && kept_fixes.contains(id))
@@ -182,11 +187,18 @@ pub fn turn_off(
 ) -> Result<(State, Vec<Kept>), ProfileError> {
     let mut writes = Vec::new();
     let mut kept = Vec::new();
+    // The shortcuts as they will be once the writes so far are in, to see whether turning one
+    // back on would put it on keys another now uses.
+    let mut planned = current.keybinds.clone();
     for m in &active.keys {
         let cur = read_leaf(current, &m.domain, &m.path);
         let kind = kind_of(&m.domain);
         // A rule deleted while the profile was on: nothing to put back, nothing kept.
         if kind == Some(DomainKind::Rules) && cur.is_none() {
+            continue;
+        }
+        // Likewise a shortcut of your own deleted since.
+        if kind == Some(DomainKind::Keybinds) && cur.is_none() {
             continue;
         }
         // Likewise an added startup entry deleted since.
@@ -199,12 +211,31 @@ pub fn turn_off(
         }
         // A created leaf can be null, which `read_leaf` reads as unset.
         let still_set = cur.as_ref() == Some(&m.set) || (m.set.is_null() && cur.is_none());
-        if still_set {
+        if still_set && kind == Some(DomainKind::Keybinds) {
+            if let ([id], Some(Value::Bool(on))) = (m.path.as_slice(), &m.before) {
+                // Turning it back on must not make two shortcuts share keys: it stays off.
+                let clash = if *on { clash_if_on(&planned, id) } else { None };
+                if let Some(other) = clash {
+                    kept.push(Kept {
+                        label: format!(
+                            "{} (left off: its keys are now used by \u{201c}{other}\u{201d})",
+                            bind_label(&current.keybinds, id)
+                        ),
+                        domain: m.domain.clone(),
+                        path: m.path.clone(),
+                    });
+                    continue;
+                }
+                set_enabled_in(&mut planned, id, *on);
+            }
+            writes.push((m.domain.clone(), (m.path.clone(), m.before.clone())));
+        } else if still_set {
             writes.push((m.domain.clone(), (m.path.clone(), m.before.clone())));
         } else if cur != m.before {
             kept.push(Kept {
                 label: match (kind, m.path.as_slice()) {
                     (Some(DomainKind::Rules), [id]) => rule_label(&current.rules, id),
+                    (Some(DomainKind::Keybinds), [id]) => bind_label(&current.keybinds, id),
                     (Some(DomainKind::Env | DomainKind::Compat | DomainKind::Autostart), _) => {
                         startup_label(current, &m.domain, &m.path, &|_| None)
                     }
@@ -291,6 +322,18 @@ pub fn changed_since(newest_first: &[Entry], since: i64) -> (Vec<(String, Vec<St
             skipped.extend(other.into_iter().map(|t| ("rules".to_string(), vec![t])));
             continue;
         }
+        if entry.domain == "keybinds" {
+            // Whole lists here too: only a shortcut's switch can be a key.
+            let (toggles, other) = bind_toggles(&entry.before, &entry.after);
+            for id in toggles {
+                let key = ("keybinds".to_string(), vec![id]);
+                if !found.contains(&key) {
+                    found.push(key);
+                }
+            }
+            skipped.extend(other.into_iter().map(|t| ("keybinds".to_string(), vec![t])));
+            continue;
+        }
         if matches!(entry.domain.as_str(), "env" | "compat" | "autostart") {
             // Whole lists here too: only values a profile can hold are keys.
             let (keys, other) = startup_keys(&entry.domain, &entry.before, &entry.after);
@@ -341,3 +384,6 @@ mod tests;
 
 #[cfg(test)]
 mod startup_tests;
+
+#[cfg(test)]
+mod keybinds_tests;
