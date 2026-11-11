@@ -48,6 +48,19 @@ fn clean_name(raw: &str) -> String {
         .to_string()
 }
 
+/// The program an `Exec` really runs. uQ's launcher overrides (`Also when started from other
+/// launchers`) put `env -- NAME=value …` in front, so that wrapper is skipped; otherwise
+/// "Blurry right now" could not match a window to an app that has such an override.
+fn program_of(argv: Vec<String>) -> Option<String> {
+    let mut it = argv.into_iter();
+    let first = it.next()?;
+    if first.rsplit('/').next() != Some("env") {
+        return Some(first);
+    }
+    it.find(|a| a != "--" && !a.split_once('=').is_some_and(|(n, _)| !n.is_empty()))
+        .or(Some(first))
+}
+
 /// One entry from a file's text; `None` when it is hidden, not an application or has no name.
 /// A file that is skipped here still hides the same id in later directories ([`scan`]).
 fn parse(id: &str, text: &str) -> Option<AppEntry> {
@@ -85,7 +98,7 @@ fn parse(id: &str, text: &str) -> Option<AppEntry> {
         .as_deref()
         .and_then(|e| exec_argv(e, &FieldCtx::default()).ok())
         .and_then(|argv| {
-            let program = argv.into_iter().next()?;
+            let program = program_of(argv)?;
             cleaned(program.rsplit('/').next().unwrap_or_default())
         });
     Some(AppEntry {
@@ -251,6 +264,25 @@ mod tests {
             (apps[0].wm_class.as_deref(), apps[0].exec_name.as_deref()),
             (None, None)
         );
+    }
+
+    #[test]
+    fn program_name_skips_uq_env_wrapper() {
+        let d = tempfile::tempdir().unwrap();
+        write(
+            d.path(),
+            "app.desktop",
+            "[Desktop Entry]\nName=App\nExec=env -- GDK_SCALE=2 QT_SCALE_FACTOR=1.5 /opt/x/bin/myapp --flag\n",
+        );
+        write(
+            d.path(),
+            "bare.desktop",
+            "[Desktop Entry]\nName=Bare\nExec=env\n",
+        );
+        let apps = scan(&[d.path().to_path_buf()]);
+        let exec = |id: &str| apps.iter().find(|a| a.id == id).unwrap().exec_name.clone();
+        assert_eq!(exec("app.desktop").as_deref(), Some("myapp"));
+        assert_eq!(exec("bare.desktop").as_deref(), Some("env"));
     }
 
     #[test]
