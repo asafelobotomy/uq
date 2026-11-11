@@ -1,0 +1,5 @@
+module widgets
+singleton Widgets 1.0 Widgets.qml
+WidgetContext 1.0 WidgetContext.qml
+Slot 1.0 Slot.qml
+WidgetHost 1.0 WidgetHost.qml

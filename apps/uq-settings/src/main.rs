@@ -13,20 +13,26 @@ use std::process::ExitCode;
 use clap::Parser;
 use cxx_qt_lib::{QQuickStyle, QString};
 
+mod about_model;
 mod app;
 mod appearance_model;
 mod compat_model;
+mod datetime_model;
+mod defaultapps_model;
 mod desktop_entries;
 mod displays_model;
 mod history_model;
 mod input_model;
 mod instance;
+mod login_screen_model;
 mod look_model;
 mod model_core;
 mod pages;
 mod plugin_host;
 mod plugins;
+mod power_model;
 mod profiles_model;
+mod region_model;
 mod registry;
 mod rules_model;
 mod search;
@@ -35,7 +41,9 @@ mod shell_model;
 mod startup_model;
 mod system_lists;
 mod themes_model;
+mod users_model;
 mod wallpaper_model;
+mod welcome_model;
 mod window;
 mod xkb_lists;
 
@@ -51,6 +59,9 @@ struct Args {
     /// A setting on that page to highlight.
     #[arg(long, default_value = "")]
     setting: String,
+    /// Show Welcome, the first-run tour (the same as `--page welcome`).
+    #[arg(long, conflicts_with_all = ["page", "setting"])]
+    welcome: bool,
     /// Render every page into this directory, then quit.
     #[arg(long, hide = true)]
     screenshots: Option<PathBuf>,
@@ -60,7 +71,10 @@ struct Args {
 }
 
 fn main() -> ExitCode {
-    let args = Args::parse();
+    let mut args = Args::parse();
+    if args.welcome {
+        args.page = app::WELCOME_PAGE.into();
+    }
     if let Some(dir) = args.plugin_dir.clone() {
         plugins::set_dir(dir);
     }

@@ -1318,3 +1318,76 @@ async fn list_autostart_does_not_hold_the_desktop_lock() {
     assert_eq!(rows[0]["exit"], 3);
     assert_eq!(rows[0]["log"], serde_json::json!(["boom"]));
 }
+
+#[tokio::test]
+async fn welcome_status_done_and_reset_over_dbus() {
+    let s = served().await;
+    let status = |json: String| serde_json::from_str::<serde_json::Value>(&json).unwrap();
+    let current = uq_core::welcome::CURRENT_WELCOME_VERSION;
+
+    let st = status(s.proxy.call("GetWelcome", &()).await.unwrap());
+    assert_eq!(
+        st,
+        serde_json::json!({"done": false, "version": 0, "current": current, "pending": true})
+    );
+
+    // Out-of-range versions are refused and change nothing.
+    for bad in [0u32, current + 1] {
+        let err = s
+            .proxy
+            .call::<_, _, ()>("SetWelcomeDone", &(bad,))
+            .await
+            .unwrap_err();
+        assert_eq!(error_name(&err), "org.uq.Desktop1.Error.InvalidArgument");
+    }
+    assert_eq!(
+        status(s.proxy.call("GetWelcome", &()).await.unwrap())["pending"],
+        true
+    );
+
+    let () = s.proxy.call("SetWelcomeDone", &(current,)).await.unwrap();
+    let st = status(s.proxy.call("GetWelcome", &()).await.unwrap());
+    assert_eq!(
+        (st["done"].clone(), st["pending"].clone()),
+        (true.into(), false.into())
+    );
+    let saved = uq_core::state::State::load(&s.paths.state_file);
+    assert!(saved.welcome.done && saved.welcome.version == current);
+    assert!(
+        s.history().await.is_empty(),
+        "finishing Welcome is not a settings change"
+    );
+
+    // A restore point taken before Welcome finished doesn't bring Welcome back.
+    let () = s.proxy.call("ResetWelcome", &()).await.unwrap();
+    let id: String = s
+        .proxy
+        .call("SaveRestorePoint", &("before",))
+        .await
+        .unwrap();
+    let () = s.proxy.call("SetWelcomeDone", &(current,)).await.unwrap();
+    s.set_gaps(9, "settings").await;
+    s.restore(&id).await.unwrap();
+    assert_eq!(
+        status(s.proxy.call("GetWelcome", &()).await.unwrap())["pending"],
+        false
+    );
+
+    let () = s.proxy.call("ResetWelcome", &()).await.unwrap();
+    let st = status(s.proxy.call("GetWelcome", &()).await.unwrap());
+    assert_eq!(st["pending"], true);
+    assert!(
+        !uq_core::state::State::load(&s.paths.state_file)
+            .welcome
+            .done
+    );
+
+    // The client proxy names the same methods.
+    let proxy = uq_core::client::DesktopProxy::new(s.proxy.connection())
+        .await
+        .unwrap();
+    proxy.set_welcome_done(current).await.unwrap();
+    assert_eq!(status(proxy.get_welcome().await.unwrap())["pending"], false);
+    proxy.reset_welcome().await.unwrap();
+    assert_eq!(status(proxy.get_welcome().await.unwrap())["done"], false);
+}

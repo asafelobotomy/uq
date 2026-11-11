@@ -65,4 +65,7 @@ ShellRoot {
 
     // The full-screen "click a window" overlay for the rules editor's Pick a window.
     PickOverlay {}
+
+    // Welcome in Settings, once, on the first login (Phase 5 spec §5.1).
+    WelcomeTrigger {}
 }

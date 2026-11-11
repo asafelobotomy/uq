@@ -867,6 +867,8 @@ impl Desktop {
             tracing::warn!("saving before-restore point: {e}");
         }
         next.launch_counts = self.state.launch_counts.clone();
+        // Whether Welcome ran is not part of a restore point's settings.
+        next.welcome = self.state.welcome;
         self.commit(next, Change::Theme, Origin::Restore).await?;
         self.announce_all();
         // The restored settings aren't the profile's any more, and neither is its power mode,

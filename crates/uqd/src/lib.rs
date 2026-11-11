@@ -14,6 +14,7 @@ pub mod service;
 mod startup;
 pub mod system;
 mod themes;
+mod welcome;
 
 /// Helpers for tests that write a script and then execute it.
 ///

@@ -10,6 +10,7 @@ mod settings_app;
 mod settings_cmd;
 mod setup;
 mod theme_cmd;
+mod welcome_cmd;
 
 use clap::{Parser, Subcommand};
 use profile_cmd::ProfileCmd;
@@ -93,6 +94,13 @@ enum Cmd {
         page: Option<String>,
         setting: Option<String>,
     },
+    /// Open Welcome, the first-run tour in Settings, if it hasn't been finished yet. Prints a
+    /// note and does nothing otherwise.
+    Welcome {
+        /// Start Welcome over from its first step, even if it was finished.
+        #[arg(long)]
+        reset: bool,
+    },
     /// Print recent setting changes: id, time, origin and summary, newest first.
     History {
         #[arg(long, default_value_t = 20)]
@@ -116,7 +124,12 @@ enum Cmd {
     /// fix from Apps and scaling, in its own scope.
     Launch { id: String },
     /// Run the shell's JSON-lines bridge on stdin/stdout (started by the shell, not by hand).
-    Bridge,
+    Bridge {
+        /// Read widgets, app actions and providers from this directory instead of /usr/share/uq
+        /// (laid out the same way).
+        #[arg(long, hide = true, value_name = "DIR")]
+        root: Option<std::path::PathBuf>,
+    },
     /// Widgets, settings pages, launcher providers and app actions from other apps.
     Integrations {
         #[command(subcommand)]
@@ -253,7 +266,7 @@ fn describe(err: zbus::Error) -> String {
 }
 
 async fn run(cmd: Cmd) -> Result<(), String> {
-    if matches!(cmd, Cmd::Bridge | Cmd::Settings { .. }) {
+    if matches!(cmd, Cmd::Bridge { .. } | Cmd::Settings { .. }) {
         unreachable!("handled in main");
     }
     if let Cmd::Profile { cmd } = cmd {
@@ -380,8 +393,9 @@ async fn run(cmd: Cmd) -> Result<(), String> {
         | Cmd::RenderThemes(_)
         | Cmd::Greeter { .. }
         | Cmd::Integrations { .. }
-        | Cmd::Bridge
+        | Cmd::Bridge { .. }
         | Cmd::Settings { .. }
+        | Cmd::Welcome { .. }
         | Cmd::Profile { .. }
         | Cmd::Theme { .. }
         | Cmd::Launch { .. } => {
@@ -485,13 +499,21 @@ async fn main() -> ExitCode {
         )
         .await;
     }
+    if let Cmd::Welcome { reset } = cli.cmd {
+        return welcome_cmd::main(reset).await;
+    }
     if let Cmd::Launch { id } = &cli.cmd {
         // Bounded inside: uqd gets 500 ms, Hyprland its own request timeout.
         return launch_cmd::run(id).await;
     }
-    if matches!(cli.cmd, Cmd::Bridge) {
+    if let Cmd::Bridge { root } = &cli.cmd {
+        let roots = root
+            .as_deref()
+            .map_or_else(bridge::IntegrationRoots::system, |r| {
+                integrations::roots_under(r).into()
+            });
         // Long-lived: no timeout; ends on stdin EOF.
-        return bridge::run(tokio::io::stdin(), tokio::io::stdout()).await;
+        return bridge::run(tokio::io::stdin(), tokio::io::stdout(), roots).await;
     }
     // uqd waits at most ~12 s on Hyprland (verify + reload); never hang a keybind forever.
     let res = tokio::time::timeout(std::time::Duration::from_secs(15), run(cli.cmd))
