@@ -267,6 +267,7 @@ All notable changes to uQ are listed here. The format follows
   Users now changes it through `passwd`, which checks the current password and the password
   rules and says plainly why a password was refused. Other people's passwords still go through
   the accounts service.
+- **The Bluetooth page no longer crashes when an adapter goes away while it reads.**
 
 ## [0.2.1] - 2026-11-10
 
