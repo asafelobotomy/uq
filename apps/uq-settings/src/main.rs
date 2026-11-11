@@ -42,6 +42,7 @@ mod startup_model;
 mod system_lists;
 mod users_model;
 mod wallpaper_model;
+mod welcome_model;
 mod window;
 mod xkb_lists;
 
@@ -57,6 +58,9 @@ struct Args {
     /// A setting on that page to highlight.
     #[arg(long, default_value = "")]
     setting: String,
+    /// Show Welcome, the first-run tour (the same as `--page welcome`).
+    #[arg(long, conflicts_with_all = ["page", "setting"])]
+    welcome: bool,
     /// Render every page into this directory, then quit.
     #[arg(long, hide = true)]
     screenshots: Option<PathBuf>,
@@ -66,7 +70,10 @@ struct Args {
 }
 
 fn main() -> ExitCode {
-    let args = Args::parse();
+    let mut args = Args::parse();
+    if args.welcome {
+        args.page = app::WELCOME_PAGE.into();
+    }
     if let Some(dir) = args.plugin_dir.clone() {
         plugins::set_dir(dir);
     }

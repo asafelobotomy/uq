@@ -185,6 +185,26 @@ impl DesktopIface {
         self.desktop.lock().await.clear_launch_counts();
     }
 
+    /// Welcome's status as JSON: `{done, version, current, pending}` (Phase 5 spec §5.1).
+    async fn get_welcome(&self) -> String {
+        self.desktop
+            .lock()
+            .await
+            .welcome()
+            .status_json()
+            .to_string()
+    }
+
+    /// The user finished or closed Welcome at `version`. Not journalled, so no origin.
+    async fn set_welcome_done(&self, version: u32) -> Result<(), UqError> {
+        Ok(self.desktop.lock().await.set_welcome_done(version)?)
+    }
+
+    /// Make Welcome due again from its first step.
+    async fn reset_welcome(&self) -> Result<(), UqError> {
+        Ok(self.desktop.lock().await.reset_welcome()?)
+    }
+
     /// The history journal as a JSON array of entries, newest first, at most `limit` (≤ 500).
     async fn list_history(&self, limit: u32) -> Result<String, UqError> {
         let entries = self.desktop.lock().await.history(limit as usize);

@@ -9,6 +9,7 @@ mod render_themes;
 mod settings_app;
 mod settings_cmd;
 mod setup;
+mod welcome_cmd;
 
 use clap::{Parser, Subcommand};
 use profile_cmd::ProfileCmd;
@@ -90,6 +91,13 @@ enum Cmd {
     Settings {
         page: Option<String>,
         setting: Option<String>,
+    },
+    /// Open Welcome, the first-run tour in Settings, if it hasn't been finished yet. Prints a
+    /// note and does nothing otherwise.
+    Welcome {
+        /// Start Welcome over from its first step, even if it was finished.
+        #[arg(long)]
+        reset: bool,
     },
     /// Print recent setting changes: id, time, origin and summary, newest first.
     History {
@@ -412,6 +420,7 @@ async fn run(cmd: Cmd) -> Result<(), String> {
         | Cmd::Integrations { .. }
         | Cmd::Bridge { .. }
         | Cmd::Settings { .. }
+        | Cmd::Welcome { .. }
         | Cmd::Profile { .. }
         | Cmd::Launch { .. } => {
             unreachable!("handled before connecting")
@@ -513,6 +522,9 @@ async fn main() -> ExitCode {
             setting.as_deref().unwrap_or(""),
         )
         .await;
+    }
+    if let Cmd::Welcome { reset } = cli.cmd {
+        return welcome_cmd::main(reset).await;
     }
     if let Cmd::Launch { id } = &cli.cmd {
         // Bounded inside: uqd gets 500 ms, Hyprland its own request timeout.

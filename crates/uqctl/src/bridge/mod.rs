@@ -17,6 +17,7 @@ pub mod protocol;
 mod providers;
 pub(crate) mod run;
 pub(crate) mod uqd;
+mod welcome;
 mod widgets;
 
 use protocol::{Inbound, MAX_LINE, Outbound, Rejected, encode, read_lines};
@@ -107,6 +108,10 @@ async fn handle(s: &Services, call: &str, args: &[Value]) -> Result<Value, Strin
                 None => Err(NO_INTEGRATIONS.into()),
             }
         }
+        "WelcomeStatus" if args.is_empty() => {
+            Ok(welcome::status(link, welcome::runtime_dir().as_deref()).await)
+        }
+        "WelcomeStatus" => Err("WelcomeStatus takes no arguments".into()),
         "Launch" => launch::launch(link, args, runs).await,
         "Search" => s.providers.search(link, runs, args).await,
         "Activate" => s.providers.activate(link, runs, args).await,
@@ -252,9 +257,12 @@ where
     while let Ok(locked) = locks.try_recv() {
         known_lock = Some(locked);
     }
+    // Whether Welcome is due (null when uqd isn't up yet) and held back by bindle (§5.1).
+    let welcome = welcome::status(&link, welcome::runtime_dir().as_deref()).await;
     let hello = Outbound::Event {
         event: "Hello".into(),
-        data: json!({"v": 1, "uqd_up": link.is_up(), "locked": known_lock.unwrap_or(false)}),
+        data: json!({"v": 1, "uqd_up": link.is_up(), "locked": known_lock.unwrap_or(false),
+            "welcome_pending": welcome["pending"], "welcome_deferred": welcome["deferred"]}),
     };
     let _ = out_tx.send(hello).await;
 
@@ -440,7 +448,8 @@ mod tests {
         let hello = next(&mut out).await;
         assert_eq!(
             hello,
-            json!({"v":1,"event":"Hello","data":{"v":1,"uqd_up":false,"locked":false}})
+            json!({"v":1,"event":"Hello","data":{"v":1,"uqd_up":false,"locked":false,
+                "welcome_pending":null,"welcome_deferred":false}})
         );
         in_w.write_all(b"{\"v\":1,\"id\":1,\"call\":\"Ping\",\"args\":[]}\n")
             .await
@@ -486,7 +495,8 @@ mod tests {
         let mut out = BufReader::new(out_r);
         assert_eq!(
             next(&mut out).await,
-            json!({"v":1,"event":"Hello","data":{"v":1,"uqd_up":false,"locked":true}})
+            json!({"v":1,"event":"Hello","data":{"v":1,"uqd_up":false,"locked":true,
+                "welcome_pending":null,"welcome_deferred":false}})
         );
         let ev = json!({"v":1,"event":"LockState","data":{"locked":true}});
         assert_eq!(next(&mut out).await, ev);

@@ -34,6 +34,10 @@ pub trait Desktop {
     fn set_setting(&self, key: &str, json: &str, origin: &str) -> zbus::Result<()>;
     fn get_launch_counts(&self) -> zbus::Result<HashMap<String, u32>>;
     fn clear_launch_counts(&self) -> zbus::Result<()>;
+    /// `{done, version, current, pending}` as JSON.
+    fn get_welcome(&self) -> zbus::Result<String>;
+    fn set_welcome_done(&self, version: u32) -> zbus::Result<()>;
+    fn reset_welcome(&self) -> zbus::Result<()>;
     fn get_layouts(&self) -> zbus::Result<HashMap<String, String>>;
     fn set_layout(&self, workspace: &str, layout: &str, origin: &str) -> zbus::Result<()>;
     /// JSON array of history entries, newest first.

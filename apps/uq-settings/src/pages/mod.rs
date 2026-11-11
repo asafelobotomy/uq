@@ -25,3 +25,4 @@ pub mod startup;
 pub mod sysbus;
 pub mod users;
 pub mod wallpaper;
+pub mod welcome;

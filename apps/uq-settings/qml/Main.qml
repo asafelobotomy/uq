@@ -30,6 +30,16 @@ Kirigami.ApplicationWindow {
     property bool maximized: false
     /// The saved state has been applied; before that, the window's first show must not overwrite it.
     property bool stateRestored: false
+    /// The window opened on Welcome (`--welcome`, the first login): Finish closes it.
+    property bool welcomeAtStart: false
+
+    /// Welcome's Finish: close the window it opened, or go back to the pages.
+    function finishWelcome() {
+        if (root.welcomeAtStart)
+            root.close();
+        else
+            App.closeWelcome();
+    }
 
     /// Start on the page the window showed last time, unless `ShowPage` (or `--page`) named one.
     /// Returns true when it switched page (which shows it).
@@ -106,7 +116,7 @@ Kirigami.ApplicationWindow {
             root.maximized = root.visibility === Window.Maximized;
     }
 
-    title: "uQ Settings"
+    title: App.welcome ? "Welcome to uQ" : "uQ Settings"
     visible: true
     width: Kirigami.Units.gridUnit * 50
     height: Kirigami.Units.gridUnit * 34
@@ -114,6 +124,7 @@ Kirigami.ApplicationWindow {
     minimumHeight: Kirigami.Units.gridUnit * 20
 
     header: QQC2.ToolBar {
+        visible: !App.welcome
         RowLayout {
             anchors.fill: parent
             SessionChanges {
@@ -240,9 +251,21 @@ Kirigami.ApplicationWindow {
         padding: 0
         globalToolBarStyle: Kirigami.ApplicationHeaderStyle.None
 
+        // Welcome (Phase 5 spec §5.1) in place of the sidebar and pages while it is on show.
+        Loader {
+            id: welcomeLoader
+            objectName: "welcome"
+            anchors.fill: parent
+            active: App.welcome
+            visible: active
+            source: "welcome/WelcomeFlow.qml"
+            onLoaded: item.finished.connect(root.finishWelcome)
+        }
+
         RowLayout {
             anchors.fill: parent
             spacing: 0
+            visible: !App.welcome
 
             Sidebar {
                 id: sidebar
@@ -267,6 +290,7 @@ Kirigami.ApplicationWindow {
                     // A page named on the command line or by ShowPage has set
                     // `App.pageRequested` by now, and wins over the remembered one.
                     root.restoreWindow();
+                    root.welcomeAtStart = App.welcome;
                     if (!root.restorePage())
                         root.showCurrent();
                 }
