@@ -687,6 +687,31 @@ static DATETIME_SETTINGS: [SearchEntry; 4] = [
     ),
 ];
 
+static REGION_SETTINGS: [SearchEntry; 3] = [
+    entry(
+        "language",
+        "System language",
+        &["locale", "translation", "lang"],
+    ),
+    entry(
+        "formats",
+        "Formats",
+        &[
+            "date format",
+            "number format",
+            "currency",
+            "units",
+            "metric",
+            "paper",
+        ],
+    ),
+    entry(
+        "console-keymap",
+        "Keyboard layout for the text console",
+        &["keymap", "console", "tty", "keyboard"],
+    ),
+];
+
 static ABOUT_SETTINGS: [SearchEntry; 2] = [
     entry(
         "hostname",
@@ -711,7 +736,7 @@ static ABOUT_SETTINGS: [SearchEntry; 2] = [
     ),
 ];
 
-static CORE_PAGES: [PageInfo; 16] = [
+static CORE_PAGES: [PageInfo; 17] = [
     PageInfo {
         id: "appearance",
         name: "Appearance",
@@ -845,6 +870,15 @@ static CORE_PAGES: [PageInfo; 16] = [
         category: Category::System,
         qml: "pages/DateTimePage.qml",
         settings: &DATETIME_SETTINGS,
+        domains: &[],
+    },
+    PageInfo {
+        id: "region",
+        name: "Region",
+        icon: "preferences-desktop-locale",
+        category: Category::System,
+        qml: "pages/RegionPage.qml",
+        settings: &REGION_SETTINGS,
         domains: &[],
     },
     PageInfo {
@@ -1192,6 +1226,7 @@ mod tests {
                 "users",
                 "login-screen",
                 "datetime",
+                "region",
                 "about"
             ]
         );
@@ -1382,7 +1417,14 @@ mod tests {
         let at = ids.iter().position(|id| *id == "startup").unwrap();
         assert_eq!(ids[at + 1..at + 4], ["power", "users", "login-screen"]);
         assert_eq!(ids.last(), Some(&"about"), "About ends the System pages");
-        for id in ["power", "users", "login-screen", "datetime", "about"] {
+        for id in [
+            "power",
+            "users",
+            "login-screen",
+            "datetime",
+            "region",
+            "about",
+        ] {
             let page = find(id).unwrap();
             assert_eq!(page.category, Category::System, "{id}");
             assert!(page.domains.is_empty(), "{id} changes no uQ setting");

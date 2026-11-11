@@ -16,6 +16,7 @@ pub mod look;
 pub mod power;
 pub mod profiles;
 pub mod proxies;
+pub mod region;
 pub mod rules;
 pub mod runner;
 pub mod shell;

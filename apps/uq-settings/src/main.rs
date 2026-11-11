@@ -30,6 +30,7 @@ mod pages;
 mod plugins;
 mod power_model;
 mod profiles_model;
+mod region_model;
 mod registry;
 mod rules_model;
 mod search;
