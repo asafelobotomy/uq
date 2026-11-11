@@ -20,7 +20,7 @@ mod systemd;
 
 pub use accounts::{FakeAccounts, FakeUser};
 pub use helper::FakeHelper;
-pub use power::{FakeBattery, FakePower};
+pub use power::FakePower;
 pub use systemd::{FakeHostname, FakeLocale, FakeTimedate};
 
 /// A private "system" bus and the fakes started on it.

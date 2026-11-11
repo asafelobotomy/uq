@@ -2,10 +2,8 @@
 //! prompt allow interactive authorization; the connection's long timeout
 //! ([`super::sysbus::CALL_TIMEOUT`]) covers the time the prompt is up.
 
-use std::collections::HashMap;
-
 use zbus::proxy::CacheProperties;
-use zbus::zvariant::{OwnedObjectPath, OwnedValue};
+use zbus::zvariant::OwnedObjectPath;
 
 #[zbus::proxy(
     interface = "org.freedesktop.Accounts",
@@ -251,6 +249,3 @@ where
         .build()
         .await
 }
-
-/// One power profile as power-profiles-daemon lists it.
-pub type ProfileDict = HashMap<String, OwnedValue>;

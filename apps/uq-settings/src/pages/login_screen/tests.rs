@@ -21,8 +21,10 @@ async fn setup(with_helper: bool, with_uqd: bool) -> T {
     };
     let system = rig.system();
     let uqd = if with_uqd {
-        let mut state = State::default();
-        state.theme = "dracula".into();
+        let mut state = State {
+            theme: "dracula".into(),
+            ..Default::default()
+        };
         state
             .set_section(
                 "wallpaper",

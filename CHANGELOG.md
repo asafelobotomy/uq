@@ -109,6 +109,33 @@ All notable changes to uQ are listed here. The format follows
   20 MiB, and never opened as an image. Turning auto-login on or off asks for the password every
   time. It starts when needed, runs in a tight sandbox with no special privileges beyond root's
   own files, and quits after 30 seconds without use.
+- **System pages in Settings.** Power, Users, Date and time, Region, Default apps and About join
+  Startup under System, and a Login screen page appears when uQ is your login screen. They talk
+  to the system's own services, so they work even when uQ's settings service isn't running.
+  Changes that need an administrator ask for the password; cancelling leaves the setting as it
+  was, and a missing service is shown as "Not available" with the package to install.
+  - **Power:** power mode, battery charge, time left and health, and what closing the lid (also
+    while plugged in) or pressing the power button does. Those three are saved by the settings
+    helper and take effect after a restart; without the helper they are hidden with a note.
+  - **Users:** change a person's name, picture, password or account type, add people and remove
+    them (with or without their files). Removing needs the user name typed; you can't remove
+    yourself or the last administrator, or make the last administrator a standard user.
+    Password boxes are emptied after every try, and passwords are hashed before they leave the
+    app.
+  - **Login screen:** the login screen's theme (or "same as mine", copied when saved),
+    wallpaper (yours, a picture up to 20 MiB, or none), your display layout, hiding the user
+    list, reduce motion, and auto-login, with a warning that anyone at the computer gets your
+    session and that it's only for fully encrypted disks. The Users page links here. Without
+    the settings helper it is view-only.
+  - **Date and time:** time zone, setting the time from the network or by hand, and the bar's
+    24-hour clock.
+  - **Region:** system language, formats (dates, numbers, money, measurements, paper) and the
+    text console's keyboard layout.
+  - **Default apps:** web browser, email, files, text editor, pictures, videos, music, PDF
+    documents and the terminal. Only the choices you make change your `mimeapps.list`; every
+    other line in it stays.
+  - **About:** the computer's name (editable), system, kernel, processor, graphics, memory, and
+    the uQ, Hyprland and Quickshell versions.
 
 ### Changed
 

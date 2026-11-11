@@ -162,7 +162,7 @@ pub fn scan_handlers(dirs: &[PathBuf]) -> Vec<Handler> {
             });
         }
     }
-    out.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    out.sort_by_key(|a| a.name.to_lowercase());
     out
 }
 

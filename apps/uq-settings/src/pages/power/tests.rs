@@ -156,3 +156,21 @@ fn words() {
     assert_eq!(state_text(4), "Fully charged");
     assert_eq!(state_text(99), "Unknown");
 }
+
+#[tokio::test]
+async fn charging_and_actions_already_running() {
+    let (_rig, p, h, page) = setup(true, true, true).await;
+    {
+        let mut b = p.battery.lock().unwrap();
+        b.state = 1;
+        b.time_to_full = 45 * 60;
+    }
+    // logind already runs what the file says: nothing pending.
+    p.state.lock().unwrap().logind = ["lock".into(), "ignore".into(), "suspend".into()];
+    let out = run(&page, actions("lock", "ignore", "suspend")).await;
+    assert_eq!(out.error, None);
+    assert_eq!(out.state["power"]["battery"]["state"], "Charging");
+    assert_eq!(out.state["power"]["battery"]["time"], "Full in 45 min");
+    assert_eq!(out.state["actions"]["pending"], false);
+    assert!(h.read("etc/systemd/logind.conf.d/50-uq.conf").is_some());
+}
