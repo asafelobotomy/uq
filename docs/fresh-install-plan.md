@@ -164,20 +164,34 @@ it to noti-fi.
 
 ### 4.5 Settings slices A–D
 
-All four are written for a real session and have never been run. Do each in full.
+Most of these four checklists are automated by `tests/live/run.sh` (added in uq#19), which runs
+35 checks (SA1–SD14) against the session it runs in, saves a restore point and a copy of
+`user.lua` first, and puts everything back at the end. The step-by-step version of this part, with
+what each check does on a real desktop, is the
+[real-desktop check plan](https://claude.ai/artifact/H29L292DtKdbNk4jLty3mu); this section is the
+short form.
 
-- [A, trust](notes/settings-slice-a-live-check.md): [Both]. Claude edits `user.lua`, runs
-  `hyprctl` and `uqctl history`; you confirm the page text. Item 6 (new version) happens for real
-  on the first uQ package update after install.
-- [B, profiles](notes/settings-slice-b-live-check.md): [Both]. Item 4 masks
-  `power-profiles-daemon` (sudo: you). Item 6 needs `SUPER+ALT+P` pressed: you.
-- [C, window rules](notes/settings-slice-c-live-check.md): [Both]. Pick mode is clicks: you click,
-  Claude reads the result. Install Pavucontrol, Firefox and mpv first. Item 6 needs two monitors.
-  Item 9 (Hyprland names) Claude can do alone and should do first, because a wrong name there is a
-  code fix.
-- [D, startup and apps](notes/settings-slice-d-live-check.md): [Both]. Items 1, 3 and 11 need a
-  log out and in. Items 6–8 are "is it sharp": yours, ideally at 125 %. Item 15 needs a Flatpak
-  Chromium-based browser.
+1. **[Claude]** `tests/live/run.sh --list` to see what will run, then
+   `tests/live/run.sh --slow --yes` from `~/Projects/uq` in a terminal of the real session
+   (`--slow` adds SB8, the light-or-dark schedule hold, about 3 minutes). Results go to
+   `results.tsv` and `log.txt` in `$UQ_LIVE_OUT`. Install `foot` first (the SC rules checks open
+   it). SB4 masks `power-profiles-daemon` with `sudo -n`, so **[You]** run `sudo -v` in that
+   terminal just before (otherwise SB4 reports N/A). Re-run one
+   failing check with `--only '^SC9$'`.
+2. **[Both]** What the script can't judge, by hand from the slice files:
+   - [A, trust](notes/settings-slice-a-live-check.md): look at the page text for items 1–5 while
+     the script runs them, or repeat 1 and 5 by hand. Item 6 also happens for real on the first
+     uQ package update after install.
+   - [B, profiles](notes/settings-slice-b-live-check.md): press `SUPER+ALT+P` for item 6 (the
+     script only checks the bind loads), and check the quick-settings Profile row and power row.
+   - [C, window rules](notes/settings-slice-c-live-check.md): pick mode is clicks, so items 1, 3
+     and 5 (Esc, empty desktop, locking during a pick) are yours, and item 6, the overlay across
+     two monitors, is not automated at all. Item 7's Firefox picture-in-picture and mpv
+     fullscreen idle block, and item 8's blurred noti-fi popup, need your eyes.
+   - [D, startup and apps](notes/settings-slice-d-live-check.md): items 1, 3, 4 and 5 need a log
+     out and in and are not automated. Items 6–8 are "is it sharp": yours, ideally at 125 %.
+     Item 15 needs a Flatpak Chromium-based browser and is manual.
+3. **[Claude]** Fill each slice file from `results.tsv` and what you reported, one PR per slice.
 
 ## 5. The first real `uq-dev session`
 
@@ -245,7 +259,7 @@ Every slice goes through the same loop, and only the last two steps need the des
 | CI green, PR merged | GitHub | [Claude] (merge on green is pre-approved) |
 | VM run of the slice's automated checks (`tests/vm/run.sh --only …`), extended with new `checks/` scripts for the slice | On the desktop (needs `/dev/kvm`), started over RC | [Claude] |
 | Try it nested: `uq-dev session` on `main` | Desktop | [Both] |
-| Promote, then the slice's live checklist on the real session | Desktop | [Both] |
+| Promote, then `tests/live/run.sh` (extended with the slice's checks) and the rest of the slice's live checklist by hand | Desktop | [Both] |
 | Release tag and AUR push | Desktop (needs `pass-cli login`) | [Both]: your go-ahead, Claude does the rest |
 
 For the VM runs on the desktop, install the harness's needs once: `qemu-base` (or `qemu-full`
