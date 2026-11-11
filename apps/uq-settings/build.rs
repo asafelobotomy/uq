@@ -60,6 +60,7 @@ fn main() {
         QmlFile::from("qml/pages/RegionPage.qml"),
         QmlFile::from("qml/pages/DefaultAppsPage.qml"),
         QmlFile::from("qml/pages/AboutPage.qml"),
+        QmlFile::from("qml/pages/NetworkPage.qml"),
     ]))
     .qt_module("Gui")
     .qt_module("Quick")
@@ -87,6 +88,7 @@ fn main() {
         "src/region_model.rs",
         "src/defaultapps_model.rs",
         "src/about_model.rs",
+        "src/network_model.rs",
     ])
     .cpp_file("cpp/window.cpp");
     // SAFETY: only adds a warning flag; GCC 16 warns about Qt's own headers.

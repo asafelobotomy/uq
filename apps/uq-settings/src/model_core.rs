@@ -11,6 +11,7 @@ use cxx_qt::CxxQtThread;
 use cxx_qt_lib::QString;
 use futures_util::StreamExt;
 use tokio::runtime::Handle;
+use tokio::sync::Notify;
 use tokio::task::JoinHandle;
 use uq_core::client::DesktopProxy;
 
@@ -86,7 +87,7 @@ pub trait PageModel: cxx_qt::Threading + Sized + 'static {
     fn show_state(self: Pin<&mut Self>, json: QString);
 }
 
-/// Start following uqd's changes, then read the state.
+/// Start following uqd's changes and the page's own [`PageLogic::watch`], then read the state.
 pub fn initialize<M: PageModel>(mut m: Pin<&mut M>) {
     let Some((handle, logic)) = m.core().logic.clone() else {
         return;
@@ -94,9 +95,17 @@ pub fn initialize<M: PageModel>(mut m: Pin<&mut M>) {
     let qt = m.qt_thread();
     let conn = session::bus().map(|(_, c)| c);
     let task = handle.spawn(async move {
-        if let Some(conn) = conn {
-            follow_uqd(conn, logic, qt).await;
-        }
+        let changed = Arc::new(Notify::new());
+        let uqd = async {
+            if let Some(conn) = conn {
+                follow_uqd(conn, logic.clone(), qt.clone()).await;
+            }
+        };
+        tokio::join!(
+            uqd,
+            logic.watch(changed.clone()),
+            follow_changes(&*logic, &changed, &qt)
+        );
     });
     m.as_mut().core_mut().watcher = Some(task);
     start(m, M::Logic::refresh());
@@ -150,18 +159,38 @@ async fn follow_uqd<M: PageModel>(
         }
     };
     while changes.next().await.is_some() {
-        let outcome = runner::run(&*logic, M::Logic::refresh()).await;
-        // A refresh's message (the Displays page's "restored") shows; none leaves the last one.
-        let shown = qt.queue(move |mut m| {
-            if let Some(error) = &outcome.error {
-                m.as_mut().show_error(QString::from(error));
-            }
-            m.show_state(QString::from(&outcome.state.to_string()));
-        });
-        if shown.is_err() {
+        if !refresh_now(&*logic, &qt).await {
             return;
         }
     }
+}
+
+/// How long a burst of outside changes (a Wi-Fi scan, a volume drag) settles before the page
+/// reads its state once for all of them.
+const SETTLE: std::time::Duration = std::time::Duration::from_millis(250);
+
+/// Re-read the state each time the page's [`PageLogic::watch`] says it changed.
+async fn follow_changes<M: PageModel>(logic: &M::Logic, changed: &Notify, qt: &CxxQtThread<M>) {
+    loop {
+        changed.notified().await;
+        tokio::time::sleep(SETTLE).await;
+        if !refresh_now(logic, qt).await {
+            return;
+        }
+    }
+}
+
+/// Read the state and show it; false once the QObject is gone.
+async fn refresh_now<M: PageModel>(logic: &M::Logic, qt: &CxxQtThread<M>) -> bool {
+    let outcome = runner::run(logic, M::Logic::refresh()).await;
+    // A refresh's message (the Displays page's "restored") shows; none leaves the last one.
+    qt.queue(move |mut m| {
+        if let Some(error) = &outcome.error {
+            m.as_mut().show_error(QString::from(error));
+        }
+        m.show_state(QString::from(&outcome.state.to_string()));
+    })
+    .is_ok()
 }
 
 /// Run `op` off the Qt thread; the result comes back through [`finish`].

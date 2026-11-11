@@ -27,6 +27,7 @@ mod instance;
 mod login_screen_model;
 mod look_model;
 mod model_core;
+mod network_model;
 mod pages;
 mod plugin_host;
 mod plugins;

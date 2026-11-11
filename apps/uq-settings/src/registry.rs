@@ -776,7 +776,52 @@ static ABOUT_SETTINGS: [SearchEntry; 2] = [
     ),
 ];
 
-static CORE_PAGES: [PageInfo; 18] = [
+static NETWORK_SETTINGS: [SearchEntry; 8] = [
+    entry(
+        "wifi",
+        "Wi-Fi",
+        &["wireless", "wlan", "internet", "join", "password"],
+    ),
+    entry(
+        "hidden-network",
+        "Join a hidden network",
+        &["hidden", "ssid", "not listed"],
+    ),
+    entry(
+        "saved-connections",
+        "Saved connections",
+        &["forget", "known networks", "connect automatically"],
+    ),
+    entry("wired", "Wired network", &["ethernet", "cable", "lan"]),
+    entry(
+        "vpn",
+        "VPN",
+        &[
+            "wireguard",
+            "openvpn",
+            "tunnel",
+            "import",
+            "private network",
+        ],
+    ),
+    entry(
+        "hotspot",
+        "Hotspot",
+        &["share connection", "tethering", "access point"],
+    ),
+    entry(
+        "ip-settings",
+        "Addresses and DNS",
+        &["ip", "dns", "static", "manual address", "gateway", "ipv6"],
+    ),
+    entry(
+        "metered",
+        "Metered connection",
+        &["data limit", "mobile data", "data plan"],
+    ),
+];
+
+static CORE_PAGES: [PageInfo; 19] = [
     PageInfo {
         id: "appearance",
         name: "Appearance",
@@ -830,6 +875,15 @@ static CORE_PAGES: [PageInfo; 18] = [
         qml: "pages/InputPage.qml",
         settings: &INPUT_SETTINGS,
         domains: &["input"],
+    },
+    PageInfo {
+        id: "network",
+        name: "Network",
+        icon: "preferences-system-network",
+        category: Category::Connections,
+        qml: "pages/NetworkPage.qml",
+        settings: &NETWORK_SETTINGS,
+        domains: &[],
     },
     PageInfo {
         id: "shell",
@@ -1266,6 +1320,7 @@ mod tests {
                 "displays",
                 "apps-scaling",
                 "input",
+                "network",
                 "shell",
                 "profiles",
                 "rules",
@@ -1292,12 +1347,14 @@ mod tests {
         assert_eq!(v[4]["domains"], serde_json::json!(["compat"]));
         assert_eq!(v[5]["qml"], "pages/InputPage.qml");
         assert_eq!(v[5]["categoryName"], "Devices");
-        assert_eq!(v[6]["qml"], "pages/ShellPage.qml");
-        assert_eq!(v[6]["categoryName"], "uQ");
-        assert_eq!(v[10]["qml"], "pages/StartupPage.qml");
-        assert_eq!(v[10]["category"], "system");
-        assert_eq!(v[10]["categoryName"], "System");
-        assert_eq!(v[10]["domains"], serde_json::json!(["autostart", "env"]));
+        assert_eq!(v[6]["qml"], "pages/NetworkPage.qml");
+        assert_eq!(v[6]["categoryName"], "Connections");
+        assert_eq!(v[7]["qml"], "pages/ShellPage.qml");
+        assert_eq!(v[7]["categoryName"], "uQ");
+        assert_eq!(v[11]["qml"], "pages/StartupPage.qml");
+        assert_eq!(v[11]["category"], "system");
+        assert_eq!(v[11]["categoryName"], "System");
+        assert_eq!(v[11]["domains"], serde_json::json!(["autostart", "env"]));
     }
 
     #[test]
@@ -1481,6 +1538,17 @@ mod tests {
         }
         let login = find("login-screen").unwrap();
         assert!(login.settings.iter().any(|s| s.id == "auto-login"));
+    }
+
+    #[test]
+    fn network_is_the_connections_page() {
+        let page = find("network").expect("the network page is registered");
+        assert_eq!(page.category, Category::Connections);
+        assert_eq!(page.qml, "pages/NetworkPage.qml");
+        assert!(page.domains.is_empty(), "it changes no uQ setting");
+        let ids: Vec<_> = core_pages().iter().map(|p| p.id).collect();
+        let at = ids.iter().position(|id| *id == "network").unwrap();
+        assert_eq!(ids[at + 1], "shell", "the last page before the uQ pages");
     }
 
     #[test]
