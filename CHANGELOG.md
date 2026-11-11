@@ -276,6 +276,9 @@ All notable changes to uQ are listed here. The format follows
   power-profiles-daemon instead of reading everything again every 30 seconds, so the charge and
   a mode changed elsewhere show at once. Only when the system bus can't be followed does it
   fall back to reading again every minute.
+- **Removing the auto-login user turns auto-login off.** The login screen no longer goes on
+  trying to log in an account that's gone; if turning it off is refused, the Users page says so.
+  `uq-settings-helper` also refuses auto-login for a locked or expired account.
 
 ## [0.2.1] - 2026-11-10
 

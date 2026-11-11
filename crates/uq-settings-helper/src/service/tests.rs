@@ -39,6 +39,26 @@ impl Passwd for MockPasswd {
         }
         Ok(self.0.get(name).copied())
     }
+
+    fn shadow(&self, name: &str) -> io::Result<Option<crate::passwd::Shadow>> {
+        let fine = crate::passwd::Shadow {
+            locked: false,
+            last_change: 19_000,
+            max: -1,
+            inactive: -1,
+            expire: -1,
+        };
+        Ok(match name {
+            "locked" => Some(crate::passwd::Shadow {
+                locked: true,
+                ..fine
+            }),
+            "expired" => Some(crate::passwd::Shadow { expire: 1, ..fine }),
+            "brokenshadow" => return Err(io::Error::other("shadow unreadable")),
+            "alice" => Some(fine),
+            _ => None,
+        })
+    }
 }
 
 fn users() -> Arc<MockPasswd> {
@@ -50,6 +70,9 @@ fn users() -> Arc<MockPasswd> {
         ("nobody", 65534),
         ("highuid", 60001),
         ("svc", 999),
+        ("locked", 1001),
+        ("expired", 1002),
+        ("brokenshadow", 1003),
     ])))
 }
 
@@ -497,6 +520,27 @@ async fn auto_login_refuses_system_missing_and_malformed_users() {
         fs::read_to_string(f.path("etc/uq/greetd.toml")).unwrap(),
         GREETD
     );
+}
+
+#[tokio::test]
+async fn auto_login_refuses_locked_and_expired_accounts() {
+    let f = Fixture::new(true);
+    for bad in ["locked", "expired"] {
+        let r = f.helper.set_auto_login(":1.5", bad).await;
+        assert!(is_invalid(r), "{bad}");
+    }
+    assert!(matches!(
+        f.helper.set_auto_login(":1.5", "brokenshadow").await,
+        Err(HelperError::Failed(_))
+    ));
+    assert!(f.checks().is_empty(), "refused before polkit is asked");
+    assert_eq!(
+        fs::read_to_string(f.path("etc/uq/greetd.toml")).unwrap(),
+        GREETD
+    );
+    // An account with a usable shadow entry, and one without any (bob), are fine.
+    f.helper.set_auto_login(":1.5", "alice").await.unwrap();
+    f.helper.set_auto_login(":1.5", "bob").await.unwrap();
 }
 
 #[tokio::test]

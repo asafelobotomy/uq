@@ -207,7 +207,8 @@ impl Helper {
     }
 
     /// `SetAutoLogin`: set (or with `""`, remove) `[initial_session]` in `/etc/uq/greetd.toml`.
-    /// The user must exist with a regular uid; the command is always the uQ session.
+    /// The user must exist with a regular uid and must not be locked or expired; the command is
+    /// always the uQ session.
     pub async fn set_auto_login(&self, sender: &str, user: &str) -> Result<(), HelperError> {
         let user = if user.is_empty() {
             None
@@ -233,6 +234,16 @@ impl Helper {
         if !(UID_MIN..=UID_MAX).contains(&uid) {
             return Err(HelperError::InvalidArgument(format!(
                 "auto-login is only for regular accounts (uid {UID_MIN} to {UID_MAX})"
+            )));
+        }
+        // A locked or expired account must not be logged in without a password.
+        let shadow = self
+            .passwd
+            .shadow(user.as_str())
+            .map_err(|e| HelperError::Failed(format!("account lookup failed: {e}")))?;
+        if let Some(why) = shadow.and_then(|s| s.refusal(crate::passwd::today())) {
+            return Err(HelperError::InvalidArgument(format!(
+                "auto-login isn't possible: {why}"
             )));
         }
         Ok(user)

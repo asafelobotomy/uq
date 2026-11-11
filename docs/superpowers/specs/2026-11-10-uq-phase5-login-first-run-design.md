@@ -191,7 +191,7 @@ Each method is a closed operation with its own polkit action, as in Phase 3 §3.
 | `ClearGreeterWallpaper()` | removes it | `org.uq.settings.greeter` |
 | `SetGreeterMonitors(s json)` | `/etc/uq/greeter-monitors.toml`, validated by `uq_core::settings::monitors` | `org.uq.settings.greeter` |
 | `ClearGreeterMonitors()` | removes it (Hyprland's automatic layout again) | `org.uq.settings.greeter` |
-| `SetAutoLogin(s user)` | `[initial_session]` in `/etc/uq/greetd.toml` (empty string removes it); the user must exist with uid ≥ 1000 | `org.uq.settings.autologin` (`auth_admin`) |
+| `SetAutoLogin(s user)` | `[initial_session]` in `/etc/uq/greetd.toml` (empty string removes it); the user must exist with uid ≥ 1000 and not be locked or expired (`/etc/shadow`); removing that user on the Users page clears it | `org.uq.settings.autologin` (`auth_admin`) |
 
 The helper unit's `ReadWritePaths` grows by `/etc/uq` and `/var/lib/uq-greeter`. All other
 hardening from Phase 3 §3 stays.

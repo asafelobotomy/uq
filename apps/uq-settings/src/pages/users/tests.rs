@@ -1,5 +1,5 @@
 use super::*;
-use crate::pages::fake_system::{FakeAccounts, FakeUser, SysRig};
+use crate::pages::fake_system::{FakeAccounts, FakeHelper, FakeUser, SysRig};
 use crate::pages::runner::run;
 
 struct Setup(SysRig, FakeAccounts, UsersState, tempfile::TempDir);
@@ -288,6 +288,71 @@ async fn removing_needs_the_name_and_never_yourself() {
         out.state["notice"]["text"],
         "bob and their files were removed."
     );
+}
+
+#[tokio::test]
+async fn removing_the_auto_login_user_turns_auto_login_off() {
+    let mut rig = SysRig::new();
+    let fake = FakeAccounts::start(&mut rig, two()).await;
+    let helper = FakeHelper::start(&mut rig, &[("bob", 1001)]).await;
+    let greetd = "etc/uq/greetd.toml";
+    std::fs::write(
+        helper.path(greetd),
+        format!(
+            "{}\n[initial_session]\ncommand = \"uq-session\"\nuser = \"bob\"\n",
+            helper.read(greetd).unwrap()
+        ),
+    )
+    .unwrap();
+    let page = UsersState::with(rig.system(), 1000, helper.root.path().to_path_buf());
+    let out = run(
+        &page,
+        Op::RemoveUser {
+            uid: 1001,
+            typed: "bob".into(),
+            remove_files: false,
+        },
+    )
+    .await;
+    assert_eq!(out.error, None);
+    assert!(fake.user("bob").is_none());
+    assert!(!helper.read(greetd).unwrap().contains("initial_session"));
+    assert_eq!(
+        out.state["notice"]["text"],
+        "bob was removed. Their files were kept. Auto-login is off."
+    );
+}
+
+#[tokio::test]
+async fn a_refused_auto_login_change_is_said_after_a_removal() {
+    let mut rig = SysRig::new();
+    let _fake = FakeAccounts::start(&mut rig, two()).await;
+    let helper = FakeHelper::start(&mut rig, &[("bob", 1001)]).await;
+    let greetd = "etc/uq/greetd.toml";
+    let with_bob = format!(
+        "{}\n[initial_session]\ncommand = \"uq-session\"\nuser = \"bob\"\n",
+        helper.read(greetd).unwrap()
+    );
+    std::fs::write(helper.path(greetd), &with_bob).unwrap();
+    helper.deny.set(true);
+    let page = UsersState::with(rig.system(), 1000, helper.root.path().to_path_buf());
+    let out = run(
+        &page,
+        Op::RemoveUser {
+            uid: 1001,
+            typed: "bob".into(),
+            remove_files: true,
+        },
+    )
+    .await;
+    assert_eq!(out.error, None);
+    assert!(
+        out.state["notice"]["text"]
+            .as_str()
+            .unwrap()
+            .ends_with("Auto-login still names them: turn it off on the Login screen page.")
+    );
+    assert_eq!(helper.read(greetd).unwrap(), with_bob);
 }
 
 #[tokio::test]

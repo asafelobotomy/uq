@@ -19,7 +19,7 @@ use serde_json::{Value, json};
 use tokio::sync::Mutex;
 
 use super::login_screen::{GREETD_TOML, auto_login_user};
-use super::proxies::{AccountsProxy, AccountsUserProxy, fresh, fresh_at};
+use super::proxies::{AccountsProxy, AccountsUserProxy, HelperProxy, fresh, fresh_at};
 use super::runner::PageLogic;
 use super::sysbus::{self, ACCOUNTS, SystemBus, failure, settle};
 
@@ -309,11 +309,20 @@ impl UsersState {
         let ok = r.is_ok();
         settle(r, &ACCOUNTS)?;
         if ok {
-            self.notice(&if remove_files {
+            let mut text = if remove_files {
                 format!("{} and their files were removed.", user.name)
             } else {
                 format!("{} was removed. Their files were kept.", user.name)
-            });
+            };
+            // The login screen must not go on trying to log in an account that's gone.
+            if auto_login_user(&self.root) == user.name {
+                let cleared = async { HelperProxy::new(&conn).await?.set_auto_login("").await };
+                text.push_str(match cleared.await {
+                    Ok(()) => " Auto-login is off.",
+                    Err(_) => " Auto-login still names them: turn it off on the Login screen page.",
+                });
+            }
+            self.notice(&text);
         }
         Ok(())
     }
