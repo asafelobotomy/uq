@@ -88,6 +88,7 @@ QQC2.ScrollView {
         id: gestureEditor
         parent: QQC2.Overlay.overlay
         choices: page.snap.choices || ({})
+        list: page.snap.gestures || []
         check: (index, json) => im.draftClash(index, json)
         canSave: page.ready && !im.busy
         busy: im.busy

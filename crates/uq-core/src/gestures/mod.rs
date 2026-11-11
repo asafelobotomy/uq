@@ -403,7 +403,7 @@ impl SwipeOptions {
         if self.distance.is_some_and(|d| d > 2000) {
             return Err(invalid(
                 "input.swipe.distance",
-                "distance must be between 0 and 2000",
+                "Swipe distance must be between 0 and 2000",
             ));
         }
         if self
@@ -412,7 +412,7 @@ impl SwipeOptions {
         {
             return Err(invalid(
                 "input.swipe.cancel_ratio",
-                "cancel_ratio must be between 0 and 1",
+                "How far to swipe must be between 0 and 1",
             ));
         }
         Ok(())

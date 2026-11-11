@@ -131,6 +131,38 @@ Item {
             verify(d.saveEnabled);
         }
 
+        function test_direction_shown_is_direction_saved() {
+            const d = opened();
+            d.action = "close";
+            d.direction = "down";
+            tryCompare(d.directionBox, "currentText", "Swipe down");
+            d.action = "move";
+            compare(d.direction, "down");
+            tryCompare(d.directionBox, "currentText", "Swipe down");
+            d.action = "workspace";
+            tryCompare(d.directionBox, "currentText", "Swipe sideways");
+        }
+
+        function test_warning_follows_the_list() {
+            const d = opened();
+            d.check = (index, json) => d.list.length > 2 ? "taken" : "";
+            compare(d.warning, "");
+            d.list = [1, 2, 3];
+            compare(d.warning, "taken");
+        }
+
+        function test_escape_ignored_while_saving() {
+            const d = opened();
+            d.save();
+            verify(d.saving);
+            keyClick(Qt.Key_Escape);
+            wait(50);
+            verify(d.opened);
+            d.finishSave("no");
+            keyClick(Qt.Key_Escape);
+            tryCompare(d, "opened", false);
+        }
+
         function test_special_name_only_for_special() {
             const d = opened();
             verify(!d.nameField.visible);

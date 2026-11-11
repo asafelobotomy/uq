@@ -373,13 +373,13 @@ async fn swipe_out_of_range_refused_plainly() {
     let out = run(&page, swipe("distance", json!(5000))).await;
     assert_eq!(
         out.error.as_deref(),
-        Some("distance must be between 0 and 2000")
+        Some("Swipe distance must be between 0 and 2000")
     );
     assert!(out.state["swipe"].get("distance").is_none());
     let out = run(&page, swipe("cancel_ratio", json!(1.5))).await;
     assert_eq!(
         out.error.as_deref(),
-        Some("cancel_ratio must be between 0 and 1")
+        Some("How far to swipe must be between 0 and 1")
     );
     assert!(r.state.lock().unwrap().settings.input.swipe.is_default());
 }

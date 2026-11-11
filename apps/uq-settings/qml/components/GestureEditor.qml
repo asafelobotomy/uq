@@ -18,6 +18,8 @@ QQC2.Dialog {
     id: editor
 
     property var choices: ({})
+    /// The gestures as last read; the warning is worked out again when this changes.
+    property var list: []
     /// `(index, gestureJson) => text`: the clash the gesture would make, "" for none. Null for no
     /// check.
     property var check: null
@@ -56,6 +58,7 @@ QQC2.Dialog {
     readonly property string warning: {
         if (typeof editor.check !== "function")
             return "";
+        editor.list;
         return String(editor.check(editor.index, JSON.stringify(editor.draft())) || "");
     }
     readonly property bool complete: editor.currentAction !== null && editor.directions.some(d => d.id === editor.direction) && editor.nameOk
@@ -140,7 +143,8 @@ QQC2.Dialog {
 
     title: editor.index < 0 ? "Add a gesture" : "Change gesture"
     modal: true
-    closePolicy: QQC2.Popup.CloseOnEscape
+    // Escape is ignored while a save is in flight, so its answer lands in this dialog.
+    closePolicy: editor.saving ? QQC2.Popup.NoAutoClose : QQC2.Popup.CloseOnEscape
     anchors.centerIn: parent
     standardButtons: QQC2.Dialog.NoButton
     width: Math.min(Kirigami.Units.gridUnit * 28, parent ? parent.width : Kirigami.Units.gridUnit * 28)
@@ -168,6 +172,7 @@ QQC2.Dialog {
             objectName: "fingersChoice"
             model: editor.fingerChoices.map(n => n + " fingers")
             currentIndex: Math.max(0, editor.fingerChoices.indexOf(editor.fingers))
+            onModelChanged: Qt.callLater(() => currentIndex = Qt.binding(() => Math.max(0, editor.fingerChoices.indexOf(editor.fingers))))
             Accessible.name: "Fingers"
             Layout.fillWidth: true
             onActivated: i => editor.fingers = editor.fingerChoices[i]
@@ -180,6 +185,8 @@ QQC2.Dialog {
             objectName: "directionChoice"
             model: editor.directions.map(d => String(d.label))
             currentIndex: Math.max(0, editor.directions.findIndex(d => d.id === editor.direction))
+            // A new model (the action changed) resets the index; put the binding back.
+            onModelChanged: Qt.callLater(() => currentIndex = Qt.binding(() => Math.max(0, editor.directions.findIndex(d => d.id === editor.direction))))
             Accessible.name: "What you do"
             Layout.fillWidth: true
             onActivated: i => editor.direction = editor.directions[i].id
@@ -192,6 +199,7 @@ QQC2.Dialog {
             objectName: "actionChoice"
             model: editor.actionChoices.map(a => String(a.label))
             currentIndex: Math.max(0, editor.actionChoices.findIndex(a => a.id === editor.action))
+            onModelChanged: Qt.callLater(() => currentIndex = Qt.binding(() => Math.max(0, editor.actionChoices.findIndex(a => a.id === editor.action))))
             Accessible.name: "What it does"
             Layout.fillWidth: true
             onActivated: i => editor.action = editor.actionChoices[i].id
@@ -204,6 +212,7 @@ QQC2.Dialog {
             objectName: "modifierChoice"
             model: editor.modifierChoices.map(m => String(m.label))
             currentIndex: Math.max(0, editor.modifierChoices.findIndex(m => m.id === editor.modifier))
+            onModelChanged: Qt.callLater(() => currentIndex = Qt.binding(() => Math.max(0, editor.modifierChoices.findIndex(m => m.id === editor.modifier))))
             Accessible.name: "Hold a key"
             Layout.fillWidth: true
             onActivated: i => editor.modifier = editor.modifierChoices[i].id
