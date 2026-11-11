@@ -527,6 +527,19 @@ async fn snapshot_shape_and_catalogue() {
 }
 
 #[tokio::test]
+async fn row_says_from_the_profile() {
+    let (r, page) = rig().await;
+    r.explain.set(
+        "keybinds.binds.uq.close",
+        json!({"source": "profile", "detail": {"name": "Quiet"}}),
+    );
+    let out = op(&page, Op::Refresh).await;
+    assert_eq!(row(&out.state, "uq.close")["source"], "profile");
+    assert_eq!(row(&out.state, "uq.close")["profile"], "Quiet");
+    assert_eq!(row(&out.state, "uq.float")["profile"], "");
+}
+
+#[tokio::test]
 async fn row_source_comes_from_explain() {
     let (r, page) = rig().await;
     r.explain.set(

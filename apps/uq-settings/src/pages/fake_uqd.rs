@@ -514,10 +514,11 @@ impl FakeUqd {
         if domain == "keybinds" {
             let kb = self.state.lock().unwrap().keybinds.clone();
             let rejected = self.explain.keybinds_rejected.lock().unwrap().clone();
-            return Ok(self
-                .binds
-                .explain(&kb, rejected.as_deref(), &overrides)
-                .to_string());
+            let mut out = self.binds.explain(&kb, rejected.as_deref(), &overrides);
+            if let Some(a) = &*self.profiles.active.lock().unwrap() {
+                uq_core::profile::mark_binds(&mut out, &kb, a);
+            }
+            return Ok(out.to_string());
         }
         if domain == "rules" {
             // uqd's pure function; overrides are keyed `rules.<row key>`.

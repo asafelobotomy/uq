@@ -10,7 +10,7 @@ use crate::settings::{SettingError, invalid};
 const LOCK_REFUSED: &str = "Shortcuts that open things can't work over the lock screen.";
 const REPEAT_REFUSED: &str = "This would start it over and over while the key is held";
 const BARE_REFUSED: &str = "Add Super, Ctrl or Alt, so typing doesn't trigger it.";
-const RECOVERY_REFUSED: &str =
+pub(crate) const RECOVERY_REFUSED: &str =
     "This shortcut gets you back in if the lock screen stops working, so it stays on.";
 
 /// Parses `text` for a shortcut: plain refusals, and the bare-key rule (R9).

@@ -4,7 +4,7 @@
 
 use crate::service::{Desktop, DesktopError};
 use serde_json::Value;
-use uq_core::keybinds;
+use uq_core::{keybinds, profile};
 
 impl Desktop {
     /// `Explain("keybinds")`: one row per shortcut, from the pure core function. Reads
@@ -24,13 +24,17 @@ impl Desktop {
             .as_ref()
             .filter(|(d, _)| d == "keybinds")
             .map(|(_, m)| m.as_str());
-        keybinds::explain(
+        let mut rows = keybinds::explain(
             &self.state.keybinds,
             live.as_deref(),
             text.as_deref(),
             rejected,
             &self.paths.user_lua.to_string_lossy(),
-        )
+        );
+        if let Some(a) = &self.active {
+            profile::mark_binds(&mut rows, &self.state.keybinds, a);
+        }
+        rows
     }
 
     /// `ListBinds`: uQ's shortcuts with your changes, your own, and the `user.lua` binds marked
