@@ -45,6 +45,7 @@ pkgbase = uq
 	optdepends = greetd: the uQ login screen (run0 uqctl greeter enable)
 	optdepends = networkmanager-openvpn: OpenVPN connections on the Network settings page
 	optdepends = sound-theme-freedesktop: the test sound on the Sound settings page
+	optdepends = xorg-xrandr: tells X11 apps which display is the main one
 	options = !lto
 	backup = etc/pam.d/uq-lock
 	backup = etc/pam.d/uq-lock-fingerprint
