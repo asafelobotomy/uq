@@ -24,6 +24,7 @@ pub mod region;
 pub mod rules;
 pub mod runner;
 pub mod shell;
+pub mod sound;
 pub mod startup;
 pub mod sysbus;
 pub mod users;

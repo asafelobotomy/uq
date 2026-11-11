@@ -40,6 +40,7 @@ mod rules_model;
 mod search;
 mod session;
 mod shell_model;
+mod sound_model;
 mod startup_model;
 mod system_lists;
 mod users_model;

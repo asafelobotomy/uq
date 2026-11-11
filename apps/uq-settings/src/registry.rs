@@ -776,6 +776,36 @@ static ABOUT_SETTINGS: [SearchEntry; 2] = [
     ),
 ];
 
+static SOUND_SETTINGS: [SearchEntry; 4] = [
+    entry(
+        "sound-output",
+        "Play sound through",
+        &[
+            "speakers",
+            "headphones",
+            "volume",
+            "mute",
+            "output",
+            "test sound",
+        ],
+    ),
+    entry(
+        "sound-input",
+        "Record sound from",
+        &["microphone", "mic", "input", "recording", "volume"],
+    ),
+    entry(
+        "sound-apps",
+        "App volume",
+        &["app volume", "mixer", "per app", "playing"],
+    ),
+    entry(
+        "sound-profiles",
+        "Sound card modes",
+        &["profile", "sound card", "hdmi", "duplex"],
+    ),
+];
+
 static BLUETOOTH_SETTINGS: [SearchEntry; 4] = [
     entry(
         "bluetooth-power",
@@ -851,7 +881,7 @@ static NETWORK_SETTINGS: [SearchEntry; 8] = [
     ),
 ];
 
-static CORE_PAGES: [PageInfo; 20] = [
+static CORE_PAGES: [PageInfo; 21] = [
     PageInfo {
         id: "appearance",
         name: "Appearance",
@@ -905,6 +935,15 @@ static CORE_PAGES: [PageInfo; 20] = [
         qml: "pages/InputPage.qml",
         settings: &INPUT_SETTINGS,
         domains: &["input"],
+    },
+    PageInfo {
+        id: "sound",
+        name: "Sound",
+        icon: "preferences-desktop-sound",
+        category: Category::Devices,
+        qml: "pages/SoundPage.qml",
+        settings: &SOUND_SETTINGS,
+        domains: &[],
     },
     PageInfo {
         id: "bluetooth",
@@ -1359,6 +1398,7 @@ mod tests {
                 "displays",
                 "apps-scaling",
                 "input",
+                "sound",
                 "bluetooth",
                 "network",
                 "shell",
@@ -1387,16 +1427,18 @@ mod tests {
         assert_eq!(v[4]["domains"], serde_json::json!(["compat"]));
         assert_eq!(v[5]["qml"], "pages/InputPage.qml");
         assert_eq!(v[5]["categoryName"], "Devices");
-        assert_eq!(v[6]["qml"], "pages/BluetoothPage.qml");
+        assert_eq!(v[6]["qml"], "pages/SoundPage.qml");
         assert_eq!(v[6]["categoryName"], "Devices");
-        assert_eq!(v[7]["qml"], "pages/NetworkPage.qml");
-        assert_eq!(v[7]["categoryName"], "Connections");
-        assert_eq!(v[8]["qml"], "pages/ShellPage.qml");
-        assert_eq!(v[8]["categoryName"], "uQ");
-        assert_eq!(v[12]["qml"], "pages/StartupPage.qml");
-        assert_eq!(v[12]["category"], "system");
-        assert_eq!(v[12]["categoryName"], "System");
-        assert_eq!(v[12]["domains"], serde_json::json!(["autostart", "env"]));
+        assert_eq!(v[7]["qml"], "pages/BluetoothPage.qml");
+        assert_eq!(v[7]["categoryName"], "Devices");
+        assert_eq!(v[8]["qml"], "pages/NetworkPage.qml");
+        assert_eq!(v[8]["categoryName"], "Connections");
+        assert_eq!(v[9]["qml"], "pages/ShellPage.qml");
+        assert_eq!(v[9]["categoryName"], "uQ");
+        assert_eq!(v[13]["qml"], "pages/StartupPage.qml");
+        assert_eq!(v[13]["category"], "system");
+        assert_eq!(v[13]["categoryName"], "System");
+        assert_eq!(v[13]["domains"], serde_json::json!(["autostart", "env"]));
     }
 
     #[test]
@@ -1580,6 +1622,19 @@ mod tests {
         }
         let login = find("login-screen").unwrap();
         assert!(login.settings.iter().any(|s| s.id == "auto-login"));
+    }
+
+    #[test]
+    fn sound_follows_input() {
+        let page = find("sound").expect("the sound page is registered");
+        assert_eq!(page.category, Category::Devices);
+        assert_eq!(page.qml, "pages/SoundPage.qml");
+        assert!(page.domains.is_empty(), "it changes no uQ setting");
+        let ids: Vec<_> = core_pages().iter().map(|p| p.id).collect();
+        let at = ids.iter().position(|id| *id == "sound").unwrap();
+        assert_eq!(ids[at - 1], "input");
+        assert_eq!(ids[at + 1], "bluetooth");
+        assert!(page.settings.iter().any(|s| s.id == "sound-output"));
     }
 
     #[test]

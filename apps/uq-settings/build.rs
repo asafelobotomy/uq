@@ -62,6 +62,7 @@ fn main() {
         QmlFile::from("qml/pages/AboutPage.qml"),
         QmlFile::from("qml/pages/NetworkPage.qml"),
         QmlFile::from("qml/pages/BluetoothPage.qml"),
+        QmlFile::from("qml/pages/SoundPage.qml"),
     ]))
     .qt_module("Gui")
     .qt_module("Quick")
@@ -91,6 +92,7 @@ fn main() {
         "src/about_model.rs",
         "src/network_model.rs",
         "src/bluetooth_model.rs",
+        "src/sound_model.rs",
     ])
     .cpp_file("cpp/window.cpp");
     // SAFETY: only adds a warning flag; GCC 16 warns about Qt's own headers.
