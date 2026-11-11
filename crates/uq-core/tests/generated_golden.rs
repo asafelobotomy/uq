@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
+use uq_core::keybinds::Keybinds;
 use uq_core::lua::{Layout, StartupRender, emit_generated};
 use uq_core::rules::{Rules, WorkspaceRule};
 use uq_core::settings::{
@@ -7,6 +8,42 @@ use uq_core::settings::{
     Position, Settings,
 };
 use uq_core::theme::{ThemeRegistry, Variant};
+
+/// Two overrides (a rebind and an off switch) and one shortcut of your own of each action kind.
+fn all_set_binds() -> Keybinds {
+    let custom = |id: &str, name: &str, combo: &str, action: serde_json::Value| serde_json::json!({"id": id, "name": name, "combo": combo, "action": action});
+    let mut vol = custom(
+        "k-0007",
+        "Louder",
+        "SUPER + F7",
+        serde_json::json!({"kind": "shell", "name": "vol-up"}),
+    );
+    vol["locked"] = true.into();
+    vol["repeating"] = true.into();
+    let v = serde_json::json!({
+        "overrides": [
+            {"id": "uq.spotlight", "combo": "SUPER + K"},
+            {"id": "uq.close", "enabled": false},
+        ],
+        "custom": [
+            custom("k-0001", "Spotlight too", "SUPER + F1",
+                serde_json::json!({"kind": "shell", "name": "spotlight"})),
+            custom("k-0002", "Float", "SUPER + F2",
+                serde_json::json!({"kind": "window", "name": "float"})),
+            custom("k-0003", "Workspace nine", "SUPER + F3",
+                serde_json::json!({"kind": "workspace", "name": "focus", "workspace": 9})),
+            custom("k-0004", "Master layout", "SUPER + F4",
+                serde_json::json!({"kind": "uq", "name": "layout", "layout": "master"})),
+            custom("k-0005", "Firefox", "SUPER + F5",
+                serde_json::json!({"kind": "launch", "app": "org.mozilla.firefox"})),
+            custom("k-0006", "Screenshot", "SUPER + SHIFT + P",
+                serde_json::json!({"kind": "command",
+                    "command": "grim -g \"$(slurp)\" ~/it's a shot.png"})),
+            vol,
+        ],
+    });
+    Keybinds::from_section(&v, &Keybinds::default()).expect("the golden shortcuts are valid")
+}
 
 /// Every look and layout option away from "unset".
 fn all_set() -> Settings {
@@ -112,22 +149,30 @@ fn golden_default_and_all_set() {
         ],
         export: true,
     };
-    for (name, settings, rules, startup) in [
+    for (name, settings, rules, binds, startup) in [
         (
             "default",
             Settings::default(),
             Rules::default(),
+            Keybinds::default(),
             StartupRender::default(),
         ),
-        ("all-set", all_set(), ws_rules, StartupRender::default()),
+        (
+            "all-set",
+            all_set(),
+            ws_rules,
+            all_set_binds(),
+            StartupRender::default(),
+        ),
         (
             "startup-all",
             Settings::default(),
             Rules::default(),
+            Keybinds::default(),
             startup,
         ),
     ] {
-        let out = emit_generated(theme, &layouts, &rules, &settings, &startup);
+        let out = emit_generated(theme, &layouts, &rules, &binds, &settings, &startup);
         let path = root.join(format!("tests/golden/generated/{name}.lua"));
         if bless {
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();

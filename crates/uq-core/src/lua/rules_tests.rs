@@ -155,6 +155,7 @@ fn rules_keep_list_order() {
         &theme(),
         &Default::default(),
         &rules,
+        &crate::keybinds::Keybinds::default(),
         &Settings::default(),
         &StartupRender::default(),
     );
@@ -186,11 +187,15 @@ fn panel_block_comes_last() {
         &theme(),
         &Default::default(),
         &rules,
+        &crate::keybinds::Keybinds::default(),
         &Settings::default(),
         &StartupRender::default(),
     );
-    assert!(out.ends_with("blur = true })\n"), "{out}");
+    // The shortcuts block comes after the rules blocks (R1).
+    let binds = out.find("-- Keyboard shortcuts").unwrap();
+    assert!(out[..binds].ends_with("blur = true })\n\n"), "{out}");
     assert!(out.find("-- Window rules") < out.find("-- Panel rules"));
+    assert!(out.find("-- Panel rules") < Some(binds));
 }
 
 #[test]
@@ -317,6 +322,7 @@ fn hostile_strings_stay_inside_lua_strings() {
         &theme(),
         &Default::default(),
         &rules,
+        &crate::keybinds::Keybinds::default(),
         &Settings::default(),
         &StartupRender::default(),
     );

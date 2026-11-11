@@ -163,13 +163,19 @@ mod tests {
 
     fn render(s: &Settings) -> String {
         let t = Theme::from_toml(FIXTURE, "fixture", Variant::Dark).unwrap();
-        emit_generated(
+        let out = emit_generated(
             &t,
             &BTreeMap::new(),
             &crate::rules::Rules::default(),
+            &crate::keybinds::Keybinds::default(),
             s,
             &StartupRender::default(),
-        )
+        );
+        // These tests are about look and layout options, not the shortcuts block.
+        out.split("\n-- Keyboard shortcuts")
+            .next()
+            .unwrap()
+            .to_string()
     }
 
     /// Cut from base.lua before the move, byte for byte.

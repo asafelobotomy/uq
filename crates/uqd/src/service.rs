@@ -1018,6 +1018,7 @@ impl Desktop {
             &theme,
             &next.layouts,
             &next.rules,
+            &next.keybinds,
             &next.settings,
             &startup_render(next, main_scale, self.dev_session),
         );

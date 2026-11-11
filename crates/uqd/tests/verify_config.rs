@@ -535,6 +535,7 @@ fn lua_mock_runs_every_variant() {
                 t,
                 &layouts(),
                 &rules(),
+                &uq_core::keybinds::Keybinds::default(),
                 &settings(),
                 &StartupRender::default(),
             ),
@@ -572,6 +573,7 @@ fn hostile_rules_run_as_one_call_each() {
         t,
         &layouts(),
         &hostile,
+        &uq_core::keybinds::Keybinds::default(),
         &settings(),
         &StartupRender::default(),
     );
@@ -608,6 +610,7 @@ fn all_variants_pass_hyprland_verify() {
                 t,
                 &layouts(),
                 &rules(),
+                &uq_core::keybinds::Keybinds::default(),
                 &settings(),
                 &StartupRender::default(),
             ),
@@ -652,7 +655,14 @@ fn hostile_env_runs_as_one_call_each() {
     let dir = tempfile::tempdir().unwrap();
     let mock = dir.path().join("mock.lua");
     std::fs::write(&mock, MOCK).unwrap();
-    let gen_ = emit_generated(t, &layouts(), &rules(), &settings(), &startup_all());
+    let gen_ = emit_generated(
+        t,
+        &layouts(),
+        &rules(),
+        &uq_core::keybinds::Keybinds::default(),
+        &settings(),
+        &startup_all(),
+    );
     let (p, _) = tree(&dir.path().join("env"), &gen_);
     let out = Command::new(&lua)
         .arg(&mock)
@@ -702,7 +712,14 @@ fn startup_switches_pass_hyprland_verify() {
     let reg = ThemeRegistry::load_dir(&repo().join("themes")).unwrap();
     let t = reg.iter().next().unwrap();
     let dir = tempfile::tempdir().unwrap();
-    let gen_ = emit_generated(t, &layouts(), &rules(), &settings(), &startup_all());
+    let gen_ = emit_generated(
+        t,
+        &layouts(),
+        &rules(),
+        &uq_core::keybinds::Keybinds::default(),
+        &settings(),
+        &startup_all(),
+    );
     let (_, main) = tree(&dir.path().join("startup"), &gen_);
     let out = Command::new("Hyprland")
         .arg("--verify-config")
