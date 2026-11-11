@@ -109,7 +109,10 @@ Runs the `[[command]]` with that `id`, with `args` (a list of strings) appended 
 What is enforced, whatever the page does:
 
 - Only declared commands run. `argv[0]` is an absolute path under `/usr/bin` or `/usr/lib`, and
-  the fixed `argv` is never changed.
+  the fixed `argv` is never changed. The check is on the path as written (no `.`, `..` or `//`),
+  not on where it leads: symlinks are not resolved, so a link under `/usr/lib` that points
+  elsewhere is accepted. Those directories are root's, so only a package (or root) can put one
+  there.
 - Arguments are appended as separate entries, exactly as many as `args` declares. Each must
   match its pattern in full (the pattern must start with `^` and end with `$`) and may never
   start with `-`, so it can't become an option.

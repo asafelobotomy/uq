@@ -287,6 +287,8 @@ All notable changes to uQ are listed here. The format follows
   runner used to wait for its output to close, which a background process it started keeps
   open; it now ends the run when the command exits, keeping the output that arrives within
   200 ms.
+- **docs/settings-pages.md says what the command path check covers.** The `/usr/bin` and
+  `/usr/lib` check is on the path as written; a symlink there that points elsewhere is accepted.
 
 ## [0.2.1] - 2026-11-10
 
