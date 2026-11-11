@@ -97,11 +97,10 @@ async fn handle(s: &Services, call: &str, args: &[Value]) -> Result<Value, Strin
     let (link, runs) = (&*s.link, &*s.runs);
     match call {
         "Ping" => Ok(json!("pong")),
-        "GetTheme" | "SetTheme" | "ListThemes" | "GetLayouts" | "SetLayout" | "GetSchedule"
-        | "SetSchedule" | "Reload" | "GetSettings" | "SetSetting" | "GetLaunchCounts"
-        | "RecordLaunch" | "ListProfiles" | "ApplyProfile" | "ProfileOff" | "PickDone" => {
-            link.call(call, args).await
-        }
+        "GetTheme" | "SetTheme" | "ListThemes" | "ListThemeInfo" | "GetLayouts" | "SetLayout"
+        | "GetSchedule" | "SetSchedule" | "Reload" | "GetSettings" | "SetSetting"
+        | "GetLaunchCounts" | "RecordLaunch" | "ListProfiles" | "ApplyProfile" | "ProfileOff"
+        | "PickDone" => link.call(call, args).await,
         "Launch" if args.first().is_some_and(|a| a.get("app_action").is_some()) => {
             match &s.actions {
                 Some(a) => a.launch(link, args).await,

@@ -32,9 +32,16 @@ ColumnLayout {
     opacity: enabled ? 1 : 0.5
 
     function refreshTheme() {
-        Bridge.call("ListThemes", []).then(function (v) {
-            root.themes = U.themeList(v);
-        }).catch(function () {});
+        // Names come from ListThemeInfo; an older uqd has only ListThemes, so show the ids then.
+        Bridge.call("ListThemeInfo", []).then(function (v) {
+            root.themes = U.themeInfoList(v);
+        }).catch(function () {
+            Bridge.call("ListThemes", []).then(function (v) {
+                root.themes = U.themeList(v).map(function (id) {
+                    return { id: id, name: id.length > 24 ? id.substring(0, 24) : id };
+                });
+            }).catch(function () {});
+        });
         Bridge.call("GetTheme", []).then(function (v) {
             var t = U.themeReply(v);
             root.themeName = t ? t.name : "";
@@ -99,8 +106,8 @@ ColumnLayout {
             model: root.themes
             delegate: Rectangle {
                 id: chip
-                required property string modelData
-                readonly property bool current: modelData === root.themeName
+                required property var modelData
+                readonly property bool current: modelData.id === root.themeName
                 implicitWidth: Math.min(chipLabel.implicitWidth + Theme.gapIn * 4, 160)
                 implicitHeight: 28
                 radius: Theme.radius - 2
@@ -111,13 +118,13 @@ ColumnLayout {
                 Accessible.role: Accessible.RadioButton
                 Accessible.checkable: true
                 Accessible.checked: current
-                Accessible.name: "Theme " + modelData
+                Accessible.name: "Theme " + modelData.name
                 Accessible.onPressAction: chip.choose()
                 Keys.onSpacePressed: chip.choose()
                 Keys.onReturnPressed: chip.choose()
 
                 function choose() {
-                    root.setTheme(chip.modelData, root.variant !== "" ? root.variant : "dark");
+                    root.setTheme(chip.modelData.id, root.variant !== "" ? root.variant : "dark");
                 }
 
                 UqText {
@@ -128,7 +135,7 @@ ColumnLayout {
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                     maximumLineCount: 1
-                    text: chip.modelData
+                    text: chip.modelData.name
                     color: chip.current ? Theme.accentText : Theme.text
                 }
                 MouseArea {

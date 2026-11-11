@@ -38,7 +38,9 @@ checkout exists). Shell edits reload live. Inside it:
   `scdr-session` in the real user manager;
 - no autostart apps: the runner starts nothing and the Startup page says "Not started in a test
   session". `XDG_DATA_HOME` isn't sandboxed here, so uqd neither writes nor deletes launcher
-  overrides, and the "Also when started from other launchers" switch is refused;
+  overrides, and the "Also when started from other launchers" switch is refused; for the same
+  reason theme import and delete say "Not available in a test session" (listing and export
+  work);
 - the real system bus: scdrd, logind, NetworkManager, UPower are the machine's own.
 
 Logs are in `~/.local/share/uq-dev/session/log`. Your real desktop sees SUPER combinations

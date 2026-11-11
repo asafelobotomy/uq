@@ -75,6 +75,7 @@ impl PageModel for DefaultAppsModel {
         monitors: false,
         profiles: false,
         autostart: false,
+        themes: false,
     };
 
     fn core(&self) -> &ModelCore<DefaultAppsState> {

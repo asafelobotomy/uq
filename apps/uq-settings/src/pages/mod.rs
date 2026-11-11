@@ -23,6 +23,7 @@ pub mod runner;
 pub mod shell;
 pub mod startup;
 pub mod sysbus;
+pub mod themes;
 pub mod users;
 pub mod wallpaper;
 pub mod welcome;

@@ -99,6 +99,7 @@ impl PageModel for LoginScreenModel {
         monitors: true,
         profiles: false,
         autostart: false,
+        themes: false,
     };
 
     fn core(&self) -> &ModelCore<LoginScreenState> {

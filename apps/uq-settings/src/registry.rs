@@ -82,7 +82,7 @@ const fn entry(
     }
 }
 
-static APPEARANCE_SETTINGS: [SearchEntry; 10] = [
+static APPEARANCE_SETTINGS: [SearchEntry; 13] = [
     entry(
         "theme",
         "Theme",
@@ -124,6 +124,21 @@ static APPEARANCE_SETTINGS: [SearchEntry; 10] = [
         "kvantum",
         "Style Qt apps to match",
         &["kvantum", "qt", "widgets", "style"],
+    ),
+    entry(
+        "theme-new",
+        "New theme from this one",
+        &["custom", "create", "colours", "colors", "edit", "make"],
+    ),
+    entry(
+        "theme-import",
+        "Import a theme",
+        &["share", "file", "load", "open", "uqtheme"],
+    ),
+    entry(
+        "theme-export",
+        "Export a theme",
+        &["share", "file", "save", "backup", "uqtheme"],
     ),
 ];
 
@@ -1430,6 +1445,29 @@ mod tests {
             last["qml"],
             "file:///usr/share/uq/settings/pages/demo/Page.qml"
         );
+    }
+
+    #[test]
+    fn theme_entries_on_appearance_page() {
+        let page = find("appearance").unwrap();
+        assert_eq!(page.settings.len(), 13);
+        for (id, label) in [
+            ("theme-new", "New theme from this one"),
+            ("theme-import", "Import a theme"),
+            ("theme-export", "Export a theme"),
+        ] {
+            let s = page.settings.iter().find(|s| s.id == id).unwrap();
+            assert_eq!(s.label, label);
+        }
+        let entries: Vec<_> = core_pages().iter().map(PageEntry::from).collect();
+        let found = |q: &str, id: &str| {
+            crate::search::search(&entries, q)
+                .iter()
+                .any(|h| h.page_id == "appearance" && h.setting_id == id)
+        };
+        assert!(found("import a theme", "theme-import"));
+        assert!(found("backup", "theme-export"));
+        assert!(found("create", "theme-new"));
     }
 
     #[test]

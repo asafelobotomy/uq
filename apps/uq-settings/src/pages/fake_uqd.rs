@@ -24,10 +24,12 @@ mod autostart;
 mod compat;
 mod devices;
 mod profiles;
+mod themes;
 mod windows;
 pub use autostart::FakeAutostart;
 pub use devices::Displays;
 pub use profiles::FakeProfiles;
+pub use themes::FakeThemes;
 pub use windows::FakeWindows;
 
 #[derive(Debug, zbus::DBusError)]
@@ -61,6 +63,7 @@ pub struct FakeUqd {
     pub profiles: FakeProfiles,
     pub windows: FakeWindows,
     pub autostart: FakeAutostart,
+    pub themes: FakeThemes,
     /// What uqd's file sync found, for `Explain("env")` and `Explain("autostart")`.
     pub files: Arc<Mutex<FileReport>>,
 }
@@ -186,8 +189,44 @@ impl FakeUqd {
     }
 
     fn list_themes(&self) -> Vec<String> {
-        vec!["gruvbox".into(), "dracula".into()]
+        self.themes.ids()
     }
+
+    fn list_theme_info(&self) -> String {
+        let active = self.state.lock().unwrap().theme.clone();
+        self.themes.info(&active)
+    }
+
+    fn export_theme(&self, id: &str, with_look: bool) -> Result<String, FakeError> {
+        self.themes.export(self, id, with_look)
+    }
+
+    async fn import_theme(
+        &self,
+        text: &str,
+        replace: bool,
+        with_look: bool,
+        origin: &str,
+        #[zbus(signal_emitter)] e: SignalEmitter<'_>,
+    ) -> Result<String, FakeError> {
+        let id = self.themes.import(self, text, replace, with_look, origin)?;
+        let _ = Self::themes_changed(&e).await;
+        Ok(id)
+    }
+
+    async fn delete_theme(
+        &self,
+        id: &str,
+        origin: &str,
+        #[zbus(signal_emitter)] e: SignalEmitter<'_>,
+    ) -> Result<String, FakeError> {
+        let report = self.themes.delete(self, id, origin)?;
+        let _ = Self::themes_changed(&e).await;
+        Ok(report)
+    }
+
+    #[zbus(signal)]
+    async fn themes_changed(e: &SignalEmitter<'_>) -> zbus::Result<()>;
 
     fn get_schedule(&self) -> String {
         serde_json::to_string(&self.state.lock().unwrap().schedule).unwrap()
@@ -641,6 +680,8 @@ pub struct Rig {
     pub windows: FakeWindows,
     /// The found startup entries and the `ShellReady` count.
     pub autostart: FakeAutostart,
+    /// The system and user themes, and the theme calls made.
+    pub themes: FakeThemes,
     /// What the file sync found, for `Explain`.
     pub files: Arc<Mutex<FileReport>>,
 }
@@ -671,6 +712,7 @@ pub async fn rig(state: State) -> Rig {
     let profiles = FakeProfiles::default();
     let windows = FakeWindows::default();
     let autostart = FakeAutostart::default();
+    let themes = FakeThemes::default();
     let files = Arc::new(Mutex::new(FileReport::default()));
     let uqd = connect(&bus).await;
     uqd.object_server()
@@ -686,6 +728,7 @@ pub async fn rig(state: State) -> Rig {
                 profiles: profiles.clone(),
                 windows: windows.clone(),
                 autostart: autostart.clone(),
+                themes: themes.clone(),
                 files: files.clone(),
             },
         )
@@ -706,6 +749,7 @@ pub async fn rig(state: State) -> Rig {
         profiles,
         windows,
         autostart,
+        themes,
         files,
     }
 }

@@ -110,6 +110,7 @@ impl PageModel for WelcomeModel {
         monitors: true,
         profiles: false,
         autostart: false,
+        themes: false,
     };
 
     fn core(&self) -> &ModelCore<WelcomeState> {

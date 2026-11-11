@@ -215,6 +215,22 @@ function themeList(v) {
     return v.filter(function (id) { return typeof id === "string" && id !== ""; });
 }
 
+// ListThemeInfo's reply {themes: [{id, name, ...}]} -> [{id, name}] for the quick-settings chips.
+// Only string ids pass; a name that is missing or not a string becomes the id; names are cut to
+// 24 characters.
+function themeInfoList(v) {
+    if (!v || typeof v !== "object" || !Array.isArray(v.themes))
+        return [];
+    var out = [];
+    v.themes.forEach(function (t) {
+        if (!t || typeof t.id !== "string" || t.id === "")
+            return;
+        var name = typeof t.name === "string" && t.name !== "" ? t.name : t.id;
+        out.push({ id: t.id, name: name.length > 24 ? name.substring(0, 24) : name });
+    });
+    return out;
+}
+
 // The workspace selector uqd stores layouts under, exactly as uqctl's active_workspace_selector
 // (crates/uqctl/src/main.rs) builds it: the id when > 0 (named and special workspaces have
 // negative ids), a special workspace's own name, otherwise "name:<name>". "" when unknown.

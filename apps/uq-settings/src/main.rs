@@ -40,6 +40,7 @@ mod session;
 mod shell_model;
 mod startup_model;
 mod system_lists;
+mod themes_model;
 mod users_model;
 mod wallpaper_model;
 mod welcome_model;

@@ -45,7 +45,13 @@ async fn bridge_forwards_set_theme() {
     assert_eq!(themes["ok"].as_array().unwrap().len(), 7);
     assert!(b.call(4, "GetLayouts", json!([])).await["ok"].is_object());
     let bad = b.call(5, "SetTheme", json!(["nope", "light"])).await;
-    assert!(bad["err"].as_str().unwrap().contains("nope"), "{bad}");
+    assert!(
+        bad["err"]
+            .as_str()
+            .unwrap()
+            .contains("isn't installed any more"),
+        "{bad}"
+    );
     let bad = b.call(6, "SetTheme", json!(["dracula"])).await;
     assert!(bad["err"].is_string(), "{bad}");
 }
@@ -420,4 +426,41 @@ async fn bridge_hello_without_uqd_leaves_welcome_unknown() {
         b.call(1, "WelcomeStatus", json!([])).await["ok"],
         json!({"pending": null, "deferred": false})
     );
+}
+
+#[tokio::test]
+async fn list_theme_info_passes_through() {
+    let bus = private_bus();
+    let dir = tempfile::tempdir().unwrap();
+    let _uqd = serve_uqd(&bus, dir.path()).await;
+    let mut b = Bridge::start(&bus);
+    b.next().await;
+    let info = b.call(1, "ListThemeInfo", json!([])).await;
+    let themes = info["ok"]["themes"].as_array().expect("an array");
+    assert_eq!(themes.len(), 7, "{info}");
+    assert!(
+        themes
+            .iter()
+            .all(|t| t["name"].is_string() && t["user"] == false)
+    );
+    assert_eq!(info["ok"]["root_is_link"], false);
+    let bad = b.call(2, "ListThemeInfo", json!(["x"])).await;
+    assert!(bad["err"].is_string(), "{bad}");
+}
+
+#[tokio::test]
+async fn bridge_refuses_theme_writes() {
+    let bus = private_bus();
+    let dir = tempfile::tempdir().unwrap();
+    let _uqd = serve_uqd(&bus, dir.path()).await;
+    let mut b = Bridge::start(&bus);
+    b.next().await;
+    for (n, call, args) in [
+        (1, "ImportTheme", json!(["x", false, false])),
+        (2, "ExportTheme", json!(["gruvbox", false])),
+        (3, "DeleteTheme", json!(["user-x"])),
+    ] {
+        let r = b.call(n, call, args).await;
+        assert_eq!(r["err"], format!("unknown call {call}"), "{r}");
+    }
 }

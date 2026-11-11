@@ -9,6 +9,7 @@ mod render_themes;
 mod settings_app;
 mod settings_cmd;
 mod setup;
+mod theme_cmd;
 mod welcome_cmd;
 
 use clap::{Parser, Subcommand};
@@ -19,6 +20,7 @@ use settings_cmd::{
 };
 use std::collections::HashMap;
 use std::process::ExitCode;
+use theme_cmd::ThemeCmd;
 use uq_core::schedule::Schedule;
 
 const NAME: &str = "org.uq.Desktop1";
@@ -176,17 +178,6 @@ enum IntegrationsCmd {
 }
 
 #[derive(Subcommand)]
-enum ThemeCmd {
-    Get,
-    List,
-    /// e.g. `uqctl theme set rosewood light`
-    Set {
-        id: String,
-        variant: String,
-    },
-}
-
-#[derive(Subcommand)]
 enum LayoutCmd {
     Get,
     /// e.g. `uqctl layout set 2 scrolling`; WORKSPACE may be `current`.
@@ -281,30 +272,14 @@ async fn run(cmd: Cmd) -> Result<(), String> {
     if let Cmd::Profile { cmd } = cmd {
         return profile_cmd::run(&profile_cmd::connect().await?, cmd).await;
     }
+    if let Cmd::Theme { cmd } = cmd {
+        return theme_cmd::run(&profile_cmd::connect().await?, cmd).await;
+    }
     let conn = zbus::Connection::session().await.map_err(describe)?;
     let proxy = zbus::Proxy::new(&conn, NAME, PATH, NAME)
         .await
         .map_err(describe)?;
     match cmd {
-        Cmd::Theme { cmd: ThemeCmd::Get } => {
-            let (id, variant): (String, String) =
-                proxy.call("GetTheme", &()).await.map_err(describe)?;
-            println!("{id} {variant}");
-        }
-        Cmd::Theme {
-            cmd: ThemeCmd::List,
-        } => {
-            let ids: Vec<String> = proxy.call("ListThemes", &()).await.map_err(describe)?;
-            ids.iter().for_each(|id| println!("{id}"));
-        }
-        Cmd::Theme {
-            cmd: ThemeCmd::Set { id, variant },
-        } => {
-            proxy
-                .call::<_, _, ()>("SetTheme", &(id, variant, ORIGIN))
-                .await
-                .map_err(describe)?;
-        }
         Cmd::Layout {
             cmd: LayoutCmd::Get,
         } => {
@@ -422,6 +397,7 @@ async fn run(cmd: Cmd) -> Result<(), String> {
         | Cmd::Settings { .. }
         | Cmd::Welcome { .. }
         | Cmd::Profile { .. }
+        | Cmd::Theme { .. }
         | Cmd::Launch { .. } => {
             unreachable!("handled before connecting")
         }

@@ -69,6 +69,7 @@ impl PageModel for AboutModel {
         monitors: false,
         profiles: false,
         autostart: false,
+        themes: false,
     };
 
     fn core(&self) -> &ModelCore<AboutState> {

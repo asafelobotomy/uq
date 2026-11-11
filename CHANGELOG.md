@@ -9,6 +9,14 @@ All notable changes to uQ are listed here. The format follows
 
 ### Added
 
+- **Your own themes: make, import, export and delete.** The Appearance page has **New theme from
+  this one…** (seven colours per version, live contrast check, a version that is hard to read
+  can't be saved), **Import…**, **Export…** and **Delete…**, and shows the theme names. Themes
+  are `.uqtheme` files (TOML, `format = 1`, size-capped, schema-checked, never run) saved in
+  `~/.local/share/uq/themes/user-<slug>/`; imports save a restore point and can bring window
+  gaps, corners and effects. `uqctl theme list --long|import|export|delete` do the same, and the
+  shell's quick settings show names. New `uqd` calls `ListThemeInfo`, `ExportTheme`,
+  `ImportTheme`, `DeleteTheme` and the `ThemesChanged` signal.
 - **uQ session.** A "uQ" entry in your display manager's session list. Its first login sets up
   uQ for you (no `uqctl setup` needed); if setup reports a problem, the problem goes to
   `~/.local/state/uq/session.log` and the desktop starts anyway. `uqctl setup` gains `--quiet`.

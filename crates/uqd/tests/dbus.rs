@@ -637,7 +637,10 @@ async fn restore_with_missing_theme_changes_nothing() {
 
     let err = s.restore(&id).await.unwrap_err();
     assert_eq!(error_name(&err), "org.uq.Desktop1.Error.UnknownTheme");
-    assert!(error_message(&err).contains("uninstalled"), "{err:?}");
+    assert!(
+        error_message(&err).contains("isn't installed any more"),
+        "{err:?}"
+    );
     assert_eq!(s.gaps().await, 12);
     assert_eq!(s.points().await.len(), points);
     assert_eq!(s.history().await.len(), history);
