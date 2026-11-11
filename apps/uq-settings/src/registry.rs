@@ -664,6 +664,29 @@ static LOGIN_SCREEN_SETTINGS: [SearchEntry; 6] = [
     ),
 ];
 
+static DATETIME_SETTINGS: [SearchEntry; 4] = [
+    entry(
+        "timezone",
+        "Time zone",
+        &["timezone", "region", "city", "clock", "utc"],
+    ),
+    entry(
+        "ntp",
+        "Set the time from the network",
+        &["automatic time", "ntp", "sync", "internet time"],
+    ),
+    entry(
+        "manual-time",
+        "Date and time by hand",
+        &["set date", "set time", "clock", "manual"],
+    ),
+    entry(
+        "datetime-clock-24h",
+        "24-hour clock in the bar",
+        &["24 hour", "12 hour", "am pm", "clock format"],
+    ),
+];
+
 static ABOUT_SETTINGS: [SearchEntry; 2] = [
     entry(
         "hostname",
@@ -688,7 +711,7 @@ static ABOUT_SETTINGS: [SearchEntry; 2] = [
     ),
 ];
 
-static CORE_PAGES: [PageInfo; 15] = [
+static CORE_PAGES: [PageInfo; 16] = [
     PageInfo {
         id: "appearance",
         name: "Appearance",
@@ -813,6 +836,15 @@ static CORE_PAGES: [PageInfo; 15] = [
         category: Category::System,
         qml: "pages/LoginScreenPage.qml",
         settings: &LOGIN_SCREEN_SETTINGS,
+        domains: &[],
+    },
+    PageInfo {
+        id: "datetime",
+        name: "Date and time",
+        icon: "preferences-system-time",
+        category: Category::System,
+        qml: "pages/DateTimePage.qml",
+        settings: &DATETIME_SETTINGS,
         domains: &[],
     },
     PageInfo {
@@ -1159,6 +1191,7 @@ mod tests {
                 "power",
                 "users",
                 "login-screen",
+                "datetime",
                 "about"
             ]
         );
@@ -1349,7 +1382,7 @@ mod tests {
         let at = ids.iter().position(|id| *id == "startup").unwrap();
         assert_eq!(ids[at + 1..at + 4], ["power", "users", "login-screen"]);
         assert_eq!(ids.last(), Some(&"about"), "About ends the System pages");
-        for id in ["power", "users", "login-screen", "about"] {
+        for id in ["power", "users", "login-screen", "datetime", "about"] {
             let page = find(id).unwrap();
             assert_eq!(page.category, Category::System, "{id}");
             assert!(page.domains.is_empty(), "{id} changes no uQ setting");

@@ -54,6 +54,7 @@ fn main() {
         QmlFile::from("qml/pages/PowerPage.qml"),
         QmlFile::from("qml/pages/UsersPage.qml"),
         QmlFile::from("qml/pages/LoginScreenPage.qml"),
+        QmlFile::from("qml/pages/DateTimePage.qml"),
         QmlFile::from("qml/pages/AboutPage.qml"),
     ]))
     .qt_module("Gui")
@@ -77,6 +78,7 @@ fn main() {
         "src/power_model.rs",
         "src/users_model.rs",
         "src/login_screen_model.rs",
+        "src/datetime_model.rs",
         "src/about_model.rs",
     ])
     .cpp_file("cpp/window.cpp");
