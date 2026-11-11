@@ -22,6 +22,12 @@ All notable changes to uQ are listed here. The format follows
 - **`ctx.openApp(desktopId)` for Settings pages.** A page can open an app (its own full app,
   say) by its `name.desktop` id, the way the launcher does (`uqctl launch`), detached from
   Settings. Paths and other ids are refused.
+- **A stable component list and a test kit for Settings pages.** docs/settings-pages.md lists the
+  `org.uq.settings` components pages may use under `uq_api = 1` (`UqLabel`, `UqComboBox`,
+  `SettingRow`, `SwitchRow`, `ValueSlider`, `ErrorCard`) with their properties.
+  `templates/settings-page-tests/` is a kit an app copies into its repository: a stub
+  `org.uq.settings` module, a stand-in `ctx` and an example offscreen `qmltestrunner` test. The
+  template page now keeps its logic in `logic.js`.
 - **Keyboard shortcuts.** A Keyboard shortcuts page lists every uQ shortcut by what it does:
   change its keys (press them to capture, or pick them), turn it off, reset it, or put all back.
   Add your own shortcuts: open a uQ panel, a window or workspace action, a layout, start an app

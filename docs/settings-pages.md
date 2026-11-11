@@ -108,6 +108,39 @@ Item {
 into links or formatting. `Text`, `Label`, `TextEdit`, `TextInput` and `Qt.createQmlObject` are
 refused by `uqctl integrations check`. Button texts should be fixed strings.
 
+### Components pages may use
+
+These components of `import org.uq.settings` are part of `uq_api = 1`: their names and the
+properties and signals listed here stay as they are while `uq_api` is 1. Anything else the module
+exports is Settings' own and may change. All of them show text as plain text.
+
+| Component | What it is | Properties and signals |
+|---|---|---|
+| `UqLabel` | a `Label` that never interprets markup; use it for every piece of text | everything `QtQuick.Controls` `Label` has (`textFormat` is fixed to plain text) |
+| `UqComboBox` | a `ComboBox` whose value and rows are plain text | everything `ComboBox` has; give it a list of strings as `model` |
+| `SettingRow` | one setting: a label on the left, the controls you put inside on the right; flashes when Settings search jumps to it | `settingId`, `label`, `highlight` (bind it to the page's `highlight`), `flashing` (read-only); children are the controls |
+| `SwitchRow` | a `SettingRow` with a switch; after a flip the switch shows `value` again until you change `value`, so a refused change snaps back | `value`, `chosen(bool value)`, `toggle` (the switch, read-only) |
+| `ValueSlider` | a `SettingRow` with a slider; `chosen` comes 400 ms after the last move | `value`, `from`, `to`, `stepSize`, `lowLabel`, `highLabel`, `busy` (when it turns false the slider shows `value` again), `chosen(real value)`, `slider` (read-only) |
+| `ErrorCard` | a card for something that failed | `title`, `detail` |
+
+Beside these, a page may use stock `QtQuick`, `QtQuick.Layouts` and `QtQuick.Controls` items
+(`Button`, `Switch`, `CheckBox`, `SpinBox`, `Slider`, `TextField` for the person's own input,
+…), with fixed strings as their `text`. Don't import Kirigami: Settings' style may change.
+
+### Testing a page
+
+`templates/settings-page-tests/` is a test kit to copy into your repository as `tests/uq/`: a stub
+`org.uq.settings` module with the components above (no Kirigami needed), a `FakeContext.qml`
+that stands in for `ctx` with canned answers and a log of every request, and an example
+`tst_page.qml` that loads your page and hands it the fake `ctx`. Run it offscreen:
+
+```
+QT_QPA_PLATFORM=offscreen qmltestrunner -import tests/uq/stub -input tests/uq
+```
+
+Its README has the details. uQ's own tests run the kit against the template page and check
+that every property and signal of the stub exists on the real component.
+
 ### `ctx.theme`
 
 The current `tokens.json`: `colors` (`bg`, `surface`, `text`, `text_muted`, `accent`, `error`,
