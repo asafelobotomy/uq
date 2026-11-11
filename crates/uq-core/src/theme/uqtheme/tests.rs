@@ -43,7 +43,7 @@ fn val(v: impl Into<toml::Value>) -> toml::Value {
     v.into()
 }
 
-const HOSTILE_NAMES: [&str; 11] = [
+const HOSTILE_NAMES: [&str; 14] = [
     "X\nshell /bin/sh -c evil",
     "X */ * { color: red } /*",
     "{{ 7*7 }}",
@@ -52,6 +52,9 @@ const HOSTILE_NAMES: [&str; 11] = [
     "X\u{202e}",
     "X\u{200b}",
     "X\r",
+    "X\u{2028}shell /bin/sh -c evil",
+    "X\u{2029}",
+    "X\u{feff}",
     " X",
     "",
     "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",

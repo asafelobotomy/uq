@@ -36,7 +36,7 @@ fn good(root: &Path, id: &str) {
     put(root, id, &dark_text(), &light_text());
 }
 
-const HOSTILE_NAMES: [&str; 11] = [
+const HOSTILE_NAMES: [&str; 14] = [
     "X\nshell /bin/sh -c evil",
     "X */ * { color: red } /*",
     "{{ 7*7 }}",
@@ -45,6 +45,9 @@ const HOSTILE_NAMES: [&str; 11] = [
     "X\u{202e}",
     "X\u{200b}",
     "X\r",
+    "X\u{2028}shell /bin/sh -c evil",
+    "X\u{2029}",
+    "X\u{feff}",
     " X",
     "",
     "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -430,4 +433,15 @@ fn messages_are_plain() {
             "{m}"
         );
     }
+}
+
+#[test]
+fn empty_author_in_a_folder_theme_means_none() {
+    let root = tempfile::tempdir().unwrap();
+    let r = root.path();
+    let with = |t: String| format!("author = \"\"\n{t}");
+    put(r, "user-x", &with(dark_text()), &with(light_text()));
+    let s = scan(r);
+    assert_eq!(s.themes.len(), 1, "{:?}", s.skipped);
+    assert_eq!(s.themes[0].author, None);
 }

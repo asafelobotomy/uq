@@ -19,6 +19,7 @@ pub const MAX_USER_THEMES: usize = 50;
 /// The most folder entries looked at in one scan.
 pub const MAX_SCANNED: usize = 200;
 pub const MAX_FILE_BYTES: u64 = 65_536;
+const _: () = assert!(MAX_FILE_BYTES == crate::autostart::scan::MAX_BYTES);
 /// The longest theme name or author.
 pub const MAX_TEXT_CHARS: usize = 64;
 const MAX_SLUG_CHARS: usize = 40;
@@ -88,7 +89,13 @@ pub fn valid_display_text(s: &str) -> bool {
 }
 
 fn invisible(c: char) -> bool {
-    matches!(c, '\u{061C}' | '\u{200B}'..='\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2060}'..='\u{2069}')
+    matches!(c, '\u{061C}' | '\u{200B}'..='\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2060}'..='\u{2069}'
+            | '\u{2028}'
+            | '\u{2029}'
+            | '\u{00AD}'
+            | '\u{180E}'
+            | '\u{FEFF}'
+            | '\u{E0000}'..='\u{E007F}')
 }
 
 /// Why a user theme can't be used, as one plain sentence.
@@ -313,6 +320,9 @@ fn read_variant(dir: &Path, id: &str, v: Variant) -> Result<(Theme, Option<Strin
 fn read_theme(dir: &Path, id: &str) -> Result<UserTheme, Problem> {
     let (dark, a_dark) = read_variant(dir, id, Variant::Dark)?;
     let (light, a_light) = read_variant(dir, id, Variant::Light)?;
+    // R4: an empty author means none, as in a .uqtheme file.
+    let a_dark = a_dark.filter(|a| !a.is_empty());
+    let a_light = a_light.filter(|a| !a.is_empty());
     if a_light.as_deref().is_some_and(|a| !valid_display_text(a)) {
         return Err(Problem::Author);
     }
