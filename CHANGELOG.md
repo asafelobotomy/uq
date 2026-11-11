@@ -9,6 +9,18 @@ All notable changes to uQ are listed here. The format follows
 
 ### Added
 
+- **uQ session.** A "uQ" entry in your display manager's session list. Its first login sets up
+  uQ for you (no `uqctl setup` needed); if setup reports a problem, the problem goes to
+  `~/.local/state/uq/session.log` and the desktop starts anyway. `uqctl setup` gains `--quiet`.
+- **Login screen.** uQ's own greeter for greetd, in uQ's look: users with their pictures, the
+  password field, the session to start (uQ first), and Suspend, Restart and Shut down (click
+  twice). It follows the theme, variant and wallpaper chosen for it and never reads anyone's home
+  folder. Wrong passwords, locked accounts and other login messages show as plain text; an
+  expired password asks for a new one twice and checks they match. If it fails 3 times in a
+  minute, greetd's text login takes over so nobody is locked out. Turn it on with
+  `run0 uqctl greeter enable` (needs `greetd`) and off with `run0 uqctl greeter disable`, which
+  brings back the display manager it replaced. See docs/greeter.md.
+
 - **`uq-dev`.** Use uQ and develop it on the same machine: `uq-dev session` opens a nested
   uQ desktop running a checkout's uqd and shell on a private bus with sandboxed config,
   `uq-dev run` runs an app from its checkout with throwaway config, and `uq-dev promote` /

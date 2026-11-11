@@ -1,0 +1,111 @@
+#!/bin/bash
+# /usr/lib/uq/uq-greeter-session: greetd's [default_session] command in /etc/uq/greetd.toml, run
+# as the `greeter` user (spec phase 5 §2.1, §2.4).
+#
+#   uq-greeter-session          Start Hyprland with /usr/share/uq/greeter/hyprland.lua (plus the
+#                               keyboard layout from `localectl`). Exit 0 once a session was
+#                               launched; otherwise record a failure and exit 1, so greetd starts
+#                               the greeter again. After 3 failures in 60 s, exec `agreety` (greetd's
+#                               text greeter) on the same VT, so a broken greeter never locks
+#                               anyone out.
+#   uq-greeter-session --shell  Run inside that Hyprland (its hyprland.start hook): run the
+#                               greeter (Quickshell), then make Hyprland exit. A greeter that isn't
+#                               up within 30 s is stopped and counts as a failure.
+#
+# The greeter writes "ready" and then "launched" to $UQ_GREETER_STATUS; that file, not an exit
+# code, tells a launched session from a crash. Nothing here logs passwords or PAM messages:
+# Quickshell's greetd lines are dropped from its output.
+# UQ_GREETER_* overrides are for tests/shell/greeter_session.sh only.
+set -u
+
+state_dir=${UQ_GREETER_STATE_DIR:-/var/cache/uq-greeter}
+config=${UQ_GREETER_CONFIG:-/usr/share/uq/greeter/hyprland.lua}
+greeter_dir=${UQ_GREETER_DIR:-/usr/share/uq/greeter}
+hyprland=${UQ_GREETER_HYPRLAND:-Hyprland}
+hyprctl=${UQ_GREETER_HYPRCTL:-hyprctl}
+qs=${UQ_GREETER_QS:-quickshell}
+agreety=${UQ_GREETER_AGREETY:-agreety}
+ready_timeout=${UQ_GREETER_READY_TIMEOUT:-30}
+session_cmd=/usr/bin/uq-session
+window=60
+max_failures=3
+
+say() { printf 'uq-greeter-session: %s\n' "$*" >&2; }
+
+if [ "${1:-}" = --shell ]; then
+    status=${UQ_GREETER_STATUS:-}
+    [ -n "$status" ] || { say "UQ_GREETER_STATUS is not set"; "$hyprctl" dispatch 'hl.dsp.exit()' >/dev/null 2>&1; exit 1; }
+    "$qs" -p "$greeter_dir" > >(grep --line-buffered -v 'quickshell\.service\.greetd' >&2) 2>&1 &
+    qs_pid=$!
+    ticks=0
+    while kill -0 "$qs_pid" 2>/dev/null; do
+        grep -qE '^(ready|launched)$' "$status" 2>/dev/null && break
+        if [ "$ticks" -ge $((ready_timeout * 10)) ]; then
+            say "the greeter did not start within ${ready_timeout} s"
+            kill "$qs_pid" 2>/dev/null
+            break
+        fi
+        sleep 0.1
+        ticks=$((ticks + 1))
+    done
+    wait "$qs_pid"
+    rc=$?
+    grep -qx launched "$status" 2>/dev/null || say "the greeter exited ($rc) without starting a session"
+    "$hyprctl" dispatch 'hl.dsp.exit()' >/dev/null 2>&1
+    exit 0
+fi
+
+# Failures are kept where they survive greetd restarting this script (one timestamp per line).
+mkdir -p "$state_dir" 2>/dev/null
+if [ ! -w "$state_dir" ]; then
+    state_dir="${XDG_RUNTIME_DIR:-/tmp}/uq-greeter"
+    mkdir -p -m 700 "$state_dir" 2>/dev/null
+fi
+failures="$state_dir/failures"
+
+recent_failures() {
+    local now
+    now=$(date +%s)
+    awk -v now="$now" -v w="$window" '$1 ~ /^[0-9]+$/ && now - $1 >= 0 && now - $1 < w { n++ } END { print n + 0 }' \
+        "$failures" 2>/dev/null || echo 0
+}
+
+fall_back() {
+    say "the graphical greeter failed $max_failures times in ${window} s; using agreety"
+    exec "$agreety" --cmd "$session_cmd"
+}
+
+[ "$(recent_failures)" -ge "$max_failures" ] && fall_back
+
+rt=$(mktemp -d "${XDG_RUNTIME_DIR:-/tmp}/uq-greeter.XXXXXX") || fall_back
+trap 'rm -rf "$rt"' EXIT
+status="$rt/status"
+: >"$status"
+
+# The keyboard layout: localectl's X11 layout and variant, read once. Only plain layout names
+# reach the config (letters, digits, _ - , and parentheses); anything else keeps "us".
+x11() { localectl status 2>/dev/null | sed -n "s/^ *X11 $1: *//p" | head -n 1; }
+layout=$(x11 Layout)
+variant=$(x11 Variant)
+valid() { [[ "$1" =~ ^[A-Za-z0-9_,()-]{1,64}$ ]]; }
+{
+    printf 'require("%s")\n' "$config"
+    if valid "$layout"; then
+        if valid "$variant"; then
+            printf 'hl.config({ input = { kb_layout = "%s", kb_variant = "%s" } })\n' "$layout" "$variant"
+        else
+            printf 'hl.config({ input = { kb_layout = "%s" } })\n' "$layout"
+        fi
+    fi
+} >"$rt/hyprland.lua"
+
+UQ_GREETER_STATUS="$status" "$hyprland" --config "$rt/hyprland.lua"
+
+if grep -qx launched "$status" 2>/dev/null; then
+    rm -f "$failures"
+    exit 0
+fi
+date +%s >>"$failures"
+tail -n 10 "$failures" >"$failures.tmp" 2>/dev/null && mv -f "$failures.tmp" "$failures"
+[ "$(recent_failures)" -ge "$max_failures" ] && { rm -rf "$rt"; fall_back; }
+exit 1

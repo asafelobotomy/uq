@@ -1,8 +1,10 @@
 //! uqctl: command-line client for uqd (`org.uq.Desktop1`).
 
 mod bridge;
+mod greeter_cmd;
 mod launch_cmd;
 mod profile_cmd;
+mod render_themes;
 mod settings_app;
 mod settings_cmd;
 mod setup;
@@ -123,7 +125,20 @@ enum Cmd {
         /// Print the outcome as one JSON object on stdout (for installers such as bindle).
         #[arg(long)]
         json: bool,
+        /// Print nothing on success; errors still go to stderr (for `uq-session` at login).
+        #[arg(long, conflicts_with = "json")]
+        quiet: bool,
     },
+    /// Make greetd with uQ's login screen the display manager, or switch back (as root:
+    /// `run0 uqctl greeter enable`).
+    Greeter {
+        #[command(subcommand)]
+        cmd: greeter_cmd::GreeterCmd,
+    },
+    /// Packaging: render every theme variant's tokens.json into OUT/<id>-<variant>/ for the
+    /// greeter, with uqd's renderer.
+    #[command(hide = true)]
+    RenderThemes(render_themes::Args),
 }
 
 #[derive(Subcommand)]
@@ -366,6 +381,8 @@ async fn run(cmd: Cmd) -> Result<(), String> {
             .await
             .map_err(describe)?,
         Cmd::Setup { .. }
+        | Cmd::RenderThemes(_)
+        | Cmd::Greeter { .. }
         | Cmd::Bridge
         | Cmd::Settings { .. }
         | Cmd::Profile { .. }
@@ -445,9 +462,16 @@ async fn pin(proxy: &zbus::Proxy<'_>, cmd: PinCmd) -> Result<(), String> {
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> ExitCode {
     let cli = Cli::parse();
-    if let Cmd::Setup { apps, json } = cli.cmd {
+    if let Cmd::Setup { apps, json, quiet } = cli.cmd {
         // Local files only: no uqd, no timeout.
-        return setup::main(apps, json);
+        return setup::main(apps, json, quiet);
+    }
+    if let Cmd::Greeter { cmd } = &cli.cmd {
+        // Local files and systemctl only: no uqd.
+        return greeter_cmd::main(cmd);
+    }
+    if let Cmd::RenderThemes(args) = cli.cmd {
+        return render_themes::main(&args);
     }
     if let Cmd::Settings { page, setting } = cli.cmd {
         return settings_app::main(
@@ -532,7 +556,8 @@ mod tests {
             Cli::try_parse_from(["uqctl", "setup"]).unwrap().cmd,
             Cmd::Setup {
                 apps: false,
-                json: false
+                json: false,
+                quiet: false
             }
         ));
         assert!(matches!(
@@ -541,9 +566,30 @@ mod tests {
                 .cmd,
             Cmd::Setup {
                 apps: true,
-                json: false
+                json: false,
+                quiet: false
             }
         ));
+        assert!(matches!(
+            Cli::try_parse_from(["uqctl", "setup", "--quiet"])
+                .unwrap()
+                .cmd,
+            Cmd::Setup { quiet: true, .. }
+        ));
+        assert!(Cli::try_parse_from(["uqctl", "setup", "--quiet", "--json"]).is_err());
+    }
+
+    #[test]
+    fn cli_parses_greeter() {
+        use greeter_cmd::GreeterCmd;
+        for (word, want) in [
+            ("enable", GreeterCmd::Enable),
+            ("disable", GreeterCmd::Disable),
+        ] {
+            let cli = Cli::try_parse_from(["uqctl", "greeter", word]).unwrap();
+            assert!(matches!(cli.cmd, Cmd::Greeter { cmd } if cmd == want));
+        }
+        assert!(Cli::try_parse_from(["uqctl", "greeter"]).is_err());
     }
 
     #[test]

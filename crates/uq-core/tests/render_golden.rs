@@ -54,6 +54,31 @@ fn golden_all_variants() {
     );
 }
 
+/// The greeter's pre-rendered `tokens.json` files (`uqctl render-themes`, run at package build)
+/// are byte-for-byte what uqd renders for that variant with default settings, for every variant.
+#[test]
+fn prerendered_tokens_equal_uqd_render() {
+    let reg = registry();
+    let out = tempfile::tempdir().unwrap();
+    let written =
+        uq_core::render::prerender_tokens(&reg, &repo().join("templates"), out.path()).unwrap();
+    assert_eq!(written.len(), reg.iter().count());
+    let golden = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/golden");
+    for t in reg.iter() {
+        let name = format!("{}-{}", t.id, t.variant);
+        let pre = fs::read_to_string(out.path().join(&name).join("tokens.json")).unwrap();
+        // uqd's render_candidate: the theme with the (default) appearance applied.
+        let theme = t.with_appearance(&uq_core::settings::Appearance::default());
+        let uqd = render(&theme, &repo().join("templates"), None).unwrap();
+        assert_eq!(pre, uqd.0[Path::new("tokens.json")], "{name}");
+        let gold = fs::read_to_string(golden.join(&name).join("tokens.json")).unwrap();
+        assert_eq!(pre, gold, "{name}");
+    }
+    // Nothing else is written, and the themes directory still loads with it inside.
+    let dirs = fs::read_dir(out.path()).unwrap().count();
+    assert_eq!(dirs, reg.iter().count());
+}
+
 #[test]
 fn tokens_json_round_trips() {
     let reg = registry();
