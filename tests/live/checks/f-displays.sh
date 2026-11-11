@@ -199,10 +199,19 @@ sf5() {
         bad "generated.lua has no cursor.default_monitor = \"$name\": $(grep -n 'cursor' "$CFG/hypr/uq/generated.lua" | head -n 3)"
     note "cursor:default_monitor in Hyprland: $(hc getoption cursor:default_monitor -j 2>&1 | jq -c . 2>/dev/null | cut -c1-120)"
     r=$(mon_merge '.workspaces = {strategy: "sequential", count: 4, manual: [], move_back: true}') || bad "the planner: $r"
-    n=$(grep -cE "workspace = \"[1-4]\", monitor = \"$name\"" "$CFG/hypr/uq/generated.lua")
-    note "workspace rules for $name: $n; $(grep 'hl.workspace_rule' "$CFG/hypr/uq/generated.lua" | head -n 2 | tr '\n' ' ')"
-    expect_eq "workspace rules on $name for workspaces 1 to 4" 4 "$n"
-    note "hyprctl workspacerules: $(hc workspacerules -j 2>&1 | jq -c '[.[] | {workspaceString, monitor}]' 2>/dev/null | cut -c1-300)"
+    # The planner needs two screens: with one it renders nothing.
+    expect_eq "planned workspace rules with one screen" 0 "$(sf5_rules)"
+    if r=$(hc output create headless "$FD_HP" 2>&1) && wait_for 5 sf7_has; then
+        wait_for 10 sf5_four || bad "with two screens expected rules for workspaces 1 to 4; observed $(sf5_rules): $(grep 'hl.workspace_rule' "$CFG/hypr/uq/generated.lua" | head -n 6 | tr '\n' ' ')"
+        expect_eq "planned rules on $name" 2 "$(grep -E 'hl\.workspace_rule' "$CFG/hypr/uq/generated.lua" | grep -cE "workspace = \"[1-4]\".*monitor = \"$name\"")"
+        expect_eq "planned rules on $FD_HP" 2 "$(grep -E 'hl\.workspace_rule' "$CFG/hypr/uq/generated.lua" | grep -cE "workspace = \"[1-4]\".*monitor = \"$FD_HP\"")"
+        note "hyprctl workspacerules: $(hc workspacerules -j 2>&1 | jq -c '[.[] | {workspaceString, monitor}]' 2>/dev/null | cut -c1-300)"
+        expect_eq "Hyprland's errors with the planner on two screens" "$e0" "$(config_errors | wc -l)"
+        hc output remove "$FD_HP" >/dev/null 2>&1
+        wait_for 10 sf5_none || bad "the planner's rules stayed after the second screen went: $(sf5_rules)"
+    else
+        note "no second output to plan for ($r); only the one-screen case was checked"
+    fi
     expect_eq "Hyprland's errors after the main display and planner" "$e0" "$(config_errors | wc -l)"
     # A main display that isn't connected renders nothing and leaves the rest alone.
     r=$(mon_merge '.primary = {make: "uqlive", model: "gone", serial: "0"}') || bad "choosing a screen that isn't connected: $r"
@@ -212,9 +221,13 @@ sf5() {
     r=$(mon_merge '.workspaces.manual = [{workspace: 9, monitor: {make: "a", model: "b", serial: "c"}}]') && bad "a manual slot outside the count was accepted"
     r=$(mon_merge 'del(.primary) | .workspaces = {strategy: "off", count: 10, manual: [], move_back: true}') || bad "turning both off: $r"
     grep -q 'default_monitor' "$CFG/hypr/uq/generated.lua" && bad "default_monitor is still in generated.lua after the main display was cleared"
-    [ "$(grep -cE "workspace = \"[1-4]\", monitor = \"$name\"" "$CFG/hypr/uq/generated.lua")" = 0 ] || bad "planner rules are still in generated.lua after it was turned off"
+    [ "$(sf5_rules)" = 0 ] || bad "planner rules are still in generated.lua after it was turned off"
     expect_eq "Hyprland's errors at the end" "$e0" "$(config_errors | wc -l)"
 }
+
+sf5_rules() { grep -E 'hl\.workspace_rule' "$CFG/hypr/uq/generated.lua" | grep -cE 'workspace = "[1-4]".*monitor = "'; }
+sf5_four() { [ "$(sf5_rules)" = 4 ]; }
+sf5_none() { [ "$(sf5_rules)" = 0 ]; }
 
 check SF6 "A headless output with no name of ours isn't a screen: nothing is written when it comes and goes" sf6 hypr
 sf6() {
@@ -232,6 +245,7 @@ sf6() {
     r=$(bus RememberMonitors ss "uqlive solo" settings) || bad "RememberMonitors: $r"
     expect_eq "screens in an arrangement made with a headless output present" 1 "$(section monitors | jq '[.profiles[] | select(.name == "uqlive solo")][0].outputs | length')"
     mon_merge '.profiles |= map(select(.name | startswith("uqlive") | not))' >/dev/null
+    h0=$(newest_id)
     hc output remove "$new" >/dev/null 2>&1
     wait_for 5 sf6_gone "$new" || bad "$new is still there after hyprctl output remove"
     sleep 2
@@ -258,13 +272,14 @@ $(fd_out "$FD_HP" 1 "$hp_x")")") || { bad "keeping the pair layout: $r"; hc outp
     r=$(bus RememberMonitors ss "uqlive pair" settings) || bad "RememberMonitors for the pair: $r"
     note "arrangements: $(fd_profiles)"
     expect_eq "arrangements saved" 2 "$(section monitors | jq '[.profiles[] | select(.name | startswith("uqlive"))] | length')"
-    hot=$(history_json 1 | jq -r '.[0].id')
+    hot=$(newest_id)
     # Unplug: within a few seconds the solo arrangement is back, with no dialog.
     hc output remove "$FD_HP" >/dev/null 2>&1
     wait_for 8 sf7_solo "$name" || bad "after the second screen went, expected the solo layout (scale 1) back; stored: $(fd_stored_scale "$name"), live: $(fd_scale "$name")"
     [ -z "$(fd_pending)" ] || bad "a change is waiting for a confirm after the hotplug"
     note "History after unplug: $(history_json 2 | jq -c '[.[] | {origin, summary}]')"
-    if [ "$(newest_id)" != "$hot" ]; then expect_eq "the origin of the switch" hotplug "$(newest | jq -r .origin)"; else bad "the switch back to the solo layout left no History row"; fi
+    # A switch for new screens is quiet: it leaves no History row.
+    expect_eq "History after the switch back to the solo layout" "$hot" "$(newest_id)"
     # Plug in: the pair is back.
     hc output create headless "$FD_HP" >/dev/null 2>&1
     wait_for 8 sf7_pair "$name" || bad "after the second screen came back, expected the pair layout (scale 2); stored: $(fd_stored_scale "$name"), live: $(fd_scale "$name")"
@@ -277,7 +292,7 @@ $(fd_out "$FD_HP" 1 "$hp_x")")") || { bad "keeping the pair layout: $r"; hc outp
     hc output remove "$FD_HP" >/dev/null 2>&1
     wait_for 8 sf7_solo "$name" || bad "after flapping, expected the solo layout; stored: $(fd_stored_scale "$name")"
     [ -z "$(fd_pending)" ] || bad "a change is waiting for a confirm after flapping"
-    note "History after flapping: $(history_json 6 | jq -c '[.[] | select(.origin == "hotplug")] | length') hotplug rows in the last 6"
+    expect_eq "hotplug rows in History after everything" 0 "$(history_json 12 | jq -c '[.[] | select(.origin == "hotplug")] | length')"
     # Switch off: nothing follows the screens.
     r=$(mon_merge '.auto_profiles = false') || bad "turning the switch off: $r"
     hc output create headless "$FD_HP" >/dev/null 2>&1

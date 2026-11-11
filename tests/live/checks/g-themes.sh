@@ -65,9 +65,8 @@ sg2() {
     local r gaps f=$WORK/sg2.uqtheme
     r=$("$UQCTL" theme import "$GT_FIX/uqlive-forest.uqtheme" 2>&1) || { bad "import: $r"; return; }
     "$UQCTL" theme export "$GT_ID" "$f" || { bad "export to a file failed"; theme_cleanup; return; }
-    if ! diff -u "$GT_FIX/uqlive-forest.uqtheme" "$f" >"$WORK/sg2.diff"; then
-        bad "the exported file differs from the imported one: $(head -n 8 "$WORK/sg2.diff" | tr '\n' ' ' | cut -c1-300)"
-    fi
+    [ "$(cat "$GT_FIX/uqlive-forest.uqtheme")" = "$(cat "$f")" ] ||
+        bad "the exported file differs from the imported one: $(grep -vxFf "$GT_FIX/uqlive-forest.uqtheme" "$f" | head -n 4 | tr '\n' '|') (and the other way: $(grep -vxFf "$f" "$GT_FIX/uqlive-forest.uqtheme" | head -n 4 | tr '\n' '|'))"
     r=$("$UQCTL" theme export "$GT_ID") || bad "export to the screen failed"
     [ "$r" = "$(cat "$f")" ] || bad "export to the screen isn't the file's text"
     grep -q '^\[look\]' "$f" && bad "a plain export has a [look] section"

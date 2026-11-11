@@ -193,7 +193,13 @@ sk5() {
         return
     fi
     note "submap before: $(hc submap)"
-    t1=$(bus PauseShortcuts) || { bad "PauseShortcuts: $t1"; return; }
+    t1=$(bus PauseShortcuts) || {
+        bad "PauseShortcuts: $t1"
+        note "hyprctl eval of the same Lua: $(hc eval 'hl.dispatch(hl.dsp.submap("uq_capture"))' 2>&1 | head -n 3); submap now $(hc submap 2>&1)"
+        note "the submap is defined in generated.lua: $(grep -n 'define_submap' "$CFG/hypr/uq/generated.lua")"
+        hc eval 'hl.dispatch(hl.dsp.submap("reset"))' >/dev/null 2>&1
+        return
+    }
     note "token: $t1; submap while paused: $(hc submap)"
     [[ $(hc submap) == *uq_capture* ]] || bad "expected the uq_capture submap while paused; observed $(hc submap)"
     r=$(bus ResumeShortcuts s "not-$t1") && bad "a wrong token was accepted"
