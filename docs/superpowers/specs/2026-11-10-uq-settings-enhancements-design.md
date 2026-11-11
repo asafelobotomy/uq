@@ -435,8 +435,9 @@ proposal above:
 3. The noti-fi page has no do-not-disturb schedule, because noti-fi has none. It offers the
    automatic do-not-disturb it has (full screen, screen sharing) and focus modes.
 4. Per-app rules on the noti-fi page are read-only; editing them stays in noti-fi.
-5. Pages poll (every 5 s while visible) instead of following signals, apart from the watches a
-   manifest can declare.
+5. Pages follow changes through manifest watches instead of polling: scdrd's PropertiesChanged
+   signal, crumBS's history file and noti-fi's state and rules files. Only the Tailscale page
+   polls (every 5 s while shown), because Tailscale has nothing a manifest can watch.
 6. scdr: no "try a scheduler" and no per-power-profile scheduler choice on the page.
 7. Page ids are the app names (`scdr`, `crumbs`, `noti-fi`, `xzram`, `scale-tail`), not the page
    titles in the table.
