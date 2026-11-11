@@ -1,0 +1,28 @@
+[package]
+name = "uq-settings-helper"
+description = "uQ's root helper: writes a few fixed system files for uQ Settings, behind polkit"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "uq-settings-helper"
+path = "src/main.rs"
+
+[dependencies]
+uq-core.workspace = true
+async-trait.workspace = true
+libc = "0.2"
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+toml.workspace = true
+toml_edit = { version = "0.25", features = ["parse", "display"] }
+tracing.workspace = true
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+zbus = { version = "5", default-features = false, features = ["tokio"] }
+
+[dev-dependencies]
+serde.workspace = true
+tempfile.workspace = true
+uq-core = { workspace = true, features = ["test-bus"] }
