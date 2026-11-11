@@ -80,3 +80,37 @@ jobs:
         run: |
           docker run --rm --device "$SMOKE_CARD" -e SMOKE_CARD -e SMOKE_UID="$(id -u)" \
             -v "$GITHUB_WORKSPACE:/src" archlinux:latest bash /src/scripts/smoke-in-container.sh
+
+  settings-live:
+    # The Settings live checks (tests/live) against this checkout's uqd and a headless Hyprland on
+    # the uQ config, on vkms like the smoke job. The checks that need a person, a login or real
+    # hardware run in the test VM (tests/vm) or on the real desktop (docs/notes).
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - name: Load vkms
+        run: |
+          sudo modprobe vkms 2>/dev/null || {
+            sudo apt-get update -q && sudo apt-get install -y -q "linux-modules-extra-$(uname -r)" && sudo modprobe vkms
+          }
+          card=""
+          for c in /sys/class/drm/card*; do
+            case "${c##*/}" in *-*) continue ;; esac
+            [ "$(basename "$(readlink -f "$c/device")")" = vkms ] && card=/dev/dri/${c##*/}
+          done
+          [ -n "$card" ] || { echo "::error::vkms loaded but no vkms card found"; exit 1; }
+          echo "SMOKE_CARD=$card" >> "$GITHUB_ENV"
+      - name: Settings live checks on Hyprland
+        run: |
+          docker run --rm --device "$SMOKE_CARD" -e SMOKE_CARD -e SMOKE_UID="$(id -u)" \
+            -v "$GITHUB_WORKSPACE:/src" archlinux:latest bash /src/tests/live/ci-in-container.sh
+      - name: Keep the results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: settings-live
+          path: target/uq-live
+          if-no-files-found: ignore

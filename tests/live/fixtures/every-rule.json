@@ -1,0 +1,21 @@
+{
+  "window": [
+    {"id": "r-ee30", "name": "uqlive tag", "enabled": true, "match": {"class": "^uqlive-tag$"}, "effects": {"tag": "mytag"}},
+    {"id": "r-ee32", "name": "uqlive every effect", "enabled": true,
+     "match": {"class": "^(uqlive-x|uqlive-y)$", "title": "t.*", "initial_class": "c", "initial_title": "d", "tag": "web",
+               "workspace": "2", "xwayland": false, "floating": true, "fullscreen": false, "pinned": false, "modal": false},
+     "effects": {"float": true, "fullscreen": false, "maximize": false, "workspace": "name:web", "silent": true, "monitor": "DP-1",
+                 "size": [800, 600], "pin": true, "no_initial_focus": true, "opacity": 0.9, "no_blur": true, "no_shadow": true,
+                 "no_anim": true, "rounding": 8, "border_size": 1, "idle_inhibit": "focus", "keep_aspect_ratio": true, "tag": "pinned"}},
+    {"id": "r-ee33", "name": "uqlive tile", "enabled": false, "match": {"class": "^uqlive-other$"}, "effects": {"tile": true, "position": [-10, 20]}},
+    {"id": "r-ee34", "name": "uqlive centre", "enabled": true, "match": {"class": "^uqlive-centred$"}, "effects": {"center": true}}
+  ],
+  "layer": [
+    {"id": "r-ee31", "name": "uqlive panel", "enabled": true, "match": {"namespace": "^(uqlive-panel)$"},
+     "effects": {"blur": true, "ignore_alpha": 0.3, "no_anim": true, "animation": "slide"}}
+  ],
+  "workspace": [
+    {"workspace": "4", "default": false, "persistent": true, "gaps_in": 3, "gaps_out": 6, "border_size": 2},
+    {"workspace": "name:uqlive-chat", "persistent": true}
+  ]
+}
