@@ -9,7 +9,7 @@ Where a step says "check Hyprland's errors", run `hyprctl configerrors`. Empty o
 
 - [ ] **1. Upgrade keeps every shortcut.** Install the package over the previous one while logged
   in. Every default still works before and after `systemctl --user restart uqd`, and
-  `hyprctl binds -j | grep -c '"uq:'` is 54. Move `generated.lua` aside and run `hyprctl reload`:
+  `hyprctl binds -j | grep -c '"uq:'` is 55. Move `generated.lua` aside and run `hyprctl reload`:
   the fallback shortcuts still work. Put it back.
 - [ ] **2. Rebind.** Change Open Spotlight to Super + K. Super + K opens it at once, and
   Super + Space does nothing. **Reset** brings Super + Space back. History shows both lines

@@ -87,7 +87,7 @@ pub fn default_of(id: &str) -> Option<&'static Default> {
     DEFAULTS.iter().find(|d| d.id == id)
 }
 
-static DEFAULTS: [Default; 55] = [
+static DEFAULTS: [Default; 56] = [
     Default {
         id: "uq.terminal",
         label: "Open a terminal",
@@ -140,6 +140,17 @@ static DEFAULTS: [Default; 55] = [
         group: Group::AppsAndDesktop,
         combo: Some("SUPER + Space"),
         action: DefaultAction::Global("spotlight"),
+        locked: false,
+        repeating: false,
+        release: false,
+        mouse: false,
+    },
+    Default {
+        id: "uq.emoji",
+        label: "Open Spotlight for emoji",
+        group: Group::AppsAndDesktop,
+        combo: Some("SUPER + period"),
+        action: DefaultAction::Global("emoji"),
         locked: false,
         repeating: false,
         release: false,
@@ -709,9 +720,9 @@ mod tests {
     }
 
     #[test]
-    fn table_has_55_rows_54_bound() {
-        assert_eq!(defaults().len(), 55);
-        assert_eq!(defaults().iter().filter(|d| d.combo.is_some()).count(), 54);
+    fn table_has_56_rows_55_bound() {
+        assert_eq!(defaults().len(), 56);
+        assert_eq!(defaults().iter().filter(|d| d.combo.is_some()).count(), 55);
     }
 
     #[test]
@@ -752,7 +763,7 @@ mod tests {
             let c = parse(d.combo.unwrap()).unwrap_or_else(|e| panic!("{}: {e}", d.id));
             assert!(seen.insert(c), "{} repeats a combo", d.id);
         }
-        assert_eq!(seen.len(), 54);
+        assert_eq!(seen.len(), 55);
     }
 
     #[test]
@@ -815,6 +826,7 @@ mod tests {
         // The launcher rows are never locked; base.lua says the same line by line.
         for id in [
             "uq.spotlight",
+            "uq.emoji",
             "uq.appmenu",
             "uq.quick-settings",
             "uq.notif-centre",

@@ -232,11 +232,11 @@ async fn list_binds_includes_marked_user_lua_rows() {
     let p = r.desktop.paths().user_lua.clone();
     std::fs::write(&p, "hl.bind(\"SUPER + T\", d) -- uq:bind Terminal two\n").unwrap();
     let v: Value = serde_json::from_str(&r.desktop.list_binds().unwrap()).unwrap();
-    assert_eq!(v["binds"].as_array().unwrap().len(), 56);
+    assert_eq!(v["binds"].as_array().unwrap().len(), 57);
     assert_eq!(v["user_lua"][0]["line"], 1);
     assert_eq!(v["user_lua"][0]["combo"], "SUPER + T");
     assert_eq!(v["user_lua"][0]["text"], "Terminal two");
-    assert_eq!(v["binds"][55]["name"], "Screenshot");
+    assert_eq!(v["binds"][56]["name"], "Screenshot");
     // No command text in the listing.
     assert!(!v.to_string().contains("grim"));
 }

@@ -66,6 +66,7 @@ hl.bind("SUPER + Return", hl.dsp.exec_cmd("kitty"), { description = "uq:uq.termi
 hl.bind("SUPER + V", hl.dsp.window.float({ action = "toggle" }), { description = "uq:uq.float" })
 hl.bind("SUPER + SHIFT + M", hl.dsp.exec_cmd("command -v hyprshutdown >/dev/null 2>&1 && hyprshutdown || hyprctl dispatch 'hl.dsp.exit()'"), { description = "uq:uq.exit" })
 hl.bind("SUPER + K", hl.dsp.global("uq:spotlight"), { description = "uq:uq.spotlight" })
+hl.bind("SUPER + period", hl.dsp.global("uq:emoji"), { description = "uq:uq.emoji" })
 hl.bind("SUPER + SUPER_L", hl.dsp.global("uq:appmenu"), { release = true, description = "uq:uq.appmenu" })
 hl.bind("SUPER + A", hl.dsp.global("uq:quick-settings"), { description = "uq:uq.quick-settings" })
 hl.bind("SUPER + N", hl.dsp.global("uq:notif-centre"), { description = "uq:uq.notif-centre" })

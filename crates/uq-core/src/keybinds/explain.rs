@@ -147,7 +147,7 @@ mod tests {
         assert_eq!(v["binds.uq.spotlight"]["stored"], "SUPER + Space");
         assert_eq!(v["binds.uq.spotlight"]["live"], Value::Null);
         assert_eq!(v["binds.uq.profile.next"]["stored"], Value::Null);
-        assert_eq!(v.as_object().unwrap().len(), 55);
+        assert_eq!(v.as_object().unwrap().len(), 56);
     }
 
     #[test]
@@ -213,7 +213,7 @@ mod tests {
     fn rejected_marks_every_row_and_the_section() {
         let k = Keybinds::default();
         let v = explain(&k, Some(&live_of(&k)), None, Some("bad"), "/u");
-        assert_eq!(v.as_object().unwrap().len(), 56);
+        assert_eq!(v.as_object().unwrap().len(), 57);
         for (key, row) in v.as_object().unwrap() {
             assert_eq!(row["source"], "error", "{key}");
             assert_eq!(row["detail"], json!({"message": "bad"}), "{key}");

@@ -645,6 +645,7 @@ fn base_lua_launcher_binds_are_not_locked() {
     let base = std::fs::read_to_string(repo().join("config/hypr/base.lua")).unwrap();
     for name in [
         "uq:spotlight",
+        "uq:emoji",
         "uq:appmenu",
         "uq:quick-settings",
         "uq:notif-centre",
@@ -760,7 +761,7 @@ fn base_lua_binds_equal_the_default_table() {
     let (ok, from_table, err) = run_mock(&lua, dir.path(), true, &[&rendered]);
     assert!(ok, "{from_table}{err}");
     let (a, b) = (bind_lines(&from_base), bind_lines(&from_table));
-    assert_eq!(a.len(), 54, "{from_base}");
+    assert_eq!(a.len(), 55, "{from_base}");
     assert_eq!(a, b, "base.lua and the default table have drifted apart");
 }
 
@@ -880,7 +881,7 @@ fn hostile_binds_run_as_one_call_each() {
         .expect(&text);
     let after = &lines[unbind..];
     let calls = after.iter().filter(|l| **l == "hl.bind").count();
-    assert_eq!(calls, 54 + 2 * hostile.len(), "{text}");
+    assert_eq!(calls, 55 + 2 * hostile.len(), "{text}");
     assert_eq!(bind_lines(&text).len(), calls, "{text}");
     assert!(!text.contains("hl.exec_cmd:x"), "{text}");
     assert!(!text.contains("hl.exec_cmd:\"x"), "{text}");

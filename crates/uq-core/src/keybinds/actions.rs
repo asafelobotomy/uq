@@ -215,6 +215,7 @@ impl Action {
         match self {
             Action::Shell { name } => match name.as_str() {
                 "spotlight" => "Opens Spotlight",
+                "emoji" => "Opens Spotlight for emoji",
                 "appmenu" => "Opens the app menu",
                 "quick-settings" => "Opens quick settings",
                 "notif-centre" => "Opens notifications",

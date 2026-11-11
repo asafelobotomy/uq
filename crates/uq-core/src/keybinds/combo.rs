@@ -141,12 +141,13 @@ pub fn kind(c: Combo) -> KeyKind {
 mod tests {
     use super::*;
 
-    const BASE_LUA: [&str; 54] = [
+    const BASE_LUA: [&str; 55] = [
         "SUPER + Return",
         "SUPER + Q",
         "SUPER + V",
         "SUPER + SHIFT + M",
         "SUPER + Space",
+        "SUPER + period",
         "SUPER + SUPER_L",
         "SUPER + A",
         "SUPER + N",

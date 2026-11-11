@@ -146,6 +146,7 @@ hl.bind(mainMod .. " + SHIFT + M", hl.dsp.exec_cmd("command -v hyprshutdown >/de
 -- don't work over the lock screen. The app menu bind fires when a tap of left SUPER is released; Hyprland shadows it
 -- once another key or button has been pressed and released while SUPER is held.
 hl.bind(mainMod .. " + Space",   hl.dsp.global("uq:spotlight"))
+hl.bind(mainMod .. " + period",  hl.dsp.global("uq:emoji"))
 hl.bind(mainMod .. " + SUPER_L", hl.dsp.global("uq:appmenu"), { release = true })
 hl.bind(mainMod .. " + A",       hl.dsp.global("uq:quick-settings"))
 hl.bind(mainMod .. " + N",       hl.dsp.global("uq:notif-centre"))
