@@ -60,6 +60,8 @@ pub enum Event {
     PickRequested(String),
     /// A startup app's status changed: `ListAutostart` has the new picture.
     AutostartChanged,
+    /// The user's themes changed: `ListThemeInfo` has the new picture.
+    ThemesChanged,
 }
 
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
@@ -138,6 +140,10 @@ pub struct Desktop {
     pub(crate) main_scale: Option<f64>,
     /// What the file sync last found (`crate::startup`).
     pub(crate) files: FileReport,
+    /// What the user's themes folder looked like when it was last read (`crate::themes`).
+    pub(crate) user_themes: uq_core::theme::user::Fingerprint,
+    /// The theme folders the last scan left out, and why.
+    pub(crate) skipped_themes: Vec<uq_core::theme::user::Skipped>,
 }
 
 /// `explain`'s dotted key as a profile path.
@@ -235,21 +241,13 @@ impl Desktop {
     ) -> Result<Self, DesktopError> {
         let themes = ThemeRegistry::load_dir(&paths.themes_dir)
             .map_err(|e| DesktopError::Io(e.to_string()))?;
-        let mut state = State::load(&paths.state_file);
-        if themes.get(&state.theme, state.variant).is_none() {
-            tracing::warn!(
-                "theme {:?} not installed; using {}",
-                state.theme,
-                State::default().theme
-            );
-            state.theme = State::default().theme;
-        }
+        let state = State::load(&paths.state_file);
         let (events, _) = broadcast::channel(64);
         let journal = Journal::open(&paths.history_dir);
         let restore = RestoreStore::open(&paths.restore_dir);
         let profiles = ProfileStore::open(paths.profiles_dir.clone());
         let active = load_active(&paths.profile_active);
-        Ok(Desktop {
+        let mut desktop = Desktop {
             paths,
             themes,
             state,
@@ -273,7 +271,24 @@ impl Desktop {
             dev_session: false,
             main_scale: None,
             files: FileReport::default(),
-        })
+            user_themes: Vec::new(),
+            skipped_themes: Vec::new(),
+        };
+        // The user's themes first, so a saved `user-…` theme survives a restart.
+        desktop.load_user_themes();
+        if desktop
+            .themes
+            .get(&desktop.state.theme, desktop.state.variant)
+            .is_none()
+        {
+            tracing::warn!(
+                "theme {:?} not installed; using {}",
+                desktop.state.theme,
+                State::default().theme
+            );
+            desktop.state.theme = State::default().theme;
+        }
+        Ok(desktop)
     }
 
     /// Use `p` for power modes instead of none (the system's service in `main`, a fake in tests).
