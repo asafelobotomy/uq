@@ -569,7 +569,68 @@ static STARTUP_SETTINGS: [SearchEntry; 4] = [
     ),
 ];
 
-static CORE_PAGES: [PageInfo; 11] = [
+static USERS_SETTINGS: [SearchEntry; 2] = [
+    entry(
+        "user-accounts",
+        "People who can log in",
+        &[
+            "user",
+            "account",
+            "password",
+            "avatar",
+            "picture",
+            "add user",
+            "remove user",
+            "administrator",
+            "admin",
+        ],
+    ),
+    entry(
+        "users-auto-login",
+        "Auto-login",
+        &["automatic login", "autologin", "without password"],
+    ),
+];
+
+static LOGIN_SCREEN_SETTINGS: [SearchEntry; 6] = [
+    entry(
+        "greeter-theme",
+        "Login screen theme",
+        &["greeter", "login", "colors", "dark", "light"],
+    ),
+    entry(
+        "greeter-wallpaper",
+        "Login screen wallpaper",
+        &["greeter", "login", "background", "picture"],
+    ),
+    entry(
+        "greeter-displays",
+        "Use my display layout at login",
+        &["greeter", "monitors", "screens", "arrangement"],
+    ),
+    entry(
+        "greeter-hide-users",
+        "Hide the list of users",
+        &["greeter", "user list", "privacy", "username"],
+    ),
+    entry(
+        "greeter-reduce-motion",
+        "Login screen motion",
+        &["greeter", "animations", "reduce motion"],
+    ),
+    entry(
+        "auto-login",
+        "Log in automatically",
+        &[
+            "autologin",
+            "automatic login",
+            "without password",
+            "greeter",
+        ],
+    ),
+];
+
+static CORE_PAGES: [PageInfo; 13] = [
     PageInfo {
         id: "appearance",
         name: "Appearance",
@@ -669,7 +730,33 @@ static CORE_PAGES: [PageInfo; 11] = [
         settings: &STARTUP_SETTINGS,
         domains: &["autostart", "env"],
     },
+    PageInfo {
+        id: "users",
+        name: "Users",
+        icon: "system-users",
+        category: Category::System,
+        qml: "pages/UsersPage.qml",
+        settings: &USERS_SETTINGS,
+        domains: &[],
+    },
+    PageInfo {
+        id: "login-screen",
+        name: "Login screen",
+        icon: "system-lock-screen",
+        category: Category::System,
+        qml: "pages/LoginScreenPage.qml",
+        settings: &LOGIN_SCREEN_SETTINGS,
+        domains: &[],
+    },
 ];
+
+/// Pages shown only on some machines: the Login screen page needs uQ's login screen
+/// (`/etc/uq/greetd.toml`). The others are always shown.
+pub fn drop_unavailable(pages: &mut Vec<PageEntry>, greeter_installed: bool) {
+    if !greeter_installed {
+        pages.retain(|p| p.id != "login-screen");
+    }
+}
 
 /// The core pages, sorted by category.
 pub fn core_pages() -> &'static [PageInfo] {
@@ -992,7 +1079,9 @@ mod tests {
                 "profiles",
                 "rules",
                 "history",
-                "startup"
+                "startup",
+                "users",
+                "login-screen"
             ]
         );
         assert_eq!(v[0]["category"], "personal");
@@ -1174,5 +1263,29 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn system_pages_registered_after_startup() {
+        let ids: Vec<_> = core_pages().iter().map(|p| p.id).collect();
+        let at = ids.iter().position(|id| *id == "startup").unwrap();
+        assert_eq!(ids[at + 1..at + 3], ["users", "login-screen"]);
+        for id in ["users", "login-screen"] {
+            let page = find(id).unwrap();
+            assert_eq!(page.category, Category::System, "{id}");
+            assert!(page.domains.is_empty(), "{id} changes no uQ setting");
+        }
+        let login = find("login-screen").unwrap();
+        assert!(login.settings.iter().any(|s| s.id == "auto-login"));
+    }
+
+    #[test]
+    fn login_screen_shown_only_with_the_greeter() {
+        let mut pages = all_pages(&[]);
+        drop_unavailable(&mut pages, true);
+        assert!(pages.iter().any(|p| p.id == "login-screen"));
+        drop_unavailable(&mut pages, false);
+        assert!(!pages.iter().any(|p| p.id == "login-screen"));
+        assert!(pages.iter().any(|p| p.id == "users"));
     }
 }
