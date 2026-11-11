@@ -36,6 +36,7 @@ checkout exists). Shell edits reload live. Inside it:
 - `UQ_DEV_SESSION=1`, which makes `base.lua`'s start and shutdown hooks do nothing, and a
   `systemctl` shim that refuses to restart, stop or start `uqd`, `uq-shell`, `uq-lock` or
   `scdr-session` in the real user manager;
+- no `xrandr` and no desktop notifications for display changes: a `uq-dev session` neither sets an X11 primary nor tells you an arrangement couldn't be used;
 - no autostart apps: the runner starts nothing and the Startup page says "Not started in a test
   session". `XDG_DATA_HOME` isn't sandboxed here, so uqd neither writes nor deletes launcher
   overrides, and the "Also when started from other launchers" switch is refused; for the same

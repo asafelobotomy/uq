@@ -144,10 +144,59 @@ and so do startup apps (`"autostart"`), environment variables (`"env"`) and Apps
 app's status as JSON, `ShellReady()` is what the bridge calls once the shell has sent its first
 request (so uqd knows when to start the login apps), and `AutostartChanged` is the signal sent
 when a status changes.
+Displays use `GetSection("monitors")` / `SetSection("monitors", json, origin)` for everything but
+the layout (main display, bar, saved arrangements, workspace planner); the layout still changes
+only through `ApplyMonitors`. `RememberMonitors(name, origin)` saves an arrangement for the
+screens that are connected and returns its id. `ListOutputs()` also carries `roles` (the main
+display and which screens get a bar) and `arrangement` (`id`, `name`, `applied`, `failed`).
+Gestures and the swipe options are part of `GetSection("input")` / `SetSection("input", ...)`.
 `PickWindow()` asks the shell to let you click a window and returns only that window's details
 (JSON with a `status`), `PickDone(token, outcome)` is what the shell calls back with, `ListWindows()`
 returns the open windows' details (no addresses or process ids), and `PickRequested(token)` is the
 signal that tells the shell to start.
+
+#### Displays
+
+Besides the layout, the Displays page keeps **saved arrangements**. After you keep a change it
+offers **Remember for these screens** (or **Update**, when the set already has one). An
+arrangement is matched by the make, model and serial of every connected screen, never by port,
+so swapping cables doesn't matter. There is one per set of screens. When screens are plugged in
+or out, uQ switches to the arrangement for the new set within about 2 seconds, with no prompt
+and no 15 second revert. **Switch arrangements when screens change** turns that off. A switch
+isn't recorded in History; Remember, Forget and the other choices on the page are, and each can
+be undone. An arrangement that can't be used leaves the layout alone and shows one
+notification.
+
+**Main display** is the screen where notifications, the volume and brightness pop-ups and
+Spotlight open, where the session starts, and, when `xrandr` is installed (optional,
+`xorg-xrandr`), the X11 primary. It does nothing until you choose one; until then those follow
+the focused screen. Menus opened from a bar stay on that bar's screen. **Show the bar on** picks
+all screens, the main one or the ones you tick; a bar always shows somewhere. **Workspaces
+across screens** puts workspaces 1 to N on screens one after another, in turn, or by hand
+(Choose for each), shows a preview, and **Move workspaces back when a screen returns** (on by
+default) sends them home when the screen comes back. A rule of your own on the Rules page for
+the same workspace wins, field by field. Undo in History puts back a whole list of arrangements
+or plan at once.
+
+#### Input
+
+The Input page lists **touchpad gestures**: fingers (3 to 5), direction (sideways, up, down,
+left, right, pinch in, pinch out), what it does, and an optional held key. uQ ships two:
+three fingers sideways switches workspace, and four fingers up opens Spotlight. Turn either off
+with its switch, or use **Back to uQ's gestures** to restore the list. Two gestures that use the
+same fingers and key conflict when their directions are equal or one covers the other (sideways
+covers left and right, up and down are covered by vertical), because Hyprland refuses the second
+one; the editor says which two clash and won't save. The swipe options (distance, reverse, make a
+new workspace past the last, cancel ratio) apply at once. A gesture in `user.lua` that overlaps
+one of uQ's makes Hyprland refuse the whole config, so every later uQ change then fails with
+Hyprland's own message; uQ never edits `user.lua`, and the page shows the line and offers to open
+it.
+
+#### Wallpaper
+
+A wallpaper entry for **All displays** can use **Span across displays**: one image is drawn over
+the screens at their real positions, and each screen shows its part. Screens with their own
+entry are left out. A folder slideshow changes slide on every screen together.
 
 #### Profiles page
 

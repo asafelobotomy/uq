@@ -9,6 +9,22 @@ All notable changes to uQ are listed here. The format follows
 
 ### Added
 
+- **Display arrangements, the main display, and touchpad gestures.** The Displays page can
+  **Remember for these screens**: each arrangement is matched by the make, model and serial of
+  every connected screen (not by port), and when screens are plugged in or out uqd switches to
+  the one for the new set within about 2 seconds, with no prompt; **Switch arrangements when
+  screens change** turns it off, and automatic switches aren't recorded in History. A **main
+  display** gets notifications, the volume pop-up and Spotlight, starts the session, and is the X11
+  primary when `xrandr` is installed (new optional dependency `xorg-xrandr`). **Span across
+  displays** draws one wallpaper over all screens. The **workspace planner** puts workspaces on
+  screens one after another, in turn or by hand, and moves them back when a screen returns.
+  **Bar per screen** shows the bar on all screens, the main one or chosen ones, and never on none.
+  The Input page gains **touchpad gestures** with conflict checks (the editor warns and uqd
+  refuses a save that Hyprland would refuse) and the workspace swipe options. New `uqd` call
+  `RememberMonitors`; `ListOutputs` gains `roles` and `arrangement`; `SetSection("monitors")` now
+  takes every key except the layout. The three-finger swipe moved from `base.lua` into
+  `generated.lua`, so a gesture of your own in `user.lua` that overlaps uQ's makes Hyprland
+  refuse the config.
 - **Keyboard shortcuts.** A Keyboard shortcuts page lists every uQ shortcut by what it does:
   change its keys (press them to capture, or pick them), turn it off, reset it, or put all back.
   Add your own shortcuts: open a uQ panel, a window or workspace action, a layout, start an app

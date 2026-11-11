@@ -125,7 +125,8 @@ in uqd.
 - Files live in `~/.local/state/uq/history/` as one JSON line per entry, rotated daily. uqd keeps
   30 days or 500 entries, whichever is smaller.
 - Launch counts, the theme schedule's own automatic flips, and unconfirmed monitor applies are
-  never recorded. A confirmed monitor change is.
+  never recorded. A confirmed monitor change is. Neither is a hotplug arrangement switch (slice F);
+  the user's own Remember, Forget and role changes are.
 
 **Restore points** are full copies of `state.toml` in `~/.local/state/uq/restore/<id>.toml`, plus
 a name and time.
@@ -325,7 +326,8 @@ env vars, and extra arguments.
   their layout positions. Each monitor's background layer draws its own crop.
 - **Workspaces per monitor.** A planner with three strategies, taken from hyprmoncfg: sequential
   (1–5 on the first screen, 6–10 on the next), interleave (odd on one, even on the other) and
-  manual. It renders `rules.workspace[].monitor`. "Move workspaces back when a monitor returns"
+  manual. The plan is stored in `monitors.workspaces` and merged into the workspace rules at render
+  (slice F), so it never appears as editable rules. "Move workspaces back when a monitor returns"
   is on by default.
 - **Bar per monitor.** The shell's bar can be on all monitors, the primary only, or a chosen set.
 
@@ -338,8 +340,10 @@ env vars, and extra arguments.
   renders through Hyprland's gesture config, with names checked against the pinned source.
 - **Workspace swipe options:** distance, invert, create a new workspace past the last, and
   cancel ratio.
-- **Conflicts.** Two gestures with the same fingers, direction and modifier conflict. The same
-  rules as keybinds apply: the editor warns, and uqd rejects the save.
+- **Conflicts.** Two gestures with the same fingers and modifier conflict when their directions are
+  equal or one is the other's axis (`horizontal` covers `left` and `right`, `vertical` covers `up`
+  and `down`), which is Hyprland's own rule; `pinch_in` and `pinch_out` render as Hyprland's
+  `pinchin` and `pinchout`. The same rules as keybinds apply: the editor warns, and uqd rejects the save.
 - **Defaults.** uQ ships 3-finger horizontal for switching workspace and 4-finger up for
   Spotlight, both of which can be turned off.
 
@@ -451,8 +455,8 @@ These come from KDE and COSMIC complaints, and a lint or test checks each one wh
 
 **D-Bus summary** (all on `org.uq.Desktop1`): `Explain`, `ListHistory`, `Undo`,
 `ListRestorePoints`, `SaveRestorePoint`, `DeleteRestorePoint`, `Restore`, `ListProfiles`,
-`GetProfile`, `SetProfile`, `DeleteProfile`, `ApplyProfile`, `ProfileOff`, `PickWindow → s`,
-`ListAutostart`, `ShellReady`, `ListThemeInfo`, `ExportTheme`, `ImportTheme`, `DeleteTheme`; the `autostart`, `env` and `compat` sections are written with
+`GetProfile`, `SetProfile`, `DeleteProfile`, `ApplyProfile`, `ProfileOff`, `RememberMonitors`, `PickWindow → s`,
+`ListAutostart`, `ShellReady`, `ListThemeInfo`, `ExportTheme`, `ImportTheme`, `DeleteTheme`; `ListOutputs` carries `roles` (main display and bar screens) and `arrangement`; the `autostart`, `env` and `compat` sections are written with
 `SetSection("autostart" | "env" | "compat", json, origin)`. Signals: `HistoryChanged`, `ProfileChanged(s id)`,
 `AutostartChanged`, `ThemesChanged`. `uqctl theme` gains `import`, `export`, `delete` and `list --long`.
 
