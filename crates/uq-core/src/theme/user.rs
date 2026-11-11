@@ -5,9 +5,9 @@
 //! breaks a rule never loads and never stops anything else from loading; the scan says why it
 //! was skipped, in plain words.
 
-use super::{Theme, Variant};
+use super::{Theme, Variant, derive};
 use crate::autostart::scan::read_capped_if;
-use crate::contrast::{self, ContrastFailure};
+use crate::contrast;
 use crate::settings::valid_theme_name;
 use serde::Serialize;
 use std::os::unix::fs::MetadataExt;
@@ -142,17 +142,6 @@ impl Problem {
     }
 }
 
-/// The plain wording of one contrast failure. Task 3 moves this into `derive`.
-fn pair_text(variant: Variant, f: &ContrastFailure) -> String {
-    format!(
-        "{} on {} is hard to read in the {variant} version ({:.1} to 1; it needs {} to 1).",
-        f.fg,
-        f.bg,
-        f.ratio,
-        contrast::AA
-    )
-}
-
 fn font_ok(s: &str) -> bool {
     (1..=MAX_FONT_CHARS).contains(&s.chars().count()) && !s.chars().any(char::is_control)
 }
@@ -187,18 +176,10 @@ pub fn check_variant(t: &Theme, author: Option<&str>) -> Result<(), Problem> {
     if let Some(f) = contrast::check_theme(t).first() {
         return Err(Problem::HardToRead {
             variant: t.variant,
-            text: pair_text(t.variant, f),
+            text: derive::problem_text(t.variant, f),
         });
     }
-    let (bg, text) = (
-        contrast::luminance(t.colors.bg),
-        contrast::luminance(t.colors.text),
-    );
-    let right = match t.variant {
-        Variant::Dark => bg < text,
-        Variant::Light => bg > text,
-    };
-    if right {
+    if derive::brightness_ok(t) {
         Ok(())
     } else {
         Err(Problem::WrongBrightness(t.variant))

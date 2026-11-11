@@ -32,6 +32,20 @@ pub struct ContrastFailure {
     pub ratio: f64,
 }
 
+/// The plain name of a theme token, for messages: "Muted text", "the background" and so on.
+pub fn plain_name(token: &str) -> &'static str {
+    match token {
+        "text" => "Text",
+        "text_muted" => "Muted text",
+        "bg" => "the background",
+        "surface" => "panels",
+        "surface_alt" => "raised panels",
+        "accent" => "the accent",
+        "accent_text" => "Text on the accent",
+        _ => "a colour",
+    }
+}
+
 /// Every text/surface pair that falls below WCAG AA.
 pub fn check_theme(t: &Theme) -> Vec<ContrastFailure> {
     let c = &t.colors;
@@ -73,6 +87,22 @@ mod tests {
     fn ratio_is_symmetric() {
         let (a, b) = (Color([0x28, 0x28, 0x28]), Color([0xeb, 0xdb, 0xb2]));
         assert!((contrast_ratio(a, b) - contrast_ratio(b, a)).abs() < 1e-9);
+    }
+
+    #[test]
+    fn plain_names_cover_every_checked_token() {
+        let mut t = Theme::from_toml(FIXTURE, "f", Variant::Dark).unwrap();
+        t.colors.text = t.colors.bg;
+        t.colors.text_muted = t.colors.bg;
+        t.colors.accent_text = t.colors.accent;
+        for f in check_theme(&t) {
+            for token in [f.fg, f.bg] {
+                assert_ne!(plain_name(token), "a colour", "{token}");
+                assert!(!plain_name(token).contains('_'));
+            }
+        }
+        assert_eq!(plain_name("text_muted"), "Muted text");
+        assert_eq!(plain_name("accent_text"), "Text on the accent");
     }
 
     #[test]
