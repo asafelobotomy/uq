@@ -28,6 +28,12 @@ Item {
 
     // The typed password, held only until the context's echo-off prompt arrives; null otherwise.
     property var pending: null
+    // How long a password check may take before it is given up (a PAM module that never answers
+    // would otherwise leave the lock screen "Checking…" for good). Tests shorten it.
+    property int pamTimeoutMs: 60000
+    // Set when the watchdog or Esc ended the check, so the abort's own completion does not
+    // replace the message shown for it.
+    property bool gaveUp: false
 
     function resultName(r) {
         if (r === PamResult.Success) return "Success";
@@ -42,6 +48,7 @@ Item {
             return;
         done = true;
         pending = null;
+        pwWatchdog.stop();
         if (pw.active) pw.abort();
         if (fp.active) fp.abort();
         fpRetry.stop();
@@ -65,12 +72,49 @@ Item {
         }
         message = { text: "", error: false };
         attemptMessages = [];
+        gaveUp = false;
         pending = typed;
         if (!pw.start()) {
             pending = null;
             message = { text: "Could not start authentication", error: true };
+            return true;
         }
+        pwWatchdog.restart();
         return true;
+    }
+
+    // Ends the password check in progress, if any: the typed password is dropped and `text` is
+    // shown. Used by the watchdog and by Esc.
+    function giveUp(text, isError) {
+        pwWatchdog.stop();
+        pending = null;
+        attemptMessages = [];
+        if (!pw.active)
+            return false;
+        gaveUp = true;
+        pw.abort();
+        message = { text: text, error: isError };
+        return true;
+    }
+
+    // Esc: stop a check that is still waiting on PAM with no question showing. A check that is
+    // asking something (e.g. a new password) is left alone. Returns true when it stopped one.
+    function cancel() {
+        if (done || !pw.active || pw.responseRequired)
+            return false;
+        console.info("uq-lock: password check cancelled");
+        return giveUp("", false);
+    }
+
+    Timer {
+        id: pwWatchdog
+        interval: auth.pamTimeoutMs
+        onTriggered: {
+            if (!pw.active)
+                return;
+            console.info("uq-lock: password check timed out");
+            auth.giveUp("That took too long. Try again.", true);
+        }
     }
 
     PamContext {
@@ -92,18 +136,21 @@ Item {
             auth.attemptMessages = auth.attemptMessages.concat([auth.message]);
         }
         onCompleted: function (result) {
+            pwWatchdog.stop();
             auth.pending = null;
             console.info("uq-lock: password", auth.resultName(result));
             if (result === PamResult.Success)
                 auth.succeed();
-            else
+            else if (!auth.gaveUp)
                 auth.message = L.failureView(auth.attemptMessages, "Authentication failed");
             auth.attemptMessages = [];
         }
         onError: function (error) {
+            pwWatchdog.stop();
             auth.pending = null;
             console.info("uq-lock: password error");
-            auth.message = L.failureView(auth.attemptMessages, "Authentication error");
+            if (!auth.gaveUp)
+                auth.message = L.failureView(auth.attemptMessages, "Authentication error");
             auth.attemptMessages = [];
         }
     }

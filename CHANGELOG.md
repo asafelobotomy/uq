@@ -247,6 +247,9 @@ All notable changes to uQ are listed here. The format follows
 
 - **Restore points saved in the same second list newest first.** They used to sort by a
   random suffix, so "the newest point" could be an older one.
+- **The lock screen no longer waits for ever on a password check.** If PAM has not answered
+  after 60 seconds, the check is stopped and the lock screen says "That took too long. Try
+  again." Esc stops a check that is still waiting.
 
 ## [0.2.1] - 2026-11-10
 

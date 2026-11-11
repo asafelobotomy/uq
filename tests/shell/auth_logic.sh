@@ -10,6 +10,9 @@
 #   fpnone: fprintd-list not on PATH (failed start) -> polled again at the 10 s throttle.
 #   info  : a stack that sends two info messages (as pam_faillock does when the account is locked)
 #           before failing -> the failure shows those messages, not "Authentication failed" (L21).
+#   hang  : a stack whose module never answers (pam_exec sleeping) -> the watchdog (shortened to
+#           2 s) aborts the check, drops the typed password and shows "That took too long".
+#   esc   : the same stack, and Esc (Auth.cancel) while it is checking -> aborted, no message.
 # As `nobody`, unix_chkpwd rejects any password, so `pw` proves rejection and the no-unlock path, not
 # that the stack validates a correct password.
 set -u
@@ -37,6 +40,9 @@ cp "$tmp/pam.d/uq-lock-fingerprint" "$tmp/pam-info.d/"
 printf '%s\n' 'auth optional pam_echo.so The account is locked due to 3 failed logins.' \
     'auth optional pam_echo.so (10 minutes left to unlock)' 'auth required pam_unix.so' \
     > "$tmp/pam-info.d/uq-lock"
+mkdir -p "$tmp/pam-hang.d"
+cp "$tmp/pam.d/uq-lock-fingerprint" "$tmp/pam-hang.d/"
+printf 'auth required pam_exec.so quiet %s 20\n' "$(command -v sleep)" > "$tmp/pam-hang.d/uq-lock"
 
 # fprintd-list stubs; each call appends a line to its scenario's log.
 mkbin() { # dir, exit code, output
@@ -61,14 +67,23 @@ ShellRoot {
     Auth {
         id: a
         pamDir: "${3:-$tmp/pam.d}"
+        pamTimeoutMs: "$1" === "hang" ? 2000 : 60000
         onUnlocked: console.log("UNLOCKED")
     }
     property int polls: 0
     Timer {
-        interval: 200; running: "$1" === "pw" || "$1" === "info"
+        interval: 200; running: "$1" === "pw" || "$1" === "info" || "$1" === "hang" || "$1" === "esc"
         onTriggered: {
             console.log("SUBMIT1", a.submit("definitely-wrong"));
             console.log("SUBMIT2", a.submit("second"), a.message.text);
+        }
+    }
+    Timer {
+        interval: 1200; running: "$1" === "esc"
+        onTriggered: {
+            console.log("BUSY", a.busy);
+            console.log("CANCEL", a.cancel());
+            console.log("CANCEL2", a.cancel());
         }
     }
     Timer {
@@ -90,6 +105,8 @@ run fpask "$tmp/bin-listed"
 run fpfail "$tmp/bin-fail"
 run fpnone "$tmp/bin-none"
 run info "$tmp/bin-fail" "$tmp/pam-info.d"
+run hang "$tmp/bin-fail" "$tmp/pam-hang.d"
+run esc "$tmp/bin-fail" "$tmp/pam-hang.d"
 for p in "${pids[@]}"; do wait "$p"; done
 pids=()
 
@@ -97,7 +114,7 @@ fail=0
 calls() { [ -f "$1/calls" ] && wc -l < "$1/calls" || echo 0; }
 check() { grep -q "$2" "$tmp/out-$1" || { echo "FAIL ($1): no '$2'"; fail=1; }; }
 none() { if grep -q "$2" "$tmp/out-$1"; then echo "FAIL ($1): unexpected '$2'"; fail=1; fi; }
-for s in pw fpask fpfail fpnone info; do
+for s in pw fpask fpfail fpnone info hang esc; do
     none $s UNLOCKED
     check $s 'STATE pending true busy false done false'
     if grep -E 'TypeError|ReferenceError|is not a type|Cannot assign|Unable to assign|is not a function|Syntax[Ee]rror|Failed to load' "$tmp/out-$s"; then
@@ -112,16 +129,25 @@ none pw 'second'
 check info 'uq-lock: password Failed'
 check info 'MSG The account is locked due to 3 failed logins. (10 minutes left to unlock) error true'
 none info 'definitely-wrong'
+check hang 'SUBMIT1 true'
+check hang 'uq-lock: password check timed out'
+check hang 'MSG That took too long. Try again. error true'
+none hang 'definitely-wrong'
+check esc 'BUSY true'
+check esc 'CANCEL true'
+check esc 'CANCEL2 false'
+check esc 'MSG  error false'
+none esc 'timed out'
 # fpask: the prompt is aborted, never answered, and the list is polled again (attempt + retry).
 check fpask 'Relaying pam message'
 none fpask 'Got response'
 none fpask 'uq-lock: fingerprint Success'
 # pw, fpfail and fpask share counting stubs; fpnone counts through Quickshell's failed-start warning.
 n=$(calls "$tmp/bin-listed"); [ "$n" -ge 2 ] || { echo "FAIL (fpask): fprintd-list polled $n times, want >= 2"; fail=1; }
-n=$(calls "$tmp/bin-fail"); [ "$n" -ge 4 ] || { echo "FAIL (fpfail+pw+info): fprintd-list polled $n times, want >= 4"; fail=1; }
+n=$(calls "$tmp/bin-fail"); [ "$n" -ge 4 ] || { echo "FAIL (fpfail+pw+info+hang+esc): fprintd-list polled $n times, want >= 4"; fail=1; }
 n=$(grep -c 'Process failed to start' "$tmp/out-fpnone"); [ "$n" -ge 2 ] || { echo "FAIL (fpnone): $n start attempts, want >= 2"; fail=1; }
 if [ "$fail" != 0 ] || [ -n "${SHOW:-}" ]; then
-    for s in pw fpask fpfail fpnone info; do echo "== $s"; cat "$tmp/out-$s"; done
+    for s in pw fpask fpfail fpnone info hang esc; do echo "== $s"; cat "$tmp/out-$s"; done
 fi
 [ "$fail" = 0 ] && echo "auth_logic ok"
 exit "$fail"
