@@ -82,8 +82,9 @@ Item {
 
         function test_scale_steps() {
             const d = make();
-            compare(d.scaleLabels, ["Automatic", "100 %", "125 %", "150 %", "175 %", "200 %", "225 %", "250 %", "275 %", "300 %"]);
+            // The catalogue is copied when the dialog opens, so open it first.
             d.start("code.desktop", "Code", null);
+            compare(d.scaleLabels, ["Automatic", "100 %", "125 %", "150 %", "175 %", "200 %", "225 %", "250 %", "275 %", "300 %"]);
             for (let i = 1; i < d.scaleLabels.length; i++) {
                 choose(d.scaleBox, i);
                 compare(JSON.parse(d.fixJson()).scale, 1 + (i - 1) * 0.25);
