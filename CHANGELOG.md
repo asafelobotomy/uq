@@ -25,6 +25,35 @@ All notable changes to uQ are listed here. The format follows
   takes every key except the layout. The three-finger swipe moved from `base.lua` into
   `generated.lua`, so a gesture of your own in `user.lua` that overlaps uQ's makes Hyprland
   refuse the config.
+
+## [0.3.0-rc.1] - 2026-11-11
+
+### Added
+
+- **Settings pages: longer D-Bus deadlines for writes that may ask for a password.** A page's
+  `[dbus]` table takes `timeout_ms = { Method = <ms> }`, up to 120 seconds, for listed methods
+  only; every other request still ends within 2 seconds. Checked by the manifest loader and
+  `uqctl integrations check`. See docs/settings-pages.md.
+- **`uqctl integrations check --no-programs`.** Skips only the check that each command's and
+  app action's program is installed, so an app's CI can check its `uq/` folder without
+  installing the app. Paths are still checked.
+- **Settings pages may ship sibling files.** A page folder may hold a `logic.js` imported from
+  its QML (`import "logic.js" as Logic`) and further component files; tested and documented in
+  docs/settings-pages.md.
+- **Settings pages follow changes instead of polling.** A page's read `[[command]]` takes a
+  `watch` table (files, absolute or under `~/`, and D-Bus signal matches on the session or system
+  bus); `ctx.command.watch(id, callback)` runs it now and again after each debounced burst of
+  changes, one run at a time, until `ctx.command.unwatch` or the page closes. See
+  docs/settings-pages.md.
+- **`ctx.openApp(desktopId)` for Settings pages.** A page can open an app (its own full app,
+  say) by its `name.desktop` id, the way the launcher does (`uqctl launch`), detached from
+  Settings. Paths and other ids are refused.
+- **A stable component list and a test kit for Settings pages.** docs/settings-pages.md lists the
+  `org.uq.settings` components pages may use under `uq_api = 1` (`UqLabel`, `UqComboBox`,
+  `SettingRow`, `SwitchRow`, `ValueSlider`, `ErrorCard`) with their properties.
+  `templates/settings-page-tests/` is a kit an app copies into its repository: a stub
+  `org.uq.settings` module, a stand-in `ctx` and an example offscreen `qmltestrunner` test. The
+  template page now keeps its logic in `logic.js`.
 - **Keyboard shortcuts.** A Keyboard shortcuts page lists every uQ shortcut by what it does:
   change its keys (press them to capture, or pick them), turn it off, reset it, or put all back.
   Add your own shortcuts: open a uQ panel, a window or workspace action, a layout, start an app
@@ -272,6 +301,48 @@ All notable changes to uQ are listed here. The format follows
 
 - **Restore points saved in the same second list newest first.** They used to sort by a
   random suffix, so "the newest point" could be an older one.
+- **The lock screen no longer waits for ever on a password check.** If PAM has not answered
+  after 60 seconds, the check is stopped and the lock screen says "That took too long. Try
+  again." Esc stops a check that is still waiting.
+- **A slow session bus or uqd no longer holds up the shell's start.** The bridge gives up on
+  connecting, subscribing and asking for uqd after 2 seconds and tries again later, and sends
+  `Hello` after at most 2 seconds of waiting for Welcome's status (the shell asks again).
+- **`uqctl history | head` no longer panics.** uqctl stops quietly when the program reading its
+  output closes the pipe.
+- **Reduce motion does something.** It is now your own setting (Settings → Look and layouts →
+  Reduce motion, `ui.reduce_motion`): the idle dim and wallpaper changes happen at once, and
+  window and panel animations are off. The login screen's own Reduce motion stops its user list
+  from coasting when flicked; it already had no other animations.
+- **"Use my display layout at login" is used.** The login screen now arranges its screens from
+  the copied layout (`/etc/uq/greeter-monitors.toml`, checked like your own; a bad file falls back
+  to the automatic layout). Settings → Login screen has **Use automatic layout** to go back
+  (new helper call `ClearGreeterMonitors`).
+- **Changing your own password asks for your current one, not an administrator's.** Settings →
+  Users now changes it through `passwd`, which checks the current password and the password
+  rules and says plainly why a password was refused. Other people's passwords still go through
+  the accounts service.
+- **The Bluetooth page no longer crashes when an adapter goes away while it reads.**
+- **The shell says when something you asked for didn't happen.** The app menu and Spotlight
+  stay open and say why when an app can't be opened (they close once it has been), Spotlight
+  says when search isn't working, and quick settings says why a theme, schedule or layout switch
+  failed. Each failure is also logged.
+- **The Power page updates as the battery and power mode change.** It follows UPower and
+  power-profiles-daemon instead of reading everything again every 30 seconds, so the charge and
+  a mode changed elsewhere show at once. Only when the system bus can't be followed does it
+  fall back to reading again every minute.
+- **Removing the auto-login user turns auto-login off.** The login screen no longer goes on
+  trying to log in an account that's gone; if turning it off is refused, the Users page says so.
+  `uq-settings-helper` also refuses auto-login for a locked or expired account.
+- **Safer file writes.** Every all-or-nothing write in uQ now uses a temp file no other write
+  shares (two writes at once can no longer trip over each other) and syncs the folder after the
+  rename, so a crash right after a save keeps it. A file that is a symlink is still replaced by
+  a regular file, as before; this is now documented.
+- **An integration command that starts something in the background no longer times out.** The
+  runner used to wait for its output to close, which a background process it started keeps
+  open; it now ends the run when the command exits, keeping the output that arrives within
+  200 ms.
+- **docs/settings-pages.md says what the command path check covers.** The `/usr/bin` and
+  `/usr/lib` check is on the path as written; a symlink there that points elsewhere is accepted.
 
 ## [0.2.1] - 2026-11-10
 

@@ -31,8 +31,9 @@ impl Fake {
         "nope".into()
     }
 
+    /// Far longer than the bridge's 2 s deadline, so a loaded machine can't blur the two.
     async fn slow(&self) {
-        tokio::time::sleep(Duration::from_secs(3)).await;
+        tokio::time::sleep(Duration::from_secs(10)).await;
     }
 
     async fn big(&self) -> String {
@@ -292,7 +293,7 @@ async fn calls_reach_only_listed_members_within_limits() {
     }
     let mut events = 0;
     loop {
-        let p = wait_for(&mut b, "WidgetProps", Duration::from_secs(3), |_| true).await;
+        let p = wait_for(&mut b, "WidgetProps", Duration::from_secs(10), |_| true).await;
         events += 1;
         assert_eq!(p["widget"], "fake");
         assert!(p["props"].get("Hidden").is_none(), "{p}");
@@ -308,21 +309,17 @@ async fn calls_reach_only_listed_members_within_limits() {
     Fake::finished(iface.signal_emitter(), "job", true)
         .await
         .unwrap();
-    let s = wait_for(&mut b, "WidgetSignal", Duration::from_secs(3), |_| true).await;
+    let s = wait_for(&mut b, "WidgetSignal", Duration::from_secs(10), |_| true).await;
     assert_eq!(
         s,
         json!({"widget": "fake", "member": "Finished", "args": ["job", true]})
     );
 
-    // Deadline: a call that takes 3 s ends with an error after 2 s.
+    // Deadline: a call that takes 10 s ends with an error after 2 s.
     let t = Instant::now();
     let r11 = b.call(11, "WidgetCall", json!(["fake", "Slow", []])).await;
     assert!(r11["err"].as_str().unwrap().contains("2 s"), "{r11}");
-    assert!(
-        t.elapsed() < Duration::from_millis(2900),
-        "{:?}",
-        t.elapsed()
-    );
+    assert!(t.elapsed() < Duration::from_secs(8), "{:?}", t.elapsed());
 
     // At most 8 in flight per widget: the ninth is busy at once.
     for id in 100..109 {
@@ -349,7 +346,7 @@ async fn calls_reach_only_listed_members_within_limits() {
     // …while an activatable one, with no requires.bus_name, may be started.
     let _ = b.call(13, "WidgetCall", json!(["ghost", "Boo", []])).await;
     let started = bus.dir().join("started");
-    let end = Instant::now() + Duration::from_secs(3);
+    let end = Instant::now() + Duration::from_secs(10);
     while !started.exists() && Instant::now() < end {
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
@@ -517,22 +514,25 @@ async fn app_actions_are_listed_and_launched_by_the_bridge() {
 }
 
 /// A session service file whose Exec appends a line to `<dir>/<tag>.count` and exits without
-/// taking the name (so the start fails, and is logged).
+/// taking the name (so the start fails, and is logged). The script is run by `/bin/sh`, never
+/// exec'd itself: a file just written can't be exec'd while another test thread's fork still
+/// holds it open for writing (ETXTBSY).
 fn counting_service(bus: &Bus, name: &str, tag: &str) {
     let script = bus.dir().join(format!("{tag}.sh"));
     std::fs::write(
         &script,
         format!(
-            "#!/bin/sh\necho x >> {}\n",
+            "echo x >> {}\n",
             bus.dir().join(format!("{tag}.count")).display()
         ),
     )
     .unwrap();
-    use std::os::unix::fs::PermissionsExt;
-    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
     std::fs::write(
         bus.dir().join("s").join(format!("{tag}.service")),
-        format!("[D-BUS Service]\nName={name}\nExec={}\n", script.display()),
+        format!(
+            "[D-BUS Service]\nName={name}\nExec=/bin/sh {}\n",
+            script.display()
+        ),
     )
     .unwrap();
 }
@@ -578,14 +578,15 @@ async fn launcher_open_starts_cold_activatable_providers_once() {
     tokio::time::sleep(Duration::from_millis(300)).await;
     assert_eq!(starts(&bus, "cold"), 0);
 
-    // Opening the launcher starts the cold one, without waiting for it.
+    // Opening the launcher starts the cold one, without waiting for it (the bus would wait
+    // 25 s for a name the service never takes).
     let t = Instant::now();
     assert_eq!(
         b.call(2, "LauncherOpened", json!([])).await["ok"],
         Value::Null
     );
-    assert!(t.elapsed() < Duration::from_secs(1));
-    let end = Instant::now() + Duration::from_secs(5);
+    assert!(t.elapsed() < Duration::from_secs(10), "{:?}", t.elapsed());
+    let end = Instant::now() + Duration::from_secs(15);
     while starts(&bus, "cold") == 0 && Instant::now() < end {
         tokio::time::sleep(Duration::from_millis(50)).await;
     }

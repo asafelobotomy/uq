@@ -25,6 +25,9 @@ id = "status"
 argv = ["/usr/bin/example", "status", "--json"]
 output = "json"                  # "json" | "text" | "none"
 timeout_ms = 3000                # default 10000, at most 600000
+# Run it again when this file changes (ctx.command.watch), instead of polling. Also
+# signals = [{ bus = "system", interface = "…", member = "…" }].
+watch = { files = ["~/.config/example/config.toml"] }
 
 [[command]]
 id = "forget"

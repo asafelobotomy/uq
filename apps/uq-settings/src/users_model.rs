@@ -42,6 +42,7 @@ pub mod qobject {
         fn set_password(
             self: Pin<&mut UsersModel>,
             uid: i64,
+            current: &QString,
             password: &QString,
             confirm: &QString,
         );
@@ -155,11 +156,18 @@ impl UsersModel {
         );
     }
 
-    fn set_password(self: Pin<&mut Self>, id: i64, password: &QString, confirm: &QString) {
+    fn set_password(
+        self: Pin<&mut Self>,
+        id: i64,
+        current: &QString,
+        password: &QString,
+        confirm: &QString,
+    ) {
         model_core::start(
             self,
             Op::SetPassword {
                 uid: uid(id),
+                current: current.to_string(),
                 password: password.to_string(),
                 confirm: confirm.to_string(),
             },

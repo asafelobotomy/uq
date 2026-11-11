@@ -1,5 +1,5 @@
 use super::*;
-use crate::pages::fake_system::{FakeAccounts, FakeUser, SysRig};
+use crate::pages::fake_system::{FakeAccounts, FakeHelper, FakeUser, SysRig};
 use crate::pages::runner::run;
 
 struct Setup(SysRig, FakeAccounts, UsersState, tempfile::TempDir);
@@ -25,9 +25,131 @@ fn two() -> Vec<FakeUser> {
 fn password(uid: u64, p: &str, c: &str) -> Op {
     Op::SetPassword {
         uid,
+        current: String::new(),
         password: p.into(),
         confirm: c.into(),
     }
+}
+
+fn own_password(uid: u64, current: &str, p: &str, c: &str) -> Op {
+    Op::SetPassword {
+        uid,
+        current: current.into(),
+        password: p.into(),
+        confirm: c.into(),
+    }
+}
+
+/// A stand-in for `/usr/bin/passwd`, run by `/bin/sh` (never exec'd itself, so no ETXTBSY):
+/// it asks like shadow's passwd does (prompts on stderr, one line read per prompt), accepts
+/// the current password in `$1/current`, refuses "short" as pam_pwquality would, and records
+/// the new password, its own arguments and its environment in `$1`. Mode `$2`: `hang` never
+/// asks anything.
+const STUB: &str = r#"
+dir=$1
+printf '%s\n' "$*" > "$dir/argv"
+env > "$dir/env"
+[ "$2" = hang ] && exec sleep 30
+echo "Changing password for alice."
+printf 'Current password: ' >&2
+read -r cur
+if [ "$cur" != "$(cat "$dir/current")" ]; then
+    echo 'passwd: Authentication token manipulation error' >&2
+    echo 'passwd: password unchanged' >&2
+    exit 10
+fi
+tries=0
+while :; do
+    printf 'New password: ' >&2
+    read -r new
+    if [ "$new" = short ]; then
+        echo 'BAD PASSWORD: The password is shorter than 8 characters' >&2
+        tries=$((tries + 1))
+        [ "$tries" -ge 3 ] && exit 10
+        continue
+    fi
+    printf 'Retype new password: ' >&2
+    read -r again
+    [ "$new" = "$again" ] || { echo 'Sorry, passwords do not match.' >&2; exit 10; }
+    break
+done
+printf '%s' "$new" > "$dir/changed"
+echo 'passwd: password updated successfully'
+"#;
+
+fn stub_passwd(page: UsersState, mode: &str) -> (UsersState, tempfile::TempDir) {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("stub.sh"), STUB).unwrap();
+    std::fs::write(dir.path().join("current"), "old pw").unwrap();
+    let cmd = vec![
+        OsString::from("/bin/sh"),
+        dir.path().join("stub.sh").into_os_string(),
+        dir.path().as_os_str().to_owned(),
+        OsString::from(mode),
+    ];
+    (page.with_passwd(cmd, Duration::from_secs(2)), dir)
+}
+
+#[tokio::test]
+async fn your_own_password_goes_through_passwd_with_the_current_one() {
+    let Setup(_rig, fake, page, _root) = setup(two(), 1000).await;
+    let (page, dir) = stub_passwd(page, "ok");
+    let out = run(&page, own_password(1000, "", "new pw 1", "new pw 1")).await;
+    assert_eq!(out.error.as_deref(), Some("Type your current password."));
+    assert!(!dir.path().join("argv").exists(), "passwd never ran");
+
+    let out = run(&page, own_password(1000, "old pw", "new pw 1", "new pw 1")).await;
+    assert_eq!(out.error, None);
+    assert_eq!(out.state["notice"]["text"], "Your password was changed.");
+    assert_eq!(
+        std::fs::read_to_string(dir.path().join("changed")).unwrap(),
+        "new pw 1"
+    );
+    // AccountsService (and so an administrator prompt) was never involved.
+    assert_eq!(fake.user("alice").unwrap().password, "");
+    // Never in argv or the environment; prompts were read in the C locale.
+    let argv = std::fs::read_to_string(dir.path().join("argv")).unwrap();
+    let env = std::fs::read_to_string(dir.path().join("env")).unwrap();
+    for secret in ["old pw", "new pw 1"] {
+        assert!(!argv.contains(secret) && !env.contains(secret), "{secret}");
+    }
+    assert!(env.lines().any(|l| l == "LC_ALL=C"), "{env}");
+}
+
+#[tokio::test]
+async fn your_own_password_failures_read_plainly() {
+    let Setup(_rig, _fake, page, _root) = setup(two(), 1000).await;
+    let (page, dir) = stub_passwd(page, "ok");
+    let out = run(&page, own_password(1000, "wrong", "new pw 1", "new pw 1")).await;
+    assert_eq!(out.error.as_deref(), Some("The current password is wrong."));
+    let out = run(&page, own_password(1000, "old pw", "short", "short")).await;
+    assert_eq!(
+        out.error.as_deref(),
+        Some("That password can't be used: The password is shorter than 8 characters")
+    );
+    let out = run(&page, own_password(1000, "old pw", "a", "b")).await;
+    assert_eq!(out.error.as_deref(), Some("The two passwords don't match."));
+    assert!(!dir.path().join("changed").exists());
+
+    let Setup(_rig, _fake, page, _root) = setup(two(), 1000).await;
+    let (page, _dir) = stub_passwd(page, "hang");
+    let started = std::time::Instant::now();
+    let out = run(&page, own_password(1000, "old pw", "new pw 1", "new pw 1")).await;
+    assert_eq!(
+        out.error.as_deref(),
+        Some("Changing the password took too long, so it was stopped.")
+    );
+    assert!(started.elapsed() < Duration::from_secs(20));
+}
+
+#[tokio::test]
+async fn someone_elses_password_still_uses_accountsservice() {
+    let Setup(_rig, fake, page, _root) = setup(two(), 1000).await;
+    let (page, dir) = stub_passwd(page, "ok");
+    let out = run(&page, own_password(1001, "ignored", "s3cret!", "s3cret!")).await;
+    assert_eq!(out.error, None);
+    assert!(fake.user("bob").unwrap().password.starts_with('$'));
+    assert!(!dir.path().join("argv").exists(), "passwd never ran");
 }
 
 #[tokio::test]
@@ -166,6 +288,71 @@ async fn removing_needs_the_name_and_never_yourself() {
         out.state["notice"]["text"],
         "bob and their files were removed."
     );
+}
+
+#[tokio::test]
+async fn removing_the_auto_login_user_turns_auto_login_off() {
+    let mut rig = SysRig::new();
+    let fake = FakeAccounts::start(&mut rig, two()).await;
+    let helper = FakeHelper::start(&mut rig, &[("bob", 1001)]).await;
+    let greetd = "etc/uq/greetd.toml";
+    std::fs::write(
+        helper.path(greetd),
+        format!(
+            "{}\n[initial_session]\ncommand = \"uq-session\"\nuser = \"bob\"\n",
+            helper.read(greetd).unwrap()
+        ),
+    )
+    .unwrap();
+    let page = UsersState::with(rig.system(), 1000, helper.root.path().to_path_buf());
+    let out = run(
+        &page,
+        Op::RemoveUser {
+            uid: 1001,
+            typed: "bob".into(),
+            remove_files: false,
+        },
+    )
+    .await;
+    assert_eq!(out.error, None);
+    assert!(fake.user("bob").is_none());
+    assert!(!helper.read(greetd).unwrap().contains("initial_session"));
+    assert_eq!(
+        out.state["notice"]["text"],
+        "bob was removed. Their files were kept. Auto-login is off."
+    );
+}
+
+#[tokio::test]
+async fn a_refused_auto_login_change_is_said_after_a_removal() {
+    let mut rig = SysRig::new();
+    let _fake = FakeAccounts::start(&mut rig, two()).await;
+    let helper = FakeHelper::start(&mut rig, &[("bob", 1001)]).await;
+    let greetd = "etc/uq/greetd.toml";
+    let with_bob = format!(
+        "{}\n[initial_session]\ncommand = \"uq-session\"\nuser = \"bob\"\n",
+        helper.read(greetd).unwrap()
+    );
+    std::fs::write(helper.path(greetd), &with_bob).unwrap();
+    helper.deny.set(true);
+    let page = UsersState::with(rig.system(), 1000, helper.root.path().to_path_buf());
+    let out = run(
+        &page,
+        Op::RemoveUser {
+            uid: 1001,
+            typed: "bob".into(),
+            remove_files: true,
+        },
+    )
+    .await;
+    assert_eq!(out.error, None);
+    assert!(
+        out.state["notice"]["text"]
+            .as_str()
+            .unwrap()
+            .ends_with("Auto-login still names them: turn it off on the Login screen page.")
+    );
+    assert_eq!(helper.read(greetd).unwrap(), with_bob);
 }
 
 #[tokio::test]

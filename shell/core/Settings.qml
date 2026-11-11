@@ -9,6 +9,9 @@ QtObject {
     // True once settings have been read from uqd; pin edits must wait for it.
     property bool loaded: false
     property var launchCounts: ({})
+    // ui.reduce_motion: skip the shell's fades and crossfades (Hyprland's animations are turned
+    // off by uqd in generated.lua). False until uqd says otherwise.
+    readonly property bool reduceMotion: !!(values && values.ui && values.ui.reduce_motion === true)
 
     function refresh() {
         Bridge.call("GetSettings", []).then(function (s) {

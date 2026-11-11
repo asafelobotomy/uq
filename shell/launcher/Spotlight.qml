@@ -9,6 +9,7 @@ import "../core"
 import "../logic/launcher.js" as L
 import "../logic/rank.js" as Rank
 import "../logic/shellprefs.js" as ShellPrefs
+import "../logic/failure.js" as F
 
 // Super+Space search box: a top hit, then results grouped by source. Logic lives in
 // launcher.js and rank.js; everything shown from apps or providers goes through UqText, and
@@ -28,6 +29,9 @@ PanelWindow {
     readonly property int rowHeight: 40
     // The bridge's 300 ms provider deadline plus slack for the round trip.
     readonly property int providerDeadlineMs: 500
+    // Why the last activation, or the last search, failed (failure.js); "" when nothing failed.
+    property string error: ""
+    property string searchError: ""
 
     // --- search state (all cleared by wipe()) ---
     property string query: ""
@@ -67,6 +71,9 @@ PanelWindow {
 
     function wipe() {
         actionMenu.close();
+        error = "";
+        searchError = "";
+        activateClose.stop();
         debounce.stop();
         deadline.stop();
         copied.stop();
@@ -101,7 +108,15 @@ PanelWindow {
         rebuild(true);
         // Always sent, even when empty, so the bridge drops a stale run command.
         var reply = Bridge.call("Search", [q, generation]);
-        reply.catch(function () {});
+        reply.then(function () {
+            root.searchError = "";
+        }).catch(function (e) {
+            var text = F.failureText("Search isn't working", e);
+            if (text !== root.searchError)
+                console.warn("uq: Search failed: " + e);
+            if (root.shown)
+                root.searchError = text;
+        });
         if (q !== "")
             deadline.restart();
         else
@@ -144,7 +159,9 @@ PanelWindow {
             reply.then(function () {
                 if (root.shown && generation === gen && !L.resultsStale(debounce.running, query, searched))
                     root.activateSelected();
-            }).catch(function () {});
+            }).catch(function () {
+                // runSearch's own handler has logged it and shows it (searchError).
+            });
             return;
         }
         activateSelected();
@@ -171,6 +188,19 @@ PanelWindow {
         var a = L.activation(sec.provider, sec.items[selection.index]);
         if (a === null)
             return;
+        var item = sec.items[selection.index];
+        var label = String(item.name || item.title || item.id || "");
+        var what = a.kind === "launch" ? "Couldn't open " + label
+            : a.kind === "copy" ? "Couldn't copy that" : "Couldn't do that";
+        // A refusal keeps Spotlight open and says why; it closes once the call worked (or after
+        // activateClose, if that takes long).
+        var fail = function (e) {
+            activateClose.stop();
+            console.warn("uq: " + a.call + " (" + sec.provider + ") failed: " + e);
+            if (root.shown)
+                root.error = F.failureText(what, e);
+        };
+        error = "";
         var h = Bridge.call(a.call, a.args);
         if (a.kind === "copy") {
             h.then(function (reply) {
@@ -179,12 +209,23 @@ PanelWindow {
                     Quickshell.clipboardText = v;
                     copied.restart();
                 }
-            }).catch(function () {});
+            }).catch(fail);
+        } else if (a.close) {
+            activateClose.restart();
+            h.then(function () {
+                activateClose.stop();
+                if (root.shown)
+                    Surfaces.close();
+            }).catch(fail);
         } else {
-            h.catch(function () {});
+            h.catch(fail);
         }
-        if (a.close)
-            Surfaces.close();
+    }
+
+    Timer {
+        id: activateClose
+        interval: 1500
+        onTriggered: if (root.shown) Surfaces.close()
     }
 
     function moveSelection(key) {
@@ -435,6 +476,16 @@ PanelWindow {
                 visible: copied.running
                 text: "Copied"
                 color: Theme.success
+            }
+            UqText {
+                objectName: "spotlightError"
+                Layout.fillWidth: true
+                visible: text !== ""
+                text: root.error !== "" ? root.error : root.searchError
+                color: Theme.error
+                wrapMode: Text.Wrap
+                maximumLineCount: 2
+                elide: Text.ElideRight
             }
             UqText {
                 Layout.fillWidth: true

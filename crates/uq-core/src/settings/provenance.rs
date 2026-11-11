@@ -346,6 +346,8 @@ pub fn expected(row: &OptionRow, state: &State, theme: &Theme) -> Option<Value> 
         "look.blur_size" => look.blur_size.map(Value::from),
         "look.blur_passes" => look.blur_passes.map(Value::from),
         "look.shadow" => b(look.shadow),
+        // Reduce motion (`ui.reduce_motion`) renders animations off whatever `look` says.
+        "look.animations" if s.ui.reduce_motion => Some(Value::Bool(false)),
         "look.animations" => b(look.animations),
         "layouts.default" => lo.default.map(|l| Value::from(l.as_str())),
         "layouts.dwindle.preserve_split" => b(lo.dwindle.preserve_split),
@@ -892,6 +894,13 @@ mod tests {
         assert_eq!(
             expected(row("layouts.dwindle.force_split"), &st, &theme),
             Some(json!(2))
+        );
+        assert_eq!(expected(row("look.animations"), &st, &theme), None);
+        st.settings.ui.reduce_motion = true;
+        assert_eq!(
+            expected(row("look.animations"), &st, &theme),
+            Some(json!(false)),
+            "reduce motion renders animations off"
         );
     }
 

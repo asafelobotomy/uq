@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
+import "../core"
 
 // The idle dim (spec §2.7): a 60% black overlay layer on every screen while the dim stage is
 // idle. It takes no input (an empty mask), so clicks and keys reach whatever is underneath; that
@@ -10,8 +11,8 @@ Scope {
     id: root
 
     property bool shown: false
-    // ui.reduce_motion: no fade. Theme has no such token yet, so shell.qml leaves this false.
-    property bool reduceMotion: false
+    // ui.reduce_motion (Settings.reduceMotion): no fade.
+    property bool reduceMotion: Settings.reduceMotion
     readonly property int fadeMs: 1000
 
     Variants {

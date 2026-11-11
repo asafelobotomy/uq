@@ -251,3 +251,139 @@ fn list_reads_a_tree_laid_out_like_usr_share_uq() {
     assert!(ok);
     assert_eq!(out.trim(), "no integrations installed");
 }
+
+/// `uqctl integrations list | head` (or any reader that has gone): stdout is a pipe whose read
+/// end is already closed. uqctl stops quietly instead of panicking on the broken pipe.
+#[test]
+fn closed_stdout_pipe_is_not_a_panic() {
+    let dir = tempfile::tempdir().unwrap();
+    good_folder(&dir.path().join("share/uq"));
+    let (reader, writer) = std::io::pipe().unwrap();
+    drop(reader);
+    let out = Command::new(env!("CARGO_BIN_EXE_uqctl"))
+        .args(["integrations", "list", "--root"])
+        .arg(dir.path().join("share/uq"))
+        .env("DBUS_SESSION_BUS_ADDRESS", "unix:path=/nonexistent")
+        .stdout(writer)
+        .output()
+        .unwrap();
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(!err.contains("panicked"), "{err}");
+    assert!(!err.contains("Broken pipe"), "{err}");
+    assert!(out.status.success(), "{:?} {err}", out.status);
+}
+
+/// A page's `[dbus] timeout_ms` (a write that may ask for a password) is checked: listed
+/// methods only, at most 120 s.
+#[test]
+fn dbus_timeouts_are_checked() {
+    let d = tempfile::tempdir().unwrap();
+    let uq = d.path().join("uq");
+    good_folder(&uq);
+    let page = |timeouts: &str| {
+        put(
+            &uq.join("pages/demo/page.toml"),
+            &format!(
+                "uq_api = 1\nid = \"demo\"\nname = \"Demo\"\nqml = \"Page.qml\"\n\
+                 [dbus]\nname = \"org.demo.App1\"\npath = \"/org/demo/App1\"\n\
+                 interface = \"org.demo.App1\"\nmethods = [\"SetSize\", \"State\"]\n\
+                 bus = \"system\"\n{timeouts}"
+            ),
+        );
+    };
+    page("timeout_ms = { SetSize = 120000 }\n");
+    let (ok, out) = uqctl(&["integrations", "check", uq.to_str().unwrap()]);
+    assert!(ok, "{out}");
+    for (bad, needle) in [
+        ("timeout_ms = { SetSize = 600000 }\n", "must be 1 to 120000"),
+        (
+            "timeout_ms = { Other = 5000 }\n",
+            "\"Other\" is not listed in dbus.methods",
+        ),
+    ] {
+        page(bad);
+        let (ok, out) = uqctl(&["integrations", "check", uq.to_str().unwrap()]);
+        assert!(!ok, "{bad}: {out}");
+        assert!(out.contains(needle), "{needle:?} missing from:\n{out}");
+    }
+}
+
+/// `--no-programs`: an app's CI without its programs installed. Missing programs are not
+/// problems; everything else still is, including an `argv[0]` outside /usr/bin and /usr/lib.
+#[test]
+fn no_programs_skips_only_the_installed_check() {
+    let d = tempfile::tempdir().unwrap();
+    let uq = d.path().join("uq");
+    good_folder(&uq);
+    put(
+        &uq.join("widgets/demo/widget.toml"),
+        "uq_api = 1\nid = \"demo\"\nname = \"Demo\"\nslot = \"quick\"\nqml = \"Widget.qml\"\n\
+         [[command]]\nid = \"status\"\nargv = [\"/usr/bin/uq-test-no-such-program\"]\n\
+         output = \"text\"\n",
+    );
+    put(
+        &uq.join("launcher/actions/demo-check.appaction"),
+        "[App Action]\nName=Check\nMatch=demo-*.desktop\nExec=/usr/lib/uq-test-no-such/x %d\n",
+    );
+    let dir = uq.to_str().unwrap();
+    let (ok, out) = uqctl(&["integrations", "check", dir]);
+    assert!(!ok, "{out}");
+    assert!(out.contains("2 problem(s)"), "{out}");
+
+    let (ok, out) = uqctl(&["integrations", "check", "--no-programs", dir]);
+    assert!(ok, "{out}");
+    assert!(
+        out.ends_with("1 rule file(s) (programs not checked)\n"),
+        "{out}"
+    );
+
+    put(
+        &uq.join("pages/demo/page.toml"),
+        "uq_api = 1\nid = \"demo\"\nname = \"Demo\"\nqml = \"Page.qml\"\n\
+         [[command]]\nid = \"x\"\nargv = [\"/opt/demo/x\"]\noutput = \"text\"\n",
+    );
+    let (ok, out) = uqctl(&["integrations", "check", "--no-programs", dir]);
+    assert!(
+        !ok,
+        "a path outside /usr/bin and /usr/lib is still refused: {out}"
+    );
+    assert!(out.contains("must be an absolute path under"), "{out}");
+}
+
+/// A page may ship sibling files: `logic.js` (imported from its QML) and further component
+/// files. They pass the check, and the text rule covers them too.
+#[test]
+fn pages_may_ship_logic_js_and_components() {
+    let d = tempfile::tempdir().unwrap();
+    let uq = d.path().join("uq");
+    good_folder(&uq);
+    put(
+        &uq.join("pages/demo/Page.qml"),
+        "import QtQuick\nimport \"logic.js\" as Logic\nItem {\n    property var ctx\n    \
+         StatusRow {}\n}\n",
+    );
+    put(
+        &uq.join("pages/demo/logic.js"),
+        ".pragma library\nfunction describe(s) { return s ? \"Running\" : \"Stopped\"; }\n",
+    );
+    put(
+        &uq.join("pages/demo/StatusRow.qml"),
+        "import QtQuick\nItem {}\n",
+    );
+    let dir = uq.to_str().unwrap();
+    let (ok, out) = uqctl(&["integrations", "check", dir]);
+    assert!(ok, "{out}");
+
+    put(
+        &uq.join("pages/demo/StatusRow.qml"),
+        "import QtQuick\nItem {\n    Text { text: \"x\" }\n}\n",
+    );
+    put(
+        &uq.join("pages/demo/logic.js"),
+        ".pragma library\nfunction make(p) { return Qt.createQmlObject(\"\", p); }\n",
+    );
+    let (ok, out) = uqctl(&["integrations", "check", dir]);
+    assert!(!ok, "{out}");
+    assert!(out.contains("StatusRow.qml:3: Text"), "{out}");
+    assert!(out.contains("logic.js:2: Text"), "{out}");
+}

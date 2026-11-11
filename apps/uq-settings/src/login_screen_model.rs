@@ -59,6 +59,10 @@ pub mod qobject {
         #[qinvokable]
         fn use_my_displays(self: Pin<&mut LoginScreenModel>);
 
+        /// Arrange the login screen's displays automatically again.
+        #[qinvokable]
+        fn automatic_displays(self: Pin<&mut LoginScreenModel>);
+
         /// Log you in automatically when the computer starts, or stop doing so.
         #[qinvokable]
         fn set_auto_login(self: Pin<&mut LoginScreenModel>, on: bool);
@@ -172,6 +176,10 @@ impl LoginScreenModel {
 
     fn use_my_displays(self: Pin<&mut Self>) {
         model_core::start(self, Op::UseMyDisplays);
+    }
+
+    fn automatic_displays(self: Pin<&mut Self>) {
+        model_core::start(self, Op::AutomaticDisplays);
     }
 
     fn set_auto_login(self: Pin<&mut Self>, on: bool) {

@@ -11,6 +11,7 @@ import "../session"
 import "../logic/launcher.js" as L
 import "../logic/rank.js" as Rank
 import "../logic/appmenu.js" as M
+import "../logic/failure.js" as F
 
 // KDE-style app menu, hung under the System island's app-menu button: avatar and an apps-only
 // search at the top, categories on the left, an app grid on the right, and user@host plus the
@@ -37,6 +38,8 @@ PanelWindow {
 
     // --- state (all cleared by wipe()) ---
     property string query: ""
+    // Why the last launch failed (failure.js), shown above the footer; "" when nothing failed.
+    property string error: ""
     property string currentCategory: M.FAVOURITES
     property int placeX: Theme.gapOut
     property int placeY: barBottom + Theme.gapIn
@@ -98,6 +101,8 @@ PanelWindow {
 
     function wipe() {
         actionMenu.close();
+        error = "";
+        launchClose.stop();
         field.text = "";
         query = "";
         currentCategory = favList.length > 0 ? M.FAVOURITES : M.ALL;
@@ -111,9 +116,28 @@ PanelWindow {
         var a = L.activation("apps", item);
         if (a === null)
             return;
-        // Launch {desktop_id} records the launch in the bridge.
-        Bridge.call(a.call, a.args).catch(function () {});
-        Surfaces.close();
+        // Launch {desktop_id} records the launch in the bridge. The menu closes once the bridge
+        // has launched it (or after launchClose, if that takes long); a refusal keeps the menu
+        // open and says why.
+        error = "";
+        var name = String(item.name || item.id || "the app");
+        launchClose.restart();
+        Bridge.call(a.call, a.args).then(function () {
+            launchClose.stop();
+            if (root.shown)
+                Surfaces.close();
+        }).catch(function (e) {
+            launchClose.stop();
+            console.warn("uq: launching " + String(item.id || "") + " failed: " + e);
+            if (root.shown)
+                root.error = F.failureText("Couldn't open " + name, e);
+        });
+    }
+
+    Timer {
+        id: launchClose
+        interval: 1500
+        onTriggered: if (root.shown) Surfaces.close()
     }
 
     // lock, logout and suspend run at once (lock through Session.lock(), like the power menu);
@@ -128,7 +152,10 @@ PanelWindow {
             Session.lock();
             break;
         case "fire":
-            Bridge.call("Power", [action]).catch(function () {});
+            // The menu closes at once (the session is ending or sleeping); a refusal is logged.
+            Bridge.call("Power", [action]).catch(function (e) {
+                console.warn("uq: Power " + action + " failed: " + e);
+            });
             Surfaces.close();
             break;
         case "powermenu":
@@ -414,6 +441,17 @@ PanelWindow {
                         color: Theme.textMuted
                     }
                 }
+            }
+
+            UqText {
+                objectName: "launchError"
+                Layout.fillWidth: true
+                visible: root.error !== ""
+                text: root.error
+                color: Theme.error
+                wrapMode: Text.Wrap
+                maximumLineCount: 2
+                elide: Text.ElideRight
             }
 
             // --- footer: user@host + power ---

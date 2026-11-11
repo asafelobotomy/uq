@@ -492,3 +492,43 @@ async fn bridge_refuses_theme_writes() {
         assert_eq!(r["err"], format!("unknown call {call}"), "{r}");
     }
 }
+
+/// A uqd that owns its name but never answers `GetWelcome` (or anything else of its own).
+struct StuckUqd;
+
+#[zbus::interface(name = "org.uq.Desktop1")]
+impl StuckUqd {
+    async fn get_welcome(&self) -> String {
+        std::future::pending::<()>().await;
+        String::new()
+    }
+}
+
+/// uqd is up but doesn't answer before `Hello`: `Hello` still comes within READY_WAIT (2 s)
+/// with Welcome unknown, so the shell asks again later instead of waiting 20 s.
+#[tokio::test]
+async fn bridge_hello_is_not_held_up_by_a_stuck_uqd() {
+    let bus = private_bus();
+    let dir = tempfile::tempdir().unwrap();
+    let _stuck = zbus::connection::Builder::address(bus.address.as_str())
+        .unwrap()
+        .name(NAME)
+        .unwrap()
+        .serve_at("/org/uq/Desktop1", StuckUqd)
+        .unwrap()
+        .build()
+        .await
+        .unwrap();
+    let run = dir.path().join("run");
+    let started = std::time::Instant::now();
+    let mut b = Bridge::start_with_env(&bus, &[("XDG_RUNTIME_DIR", run.as_os_str())]);
+    let hello = b.next().await;
+    assert_eq!(hello["event"], "Hello", "{hello}");
+    assert_eq!(hello["data"]["uqd_up"], true, "{hello}");
+    assert_eq!(hello["data"]["welcome_pending"], Value::Null, "{hello}");
+    assert!(
+        started.elapsed() < Duration::from_secs(8),
+        "Hello took {:?}",
+        started.elapsed()
+    );
+}

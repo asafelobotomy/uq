@@ -413,7 +413,14 @@ fn call_err(e: zbus::Error) -> DbusJsonError {
 async fn deadline<T>(
     f: impl std::future::Future<Output = Result<T, DbusJsonError>>,
 ) -> Result<T, DbusJsonError> {
-    tokio::time::timeout(CALL_DEADLINE, f)
+    deadline_of(CALL_DEADLINE, f).await
+}
+
+async fn deadline_of<T>(
+    within: Duration,
+    f: impl std::future::Future<Output = Result<T, DbusJsonError>>,
+) -> Result<T, DbusJsonError> {
+    tokio::time::timeout(within, f)
         .await
         .unwrap_or(Err(DbusJsonError::Deadline))
 }
@@ -460,13 +467,26 @@ pub async fn call(
     args: &Json,
     auto_start: bool,
 ) -> Result<Json, DbusJsonError> {
+    call_within(conn, target, method, args, auto_start, CALL_DEADLINE).await
+}
+
+/// [`call`] with its own deadline instead of [`CALL_DEADLINE`]: a page's `[dbus] timeout_ms`
+/// for a method that may wait for a password prompt.
+pub async fn call_within(
+    conn: &zbus::Connection,
+    target: &Target,
+    method: &str,
+    args: &Json,
+    auto_start: bool,
+    within: Duration,
+) -> Result<Json, DbusJsonError> {
     if serde_json::to_string(args).map_or(usize::MAX, |s| s.len()) > MAX_ARGS_JSON {
         return Err(DbusJsonError::ArgsTooLarge);
     }
     check_names(target)?;
     MemberName::try_from(method)
         .map_err(|_| DbusJsonError::NotAllowed(format!("method {method:?}")))?;
-    deadline(async {
+    deadline_of(within, async {
         if !auto_start {
             ensure_running(conn, &target.name).await?;
         }

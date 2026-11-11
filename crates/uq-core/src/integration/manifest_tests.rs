@@ -323,6 +323,38 @@ fn page_takes_commands_requires_and_a_dbus_table() {
 }
 
 #[test]
+fn page_dbus_timeouts_are_for_listed_methods_only() {
+    let table = |extra: &str| {
+        parse_page(&format!(
+            "{PAGE}[dbus]\nname = \"org.x.Y\"\npath = \"/o\"\ninterface = \"org.x.I\"\n\
+             methods = [\"Pause\", \"State\"]\nbus = \"system\"\n{extra}"
+        ))
+    };
+    let p = table("timeout_ms = { Pause = 120000 }\n").unwrap();
+    let d = p.dbus.unwrap();
+    assert_eq!(d.deadline("Pause"), std::time::Duration::from_secs(120));
+    assert_eq!(
+        d.deadline("State"),
+        crate::integration::dbus_json::CALL_DEADLINE,
+        "an unlisted method keeps 2 s"
+    );
+    for (why, extra) in [
+        ("not a method", "timeout_ms = { Resume = 5000 }\n"),
+        ("too long", "timeout_ms = { Pause = 120001 }\n"),
+        ("zero", "timeout_ms = { Pause = 0 }\n"),
+        ("not a number", "timeout_ms = { Pause = \"long\" }\n"),
+    ] {
+        let r = table(extra);
+        assert!(r.is_err(), "{why}: {r:?}");
+    }
+    let w = widget_with(
+        "signals = [\"Finished\"]\n",
+        "signals = [\"Finished\"]\ntimeout_ms = { Pause = 5000 }\n",
+    );
+    assert!(w.unwrap_err().to_string().contains("pages only"));
+}
+
+#[test]
 fn page_rejects_bad_keys() {
     for (why, extra) in [
         ("unknown", "surprise = 1\n"),

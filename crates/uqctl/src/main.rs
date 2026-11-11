@@ -181,7 +181,13 @@ enum IntegrationsCmd {
         root: Option<std::path::PathBuf>,
     },
     /// Check an app's uq/ folder before packaging. Exit 0: clean; 1: problems listed.
-    Check { dir: std::path::PathBuf },
+    Check {
+        dir: std::path::PathBuf,
+        /// Don't check that the programs commands and app actions run are installed (for the
+        /// CI of an app whose programs aren't installed there). Paths are still checked.
+        #[arg(long)]
+        no_programs: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -484,9 +490,31 @@ async fn pin(proxy: &zbus::Proxy<'_>, cmd: PinCmd) -> Result<(), String> {
     }
 }
 
+/// `uqctl history | head` closes stdout early; `println!` then panics. Treat that like SIGPIPE
+/// would: quietly stop (exit 0). Not for `bridge`, which writes through tokio and ends on its
+/// own when the shell goes away.
+fn quiet_broken_pipe() {
+    let default = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let msg = info
+            .payload()
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| info.payload().downcast_ref::<&str>().copied())
+            .unwrap_or_default();
+        if msg.starts_with("failed printing to std") && msg.contains("Broken pipe") {
+            std::process::exit(0);
+        }
+        default(info);
+    }));
+}
+
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> ExitCode {
     let cli = Cli::parse();
+    if !matches!(cli.cmd, Cmd::Bridge { .. }) {
+        quiet_broken_pipe();
+    }
     if let Cmd::Setup { apps, json, quiet } = cli.cmd {
         // Local files only: no uqd, no timeout.
         return setup::main(apps, json, quiet);
@@ -502,7 +530,7 @@ async fn main() -> ExitCode {
         // Local files, plus a bounded look at the bus for `requires.bus_name`.
         return match cmd {
             IntegrationsCmd::List { json, root } => integrations::list(json, root).await,
-            IntegrationsCmd::Check { dir } => integrations::check(&dir),
+            IntegrationsCmd::Check { dir, no_programs } => integrations::check(&dir, !no_programs),
         };
     }
     if let Cmd::Settings { page, setting } = cli.cmd {
@@ -660,7 +688,21 @@ mod tests {
                 .unwrap()
                 .cmd,
             Cmd::Integrations {
-                cmd: IntegrationsCmd::Check { .. }
+                cmd: IntegrationsCmd::Check {
+                    no_programs: false,
+                    ..
+                }
+            }
+        ));
+        assert!(matches!(
+            Cli::try_parse_from(["uqctl", "integrations", "check", "--no-programs", "uq"])
+                .unwrap()
+                .cmd,
+            Cmd::Integrations {
+                cmd: IntegrationsCmd::Check {
+                    no_programs: true,
+                    ..
+                }
             }
         ));
     }

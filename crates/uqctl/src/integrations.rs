@@ -203,6 +203,8 @@ pub struct Checker {
     activatable: Vec<(PathBuf, String)>,
     services: Vec<String>,
     counts: [usize; 6],
+    /// Check that each command's and app action's program exists (off with `--no-programs`).
+    programs: bool,
 }
 
 impl Checker {
@@ -232,6 +234,9 @@ impl Checker {
     }
 
     fn commands(&mut self, path: &Path, commands: &[CommandSpec]) {
+        if !self.programs {
+            return;
+        }
         for c in commands {
             if !Path::new(&c.argv[0]).exists() {
                 self.problem(
@@ -315,7 +320,7 @@ impl Checker {
             match load_app_action(&p) {
                 Ok(a) => {
                     self.counts[3] += 1;
-                    if !a.program_exists() {
+                    if self.programs && !a.program_exists() {
                         self.problem(&p, format!("Exec program {} does not exist", a.program()));
                     }
                 }
@@ -400,14 +405,16 @@ impl Checker {
 
 /// Check a repo's `uq/` folder: its layout, every manifest, the QML text lint, that every
 /// command's program exists, provider bus names, service files for activatable providers, and
-/// `integrations/<name>/rules.toml` window rules.
+/// `integrations/<name>/rules.toml` window rules. With `programs` false, whether the programs
+/// are installed is not checked (their paths still are, by the manifest rules).
 /// Returns the problems and a one-line summary.
-pub fn check_dir(dir: &Path) -> (Vec<String>, String) {
+pub fn check_dir(dir: &Path, programs: bool) -> (Vec<String>, String) {
     let mut c = Checker {
         problems: Vec::new(),
         activatable: Vec::new(),
         services: Vec::new(),
         counts: [0; 6],
+        programs,
     };
     match sorted_entries(dir) {
         Err(e) => c.problems.push(e),
@@ -438,15 +445,18 @@ pub fn check_dir(dir: &Path) -> (Vec<String>, String) {
         }
     }
     let [w, pg, pr, a, s, r] = c.counts;
-    let summary = format!(
+    let mut summary = format!(
         "{w} widget(s), {pg} page(s), {pr} provider(s), {a} app action(s), {s} service file(s), \
          {r} rule file(s)"
     );
+    if !programs {
+        summary.push_str(" (programs not checked)");
+    }
     (c.problems, summary)
 }
 
-pub fn check(dir: &Path) -> ExitCode {
-    let (problems, summary) = check_dir(dir);
+pub fn check(dir: &Path, programs: bool) -> ExitCode {
+    let (problems, summary) = check_dir(dir, programs);
     if problems.is_empty() {
         println!("ok: {summary}");
         return ExitCode::SUCCESS;

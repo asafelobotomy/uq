@@ -22,7 +22,7 @@ pub mod qobject {
     unsafe extern "RustQt" {
         #[qobject]
         #[qml_element]
-        /// `{look, layouts, defaults, sources}`; `{}` until uqd has been read.
+        /// `{look, layouts, defaults, sources, reduce_motion}`; `{}` until uqd has been read.
         #[qproperty(QString, state_json)]
         /// The message of the last refused change, "" when there is none.
         #[qproperty(QString, error)]
@@ -55,6 +55,10 @@ pub mod qobject {
         /// Apply `look` or `layouts` to the session again, over what changed it while running.
         #[qinvokable]
         fn reapply(self: Pin<&mut LookModel>, domain: &QString);
+
+        /// Turn reduce motion (`ui.reduce_motion`) on or off.
+        #[qinvokable]
+        fn set_reduce_motion(self: Pin<&mut LookModel>, on: bool);
     }
 
     impl cxx_qt::Threading for LookModel {}
@@ -86,7 +90,8 @@ impl PageModel for LookModel {
     const FOLLOW: Follow = Follow {
         sections: &["look", "layouts"],
         theme: true,
-        settings: false,
+        // `ui.reduce_motion` is a setting, not a section.
+        settings: true,
         history: false,
         monitors: false,
         profiles: false,
@@ -156,6 +161,10 @@ impl LookModel {
             ),
             Err(e) => self.set_error(QString::from(&format!("{field}: not valid JSON ({e})"))),
         }
+    }
+
+    fn set_reduce_motion(self: Pin<&mut Self>, on: bool) {
+        model_core::start(self, Op::SetReduceMotion { on });
     }
 
     fn set_workspace(self: Pin<&mut Self>, selector: &QString, layout: &QString) {

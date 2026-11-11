@@ -156,3 +156,44 @@ fn atomic_write_replaces_file() {
     assert_eq!(fs::read_to_string(&p).unwrap(), "b");
     assert_eq!(fs::read_dir(p.parent().unwrap()).unwrap().count(), 1);
 }
+
+#[test]
+fn concurrent_atomic_writes_never_share_a_temp_file() {
+    let root = tempfile::tempdir().unwrap();
+    let p = root.path().join("state.toml");
+    let bodies: Vec<String> = (0..8)
+        .map(|i| format!("writer {i}\n").repeat(4096))
+        .collect();
+    std::thread::scope(|s| {
+        for body in &bodies {
+            let p = &p;
+            s.spawn(move || {
+                for _ in 0..20 {
+                    atomic_write(p, body).unwrap();
+                }
+            });
+        }
+    });
+    // The file is exactly one writer's whole body, and no temp file is left behind.
+    let got = fs::read_to_string(&p).unwrap();
+    assert!(bodies.contains(&got), "a mixed or torn write");
+    assert_eq!(fs::read_dir(root.path()).unwrap().count(), 1);
+}
+
+#[test]
+fn atomic_write_replaces_a_symlink_not_its_target() {
+    let root = tempfile::tempdir().unwrap();
+    let real = root.path().join("dotfiles.toml");
+    fs::write(&real, "kept").unwrap();
+    let link = root.path().join("state.toml");
+    std::os::unix::fs::symlink(&real, &link).unwrap();
+    atomic_write(&link, "new").unwrap();
+    assert!(
+        !fs::symlink_metadata(&link)
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
+    assert_eq!(fs::read_to_string(&link).unwrap(), "new");
+    assert_eq!(fs::read_to_string(&real).unwrap(), "kept");
+}

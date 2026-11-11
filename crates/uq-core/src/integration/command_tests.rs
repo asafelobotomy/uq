@@ -23,6 +23,7 @@ fn spec(script: &str, output: Output, timeout_ms: u64) -> CommandSpec {
         timeout_ms,
         args: Vec::new(),
         confirm: None,
+        watch: None,
     }
 }
 
@@ -271,6 +272,44 @@ async fn timeout_kills_the_whole_group() {
         wait_gone(pid.trim()).await,
         "the background child {pid} survived"
     );
+}
+
+#[tokio::test]
+async fn a_background_child_holding_stdout_doesnt_hold_up_a_finished_command() {
+    let dir = tempfile::tempdir().unwrap();
+    let pidfile = dir.path().join("pid");
+    // The background sleep inherits stdout and stderr and keeps them open for 30 s.
+    let script = format!(
+        "sleep 30 & echo $! > '{}'; echo started; echo note >&2; exit 3",
+        pidfile.display()
+    );
+    let start = Instant::now();
+    let res = runner()
+        .run(&spec(&script, Output::Text, 5000), &[])
+        .await
+        .unwrap();
+    let took = start.elapsed();
+    assert!(took < Duration::from_secs(2), "{took:?}");
+    assert_eq!(res.code, 3);
+    assert_eq!(res.output, json!("started\n"));
+    assert_eq!(res.stderr_head, "note\n");
+    // It finished, so what it started is left alone.
+    let pid = std::fs::read_to_string(&pidfile).unwrap();
+    assert!(alive(pid.trim()));
+    // SAFETY: only signals the test's own background sleep.
+    unsafe {
+        libc::kill(pid.trim().parse().unwrap(), libc::SIGKILL);
+    }
+}
+
+#[tokio::test]
+async fn output_written_just_before_exit_is_kept() {
+    let script = "head -c 200000 /dev/zero | tr '\\0' x";
+    let res = runner()
+        .run(&spec(script, Output::Text, 5000), &[])
+        .await
+        .unwrap();
+    assert_eq!(res.output.as_str().unwrap().len(), 200_000);
 }
 
 #[tokio::test]

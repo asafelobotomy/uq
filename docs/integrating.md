@@ -42,7 +42,9 @@ Tools:
 - `uqctl integrations check uq/` checks the whole folder before packaging: the layout, every
   manifest and file, the plain-text rule for QML, that each command's program exists, that
   each provider's bus name is valid, and every `rules.toml`. Exit 0 means clean. Run it in your CI, pinned to a uQ
-  release.
+  release. In a CI where your app's programs aren't installed, add `--no-programs`: whether each
+  command's and app action's program exists is then not checked (its path still is, so it must
+  still be under `/usr/bin` or `/usr/lib`), and the summary ends "(programs not checked)".
 - `uqctl integrations list [--json]` shows what an installed uQ found, whether each item shows,
   and why not.
 - uQ's own gate test, `tests/shell/integrations_gate.sh`, installs fixture `uq/` folders into an
@@ -67,7 +69,8 @@ What uQ enforces:
   exactly as many as declared, each matching its anchored pattern and never starting with `-`.
   No shell, a scrubbed environment, stdin closed, its own process group, a time limit (10 s by
   default, at most 10 minutes), 4 MiB of output and 64 KiB of errors; then `SIGTERM`, and
-  `SIGKILL` 2 seconds later.
+  `SIGKILL` 2 seconds later. A run ends when the command exits (plus 200 ms for its output), even
+  if something it started in the background still holds its output open.
 - **D-Bus** goes to one name, path and interface per widget or page, listed members only.
   Argument types come from the service's introspection data, never from the QML. Only `b y n q i
   u x t d s o`, arrays of those, `a{sv}` and `a{ss}` cross, both ways. Arguments are at most
@@ -102,15 +105,18 @@ Checklist:
 
 ## Settings pages
 
-A page under **Apps** in uQ Settings: `/usr/share/uq/settings/pages/<id>/page.toml` and one QML
-file. The full reference, including `ctx` for pages, `[[command]]` with `confirm`, `[requires]`
-and `[dbus]`, is [`docs/settings-pages.md`](settings-pages.md); the starting point is
-`templates/settings-page/`.
+A page under **Apps** in uQ Settings: `/usr/share/uq/settings/pages/<id>/page.toml`, a QML
+file and, if you like, a `logic.js` and component files beside it. The full reference,
+including `ctx` for pages, `[[command]]` with `confirm`, `[requires]`, `[dbus]` and the
+components pages may use, is [`docs/settings-pages.md`](settings-pages.md); the starting point
+is `templates/settings-page/`, and `templates/settings-page-tests/` is a kit for testing a page
+offscreen in your CI.
 
 Checklist:
 
 - [ ] `id` equals the folder name; `uq_api = 1`.
-- [ ] All text goes through `UqLabel`; no `Text` or `Label`.
+- [ ] All text goes through `UqLabel`; no `Text` or `Label`. Only the listed components of
+      `org.uq.settings` are used.
 - [ ] Every `[[command]]` has the smallest `args` patterns that work, and `confirm` on anything
       destructive.
 - [ ] `[requires]` hides the page when your program or service isn't there.

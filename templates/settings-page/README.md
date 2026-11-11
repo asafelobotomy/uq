@@ -6,9 +6,14 @@ A starting point for a uQ Settings page shipped by another app.
    same `<id>`.
 2. Change `name`, `icon`, `keywords`, the `[[setting]]` rows, `[requires]` and the
    `[[command]]` tables to fit your app. Remove what you don't need.
-3. Edit `Page.qml`. Show all text with `UqLabel` (from `import org.uq.settings`), never `Text`
-   or `Label`.
-4. Check the folder: `uqctl integrations check uq/`. Run it in your CI too.
+3. Edit `Page.qml`, using only the components listed under "Components pages may use" in
+   `docs/settings-pages.md`. Keep parsing and other pure logic in `logic.js` beside it (imported
+   as `import "logic.js" as Logic`), and split a big page into component files in the same
+   folder. Show all text with `UqLabel` (from `import org.uq.settings`), never `Text` or
+   `Label`.
+4. Check the folder: `uqctl integrations check uq/`. Run it in your CI too (with
+   `--no-programs` if your app isn't installed there). To test the page offscreen, copy
+   `templates/settings-page-tests/` to `tests/uq/` (its README says how).
 5. Install the folder to `/usr/share/uq/settings/pages/<id>/` from your package. Settings picks
    it up within a few seconds, without restarting.
 

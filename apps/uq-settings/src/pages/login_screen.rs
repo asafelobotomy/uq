@@ -55,6 +55,8 @@ pub enum Op {
     ClearWallpaper,
     /// Copy the user's display layout.
     UseMyDisplays,
+    /// Remove the copied layout: Hyprland's automatic layout at login again.
+    AutomaticDisplays,
     /// Auto-login for the current user (`true`) or nobody.
     SetAutoLogin {
         on: bool,
@@ -320,6 +322,10 @@ impl PageLogic for LoginScreenState {
                     .await?
                     .set_greeter_monitors(&monitors.to_string())
                     .await;
+                self.saved(r)
+            }
+            Op::AutomaticDisplays => {
+                let r = self.helper().await?.clear_greeter_monitors().await;
                 self.saved(r)
             }
             Op::SetAutoLogin { on } => {

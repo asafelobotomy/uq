@@ -7,6 +7,7 @@
 //!   §2.6; Phase 3 §2.5), and the folder loader with its symlink hygiene.
 //! - [`appaction`]: `.appaction` files, app actions on launcher rows (§2.4.2).
 //! - [`command`]: the declared-command runner (§2.3).
+//! - [`command_watch`]: a page command's `watch`: re-run it on a file change or a D-Bus signal.
 //! - [`dbus_json`]: JSON ↔ D-Bus values by signature, and deadline-bound calls (§2.2 limits).
 //! - [`rules`]: `rules.toml` window rules and the `integration_rules` domain (§3.3).
 //! - [`scan`]: everything found under the integration roots, valid or not (§2.7, §5).
@@ -17,6 +18,7 @@
 
 pub mod appaction;
 pub mod command;
+pub mod command_watch;
 pub mod dbus_json;
 pub mod manifest;
 pub mod rules;

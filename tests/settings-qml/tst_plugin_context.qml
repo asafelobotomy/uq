@@ -19,11 +19,23 @@ Item {
 
         signal finished(int request, string resultJson)
         signal confirmRequested(int request, string page, string text)
+        signal commandChanged(int watch)
+        property var watching: []
 
         function reset() {
             next = 0;
             calls = [];
             answers = [];
+            watching = [];
+        }
+        function watchCommand(page, id) {
+            if (id !== "status")
+                return 0;
+            watching.push(77);
+            return 77;
+        }
+        function unwatch(watch) {
+            watching = watching.filter(w => w !== watch);
         }
         function later(fn) {
             Qt.callLater(fn);
@@ -48,6 +60,12 @@ Item {
             const req = ++next;
             calls.push(["call", page, method, argsJson, targetJson]);
             later(() => finished(req, JSON.stringify({ value: [method, JSON.parse(argsJson)] })));
+            return req;
+        }
+        function openApp(page, desktopId) {
+            const req = ++next;
+            calls.push(["open", page, desktopId]);
+            later(() => finished(req, JSON.stringify(desktopId.endsWith(".desktop") ? { ok: true } : { error: "not an app id" })));
             return req;
         }
         function dbusGet(page, property, targetJson) {
@@ -101,6 +119,7 @@ Item {
             compare(typeof c.ctx.command.run, "function");
             compare(typeof c.ctx.dbus.call, "function");
             compare(typeof c.ctx.dbus.get, "function");
+            compare(typeof c.ctx.openApp, "function");
         }
 
         function test_run_without_confirm() {
@@ -190,12 +209,56 @@ Item {
             compare(tc.results[1].error, "nope");
         }
 
+        function test_watch_reruns_on_change_until_unwatched() {
+            const [c] = make(fakeHost);
+            const handle = c.ctx.command.watch("status", collect);
+            compare(handle, 77);
+            tryCompare(tc.results, "length", 1);
+            fakeHost.commandChanged(77);
+            tryCompare(tc.results, "length", 2);
+            compare(fakeHost.calls.filter(x => x[0] === "run").length, 2);
+            // Two changes during one run: one more run after it.
+            fakeHost.commandChanged(77);
+            fakeHost.commandChanged(77);
+            fakeHost.commandChanged(77);
+            tryCompare(tc.results, "length", 4);
+            wait(50);
+            compare(tc.results.length, 4);
+            fakeHost.commandChanged(12);
+            c.ctx.command.unwatch(handle);
+            compare(fakeHost.watching, []);
+            fakeHost.commandChanged(77);
+            wait(50);
+            compare(tc.results.length, 4, "nothing after unwatch");
+            compare(c.ctx.command.watch("nope", collect), 0, "no watch in page.toml");
+        }
+
+        function test_closing_the_page_stops_its_watches() {
+            const [c] = make(fakeHost);
+            c.ctx.command.watch("status", collect);
+            compare(fakeHost.watching, [77]);
+            c.destroy();
+            tryCompare(fakeHost, "watching", []);
+        }
+
+        function test_open_app() {
+            const [c] = make(fakeHost);
+            c.ctx.openApp("org.example.App.desktop", collect);
+            c.ctx.openApp("../x", collect);
+            c.ctx.openApp("org.example.App.desktop");
+            compare(fakeHost.calls[0], ["open", "demo", "org.example.App.desktop"]);
+            tryCompare(tc.results, "length", 2);
+            verify(tc.results[0].ok);
+            verify(tc.results[1].error.length > 0);
+        }
+
         function test_without_a_host_everything_fails_softly() {
             const [c] = make(null);
             c.ctx.command.run("status", [], collect);
             c.ctx.dbus.call("Pause", [], collect);
             c.ctx.dbus.get("Count", collect);
-            tryCompare(tc.results, "length", 3);
+            c.ctx.openApp("x.desktop", collect);
+            tryCompare(tc.results, "length", 4);
             verify(tc.results.every(r => r.error.length > 0));
         }
     }

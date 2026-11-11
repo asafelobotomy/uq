@@ -328,6 +328,8 @@ async fn auto_login_and_greeter_files_over_the_bus() {
             .unwrap()
             .contains("[outputs.HDMI-A-1]\nmode = \"preferred\"\n")
     );
+    s.call("ClearGreeterMonitors", &()).await.unwrap();
+    assert!(!s.file("etc/uq/greeter-monitors.toml").exists());
     s.call("SetAutoLogin", &("",)).await.unwrap();
     assert!(
         !fs::read_to_string(s.file("etc/uq/greetd.toml"))
@@ -337,7 +339,7 @@ async fn auto_login_and_greeter_files_over_the_bus() {
 }
 
 #[tokio::test]
-async fn introspection_lists_exactly_the_six_methods() {
+async fn introspection_lists_exactly_the_seven_methods() {
     let s = Setup::new().await;
     let reply = s
         .client
@@ -367,6 +369,7 @@ async fn introspection_lists_exactly_the_six_methods() {
     assert_eq!(
         methods,
         [
+            "ClearGreeterMonitors",
             "ClearGreeterWallpaper",
             "SetAutoLogin",
             "SetGreeterAppearance",
