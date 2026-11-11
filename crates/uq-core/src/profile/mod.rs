@@ -20,9 +20,9 @@ pub use rules::{
     rule_toggles, set_enabled,
 };
 pub use startup::{
-    TOO_MANY_VARS, check_autostart_tree, check_compat_tree, check_env_tree, emptied_elsewhere,
-    kept_fix_notice, mark_startup, missing_startup, missing_startup_notice, startup_keys,
-    startup_keys_of, startup_label, startup_notice,
+    TOO_MANY_FIXES, TOO_MANY_VARS, check_autostart_tree, check_compat_tree, check_env_tree,
+    emptied_elsewhere, kept_fix_notice, mark_startup, missing_startup, missing_startup_notice,
+    startup_keys, startup_keys_of, startup_label, startup_notice,
 };
 pub use store::ProfileStore;
 
@@ -130,6 +130,8 @@ pub enum ProfileError {
     TooManyKeys,
     #[error("{}", TOO_MANY_VARS)]
     TooManyVars,
+    #[error("{}", TOO_MANY_FIXES)]
+    TooManyFixes,
     #[error(
         "Turning the profile off would put back a variable it removed, making more than 100 \
          environment variables. Remove one on the Startup page first."

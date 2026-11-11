@@ -480,3 +480,190 @@ async fn explain_says_from_the_profile() {
     assert_eq!(compat["qt_wayland"]["source"], "uq");
     assert!(from_profile(&compat["apps.code.desktop"]), "{compat}");
 }
+
+/// R19 on the runner path: an added app whose fix has `elsewhere` on gets the fix once, from
+/// its own source, not again on top of uQ's override in the data home.
+#[tokio::test]
+async fn added_app_with_elsewhere_fix_gets_fix_once() {
+    let mut r = rig();
+    put(
+        &root(&r).join("share-dirs/applications/foo.desktop"),
+        "[Desktop Entry]\nType=Application\nName=Foo\nExec=foo\n",
+    );
+    write(
+        &mut r,
+        "compat",
+        r#"{"apps":[{"id":"foo.desktop","env":[{"name":"FOO","value":"1"}],"args":["--bar"],"elsewhere":true}]}"#,
+    )
+    .await
+    .unwrap();
+    let target = files::override_target(&r.desktop.paths().startup, "foo.desktop").unwrap();
+    assert!(files::is_ours(&target, MarkerKind::Override));
+    write(
+        &mut r,
+        "autostart",
+        r#"{"files":[],"added":[{"name":"Foo","app":"foo.desktop"}]}"#,
+    )
+    .await
+    .unwrap();
+    let (plan, _) = r.desktop.autostart_plan();
+    let row = plan.iter().find(|e| e.name == "Foo").unwrap();
+    let Plan::Run { argv, .. } = &row.plan else {
+        panic!("{row:?}");
+    };
+    assert_eq!(argv, &["env", "--", "FOO=1", "foo", "--bar"], "{argv:?}");
+    // The source is what runs, as with the bridge: a change to it shows before the 60 s check
+    // rewrites the override.
+    put(
+        &root(&r).join("share-dirs/applications/foo.desktop"),
+        "[Desktop Entry]\nType=Application\nName=Foo\nExec=foo2\n",
+    );
+    let (plan, _) = r.desktop.autostart_plan();
+    let row = plan.iter().find(|e| e.name == "Foo").unwrap();
+    assert!(
+        matches!(&row.plan, Plan::Run { argv, .. } if argv == &["env", "--", "FOO=1", "foo2", "--bar"]),
+        "{row:?}"
+    );
+}
+
+/// A marked override with no valid source runs as written, without the fix again.
+#[tokio::test]
+async fn added_app_override_without_valid_source_runs_as_written() {
+    let mut r = rig();
+    write(
+        &mut r,
+        "compat",
+        r#"{"apps":[{"id":"foo.desktop","env":[{"name":"FOO","value":"1"}],"args":["--bar"]}]}"#,
+    )
+    .await
+    .unwrap();
+    // Left from before (the sync removes it on the next compat write), naming a source outside
+    // the data dirs.
+    let target = files::override_target(&r.desktop.paths().startup, "foo.desktop").unwrap();
+    put(
+        &target,
+        "[Desktop Entry]\nType=Application\nName=Foo\nExec=env -- FOO=1 foo --bar\nX-uQ-Override=true\nX-uQ-Source=/elsewhere/foo.desktop\n",
+    );
+    write(
+        &mut r,
+        "autostart",
+        r#"{"files":[],"added":[{"name":"Foo","app":"foo.desktop"}]}"#,
+    )
+    .await
+    .unwrap();
+    let (plan, _) = r.desktop.autostart_plan();
+    let row = plan.iter().find(|e| e.name == "Foo").unwrap();
+    let Plan::Run { argv, .. } = &row.plan else {
+        panic!("{row:?}");
+    };
+    assert_eq!(argv, &["env", "--", "FOO=1", "foo", "--bar"], "{argv:?}");
+}
+
+fn inode(p: &Path) -> u64 {
+    use std::os::unix::fs::MetadataExt;
+    std::fs::symlink_metadata(p).unwrap().ino()
+}
+
+/// The 60 s check retries a failed session variables file (task 7 L2).
+#[tokio::test]
+async fn tick_retries_a_failed_env_file() {
+    let mut r = rig();
+    let env_d = r.desktop.paths().startup.config_home.join("environment.d");
+    // A file where the folder should be: the write fails.
+    put(&env_d, "not a folder");
+    write(&mut r, "env", r#"{"vars":[{"name":"FOO","value":"1"}]}"#)
+        .await
+        .unwrap();
+    assert!(r.desktop.files.env_file.is_some());
+    r.desktop.refresh_files();
+    assert!(r.desktop.files.env_file.is_some(), "still failing");
+    std::fs::remove_file(&env_d).unwrap();
+    r.desktop.refresh_files();
+    assert_eq!(r.desktop.files.env_file, None);
+    assert!(env_file(&r).unwrap().contains("FOO"));
+}
+
+/// The 60 s check rebuilds the hidden copies, so a change in the folders alone is picked up
+/// (task 7 L3): the user's own file that shadowed an entry that is off goes away.
+#[tokio::test]
+async fn tick_rebuilds_hidden_copies_after_a_folder_change() {
+    let mut r = rig();
+    let applet = "[Desktop Entry]\nType=Application\nName=Applet\nExec=nm-applet\n";
+    put(&root(&r).join("xdg/autostart/nm-applet.desktop"), applet);
+    let own = r
+        .desktop
+        .paths()
+        .startup
+        .user_autostart()
+        .join("nm-applet.desktop");
+    put(&own, MINE_APPLET);
+    write(
+        &mut r,
+        "autostart",
+        r#"{"files":[{"id":"nm-applet.desktop","enabled":false,"delay":null}],"added":[]}"#,
+    )
+    .await
+    .unwrap();
+    assert_eq!(std::fs::read_to_string(&own).unwrap(), MINE_APPLET);
+    std::fs::remove_file(&own).unwrap();
+    r.desktop.refresh_files();
+    let t = std::fs::read_to_string(&own).unwrap();
+    assert!(
+        t.contains("Hidden=true") && t.contains("X-uQ-Autostart=true"),
+        "{t}"
+    );
+}
+
+const MINE_APPLET: &str = "[Desktop Entry]\nType=Application\nName=Mine\nExec=mine\n";
+
+/// When nothing changed, the 60 s check rewrites nothing.
+#[tokio::test]
+async fn tick_rewrites_nothing_when_nothing_changed() {
+    let mut r = rig();
+    let applet = "[Desktop Entry]\nType=Application\nName=Applet\nExec=nm-applet\n";
+    put(&root(&r).join("xdg/autostart/nm-applet.desktop"), applet);
+    write(&mut r, "env", r#"{"vars":[{"name":"FOO","value":"1"}]}"#)
+        .await
+        .unwrap();
+    write(
+        &mut r,
+        "autostart",
+        r#"{"files":[{"id":"nm-applet.desktop","enabled":false,"delay":null}],"added":[]}"#,
+    )
+    .await
+    .unwrap();
+    let env = files::environment_d_path(&r.desktop.paths().startup);
+    let copy = r
+        .desktop
+        .paths()
+        .startup
+        .user_autostart()
+        .join("nm-applet.desktop");
+    let before = (inode(&env), inode(&copy));
+    let mtimes = (
+        std::fs::metadata(&env).unwrap().modified().unwrap(),
+        std::fs::metadata(&copy).unwrap().modified().unwrap(),
+    );
+    r.desktop.refresh_files();
+    r.desktop.refresh_files();
+    assert_eq!((inode(&env), inode(&copy)), before);
+    assert_eq!(
+        (
+            std::fs::metadata(&env).unwrap().modified().unwrap(),
+            std::fs::metadata(&copy).unwrap().modified().unwrap(),
+        ),
+        mtimes
+    );
+    assert_eq!(r.desktop.files.env_file, None);
+    assert_eq!(r.desktop.files.autostart, None);
+}
+
+#[test]
+fn a_lasting_failure_is_logged_once() {
+    let m = Some("uQ couldn't write it".to_string());
+    assert_eq!(new_failure(&None, &m), m.as_deref());
+    assert_eq!(new_failure(&m, &m), None);
+    let other = Some("another".to_string());
+    assert_eq!(new_failure(&m, &other), other.as_deref());
+    assert_eq!(new_failure(&m, &None), None);
+}

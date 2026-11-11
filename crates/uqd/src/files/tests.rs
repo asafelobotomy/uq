@@ -304,6 +304,25 @@ fn never_follows_override_symlink() {
 }
 
 #[test]
+fn is_ours_never_reads_a_symlink_swapped_in_after_the_check() {
+    let d = dirs();
+    let marked = format!("{OVERRIDE_HEADER}\n{SOURCE}X-uQ-Override=true\n");
+    let outside = d.root.join("elsewhere.desktop");
+    put(&outside, &marked);
+    put(&target(&d), &marked);
+    assert!(is_ours(&target(&d), MarkerKind::Override));
+    // Between the no-follow check and the read, the file becomes a symlink to a marked file.
+    let to = outside.clone();
+    hook::on_read(move |p| {
+        std::fs::remove_file(p).unwrap();
+        std::os::unix::fs::symlink(&to, p).unwrap();
+    });
+    assert!(!is_ours(&target(&d), MarkerKind::Override));
+    let meta = std::fs::symlink_metadata(target(&d)).unwrap();
+    assert!(meta.file_type().is_symlink());
+}
+
+#[test]
 fn never_deletes_file_swapped_after_check() {
     let d = dirs();
     put(&source(&d), SOURCE);

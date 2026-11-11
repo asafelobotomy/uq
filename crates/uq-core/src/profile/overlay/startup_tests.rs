@@ -185,11 +185,11 @@ fn a_created_fix_counts_toward_the_limit() {
     cur.set_section("compat", json!({ "apps": apps })).unwrap();
     let p = profile("[compat.apps.\"new.desktop\"]\nplatform = \"x11\"\n");
     let e = apply(&cur, &p, &known(&[]), 0).unwrap_err();
-    assert!(
-        matches!(&e, ProfileError::Invalid { reason, .. } if reason.contains("100")),
-        "{e:?}"
+    assert_eq!(e, ProfileError::TooManyFixes);
+    assert_eq!(
+        e.to_string(),
+        "This profile would make more than 100 app fixes."
     );
-    assert!(!e.to_string().contains(".desktop"), "{e}");
 }
 
 fn entry(time: i64, domain: &str, before: Value, after: Value) -> Entry {
@@ -319,4 +319,44 @@ fn back_to_normal_over_the_limits_says_what_to_do() {
             .ends_with("Remove one on the Apps and scaling page first."),
         "{e}"
     );
+}
+
+#[test]
+fn back_to_normal_keeps_a_fix_now_working_elsewhere() {
+    let cur = State::default();
+    let p = profile("[compat.apps.\"code.desktop\"]\nplatform = \"x11\"\nscale = 1.5\n");
+    let (mut on, active) = apply(&cur, &p, &known(&[]), 0).unwrap();
+    // The user turns on "Also when started from other launchers" for the profile's fix.
+    let mut c = on.section("compat").unwrap();
+    c["apps"][0]["elsewhere"] = json!(true);
+    on.set_section("compat", c).unwrap();
+    let (off, kept) = turn_off(&on, &active).unwrap();
+    let fix = off.compat.fix_for("code.desktop").expect("the fix stays");
+    assert!(fix.elsewhere);
+    assert_eq!(fix.platform, crate::compat::Platform::X11);
+    assert_eq!(fix.scale, Some(1.5));
+    let paths: Vec<_> = kept.iter().map(|k| k.path.clone()).collect();
+    assert_eq!(
+        paths,
+        [
+            s(&["apps", "code.desktop", "platform"]),
+            s(&["apps", "code.desktop", "scale"])
+        ]
+    );
+    assert!(
+        kept.iter()
+            .all(|k| k.domain == "compat" && !k.label.is_empty())
+    );
+    // A fix that keeps something of its own still gets the profile's keys put back.
+    let mut c = on.section("compat").unwrap();
+    c["apps"][0]["args"] = json!(["--x"]);
+    on.set_section("compat", c).unwrap();
+    let (off, kept) = turn_off(&on, &active).unwrap();
+    assert!(kept.is_empty(), "{kept:?}");
+    let fix = off.compat.fix_for("code.desktop").unwrap();
+    assert_eq!(
+        (fix.platform, fix.scale),
+        (crate::compat::Platform::Auto, None)
+    );
+    assert!(fix.elsewhere);
 }

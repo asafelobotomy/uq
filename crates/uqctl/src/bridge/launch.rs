@@ -6,7 +6,7 @@
 
 use super::desktop_entry::{
     Dirs, FieldCtx, LaunchEntry, binary_exists, exec_argv, normalise_id, parse_entry, parse_exec,
-    unit_id, valid_desktop_id,
+    unit_id, valid_override_source,
 };
 use super::uqd::Link;
 use serde_json::Value;
@@ -86,21 +86,11 @@ fn terminal_prefix(dirs: &Dirs, terminal: Option<&str>) -> Vec<String> {
 pub const FIX_WAIT: Duration = Duration::from_millis(500);
 
 /// The source a marked override names, when it may be launched with the fix instead (R19, F20):
-/// exactly `<d>/applications/<id>` for a data dir `d` other than the data home, and a regular
-/// file. Anything else is `None`, and the override runs as written.
+/// [`uq_core::desktop_entry::valid_override_source`] (shared with uqd's autostart runner), and
+/// a regular file. Anything else is `None`, and the override runs as written.
 pub fn valid_source(dirs: &Dirs, id: &str, source: &str) -> Option<PathBuf> {
-    if !valid_desktop_id(id) {
-        return None;
-    }
-    let path = PathBuf::from(source);
-    let file = normalise_id(id);
-    let ok = dirs
-        .system
-        .iter()
-        .filter(|d| dirs.home.as_ref() != Some(*d))
-        .any(|d| d.join(&file) == path);
-    let regular = std::fs::metadata(&path).is_ok_and(|m| m.is_file());
-    (ok && regular).then_some(path)
+    valid_override_source(dirs.home.as_deref(), &dirs.system, id, source)
+        .filter(|p| std::fs::metadata(p).is_ok_and(|m| m.is_file()))
 }
 
 fn read_launch_entry(id: &str, path: &Path) -> Result<LaunchEntry, String> {

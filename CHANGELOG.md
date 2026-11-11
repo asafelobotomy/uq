@@ -93,7 +93,8 @@ All notable changes to uQ are listed here. The format follows
   Wayland, Steam UI scale), a Blurry right now list and per-app fixes (Run on, Size, extra
   variables and options), which also apply to autostart. "Also when started from other
   launchers" writes a desktop-file override marked `X-uQ-Override=true`, and Chromium-based
-  browsers get a flags file with a marker line; uQ changes only files it marked. All three
+  browsers get a flags file with a marker line. uQ never writes through a symlink and never edits
+  or deletes a file it didn't mark; it replaces its own `60-uq.conf` whatever it holds. All three
   domains have history, undo and restore points, and a profile can hold environment variables,
   the switches, a fix's Run on and Size, and an existing startup app's on/off and delay (never a
   new command, launch options or a launcher file; startup changes apply at next login).

@@ -67,3 +67,10 @@ errors.
 - [ ] **14. Dev session.** In `uq-dev session`, no autostart app starts, the Startup page says
   "Not started in a test session", and "Also when started from other launchers" is refused with
   "Not available in a test session". The real `~/.local/share/applications` is untouched.
+- [ ] **15. Flatpak launchers.** Install a Chromium-based browser from Flatpak (its exported
+  `Exec` ends in `--file-forwarding <app-id> @@u %U @@`). Give it a fix with an option such as
+  `--ozone-platform=x11` and turn on "Also when started from other launchers". Look at the
+  override's `Exec`: uQ puts the browser flags and options just before `%U`, so they land inside
+  Flatpak's `@@u … @@` forwarding block. Start the browser from another launcher, with and
+  without a URL, and record what happens: whether the option reaches the browser, is treated as
+  a file or URL to open, or makes the start fail. Don't assume it works; this is unverified.

@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use uq_core::autostart::Added;
 use uq_core::autostart::scan::{Plan, Resolved, known_ids, read_capped, read_folders, resolve};
 use uq_core::compat::launch::main_scale;
-use uq_core::desktop_entry::{normalise_id, valid_desktop_id};
+use uq_core::desktop_entry::{normalise_id, read_entry, valid_desktop_id, valid_override_source};
 use uq_core::env::{environment_d_lines, session_env};
 use uq_core::profile;
 use uq_core::settings::{LiveOutput, parse_live};
@@ -65,10 +65,11 @@ impl Desktop {
                 return None;
             }
             let file = normalise_id(id);
-            app_dirs.iter().find_map(|d| {
+            let found = app_dirs.iter().find_map(|d| {
                 let p = d.join(&file);
                 read_capped(&p).map(|t| (p, t))
-            })
+            })?;
+            Some(self.follow_override(id, found))
         };
         let mut plan = resolve(
             &found,
@@ -84,6 +85,30 @@ impl Desktop {
             }
         }
         (plan, self.child_env())
+    }
+
+    /// The file an added app runs from, as the bridge's launch picks it (R19, F20): a marked
+    /// override (which already carries its fix) is swapped for its own `X-uQ-Source` when the
+    /// app has a fix and that source is valid and unmarked; otherwise it is kept, and the scan
+    /// runs it as written, without the fix again.
+    fn follow_override(&self, id: &str, found: (PathBuf, String)) -> (PathBuf, String) {
+        let e = read_entry(&found.1);
+        if !e.uq_override || self.state.compat.fix_for(id).is_none() {
+            return found;
+        }
+        let paths = &self.paths.startup;
+        let home = paths.data_home.join("applications");
+        let system: Vec<PathBuf> = paths
+            .data_dirs
+            .iter()
+            .map(|d| d.join("applications"))
+            .collect();
+        e.uq_source
+            .as_deref()
+            .and_then(|s| valid_override_source(Some(&home), &system, id, s))
+            .and_then(|p| read_capped(&p).map(|t| (p, t)))
+            .filter(|(_, t)| !read_entry(t).uq_override)
+            .unwrap_or(found)
     }
 
     /// Every startup id on this computer for `state`: found in the folders (F14's bounded
@@ -210,21 +235,27 @@ impl Desktop {
         self.sync_autostart_copies();
     }
 
-    /// The 60 s check (R18, F37): overrides follow their source files, and a browser
-    /// installed since gets its flags file.
-    pub fn refresh_overrides(&mut self) {
+    /// The 60 s check (R15, R18, F37): overrides follow their source files, a browser
+    /// installed since gets its flags file, and the session variables file and the hidden
+    /// autostart copies are brought in line again, so a failed write is retried and a change
+    /// in the folders alone is picked up. A file that already says the same isn't rewritten,
+    /// and a failure that persists is logged once, not every minute.
+    pub fn refresh_files(&mut self) {
         self.sync_override_files(&[]);
         self.sync_flag_files();
+        self.sync_env_file();
+        self.sync_autostart_copies();
     }
 
     fn sync_env_file(&mut self) {
         let lines = environment_d_lines(&self.state.env, &self.state.compat);
-        self.files.env_file = files::write_environment_d(&self.paths.startup, &lines)
+        let now = files::write_environment_d(&self.paths.startup, &lines)
             .err()
-            .map(|e| {
-                tracing::warn!("writing the session variables file: {e}");
-                format!("uQ couldn't write the session variables file: {e}")
-            });
+            .map(|e| format!("uQ couldn't write the session variables file: {e}"));
+        if let Some(m) = new_failure(&self.files.env_file, &now) {
+            tracing::warn!("{m}");
+        }
+        self.files.env_file = now;
     }
 
     fn sync_flag_files(&mut self) {
@@ -258,10 +289,11 @@ impl Desktop {
     fn sync_autostart_copies(&mut self) {
         let paths = &self.paths.startup;
         let found = read_folders(&paths.user_autostart(), &paths.system_autostart());
-        self.files.autostart = files::sync_hidden_copies(paths, &found, &self.state.autostart);
-        if let Some(m) = &self.files.autostart {
+        let now = files::sync_hidden_copies(paths, &found, &self.state.autostart);
+        if let Some(m) = new_failure(&self.files.autostart, &now) {
             tracing::warn!("{m}");
         }
+        self.files.autostart = now;
     }
 
     /// `Explain` for `env`, `compat` and `autostart`. For `compat`, `generic` holds the
@@ -293,6 +325,12 @@ impl Desktop {
         }
         rows
     }
+}
+
+/// The failure to log: `now`, unless it is the one already reported (`before`), so a failure
+/// that lasts across 60 s checks reaches the journal once.
+fn new_failure<'a>(before: &Option<String>, now: &'a Option<String>) -> Option<&'a str> {
+    now.as_deref().filter(|m| before.as_deref() != Some(*m))
 }
 
 /// `TryExec`: an absolute path to a file, or a file of that name in an absolute entry of uqd's

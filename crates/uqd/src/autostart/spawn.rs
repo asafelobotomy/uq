@@ -65,8 +65,14 @@ pub fn is_service_var(name: &str) -> bool {
 
 /// The whole command line for one autostart run (Global Constraints, R6, R22, F35):
 /// `<systemd-run> --user --scope --quiet --collect --slice=app.slice --unit=<unit>
-/// -- systemd-cat -t <tag> -- <argv…>`.
-pub fn scope_argv(systemd_run: &Path, unit: &str, tag: &str, argv: &[String]) -> Vec<String> {
+/// -- <systemd-cat> -t <tag> -- <argv…>`, both tools by absolute path.
+pub fn scope_argv(
+    systemd_run: &Path,
+    systemd_cat: &Path,
+    unit: &str,
+    tag: &str,
+    argv: &[String],
+) -> Vec<String> {
     let mut out = vec![systemd_run.to_string_lossy().into_owned()];
     out.extend(
         [
@@ -79,7 +85,9 @@ pub fn scope_argv(systemd_run: &Path, unit: &str, tag: &str, argv: &[String]) ->
         .map(String::from),
     );
     out.push(format!("--unit={unit}"));
-    out.extend(["--", "systemd-cat", "-t", tag, "--"].map(String::from));
+    out.push("--".into());
+    out.push(systemd_cat.to_string_lossy().into_owned());
+    out.extend(["-t", tag, "--"].map(String::from));
     out.extend(argv.iter().cloned());
     out
 }
@@ -106,13 +114,14 @@ pub fn journal_args(unit: &str, tag: &str, since: i64, lines: usize) -> Vec<Stri
 /// variables, plus `env`. Never killed when uqd lets go of it.
 pub fn scope_command(
     systemd_run: &Path,
+    systemd_cat: &Path,
     unit: &str,
     tag: &str,
     argv: &[String],
     env: &[(String, String)],
     cwd: &Path,
 ) -> tokio::process::Command {
-    let full = scope_argv(systemd_run, unit, tag, argv);
+    let full = scope_argv(systemd_run, systemd_cat, unit, tag, argv);
     let mut cmd = tokio::process::Command::new(&full[0]);
     cmd.args(&full[1..])
         .current_dir(cwd)
@@ -148,22 +157,34 @@ pub fn find_on_path(name: &str) -> Option<PathBuf> {
 const JOURNAL_TIMEOUT: Duration = Duration::from_secs(2);
 const JOURNAL_MAX_BYTES: u64 = 64 * 1024;
 
-/// The real spawner: `systemd-run` and `journalctl` by the absolute paths found when it was
-/// made, so a `PATH` in an app's environment never changes what uqd runs.
+/// The real spawner: `systemd-run`, `systemd-cat` and `journalctl` by the absolute paths found
+/// when it was made, so a `PATH` in an app's environment never changes what uqd runs.
 pub struct SystemSpawner {
     systemd_run: PathBuf,
+    systemd_cat: PathBuf,
     journalctl: Option<PathBuf>,
     tails: Semaphore,
 }
 
 impl SystemSpawner {
-    /// `None` when `systemd-run` isn't on uqd's `PATH`.
+    /// `None` when `systemd-run` or `systemd-cat` isn't on uqd's `PATH`.
     pub fn new() -> Option<SystemSpawner> {
+        SystemSpawner::with_finder(find_on_path)
+    }
+
+    /// [`SystemSpawner::new`] with `find` in place of the `PATH` lookup.
+    pub fn with_finder(find: impl Fn(&str) -> Option<PathBuf>) -> Option<SystemSpawner> {
         Some(SystemSpawner {
-            systemd_run: find_on_path("systemd-run")?,
-            journalctl: find_on_path("journalctl"),
+            systemd_run: find("systemd-run")?,
+            systemd_cat: find("systemd-cat")?,
+            journalctl: find("journalctl"),
             tails: Semaphore::new(super::MAX_TAILS),
         })
+    }
+
+    /// The `systemd-run` and `systemd-cat` it runs.
+    pub fn tools(&self) -> (&Path, &Path) {
+        (&self.systemd_run, &self.systemd_cat)
     }
 }
 
@@ -189,7 +210,16 @@ impl Spawner for SystemSpawner {
         env: &[(String, String)],
         cwd: &Path,
     ) -> std::io::Result<Child> {
-        let mut child = scope_command(&self.systemd_run, unit, tag, argv, env, cwd).spawn()?;
+        let mut child = scope_command(
+            &self.systemd_run,
+            &self.systemd_cat,
+            unit,
+            tag,
+            argv,
+            env,
+            cwd,
+        )
+        .spawn()?;
         let pid = child.id().unwrap_or(0);
         Ok(Child {
             pid,
@@ -269,6 +299,7 @@ mod fake {
     /// Records calls. Exits are scripted by journal tag; an unscripted run never ends.
     pub struct FakeSpawner {
         pub systemd_run: PathBuf,
+        pub systemd_cat: PathBuf,
         pub calls: Mutex<Vec<SpawnCall>>,
         pub exits: Mutex<HashMap<String, ExitInfo>>,
         /// The `(pid, unit)` pairs `alive` answers true for.
@@ -290,6 +321,7 @@ mod fake {
         fn default() -> Self {
             FakeSpawner {
                 systemd_run: PathBuf::from("/fake/bin/systemd-run"),
+                systemd_cat: PathBuf::from("/fake/bin/systemd-cat"),
                 calls: Mutex::default(),
                 exits: Mutex::default(),
                 live: Mutex::default(),
@@ -334,7 +366,7 @@ mod fake {
                 unit: unit.into(),
                 tag: tag.into(),
                 argv: argv.to_vec(),
-                command: scope_argv(&self.systemd_run, unit, tag, argv),
+                command: scope_argv(&self.systemd_run, &self.systemd_cat, unit, tag, argv),
                 env: env.to_vec(),
                 cwd: cwd.into(),
             });

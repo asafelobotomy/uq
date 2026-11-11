@@ -67,7 +67,9 @@ impl AutostartConfig {
         };
         let spawner = SystemSpawner::new().map(|s| Arc::new(s) as Arc<dyn Spawner>);
         if spawner.is_none() {
-            tracing::warn!("systemd-run isn't on uqd's PATH; startup apps won't be started");
+            tracing::warn!(
+                "systemd-run or systemd-cat isn't on uqd's PATH; startup apps won't be started"
+            );
         }
         AutostartConfig {
             spawner,

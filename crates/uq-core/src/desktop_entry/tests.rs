@@ -240,3 +240,38 @@ fn get_key_reads_one_group() {
     assert_eq!(get_key(text, "Desktop Action y", "Exec"), None);
     assert_eq!(get_key(text, "Desktop Entry", "Name"), None);
 }
+
+#[test]
+fn valid_override_source_checks_dir_and_id() {
+    let home = std::path::PathBuf::from("/h/applications");
+    let sys = vec![
+        std::path::PathBuf::from("/usr/share/applications"),
+        home.clone(),
+    ];
+    let src = "/usr/share/applications/code.desktop";
+    let ok = Some(std::path::PathBuf::from(src));
+    assert_eq!(valid_override_source(Some(&home), &sys, "code", src), ok);
+    assert_eq!(
+        valid_override_source(Some(&home), &sys, "code.desktop", src),
+        ok
+    );
+    assert_eq!(valid_override_source(Some(&home), &sys, "other", src), None);
+    assert_eq!(
+        valid_override_source(Some(&home), &sys, "../code", src),
+        None
+    );
+    // The data home never counts, even when it is also listed as a data dir.
+    let in_home = "/h/applications/code.desktop";
+    assert_eq!(
+        valid_override_source(Some(&home), &sys, "code", in_home),
+        None
+    );
+    assert_eq!(
+        valid_override_source(None, &sys, "code", in_home),
+        Some(std::path::PathBuf::from(in_home))
+    );
+    assert_eq!(
+        valid_override_source(Some(&home), &sys, "code", "/elsewhere/code.desktop"),
+        None
+    );
+}

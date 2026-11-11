@@ -44,7 +44,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tokio::select! {
             _ = tick.tick() => {
                 shared.lock().await.flush_launch_counts();
-                shared.lock().await.refresh_overrides();
+                shared.lock().await.refresh_files();
                 if let Err(e) = shared.lock().await.tick_schedule_at(chrono::Local::now()).await {
                     tracing::warn!("scheduled theme change failed: {e}");
                 }

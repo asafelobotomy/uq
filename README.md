@@ -309,7 +309,9 @@ Chrome, Brave, Vivaldi and Edge, uQ writes the browser's flags file in `~/.confi
 alone and the page says so. A system change, such as an upgrade of an app's desktop file or a
 newly installed browser, is picked up within a minute.
 
-uQ changes only files it marked, and never a symlink. In `uq-dev session` the page refuses the
+uQ never writes through a symlink, and never edits or deletes a file it didn't mark. The one
+exception is `~/.config/environment.d/60-uq.conf`, which is uQ's by name: uQ replaces it
+whatever it holds (a symlink there becomes a plain file). In `uq-dev session` the page refuses the
 elsewhere switch ("Not available in a test session"). Manual checks are in
 [docs/notes/settings-slice-d-live-check.md](docs/notes/settings-slice-d-live-check.md).
 

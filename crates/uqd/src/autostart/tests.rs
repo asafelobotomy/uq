@@ -120,7 +120,7 @@ async fn runner_starts_each_entry_once_with_scope_and_tag() {
         c[7..],
         [
             "--",
-            "systemd-cat",
+            "/fake/bin/systemd-cat",
             "-t",
             "uq-autostart-nm-applet",
             "--",
@@ -139,6 +139,7 @@ fn scope_command_runs_no_shell_and_drops_service_vars() {
     let env = vec![("FOO".to_string(), "$(bar)".to_string())];
     let cmd = scope_command(
         Path::new("/usr/bin/systemd-run"),
+        Path::new("/usr/bin/systemd-cat"),
         "app-uq-autostart-x-0000abcd",
         "uq-autostart-x",
         &argv,
@@ -159,6 +160,23 @@ fn scope_command_runs_no_shell_and_drops_service_vars() {
     }
     assert!(spawn::is_service_var("INVOCATION_ID") && spawn::is_service_var("LISTEN_FDS"));
     assert!(!spawn::is_service_var("PATH"));
+}
+
+#[test]
+fn system_spawner_needs_both_tools_by_absolute_path() {
+    let all = |n: &str| Some(PathBuf::from(format!("/usr/bin/{n}")));
+    let s = spawn::SystemSpawner::with_finder(all).unwrap();
+    assert_eq!(
+        s.tools(),
+        (
+            Path::new("/usr/bin/systemd-run"),
+            Path::new("/usr/bin/systemd-cat")
+        )
+    );
+    let no_cat = |n: &str| (n != "systemd-cat").then(|| PathBuf::from(format!("/usr/bin/{n}")));
+    assert!(spawn::SystemSpawner::with_finder(no_cat).is_none());
+    let no_run = |n: &str| (n != "systemd-run").then(|| PathBuf::from(format!("/usr/bin/{n}")));
+    assert!(spawn::SystemSpawner::with_finder(no_run).is_none());
 }
 
 #[test]

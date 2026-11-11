@@ -343,3 +343,27 @@ fn wanted_copies_rules() {
     assert!(w.is_empty());
     assert_eq!(d, vec![PathBuf::from(format!("{USER}/gone.desktop"))]);
 }
+
+#[test]
+fn scan_added_override_is_not_fixed_again() {
+    let compat = Compat::from_section(
+        &json!({"apps": [{"id": "foo.desktop", "args": ["--bar"], "elsewhere": true}]}),
+    )
+    .unwrap();
+    let state = ok(added(json!({"name": "Foo", "app": "foo.desktop"})));
+    let apps = |_: &str| {
+        Some((
+            PathBuf::from("/home/u/.local/share/applications/foo.desktop"),
+            entry("foo --bar", "X-uQ-Override=true\n"),
+        ))
+    };
+    let r = resolve(&[], &state, &compat, &apps, &|_| true).remove(0);
+    assert_eq!(
+        r.plan,
+        Plan::Run {
+            argv: s(&["foo", "--bar"]),
+            cwd: None,
+            delay: 0
+        }
+    );
+}

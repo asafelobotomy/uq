@@ -21,7 +21,7 @@ pub use text::{
 use super::{ProfileError, invalid, plain};
 use crate::autostart::{FileChoice, MAX_DELAY, valid_added_id};
 use crate::compat::hypr::SwitchKey;
-use crate::compat::{AppFix, Platform, valid_scale};
+use crate::compat::{AppFix, MAX_APPS, Platform, valid_scale};
 use crate::desktop_entry::valid_desktop_id;
 use crate::env::{self, MAX_VARS, Var};
 use crate::settings::SettingError;
@@ -38,6 +38,7 @@ pub(super) const AUTOSTART_ONLY: &str =
     "a profile can only turn a startup app on or off or set its delay";
 /// An apply that would pass the variables' limit.
 pub const TOO_MANY_VARS: &str = "This profile would make more than 100 environment variables.";
+pub const TOO_MANY_FIXES: &str = "This profile would make more than 100 app fixes.";
 
 const UNKNOWN: &str = "not a setting uQ knows";
 const APP_ID: &str = "this isn't the name of an app's file";
@@ -314,6 +315,9 @@ fn write_compat(
     }
     c.apps
         .retain(|f| !(f.is_empty() && touched.contains(&f.id.as_str())));
+    if c.apps.len() > MAX_APPS {
+        return Err(refuse("compat", TOO_MANY_FIXES));
+    }
     state.set_section("compat", c.section())
 }
 

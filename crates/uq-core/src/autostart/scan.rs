@@ -98,12 +98,22 @@ pub struct Resolved {
 /// once opened, at most [`MAX_BYTES`] (a bigger file is `None`), decoded lossily. Symlinks are
 /// followed for reading.
 pub fn read_capped(path: &Path) -> Option<String> {
+    read_capped_if(path, std::fs::Metadata::is_file)
+}
+
+/// [`read_capped`], read only when `accept` takes the opened file's metadata (for example the
+/// same device and inode as a no-follow check made just before).
+pub fn read_capped_if(
+    path: &Path,
+    accept: impl FnOnce(&std::fs::Metadata) -> bool,
+) -> Option<String> {
     let f = OpenOptions::new()
         .read(true)
         .custom_flags(O_NONBLOCK | O_NOCTTY)
         .open(path)
         .ok()?;
-    if !f.metadata().ok()?.is_file() {
+    let m = f.metadata().ok()?;
+    if !m.is_file() || !accept(&m) {
         return None;
     }
     let mut buf = Vec::new();
@@ -337,7 +347,10 @@ fn resolve_added(
             // The user chose this app, so the show-in lists don't apply; a hidden application
             // file means the app was removed.
             let checked = check_entry(&e, &path, NOT_INSTALLED, false, exists);
-            row.finish(checked, Some(app), compat)
+            // A marked override already carries its fix, so it is never given it again (R19);
+            // `apps` gives the override's own source instead when the fix should apply.
+            let fix_id = (!e.uq_override).then_some(app.as_str());
+            row.finish(checked, fix_id, compat)
         }
     }
 }

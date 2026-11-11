@@ -5,9 +5,9 @@
 //! "Back to normal" only puts back keys that still hold what the profile set.
 
 use super::{
-    DomainKind, Profile, ProfileError, TOO_MANY_VARS, emptied_elsewhere, enabled_of, key_label,
-    kind_of, leaves, read_leaf, rule_label, rule_toggles, startup_keys, startup_label,
-    write_leaves,
+    DomainKind, Profile, ProfileError, TOO_MANY_FIXES, TOO_MANY_VARS, emptied_elsewhere,
+    enabled_of, key_label, kind_of, leaves, read_leaf, rule_label, rule_toggles, startup_keys,
+    startup_label, write_leaves,
 };
 use crate::history::{self, Entry};
 use crate::settings::SettingError;
@@ -53,6 +53,9 @@ fn refused(e: SettingError) -> ProfileError {
     match e {
         SettingError::Invalid { key, reason } if key == "env" && reason == TOO_MANY_VARS => {
             ProfileError::TooManyVars
+        }
+        SettingError::Invalid { key, reason } if key == "compat" && reason == TOO_MANY_FIXES => {
+            ProfileError::TooManyFixes
         }
         SettingError::Invalid { key, reason } => ProfileError::Invalid { key, reason },
         SettingError::UnknownKey(key) => ProfileError::Invalid {
@@ -212,14 +215,40 @@ pub fn turn_off(
             });
         }
     }
-    let mut next = current.clone();
-    write_by_domain(&mut next, writes).map_err(|e| match e {
-        // Putting back what the profile removed would pass a limit: say what to do.
-        ProfileError::TooManyVars => ProfileError::OffTooManyVars,
-        ProfileError::Invalid { key, .. } if key == "compat.apps" => ProfileError::OffTooManyFixes,
-        e => e,
-    })?;
-    Ok((next, kept))
+    // Putting back what the profile removed would pass a limit: say what to do.
+    let put_back = |writes: Vec<(String, Write)>| {
+        let mut next = current.clone();
+        write_by_domain(&mut next, writes).map_err(|e| match e {
+            ProfileError::TooManyVars => ProfileError::OffTooManyVars,
+            ProfileError::TooManyFixes => ProfileError::OffTooManyFixes,
+            e => e,
+        })?;
+        Ok::<_, ProfileError>(next)
+    };
+    let next = put_back(writes.clone())?;
+    // A fix the user has since made work in other launchers is never removed, as `apply`
+    // leaves it alone (`emptied_elsewhere`): its keys are kept instead.
+    let emptied: Vec<&str> = current
+        .compat
+        .apps
+        .iter()
+        .filter(|f| f.elsewhere && next.compat.fix_for(&f.id).is_none())
+        .map(|f| f.id.as_str())
+        .collect();
+    if emptied.is_empty() {
+        return Ok((next, kept));
+    }
+    let fix_key = |(domain, (path, _)): &(String, Write)| match path.as_slice() {
+        [apps, id, _] if domain == "compat" && apps == "apps" => emptied.contains(&id.as_str()),
+        _ => false,
+    };
+    let (skipped, writes): (Vec<_>, Vec<_>) = writes.into_iter().partition(fix_key);
+    kept.extend(skipped.into_iter().map(|(domain, (path, _))| Kept {
+        label: startup_label(current, &domain, &path, &|_| None),
+        domain,
+        path,
+    }));
+    Ok((put_back(writes)?, kept))
 }
 
 /// True when the profile set this key and it still has that value.

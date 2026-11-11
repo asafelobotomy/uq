@@ -3,6 +3,7 @@
 //! setter. Pure text work; nothing here runs a process or touches the disk.
 
 use crate::settings::valid_pinned_id;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum ExecError {
@@ -435,6 +436,28 @@ pub fn normalise_id(id: &str) -> String {
 pub fn valid_desktop_id(id: &str) -> bool {
     let n = normalise_id(id);
     valid_pinned_id(&n) && !n.starts_with('.') && !n.contains("..")
+}
+
+/// Where a marked override's `X-uQ-Source` may point (R19, F20): exactly `<d>/<id>` for an
+/// `applications` folder `d` in `system` that isn't `home`. The bridge and the autostart runner
+/// both launch from such a source, with the fix, instead of the override (which already carries
+/// it). Pure: the caller checks that the path is a regular file.
+pub fn valid_override_source(
+    home: Option<&Path>,
+    system: &[PathBuf],
+    id: &str,
+    source: &str,
+) -> Option<PathBuf> {
+    if !valid_desktop_id(id) {
+        return None;
+    }
+    let path = PathBuf::from(source);
+    let file = normalise_id(id);
+    system
+        .iter()
+        .filter(|d| home != Some(d.as_path()))
+        .any(|d| d.join(&file) == path)
+        .then_some(path)
 }
 
 /// A systemd unit-name fragment for an app id: alphanumerics, `_` and `-`, the rest `_`, at most 64.

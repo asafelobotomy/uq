@@ -12,7 +12,7 @@ use std::io::{self, Write};
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 use uq_core::atomic::atomic_write;
-use uq_core::autostart::scan::read_capped;
+use uq_core::autostart::scan::{read_capped, read_capped_if};
 use uq_core::compat::Compat;
 use uq_core::compat::browsers::{BROWSERS, FLAGS_MARKER, flags_text};
 use uq_core::desktop_entry::{random_suffix, read_entry, valid_desktop_id};
@@ -67,10 +67,16 @@ pub(crate) fn present(path: &Path) -> bool {
 }
 
 /// Whether `path` is a regular file (never a symlink) that carries `kind`'s marker. Read with
-/// the bounded, non-blocking read (F14).
+/// the bounded, non-blocking read (F14), and only when the file opened is the one the no-follow
+/// check saw (same device and inode), so a symlink swapped in between is never read through.
 pub(crate) fn is_ours(path: &Path, kind: MarkerKind) -> bool {
+    use std::os::unix::fs::MetadataExt;
     match fs::symlink_metadata(path) {
-        Ok(m) if m.file_type().is_file() => read_capped(path).is_some_and(|t| kind.marks(&t)),
+        Ok(m) if m.file_type().is_file() => {
+            hook::fire_read(path);
+            read_capped_if(path, |o| (o.dev(), o.ino()) == (m.dev(), m.ino()))
+                .is_some_and(|t| kind.marks(&t))
+        }
         _ => false,
     }
 }
@@ -94,6 +100,7 @@ pub(crate) mod hook {
     type Hook = Box<dyn FnOnce(&Path)>;
     thread_local! {
         static HOOK: RefCell<Option<Hook>> = RefCell::new(None);
+        static READ_HOOK: RefCell<Option<Hook>> = RefCell::new(None);
     }
 
     /// Run `f` once, at the next point between a check and a write or delete.
@@ -101,8 +108,19 @@ pub(crate) mod hook {
         HOOK.with(|h| *h.borrow_mut() = Some(Box::new(f)));
     }
 
+    /// Run `f` once, in the next [`super::is_ours`], between its no-follow check and its read.
+    pub(crate) fn on_read(f: impl FnOnce(&Path) + 'static) {
+        READ_HOOK.with(|h| *h.borrow_mut() = Some(Box::new(f)));
+    }
+
     pub(super) fn fire(path: &Path) {
         if let Some(f) = HOOK.with(|h| h.borrow_mut().take()) {
+            f(path);
+        }
+    }
+
+    pub(super) fn fire_read(path: &Path) {
+        if let Some(f) = READ_HOOK.with(|h| h.borrow_mut().take()) {
             f(path);
         }
     }
@@ -111,6 +129,7 @@ pub(crate) mod hook {
 #[cfg(not(test))]
 mod hook {
     pub(super) fn fire(_: &std::path::Path) {}
+    pub(super) fn fire_read(_: &std::path::Path) {}
 }
 
 /// Write `text` to `path` only if `path` is absent or uQ's (F13): a temp file in the same
