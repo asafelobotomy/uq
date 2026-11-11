@@ -10,6 +10,7 @@ use crate::rules::Rules;
 use crate::schedule::Schedule;
 use crate::settings::{LayoutOptions, SettingError, Settings};
 use crate::theme::Variant;
+use crate::welcome::Welcome;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -42,6 +43,9 @@ pub struct State {
     /// The scheduled transition uqd last applied; a manual change holds until a newer one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub schedule_mark: Option<chrono::DateTime<chrono::Utc>>,
+    /// Whether Welcome is still due (spec §5.1). Bookkeeping, not a setting: never journalled.
+    #[serde(deserialize_with = "crate::welcome::lenient")]
+    pub welcome: Welcome,
     #[serde(flatten)]
     pub settings: Settings,
     pub launch_counts: BTreeMap<String, u32>,
@@ -86,6 +90,7 @@ impl Default for State {
             compat: Compat::default(),
             autostart: Autostart::default(),
             schedule_mark: None,
+            welcome: Welcome::default(),
             settings: Settings::default(),
             launch_counts: BTreeMap::new(),
         }
@@ -385,10 +390,50 @@ mod tests {
                 }],
             },
             schedule_mark: None,
+            welcome: Welcome {
+                done: true,
+                version: 1,
+            },
             settings: Settings::default(),
             launch_counts: BTreeMap::new(),
         };
         s.save(&p).unwrap();
+        assert_eq!(State::load(&p), s);
+    }
+
+    #[test]
+    fn state_without_welcome_loads_as_pending() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("state.toml");
+        std::fs::write(&p, include_str!("../tests/fixtures/phase1-state.toml")).unwrap();
+        let s = State::load(&p);
+        assert_eq!(s.welcome, Welcome::default());
+        assert!(s.welcome.pending());
+        assert_eq!(s.theme, "dracula", "the rest of the file loads");
+        // A wrong-typed [welcome] costs only itself.
+        std::fs::write(&p, "theme = \"rosewood\"\nwelcome = \"done\"\n").unwrap();
+        let s = State::load(&p);
+        assert_eq!(
+            (s.theme.as_str(), s.welcome),
+            ("rosewood", Welcome::default())
+        );
+        assert!(p.exists(), "not moved aside");
+    }
+
+    #[test]
+    fn welcome_round_trips() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("state.toml");
+        let s = State {
+            welcome: Welcome {
+                done: true,
+                version: crate::welcome::CURRENT_WELCOME_VERSION,
+            },
+            ..State::default()
+        };
+        s.save(&p).unwrap();
+        let text = std::fs::read_to_string(&p).unwrap();
+        assert!(text.contains("[welcome]"), "{text}");
         assert_eq!(State::load(&p), s);
     }
 

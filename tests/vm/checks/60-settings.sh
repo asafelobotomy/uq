@@ -160,6 +160,9 @@ g_autostart_files() {
 g_row() { gbus ListAutostart | jq -c --arg i "$1" '.[] | select(.id == $i)'; }
 g_status() { g_row "$1" | jq -r .status; }
 g_status_is() { [ "$(g_status "$1")" = "$2" ]; }
+# g_log_has ID TEXT: the row's last lines contain TEXT. uqd reads them from the journal when the
+# row is listed and tries again on the next listing while journald hasn't indexed them yet.
+g_log_has() { [[ $(g_row "$1" | jq -r '.log // [] | tostring') == *"$2"* ]]; }
 g_relogin() {
     vroot systemctl restart getty@tty1.service
     sleep 3
@@ -186,7 +189,7 @@ c_SD1l() {
     wait_for 10 g_status_is uqlive-fail.desktop failed || bad "expected the failing entry failed; observed $(g_row uqlive-fail.desktop)"
     note "fail row: $(g_row uqlive-fail.desktop)"
     [ "$(g_row uqlive-fail.desktop | jq -r .exit)" = 3 ] || bad "expected exit 3 on the failing entry"
-    [[ $(g_row uqlive-fail.desktop | jq -r '.log // [] | tostring') == *boom* ]] || bad "expected 'boom' in the failing entry's last lines"
+    wait_for 10 g_log_has uqlive-fail.desktop boom || bad "expected 'boom' in the failing entry's last lines; observed $(g_row uqlive-fail.desktop)"
     ev "journalctl --user -t uq-autostart-uqlive-fail --no-pager -o cat | tail -n 3"
     [ "$(g_status uqlive-off.desktop)" = off ] || bad "expected the turned-off entry off; observed $(g_row uqlive-off.desktop)"
     vgsh 'pgrep -fx "sleep 602" >/dev/null' && bad "the turned-off entry started"
@@ -198,7 +201,13 @@ c_SD1l() {
     vgsh 'pkill -fx "sleep 600"'; sleep 1
     vg systemctl --user restart uqd; sleep 4
     note "login row after killing it and restarting uqd: $(g_row uqlive-login.desktop)"
-    [ "$(g_status uqlive-login.desktop)" = exited ] || bad "expected the killed app to read finished; observed $(g_row uqlive-login.desktop)"
+    # uqd adopted the app on the first restart, so it can't know the exit code: unknown_exit,
+    # shown as "finished" (exited if it saw the exit itself).
+    case "$(g_status uqlive-login.desktop)" in
+        exited|unknown_exit) [[ $(g_row uqlive-login.desktop | jq -r .reason) == *finished* ]] ||
+            bad "expected the killed app's reason to say finished; observed $(g_row uqlive-login.desktop)" ;;
+        *) bad "expected the killed app to read finished; observed $(g_row uqlive-login.desktop)" ;;
+    esac
     vgsh 'pkill -fx "sleep 601"; rm -f ~/.config/autostart/uqlive-*.desktop'
     g_restore "$p"
 }

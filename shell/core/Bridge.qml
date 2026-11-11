@@ -17,6 +17,11 @@ QtObject {
     // Owner of org.freedesktop.Notifications (spec 2.3); known stays false until a NotifOwner event.
     property var notifOwner: ({ known: false, owner: null, name: "", self: false })
     property string configError: ""
+    // Widgets and app actions from other apps, as the bridge last sent them (Phase 4 §2.2,
+    // §2.4.2); shell/widgets/Widgets.qml cleans them up. Kept across bridge restarts: the new
+    // bridge sends both again at once.
+    property var widgets: []
+    property var appActions: []
 
     signal event(string name, var data)
     signal themeChanged()
@@ -190,6 +195,8 @@ QtObject {
             if (data && typeof data === "object") searchResults(data);
             break;
         case "ConfigError": configError = data ? String(data.message) : ""; break;
+        case "Widgets": widgets = Array.isArray(data) ? data : []; break;
+        case "AppActions": appActions = Array.isArray(data) ? data : []; break;
         }
         event(name, data);
     }

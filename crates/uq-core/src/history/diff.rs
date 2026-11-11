@@ -18,7 +18,8 @@ pub struct DomainChange {
 
 const MAX_NAMED: usize = 3;
 
-/// Every domain whose content differs between `old` and `new`. `launch_counts` is not compared.
+/// Every domain whose content differs between `old` and `new`. `launch_counts` and `welcome`
+/// (bookkeeping, not settings) are not compared.
 pub fn diff(old: &State, new: &State, labels: Labels) -> Vec<DomainChange> {
     journal_domains()
         .into_iter()
@@ -294,6 +295,17 @@ mod tests {
         let old = State::default();
         let mut new = old.clone();
         new.launch_counts.insert("firefox.desktop".into(), 4);
+        assert!(diff(&old, &new, &|_, _| None).is_empty());
+    }
+
+    /// Welcome's bookkeeping is not a setting: finishing or resetting Welcome writes no history
+    /// entry (so there's nothing to label), and Undo never brings Welcome back.
+    #[test]
+    fn diff_ignores_welcome() {
+        let old = State::default();
+        let mut new = old.clone();
+        new.welcome.done = true;
+        new.welcome.version = crate::welcome::CURRENT_WELCOME_VERSION;
         assert!(diff(&old, &new, &|_, _| None).is_empty());
     }
 

@@ -1,2 +1,3 @@
 module session
 singleton Session 1.0 Session.qml
+WelcomeTrigger 1.0 WelcomeTrigger.qml

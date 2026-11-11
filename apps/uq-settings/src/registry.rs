@@ -612,7 +612,319 @@ static STARTUP_SETTINGS: [SearchEntry; 4] = [
     ),
 ];
 
-static CORE_PAGES: [PageInfo; 12] = [
+static POWER_SETTINGS: [SearchEntry; 5] = [
+    entry(
+        "power-mode",
+        "Power mode",
+        &[
+            "performance",
+            "power saver",
+            "balanced",
+            "profile",
+            "energy",
+        ],
+    ),
+    entry(
+        "battery",
+        "Battery",
+        &["charge", "health", "time left", "charging"],
+    ),
+    entry(
+        "lid-action",
+        "When the lid is closed",
+        &["laptop", "lid", "sleep", "suspend", "hibernate"],
+    ),
+    entry(
+        "lid-action-ac",
+        "When the lid is closed while plugged in",
+        &["laptop", "lid", "docked", "charger", "mains"],
+    ),
+    entry(
+        "power-key-action",
+        "When the power button is pressed",
+        &["power button", "shut down", "sleep", "key"],
+    ),
+];
+
+static USERS_SETTINGS: [SearchEntry; 2] = [
+    entry(
+        "user-accounts",
+        "People who can log in",
+        &[
+            "user",
+            "account",
+            "password",
+            "avatar",
+            "picture",
+            "add user",
+            "remove user",
+            "administrator",
+            "admin",
+        ],
+    ),
+    entry(
+        "users-auto-login",
+        "Auto-login",
+        &["automatic login", "autologin", "without password"],
+    ),
+];
+
+static LOGIN_SCREEN_SETTINGS: [SearchEntry; 6] = [
+    entry(
+        "greeter-theme",
+        "Login screen theme",
+        &["greeter", "login", "colors", "dark", "light"],
+    ),
+    entry(
+        "greeter-wallpaper",
+        "Login screen wallpaper",
+        &["greeter", "login", "background", "picture"],
+    ),
+    entry(
+        "greeter-displays",
+        "Use my display layout at login",
+        &["greeter", "monitors", "screens", "arrangement"],
+    ),
+    entry(
+        "greeter-hide-users",
+        "Hide the list of users",
+        &["greeter", "user list", "privacy", "username"],
+    ),
+    entry(
+        "greeter-reduce-motion",
+        "Login screen motion",
+        &["greeter", "animations", "reduce motion"],
+    ),
+    entry(
+        "auto-login",
+        "Log in automatically",
+        &[
+            "autologin",
+            "automatic login",
+            "without password",
+            "greeter",
+        ],
+    ),
+];
+
+static DATETIME_SETTINGS: [SearchEntry; 4] = [
+    entry(
+        "timezone",
+        "Time zone",
+        &["timezone", "region", "city", "clock", "utc"],
+    ),
+    entry(
+        "ntp",
+        "Set the time from the network",
+        &["automatic time", "ntp", "sync", "internet time"],
+    ),
+    entry(
+        "manual-time",
+        "Date and time by hand",
+        &["set date", "set time", "clock", "manual"],
+    ),
+    entry(
+        "datetime-clock-24h",
+        "24-hour clock in the bar",
+        &["24 hour", "12 hour", "am pm", "clock format"],
+    ),
+];
+
+static REGION_SETTINGS: [SearchEntry; 3] = [
+    entry(
+        "language",
+        "System language",
+        &["locale", "translation", "lang"],
+    ),
+    entry(
+        "formats",
+        "Formats",
+        &[
+            "date format",
+            "number format",
+            "currency",
+            "units",
+            "metric",
+            "paper",
+        ],
+    ),
+    entry(
+        "console-keymap",
+        "Keyboard layout for the text console",
+        &["keymap", "console", "tty", "keyboard"],
+    ),
+];
+
+static DEFAULT_APPS_SETTINGS: [SearchEntry; 9] = [
+    entry(
+        "default-browser",
+        "Web browser",
+        &["browser", "internet", "links", "web"],
+    ),
+    entry("default-mail", "Email", &["mail", "email", "mailto"]),
+    entry(
+        "default-files",
+        "Files",
+        &["file manager", "folders", "directory"],
+    ),
+    entry("default-text", "Text editor", &["text", "editor", "notes"]),
+    entry(
+        "default-images",
+        "Pictures",
+        &["image viewer", "photos", "images"],
+    ),
+    entry(
+        "default-video",
+        "Videos",
+        &["video player", "movies", "film"],
+    ),
+    entry(
+        "default-music",
+        "Music",
+        &["audio player", "songs", "music player"],
+    ),
+    entry(
+        "default-pdf",
+        "PDF documents",
+        &["pdf", "document viewer", "reader"],
+    ),
+    entry(
+        "default-terminal",
+        "Terminal",
+        &["terminal", "console", "command line", "shell"],
+    ),
+];
+
+static ABOUT_SETTINGS: [SearchEntry; 2] = [
+    entry(
+        "hostname",
+        "Computer name",
+        &["hostname", "device name", "network name", "rename"],
+    ),
+    entry(
+        "versions",
+        "System details and versions",
+        &[
+            "version",
+            "about",
+            "kernel",
+            "processor",
+            "cpu",
+            "memory",
+            "ram",
+            "graphics",
+            "gpu",
+            "hardware",
+        ],
+    ),
+];
+
+static SOUND_SETTINGS: [SearchEntry; 4] = [
+    entry(
+        "sound-output",
+        "Play sound through",
+        &[
+            "speakers",
+            "headphones",
+            "volume",
+            "mute",
+            "output",
+            "test sound",
+        ],
+    ),
+    entry(
+        "sound-input",
+        "Record sound from",
+        &["microphone", "mic", "input", "recording", "volume"],
+    ),
+    entry(
+        "sound-apps",
+        "App volume",
+        &["app volume", "mixer", "per app", "playing"],
+    ),
+    entry(
+        "sound-profiles",
+        "Sound card modes",
+        &["profile", "sound card", "hdmi", "duplex"],
+    ),
+];
+
+static BLUETOOTH_SETTINGS: [SearchEntry; 4] = [
+    entry(
+        "bluetooth-power",
+        "Bluetooth",
+        &["bluetooth", "wireless", "turn on", "turn off"],
+    ),
+    entry(
+        "bluetooth-visible",
+        "Let other devices find this computer",
+        &["discoverable", "visible", "find", "bluetooth name"],
+    ),
+    entry(
+        "bluetooth-devices",
+        "Your Bluetooth devices",
+        &[
+            "paired",
+            "headphones",
+            "connect",
+            "battery",
+            "forget",
+            "trust",
+        ],
+    ),
+    entry(
+        "bluetooth-pair",
+        "Pair a new device",
+        &["pair", "add device", "scan", "keyboard", "mouse", "speaker"],
+    ),
+];
+
+static NETWORK_SETTINGS: [SearchEntry; 8] = [
+    entry(
+        "wifi",
+        "Wi-Fi",
+        &["wireless", "wlan", "internet", "join", "password"],
+    ),
+    entry(
+        "hidden-network",
+        "Join a hidden network",
+        &["hidden", "ssid", "not listed"],
+    ),
+    entry(
+        "saved-connections",
+        "Saved connections",
+        &["forget", "known networks", "connect automatically"],
+    ),
+    entry("wired", "Wired network", &["ethernet", "cable", "lan"]),
+    entry(
+        "vpn",
+        "VPN",
+        &[
+            "wireguard",
+            "openvpn",
+            "tunnel",
+            "import",
+            "private network",
+        ],
+    ),
+    entry(
+        "hotspot",
+        "Hotspot",
+        &["share connection", "tethering", "access point"],
+    ),
+    entry(
+        "ip-settings",
+        "Addresses and DNS",
+        &["ip", "dns", "static", "manual address", "gateway", "ipv6"],
+    ),
+    entry(
+        "metered",
+        "Metered connection",
+        &["data limit", "mobile data", "data plan"],
+    ),
+];
+
+static CORE_PAGES: [PageInfo; 22] = [
     PageInfo {
         id: "appearance",
         name: "Appearance",
@@ -668,6 +980,33 @@ static CORE_PAGES: [PageInfo; 12] = [
         domains: &["input"],
     },
     PageInfo {
+        id: "sound",
+        name: "Sound",
+        icon: "preferences-desktop-sound",
+        category: Category::Devices,
+        qml: "pages/SoundPage.qml",
+        settings: &SOUND_SETTINGS,
+        domains: &[],
+    },
+    PageInfo {
+        id: "bluetooth",
+        name: "Bluetooth",
+        icon: "preferences-system-bluetooth",
+        category: Category::Devices,
+        qml: "pages/BluetoothPage.qml",
+        settings: &BLUETOOTH_SETTINGS,
+        domains: &[],
+    },
+    PageInfo {
+        id: "network",
+        name: "Network",
+        icon: "preferences-system-network",
+        category: Category::Connections,
+        qml: "pages/NetworkPage.qml",
+        settings: &NETWORK_SETTINGS,
+        domains: &[],
+    },
+    PageInfo {
         id: "shell",
         name: "Shell",
         icon: "preferences-desktop",
@@ -721,7 +1060,78 @@ static CORE_PAGES: [PageInfo; 12] = [
         settings: &STARTUP_SETTINGS,
         domains: &["autostart", "env"],
     },
+    PageInfo {
+        id: "power",
+        name: "Power",
+        icon: "preferences-system-power-management",
+        category: Category::System,
+        qml: "pages/PowerPage.qml",
+        settings: &POWER_SETTINGS,
+        domains: &[],
+    },
+    PageInfo {
+        id: "users",
+        name: "Users",
+        icon: "system-users",
+        category: Category::System,
+        qml: "pages/UsersPage.qml",
+        settings: &USERS_SETTINGS,
+        domains: &[],
+    },
+    PageInfo {
+        id: "login-screen",
+        name: "Login screen",
+        icon: "system-lock-screen",
+        category: Category::System,
+        qml: "pages/LoginScreenPage.qml",
+        settings: &LOGIN_SCREEN_SETTINGS,
+        domains: &[],
+    },
+    PageInfo {
+        id: "datetime",
+        name: "Date and time",
+        icon: "preferences-system-time",
+        category: Category::System,
+        qml: "pages/DateTimePage.qml",
+        settings: &DATETIME_SETTINGS,
+        domains: &[],
+    },
+    PageInfo {
+        id: "region",
+        name: "Region",
+        icon: "preferences-desktop-locale",
+        category: Category::System,
+        qml: "pages/RegionPage.qml",
+        settings: &REGION_SETTINGS,
+        domains: &[],
+    },
+    PageInfo {
+        id: "default-apps",
+        name: "Default apps",
+        icon: "preferences-desktop-default-applications",
+        category: Category::System,
+        qml: "pages/DefaultAppsPage.qml",
+        settings: &DEFAULT_APPS_SETTINGS,
+        domains: &[],
+    },
+    PageInfo {
+        id: "about",
+        name: "About",
+        icon: "help-about",
+        category: Category::System,
+        qml: "pages/AboutPage.qml",
+        settings: &ABOUT_SETTINGS,
+        domains: &[],
+    },
 ];
+
+/// Pages shown only on some machines: the Login screen page needs uQ's login screen
+/// (`/etc/uq/greetd.toml`). The others are always shown.
+pub fn drop_unavailable(pages: &mut Vec<PageEntry>, greeter_installed: bool) {
+    if !greeter_installed {
+        pages.retain(|p| p.id != "login-screen");
+    }
+}
 
 /// The core pages, sorted by category.
 pub fn core_pages() -> &'static [PageInfo] {
@@ -1092,12 +1502,22 @@ mod tests {
                 "displays",
                 "apps-scaling",
                 "input",
+                "sound",
+                "bluetooth",
+                "network",
                 "shell",
                 "profiles",
                 "rules",
                 "history",
                 "keybinds",
-                "startup"
+                "startup",
+                "power",
+                "users",
+                "login-screen",
+                "datetime",
+                "region",
+                "default-apps",
+                "about"
             ]
         );
         assert_eq!(v[0]["category"], "personal");
@@ -1112,15 +1532,21 @@ mod tests {
         assert_eq!(v[4]["domains"], serde_json::json!(["compat"]));
         assert_eq!(v[5]["qml"], "pages/InputPage.qml");
         assert_eq!(v[5]["categoryName"], "Devices");
-        assert_eq!(v[6]["qml"], "pages/ShellPage.qml");
-        assert_eq!(v[6]["categoryName"], "uQ");
-        assert_eq!(v[10]["qml"], "pages/KeybindsPage.qml");
-        assert_eq!(v[10]["categoryName"], "uQ");
-        assert_eq!(v[10]["domains"], serde_json::json!(["keybinds"]));
-        assert_eq!(v[11]["qml"], "pages/StartupPage.qml");
-        assert_eq!(v[11]["category"], "system");
-        assert_eq!(v[11]["categoryName"], "System");
-        assert_eq!(v[11]["domains"], serde_json::json!(["autostart", "env"]));
+        assert_eq!(v[6]["qml"], "pages/SoundPage.qml");
+        assert_eq!(v[6]["categoryName"], "Devices");
+        assert_eq!(v[7]["qml"], "pages/BluetoothPage.qml");
+        assert_eq!(v[7]["categoryName"], "Devices");
+        assert_eq!(v[8]["qml"], "pages/NetworkPage.qml");
+        assert_eq!(v[8]["categoryName"], "Connections");
+        assert_eq!(v[9]["qml"], "pages/ShellPage.qml");
+        assert_eq!(v[9]["categoryName"], "uQ");
+        assert_eq!(v[13]["qml"], "pages/KeybindsPage.qml");
+        assert_eq!(v[13]["categoryName"], "uQ");
+        assert_eq!(v[13]["domains"], serde_json::json!(["keybinds"]));
+        assert_eq!(v[14]["qml"], "pages/StartupPage.qml");
+        assert_eq!(v[14]["category"], "system");
+        assert_eq!(v[14]["categoryName"], "System");
+        assert_eq!(v[14]["domains"], serde_json::json!(["autostart", "env"]));
     }
 
     #[test]
@@ -1305,5 +1731,84 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn system_pages_registered_after_startup() {
+        let ids: Vec<_> = core_pages().iter().map(|p| p.id).collect();
+        let at = ids.iter().position(|id| *id == "startup").unwrap();
+        assert_eq!(ids[at + 1..at + 4], ["power", "users", "login-screen"]);
+        assert_eq!(ids.last(), Some(&"about"), "About ends the System pages");
+        for id in [
+            "power",
+            "users",
+            "login-screen",
+            "datetime",
+            "region",
+            "about",
+        ] {
+            let page = find(id).unwrap();
+            assert_eq!(page.category, Category::System, "{id}");
+            assert!(page.domains.is_empty(), "{id} changes no uQ setting");
+        }
+        let login = find("login-screen").unwrap();
+        assert!(login.settings.iter().any(|s| s.id == "auto-login"));
+    }
+
+    #[test]
+    fn sound_follows_input() {
+        let page = find("sound").expect("the sound page is registered");
+        assert_eq!(page.category, Category::Devices);
+        assert_eq!(page.qml, "pages/SoundPage.qml");
+        assert!(page.domains.is_empty(), "it changes no uQ setting");
+        let ids: Vec<_> = core_pages().iter().map(|p| p.id).collect();
+        let at = ids.iter().position(|id| *id == "sound").unwrap();
+        assert_eq!(ids[at - 1], "input");
+        assert_eq!(ids[at + 1], "bluetooth");
+        assert!(page.settings.iter().any(|s| s.id == "sound-output"));
+    }
+
+    #[test]
+    fn bluetooth_ends_the_devices_pages() {
+        let page = find("bluetooth").expect("the bluetooth page is registered");
+        assert_eq!(page.category, Category::Devices);
+        assert_eq!(page.qml, "pages/BluetoothPage.qml");
+        assert!(page.domains.is_empty(), "it changes no uQ setting");
+        let ids: Vec<_> = core_pages().iter().map(|p| p.id).collect();
+        let at = ids.iter().position(|id| *id == "bluetooth").unwrap();
+        assert_eq!(ids[at + 1], "network");
+    }
+
+    #[test]
+    fn network_is_the_connections_page() {
+        let page = find("network").expect("the network page is registered");
+        assert_eq!(page.category, Category::Connections);
+        assert_eq!(page.qml, "pages/NetworkPage.qml");
+        assert!(page.domains.is_empty(), "it changes no uQ setting");
+        let ids: Vec<_> = core_pages().iter().map(|p| p.id).collect();
+        let at = ids.iter().position(|id| *id == "network").unwrap();
+        assert_eq!(ids[at + 1], "shell", "the last page before the uQ pages");
+    }
+
+    #[test]
+    fn login_screen_shown_only_with_the_greeter() {
+        let mut pages = all_pages(&[]);
+        drop_unavailable(&mut pages, true);
+        assert!(pages.iter().any(|p| p.id == "login-screen"));
+        drop_unavailable(&mut pages, false);
+        assert!(!pages.iter().any(|p| p.id == "login-screen"));
+        assert!(pages.iter().any(|p| p.id == "users"));
+    }
+
+    #[test]
+    fn default_apps_rows_match_the_kinds() {
+        let page = find("default-apps").unwrap();
+        let mut ids: Vec<String> = crate::pages::defaultapps::KINDS
+            .iter()
+            .map(|k| format!("default-{}", k.id))
+            .collect();
+        ids.push("default-terminal".into());
+        let listed: Vec<String> = page.settings.iter().map(|s| s.id.to_string()).collect();
+        assert_eq!(listed, ids);
     }
 }

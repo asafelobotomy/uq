@@ -1,0 +1,343 @@
+[
+  {
+    "id": 0,
+    "type": "PipeWire:Interface:Core",
+    "version": 4,
+    "permissions": [ "r", "w", "x", "m" ],
+    "info": {
+      "cookie": 1806227371,
+      "user-name": "ana",
+      "host-name": "ana-laptop",
+      "version": "1.4.9",
+      "name": "pipewire-0",
+      "change-mask": [ "props" ],
+      "props": {
+        "config.name": "pipewire.conf",
+        "core.name": "pipewire-0",
+        "object.id": 0,
+        "object.serial": 0
+      }
+    }
+  },
+  {
+    "id": 32,
+    "type": "PipeWire:Interface:Metadata",
+    "version": 3,
+    "permissions": [ "r", "w", "x", "m" ],
+    "props": {
+      "metadata.name": "default",
+      "object.serial": 32
+    },
+    "metadata": [
+      { "subject": 0, "key": "default.configured.audio.sink", "type": "Spa:String:JSON", "value": { "name": "alsa_output.pci-0000_00_1f.3.analog-stereo" } },
+      { "subject": 0, "key": "default.audio.sink", "type": "Spa:String:JSON", "value": { "name": "alsa_output.pci-0000_00_1f.3.analog-stereo" } },
+      { "subject": 0, "key": "default.audio.source", "type": "Spa:String:JSON", "value": { "name": "alsa_input.pci-0000_00_1f.3.analog-stereo" } },
+      { "subject": 71, "key": "target.object", "type": "Spa:Id", "value": "1060" }
+    ]
+  },
+  {
+    "id": 33,
+    "type": "PipeWire:Interface:Metadata",
+    "version": 3,
+    "permissions": [ "r", "w", "x", "m" ],
+    "props": {
+      "metadata.name": "settings",
+      "object.serial": 33
+    },
+    "metadata": [
+      { "subject": 0, "key": "clock.rate", "type": "", "value": "48000" }
+    ]
+  },
+  {
+    "id": 45,
+    "type": "PipeWire:Interface:Device",
+    "version": 3,
+    "permissions": [ "r", "w", "x", "m" ],
+    "info": {
+      "change-mask": [ "props", "params" ],
+      "props": {
+        "api.alsa.card": 0,
+        "device.api": "alsa",
+        "device.bus": "pci",
+        "device.description": "Built-in Audio",
+        "device.name": "alsa_card.pci-0000_00_1f.3",
+        "device.nick": "HDA Intel PCH",
+        "media.class": "Audio/Device",
+        "object.id": 45,
+        "object.serial": 1045
+      },
+      "params": {
+        "EnumProfile": [
+          { "index": 0, "name": "off", "description": "Off", "available": "yes", "priority": 0, "classes": [ "Spa:Pod:Object:Param:Profile", 0 ] },
+          { "index": 1, "name": "output:analog-stereo+input:analog-stereo", "description": "Analog Stereo Duplex", "available": "yes", "priority": 6565 },
+          { "index": 2, "name": "output:hdmi-stereo", "description": "Digital Stereo (HDMI) Output", "available": "no", "priority": 5900 },
+          { "index": 3, "name": "output:analog-stereo", "description": "Analog Stereo Output", "available": "yes", "priority": 6500 }
+        ],
+        "Profile": [
+          { "index": 1, "name": "output:analog-stereo+input:analog-stereo", "description": "Analog Stereo Duplex", "available": "yes", "priority": 6565, "save": true }
+        ],
+        "Route": [
+          { "index": 4, "direction": "Output", "name": "analog-output-speaker", "description": "Speakers", "available": "unknown", "device": 4, "props": { "mute": false, "channelVolumes": [ 0.125, 0.125 ] } }
+        ]
+      }
+    }
+  },
+  {
+    "id": 46,
+    "type": "PipeWire:Interface:Device",
+    "version": 3,
+    "permissions": [ "r", "w", "x", "m" ],
+    "info": {
+      "change-mask": [ "props", "params" ],
+      "props": {
+        "api.bluez5.address": "AA:BB:CC:DD:EE:01",
+        "device.api": "bluez5",
+        "device.description": "Ana's headphones",
+        "device.name": "bluez_card.AA_BB_CC_DD_EE_01",
+        "media.class": "Audio/Device",
+        "object.id": 46,
+        "object.serial": 1046
+      },
+      "params": {
+        "EnumProfile": [
+          { "index": 0, "name": "off", "description": "Off", "available": "yes", "priority": 0 },
+          { "index": 1, "name": "a2dp-sink", "description": "High Fidelity Playback (A2DP Sink, codec SBC)", "available": "yes", "priority": 16 },
+          { "index": 2, "name": "headset-head-unit", "description": "Headset Head Unit (HSP/HFP, codec CVSD)", "available": "yes", "priority": 1 }
+        ],
+        "Profile": [
+          { "index": 1, "name": "a2dp-sink", "description": "High Fidelity Playback (A2DP Sink, codec SBC)", "available": "yes", "priority": 16 }
+        ]
+      }
+    }
+  },
+  {
+    "id": 47,
+    "type": "PipeWire:Interface:Device",
+    "version": 3,
+    "permissions": [ "r", "w", "x", "m" ],
+    "info": {
+      "props": {
+        "device.api": "v4l2",
+        "device.description": "Integrated Camera",
+        "media.class": "Video/Device",
+        "object.id": 47,
+        "object.serial": 1047
+      },
+      "params": {}
+    }
+  },
+  {
+    "id": 50,
+    "type": "PipeWire:Interface:Node",
+    "version": 3,
+    "permissions": [ "r", "w", "x", "m" ],
+    "info": {
+      "max-input-ports": 65,
+      "max-output-ports": 0,
+      "n-input-ports": 2,
+      "n-output-ports": 2,
+      "state": "running",
+      "error": null,
+      "props": {
+        "device.id": 45,
+        "media.class": "Audio/Sink",
+        "node.description": "Built-in Audio Analog Stereo",
+        "node.name": "alsa_output.pci-0000_00_1f.3.analog-stereo",
+        "node.nick": "HDA Intel PCH",
+        "object.id": 50,
+        "object.serial": 1050,
+        "priority.session": 1009
+      },
+      "params": {
+        "Props": [
+          { "volume": 1.0, "mute": false, "channelVolumes": [ 0.125, 0.125 ], "channelMap": [ "FL", "FR" ], "softMute": false, "softVolumes": [ 1.0, 1.0 ] },
+          { "params": [ "audio.channels", 2 ] }
+        ]
+      }
+    }
+  },
+  {
+    "id": 51,
+    "type": "PipeWire:Interface:Node",
+    "version": 3,
+    "permissions": [ "r", "w", "x", "m" ],
+    "info": {
+      "state": "suspended",
+      "props": {
+        "device.id": 45,
+        "media.class": "Audio/Source",
+        "node.description": "Built-in Audio Analog Stereo",
+        "node.name": "alsa_input.pci-0000_00_1f.3.analog-stereo",
+        "object.id": 51,
+        "object.serial": 1051
+      },
+      "params": {
+        "Props": [
+          { "volume": 1.0, "mute": true, "channelVolumes": [ 0.729, 0.729 ], "channelMap": [ "FL", "FR" ] }
+        ]
+      }
+    }
+  },
+  {
+    "id": 60,
+    "type": "PipeWire:Interface:Node",
+    "version": 3,
+    "permissions": [ "r", "w", "x", "m" ],
+    "info": {
+      "state": "running",
+      "props": {
+        "api.bluez5.profile": "a2dp-sink",
+        "device.id": 46,
+        "media.class": "Audio/Sink",
+        "node.description": "Ana's headphones",
+        "node.name": "bluez_output.AA_BB_CC_DD_EE_01.1",
+        "object.id": 60,
+        "object.serial": 1060
+      },
+      "params": {
+        "Props": [
+          { "volume": 1.0, "mute": false, "channelVolumes": [ 0.512, 0.343 ], "channelMap": [ "FL", "FR" ] }
+        ]
+      }
+    }
+  },
+  {
+    "id": 61,
+    "type": "PipeWire:Interface:Node",
+    "version": 3,
+    "permissions": [ "r", "w", "x", "m" ],
+    "info": {
+      "state": "suspended",
+      "props": {
+        "media.class": "Video/Source",
+        "node.description": "Integrated Camera (V4L2)",
+        "node.name": "v4l2_input.pci-0000_00_14.0-usb-0_6_1.0",
+        "object.id": 61,
+        "object.serial": 1061
+      },
+      "params": {}
+    }
+  },
+  {
+    "id": 70,
+    "type": "PipeWire:Interface:Node",
+    "version": 3,
+    "permissions": [ "r", "w", "x", "m" ],
+    "info": {
+      "state": "running",
+      "props": {
+        "application.name": "Firefox",
+        "application.process.binary": "firefox",
+        "application.icon-name": "firefox",
+        "media.class": "Stream/Output/Audio",
+        "media.name": "<i>Video</i> — YouTube",
+        "node.name": "Firefox",
+        "object.id": 70,
+        "object.serial": 1070
+      },
+      "params": {
+        "Props": [
+          { "volume": 1.0, "mute": false, "channelVolumes": [ 1.0, 1.0 ], "channelMap": [ "FL", "FR" ] }
+        ]
+      }
+    }
+  },
+  {
+    "id": 71,
+    "type": "PipeWire:Interface:Node",
+    "version": 3,
+    "permissions": [ "r", "w", "x", "m" ],
+    "info": {
+      "state": "running",
+      "props": {
+        "application.name": "Music",
+        "media.class": "Stream/Output/Audio",
+        "media.name": "Track 3",
+        "node.name": "music-player",
+        "object.id": 71,
+        "object.serial": 1071
+      },
+      "params": {
+        "Props": [
+          { "volume": 1.0, "mute": true, "channelVolumes": [ 0.216, 0.216 ], "channelMap": [ "FL", "FR" ] }
+        ]
+      }
+    }
+  },
+  {
+    "id": 72,
+    "type": "PipeWire:Interface:Node",
+    "version": 3,
+    "permissions": [ "r", "w", "x", "m" ],
+    "info": {
+      "state": "running",
+      "props": {
+        "application.name": "Voice recorder",
+        "media.class": "Stream/Input/Audio",
+        "media.name": "Recording",
+        "node.name": "recorder",
+        "object.id": 72,
+        "object.serial": 1072
+      },
+      "params": {
+        "Props": [
+          { "volume": 1.0, "mute": false, "channelVolumes": [ 1.0 ], "channelMap": [ "MONO" ] }
+        ]
+      }
+    }
+  },
+  {
+    "id": 80,
+    "type": "PipeWire:Interface:Link",
+    "version": 3,
+    "permissions": [ "r", "w", "x", "m" ],
+    "info": {
+      "output-node-id": 70,
+      "output-port-id": 90,
+      "input-node-id": 50,
+      "input-port-id": 91,
+      "state": "active",
+      "error": null,
+      "format": null,
+      "props": { "link.output.node": 70, "link.input.node": 50, "object.id": 80, "object.serial": 1080 }
+    }
+  },
+  {
+    "id": 81,
+    "type": "PipeWire:Interface:Link",
+    "version": 3,
+    "permissions": [ "r", "w", "x", "m" ],
+    "info": {
+      "output-node-id": 71,
+      "output-port-id": 92,
+      "input-node-id": 60,
+      "input-port-id": 93,
+      "state": "active",
+      "props": { "object.id": 81, "object.serial": 1081 }
+    }
+  },
+  {
+    "id": 82,
+    "type": "PipeWire:Interface:Link",
+    "version": 3,
+    "permissions": [ "r", "w", "x", "m" ],
+    "info": {
+      "output-node-id": 51,
+      "output-port-id": 94,
+      "input-node-id": 72,
+      "input-port-id": 95,
+      "state": "active",
+      "props": { "object.id": 82, "object.serial": 1082 }
+    }
+  },
+  {
+    "id": 90,
+    "type": "PipeWire:Interface:Port",
+    "version": 3,
+    "permissions": [ "r", "w", "x", "m" ],
+    "info": {
+      "direction": "output",
+      "props": { "node.id": 70, "port.name": "output_FL", "object.id": 90, "object.serial": 1090 }
+    }
+  }
+]

@@ -23,3 +23,4 @@ pub mod stub;
 #[cfg(feature = "test-bus")]
 pub mod test_bus;
 pub mod theme;
+pub mod welcome;

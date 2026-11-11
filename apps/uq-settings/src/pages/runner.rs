@@ -3,9 +3,10 @@
 //! ([`patch_section`]). `crate::model_core` is the QObject side.
 
 use std::future::Future;
+use std::sync::Arc;
 
 use serde_json::{Map, Value, json};
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, Notify};
 use uq_core::client::{self, DesktopProxy};
 use uq_core::settings::provenance;
 
@@ -57,6 +58,14 @@ pub trait PageLogic: Send + Sync + 'static {
     fn apply(&self, op: Self::Op) -> impl Future<Output = zbus::Result<()>> + Send;
     /// Everything the page shows, read from uqd.
     fn snapshot(&self) -> impl Future<Output = zbus::Result<Value>> + Send;
+    /// Runs while the page is open and follows what it shows for changes made outside the app
+    /// (a system service's signals, a pairing request), calling `changed.notify_one()` for each;
+    /// the model then reads the state again. It is dropped when the page closes. By default a
+    /// page follows only uqd.
+    fn watch(&self, changed: Arc<Notify>) -> impl Future<Output = ()> + Send {
+        drop(changed);
+        std::future::pending()
+    }
 }
 
 /// Do `op`, then read the state back. A refusal comes back as `error` with the state as uqd has

@@ -32,6 +32,10 @@ QtObject {
         var prev = root.open;
         var next = L.transition({ open: prev }, event);
         root.open = next.open;
+        // Spotlight or the app menu opened: the bridge starts cold activatable providers now,
+        // so they can answer the first queries (Phase 4 spec §2.4.1). Never waited on.
+        if (next.open !== prev && (next.open === "spotlight" || next.open === "appmenu"))
+            Bridge.call("LauncherOpened", []).catch(function () {});
         if (next.open !== "powermenu")
             root.powerConfirm = "";
         if (next.wipe) {

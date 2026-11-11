@@ -24,6 +24,12 @@ use zbus::proxy::{CacheProperties, MethodFlags};
 const SEARCH_TIMEOUT: Duration = Duration::from_millis(300);
 const ACTIVATE_TIMEOUT: Duration = Duration::from_secs(1);
 const LOG_EVERY: Duration = Duration::from_secs(60);
+/// An activatable provider is started at most this often (Phase 4 spec §2.4.1).
+pub(crate) const START_EVERY: Duration = Duration::from_secs(30);
+/// A provider that fails to start is logged at most this often (§5).
+pub(crate) const START_LOG_EVERY: Duration = Duration::from_secs(600);
+/// `StartServiceByName` gets this long; nothing waits for it.
+const START_TIMEOUT: Duration = Duration::from_secs(2);
 const MAX_ITEMS: usize = 20;
 const MAX_ID_BYTES: usize = 512;
 const MAX_TITLE_BYTES: usize = 200;
@@ -179,6 +185,36 @@ impl DefCache {
     }
 }
 
+/// When each activatable provider was last started and when its failure was last logged.
+#[derive(Debug, Default)]
+pub(crate) struct StartThrottle {
+    tried: HashMap<String, Instant>,
+    logged: HashMap<String, Instant>,
+}
+
+fn due(map: &mut HashMap<String, Instant>, name: &str, now: Instant, every: Duration) -> bool {
+    if map
+        .get(name)
+        .is_some_and(|t| now.saturating_duration_since(*t) < every)
+    {
+        return false;
+    }
+    map.insert(name.to_string(), now);
+    true
+}
+
+impl StartThrottle {
+    /// Whether `name` may be started now (at most once per [`START_EVERY`]); records the try.
+    pub(crate) fn try_start(&mut self, name: &str, now: Instant) -> bool {
+        due(&mut self.tried, name, now, START_EVERY)
+    }
+
+    /// Whether a failure of `name` should be logged now (at most once per [`START_LOG_EVERY`]).
+    pub(crate) fn should_log(&mut self, name: &str, now: Instant) -> bool {
+        due(&mut self.logged, name, now, START_LOG_EVERY)
+    }
+}
+
 #[derive(Default)]
 struct State {
     generation: u64,
@@ -192,6 +228,7 @@ pub(crate) struct Providers {
     state: Mutex<State>,
     defs: Mutex<DefCache>,
     logged: Mutex<HashMap<String, Instant>>,
+    starts: Mutex<StartThrottle>,
 }
 
 fn results_event(
@@ -249,6 +286,7 @@ impl Providers {
                 defs: Vec::new(),
             }),
             logged: Mutex::default(),
+            starts: Mutex::default(),
         })
     }
 
@@ -261,6 +299,86 @@ impl Providers {
         {
             l.insert(who.to_string(), now);
             eprintln!("uqctl bridge: provider {who}: {msg}");
+        }
+    }
+
+    /// The bridge's `LauncherOpened` call (Spotlight or the app menu opened): start each
+    /// switched-on `Activatable=true` provider whose name has no owner and has a session service
+    /// file, at most once per 30 s each, without waiting (§2.4.1). Queries still go only to
+    /// owned names, with `NO_AUTO_START`.
+    pub(crate) async fn launcher_opened(
+        self: &Arc<Self>,
+        link: &Link,
+        args: &[Value],
+    ) -> Result<Value, String> {
+        if !args.is_empty() {
+            return Err("LauncherOpened takes no arguments".into());
+        }
+        let prefs = provider_prefs(link);
+        let defs: Vec<ProviderDef> = lock(&self.defs)
+            .current()
+            .into_iter()
+            .filter(|d| d.activatable && provider_enabled(&prefs, &d.bus_name))
+            .collect();
+        if defs.is_empty() {
+            return Ok(Value::Null);
+        }
+        let Some(conn) = link.connection().await else {
+            return Ok(Value::Null);
+        };
+        let me = self.clone();
+        tokio::spawn(async move {
+            tokio::select! {
+                _ = me.stop.cancelled() => {}
+                _ = me.start_cold(&conn, defs) => {}
+            }
+        });
+        Ok(Value::Null)
+    }
+
+    async fn start_cold(self: &Arc<Self>, conn: &zbus::Connection, defs: Vec<ProviderDef>) {
+        let Ok(dbus) = zbus::fdo::DBusProxy::new(conn).await else {
+            return;
+        };
+        let names = match tokio::time::timeout(START_TIMEOUT, dbus.list_activatable_names()).await {
+            Ok(Ok(n)) => n,
+            _ => return,
+        };
+        for def in defs {
+            if !names.iter().any(|n| n.as_str() == def.bus_name) {
+                // Activatable=true without a service file: the key is ignored (§2.4.1).
+                if lock(&self.starts).should_log(&def.bus_name, Instant::now()) {
+                    eprintln!(
+                        "uqctl bridge: provider {}: Activatable=true but no D-Bus service file",
+                        def.bus_name
+                    );
+                }
+                continue;
+            }
+            if owned(conn, &def.bus_name).await
+                || !lock(&self.starts).try_start(&def.bus_name, Instant::now())
+            {
+                continue;
+            }
+            let (me, conn) = (self.clone(), conn.clone());
+            tokio::spawn(async move {
+                let name = def.bus_name.as_str();
+                let start = async {
+                    let dbus = zbus::fdo::DBusProxy::new(&conn).await?;
+                    let wk = WellKnownName::try_from(name).map_err(zbus::Error::from)?;
+                    dbus.start_service_by_name(wk, 0)
+                        .await
+                        .map_err(zbus::Error::from)
+                };
+                let err = match tokio::time::timeout(START_TIMEOUT, start).await {
+                    Ok(Ok(_)) => return,
+                    Ok(Err(e)) => e.to_string(),
+                    Err(_) => "didn't start within 2 s".to_string(),
+                };
+                if lock(&me.starts).should_log(name, Instant::now()) {
+                    eprintln!("uqctl bridge: provider {name}: couldn't start: {err}");
+                }
+            });
         }
     }
 
@@ -462,6 +580,19 @@ mod tests {
             "[]".into(),
             score,
         )
+    }
+
+    #[test]
+    fn starts_at_most_every_30_s_and_logs_every_10_min() {
+        let mut t = StartThrottle::default();
+        let t0 = Instant::now();
+        assert!(t.try_start("a", t0));
+        assert!(!t.try_start("a", t0 + Duration::from_secs(29)));
+        assert!(t.try_start("b", t0), "per provider");
+        assert!(t.try_start("a", t0 + Duration::from_secs(30)));
+        assert!(t.should_log("a", t0));
+        assert!(!t.should_log("a", t0 + Duration::from_secs(599)));
+        assert!(t.should_log("a", t0 + Duration::from_secs(600)));
     }
 
     #[test]

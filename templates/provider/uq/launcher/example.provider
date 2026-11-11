@@ -1,0 +1,8 @@
+# Installed to /usr/share/uq/launcher/example.provider by your app's package.
+[Launcher Provider]
+BusName=org.example.Provider
+Name=Example
+# Optional: only queries starting with this reach the provider (stripped). 1-4 characters.
+Prefix=!
+# The bus name has a session D-Bus service file: uQ starts it when the launcher opens.
+Activatable=true

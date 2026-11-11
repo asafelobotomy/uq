@@ -97,6 +97,7 @@ PanelWindow {
     }
 
     function wipe() {
+        actionMenu.close();
         field.text = "";
         query = "";
         currentCategory = favList.length > 0 ? M.FAVOURITES : M.ALL;
@@ -392,7 +393,14 @@ PanelWindow {
                                 id: cellMouse
                                 anchors.fill: parent
                                 hoverEnabled: true
-                                onClicked: root.launch(cell.modelData)
+                                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                onClicked: function (mouse) {
+                                    if (mouse.button === Qt.RightButton)
+                                        actionMenu.openAt(cell, mouse.x, mouse.y,
+                                                          String(cell.modelData.id || ""));
+                                    else
+                                        root.launch(cell.modelData);
+                                }
                             }
                         }
                     }
@@ -452,6 +460,13 @@ PanelWindow {
                     }
                 }
             }
+        }
+
+        // Right-click on an app: app actions from other apps (Phase 4 spec §2.4.2).
+        AppActionMenu {
+            id: actionMenu
+            onDone: Surfaces.close()
+            onOpenChanged: if (!open && root.shown) field.forceActiveFocus()
         }
     }
 }

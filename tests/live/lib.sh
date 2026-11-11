@@ -86,6 +86,9 @@ detect() {
     timeout 5 systemctl --user show-environment >/dev/null 2>&1 && [ -z "${UQ_LIVE_UQDCTL:-}" ] && HAVE[systemd]=1
     sudo -n true 2>/dev/null && HAVE[root]=1
     busctl --system status net.hadess.PowerProfiles >/dev/null 2>&1 && HAVE[ppd]=1
+    # A VM's power-profiles-daemon often has no platform driver, so it offers no "performance".
+    [ -n "${HAVE[ppd]:-}" ] && [[ $(busctl --system --json=short get-property net.hadess.PowerProfiles \
+        /net/hadess/PowerProfiles net.hadess.PowerProfiles Profiles 2>/dev/null) == *'"performance"'* ]] && HAVE[ppd_perf]=1
     { [ -n "${UQ_LIVE_UQDCTL:-}" ] || [ -n "${HAVE[systemd]:-}" ]; } && HAVE[restart]=1
     [ -n "${UQ_LIVE_SLOW:-}" ] && HAVE[slow]=1
     [ -n "${UQ_LIVE_SANDBOX:-}" ] && HAVE[sandbox]=1

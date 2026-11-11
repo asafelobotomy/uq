@@ -2,11 +2,12 @@
 # Settings slice B (profiles): docs/notes/settings-slice-b-live-check.md. The quick-settings row
 # and the SUPER+ALT+P key press are the VM's; here the same uqd calls run.
 
-# profile_toml ID NAME [EXTRA TOML]: a profile with gaps 0 and animations off (and a power mode
-# when this session has power-profiles-daemon).
+# profile_toml ID NAME [EXTRA TOML]: a profile with gaps 0 and animations off, and the power mode
+# "performance" when this session's power-profiles-daemon offers it (unless EXTRA has its own
+# [power] table).
 profile_toml() {
     printf 'format = 1\nid = "%s"\nname = "%s"\n\n[look]\ngaps_in = 0\nanimations = false\n' "$1" "$2"
-    [ -n "${HAVE[ppd]:-}" ] && printf '\n[power]\nprofile = "performance"\n'
+    [ -n "${HAVE[ppd_perf]:-}" ] && [[ ${3:-} != *"[power]"* ]] && printf '\n[power]\nprofile = "performance"\n'
     [ $# -ge 3 ] && printf '\n%s\n' "$3"
     return 0
 }
@@ -32,8 +33,10 @@ sb1() {
         note "live gaps_in: $e"
         [[ $e == *0* ]] || bad "expected live gaps 0; observed $e"
     fi
-    if [ -n "${HAVE[ppd]:-}" ]; then
+    if [ -n "${HAVE[ppd_perf]:-}" ]; then
         expect_eq "power mode while on (was $p0)" performance "$(power_now)"
+    elif [ -n "${HAVE[ppd]:-}" ]; then
+        note "power-profiles-daemon offers no performance mode here (no platform driver); power not checked"
     fi
     r=$(history_json 5 | jq -r --arg p "profile:$GAMING" '[.[] | select(.origin == $p)] | length')
     [ "$r" -ge 1 ] || bad "expected History entries from the profile; observed $(history_json 3 | jq -c '[.[] | .origin]')"
@@ -45,7 +48,7 @@ sb1() {
     expect_eq "gaps 'From the ... profile'" "Live check" "$(jq -r .detail.name <<<"$e")"
     r=$(bus ProfileOff) || bad "ProfileOff: $r"
     expect_eq "gaps after Back to normal" "$g0" "$(look_val gaps_in)"
-    [ -n "${HAVE[ppd]:-}" ] && expect_eq "power mode after Back to normal" "$p0" "$(power_now)"
+    [ -n "${HAVE[ppd_perf]:-}" ] && expect_eq "power mode after Back to normal" "$p0" "$(power_now)"
 }
 
 check SB2 "A hand change survives Back to normal, and the message names it" sb2
@@ -83,15 +86,19 @@ sb4() {
         sudo -n systemctl mask --now power-profiles-daemon >/dev/null 2>&1 && masked=1
         note "masked power-profiles-daemon"
     fi
-    r=$(bus SetProfile sb "$(profile_toml "$GAMING" "Live check" '[power]
-profile = "performance"')" false) || { bad "SetProfile: $r"; return; }
-    t0=$(date +%s%N)
-    r=$(bus ApplyProfile s "$GAMING")
-    took=$((($(date +%s%N) - t0) / 1000000))
-    note "ApplyProfile took ${took} ms: $r"
-    [ "$took" -le 3500 ] || bad "expected the call back within about 3 s; observed ${took} ms"
-    [[ $r == *"Power mode wasn't changed"* ]] || bad "expected \"Power mode wasn't changed: ...\"; observed $r"
-    expect_eq "gaps while on" 0 "$(look_val gaps_in)"
+    if r=$(bus SetProfile sb "$(profile_toml "$GAMING" "Live check" '[power]
+profile = "performance"')" false); then
+        t0=$(date +%s%N)
+        r=$(bus ApplyProfile s "$GAMING")
+        took=$((($(date +%s%N) - t0) / 1000000))
+        note "ApplyProfile took ${took} ms: $r"
+        [ "$took" -le 3500 ] || bad "expected the call back within about 3 s; observed ${took} ms"
+        [[ $r == *"Power mode wasn't changed"* ]] || bad "expected \"Power mode wasn't changed: ...\"; observed $r"
+        expect_eq "gaps while on" 0 "$(look_val gaps_in)"
+    else
+        bad "SetProfile: $r"
+    fi
+    # Back on before anything else runs, whatever happened above.
     if [ "$masked" = 1 ]; then
         sudo -n systemctl unmask power-profiles-daemon >/dev/null 2>&1
         sudo -n systemctl start power-profiles-daemon >/dev/null 2>&1

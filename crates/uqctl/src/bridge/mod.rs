@@ -3,6 +3,7 @@
 //! stdout is protocol only; everything else goes to stderr. One task owns stdout and receives
 //! `Outbound` over an mpsc channel, so concurrent replies and events never interleave mid-line.
 
+mod appactions;
 mod calc;
 pub(crate) mod desktop_entry;
 mod dispatch;
@@ -16,9 +17,12 @@ pub mod protocol;
 mod providers;
 pub(crate) mod run;
 pub(crate) mod uqd;
+mod welcome;
+mod widgets;
 
 use protocol::{Inbound, MAX_LINE, Outbound, Rejected, encode, read_lines};
 use serde_json::{Value, json};
+use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -31,41 +35,109 @@ const MAX_IN_FLIGHT: usize = 64;
 /// How long the writer may take to drain queued output after stdin EOF.
 const DRAIN: Duration = Duration::from_secs(2);
 
+/// Where the integration files are read from (Phase 4 spec §2.2, §2.4.2).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IntegrationRoots {
+    /// `/usr/share/uq/shell/widgets`.
+    pub widgets: PathBuf,
+    /// `/usr/share/uq/launcher/actions`.
+    pub actions: PathBuf,
+    /// Launcher provider directories (system, then the user's).
+    pub providers: Vec<PathBuf>,
+    /// Where `[requires] bins` must exist.
+    pub bin_dir: PathBuf,
+}
+
+impl IntegrationRoots {
+    /// What an installed uQ reads.
+    pub fn system() -> IntegrationRoots {
+        IntegrationRoots::from(uq_core::integration::scan::Roots::system())
+    }
+}
+
+impl From<uq_core::integration::scan::Roots> for IntegrationRoots {
+    fn from(r: uq_core::integration::scan::Roots) -> IntegrationRoots {
+        let mut providers = r.providers;
+        // The user's provider directory stays, as Phase 2 defined it.
+        for d in uq_core::launcher_providers::default_dirs()
+            .into_iter()
+            .skip(1)
+        {
+            if !providers.contains(&d) {
+                providers.push(d);
+            }
+        }
+        IntegrationRoots {
+            widgets: r.widgets,
+            actions: r.actions,
+            providers,
+            bin_dir: r.bin_dir,
+        }
+    }
+}
+
+/// What a request may use; cloned into each request task.
+#[derive(Clone)]
+struct Services {
+    link: Arc<uqd::Link>,
+    net: Arc<net::Net>,
+    runs: Arc<Mutex<run::RunState>>,
+    providers: Arc<providers::Providers>,
+    logind: Arc<logind::Logind>,
+    /// None when the bridge runs without integrations (unit tests).
+    widgets: Option<Arc<widgets::Widgets>>,
+    actions: Option<Arc<appactions::AppActions>>,
+}
+
+const NO_INTEGRATIONS: &str = "integrations are off";
+
 /// Handle one request. This is the single dispatch point later tasks extend with new calls;
 /// anything not matched is an error reply.
-async fn handle(
-    link: &uqd::Link,
-    net: &Arc<net::Net>,
-    runs: &Mutex<run::RunState>,
-    providers: &Arc<providers::Providers>,
-    logind: &Arc<logind::Logind>,
-    call: &str,
-    args: &[Value],
-) -> Result<Value, String> {
+async fn handle(s: &Services, call: &str, args: &[Value]) -> Result<Value, String> {
+    let (link, runs) = (&*s.link, &*s.runs);
     match call {
         "Ping" => Ok(json!("pong")),
         "GetTheme" | "SetTheme" | "ListThemes" | "ListThemeInfo" | "GetLayouts" | "SetLayout"
         | "GetSchedule" | "SetSchedule" | "Reload" | "GetSettings" | "SetSetting"
         | "GetLaunchCounts" | "RecordLaunch" | "ListProfiles" | "ApplyProfile" | "ProfileOff"
         | "PickDone" => link.call(call, args).await,
+        "Launch" if args.first().is_some_and(|a| a.get("app_action").is_some()) => {
+            match &s.actions {
+                Some(a) => a.launch(link, args).await,
+                None => Err(NO_INTEGRATIONS.into()),
+            }
+        }
+        "WelcomeStatus" if args.is_empty() => {
+            Ok(welcome::status(link, welcome::runtime_dir().as_deref()).await)
+        }
+        "WelcomeStatus" => Err("WelcomeStatus takes no arguments".into()),
         "Launch" => launch::launch(link, args, runs).await,
-        "Search" => providers.search(link, runs, args).await,
-        "Activate" => providers.activate(link, runs, args).await,
+        "Search" => s.providers.search(link, runs, args).await,
+        "Activate" => s.providers.activate(link, runs, args).await,
+        "LauncherOpened" => s.providers.launcher_opened(link, args).await,
+        "WidgetCall" | "WidgetGet" | "WidgetRun" => {
+            let w = s.widgets.as_ref().ok_or(NO_INTEGRATIONS)?;
+            match call {
+                "WidgetCall" => w.call(args).await,
+                "WidgetGet" => w.get(args).await,
+                _ => w.run_command(args).await,
+            }
+        }
         "Dispatch" => dispatch::dispatch(args).await,
         "Power" => power::power(args).await,
         "Lock" => logind::lock(args).await,
         "SleepLockReady" if args.is_empty() => {
-            logind.sleep_lock_ready();
+            s.logind.sleep_lock_ready();
             Ok(Value::Null)
         }
         "SleepLockReady" => Err("SleepLockReady takes no arguments".into()),
         "GeocodeCity" => match args {
-            [Value::String(name)] => net.geocode(name).await,
+            [Value::String(name)] => s.net.geocode(name).await,
             _ => Err("GeocodeCity takes one string argument (the city name)".into()),
         },
         "NetworkChanged" => match args {
             [Value::Object(o)] if o.get("vpn_active").is_some_and(Value::is_boolean) => {
-                net.network_changed(o["vpn_active"] == true).await;
+                s.net.network_changed(o["vpn_active"] == true).await;
                 Ok(Value::Null)
             }
             _ => Err("NetworkChanged takes {vpn_active: bool}".into()),
@@ -115,13 +187,14 @@ async fn write_loop<W: AsyncWrite + Unpin>(mut w: W, mut rx: mpsc::Receiver<Outb
     }
 }
 
-pub async fn run<R, W>(stdin: R, stdout: W) -> ExitCode
+/// Run the bridge on the real buses. `roots`: where integrations are read from.
+pub async fn run<R, W>(stdin: R, stdout: W, roots: IntegrationRoots) -> ExitCode
 where
     R: AsyncRead + Unpin + Send + 'static,
     W: AsyncWrite + Unpin + Send + 'static,
 {
     let locks = locknotify::spawn(std::env::var_os("WAYLAND_DISPLAY"));
-    run_with_bus(stdin, stdout, None, None, locks).await
+    run_with_bus(stdin, stdout, None, None, locks, Some(roots)).await
 }
 
 /// Relay lock-notify states: each change (and the first report) becomes a `LockState` event, then
@@ -158,13 +231,14 @@ async fn relay_locks(
 
 /// As `run`, against the session bus at `addr` and the system bus at `system` (None: the real
 /// ones), with lock states from `locks`. Tests pass private buses and their own lock source, so
-/// they never reach a Wayland display.
+/// they never reach a Wayland display. `roots` None runs without widgets and app actions.
 pub async fn run_with_bus<R, W>(
     stdin: R,
     stdout: W,
     addr: Option<&str>,
     system: Option<&str>,
     mut locks: mpsc::UnboundedReceiver<bool>,
+    roots: Option<IntegrationRoots>,
 ) -> ExitCode
 where
     R: AsyncRead + Unpin + Send + 'static,
@@ -182,9 +256,12 @@ where
     while let Ok(locked) = locks.try_recv() {
         known_lock = Some(locked);
     }
+    // Whether Welcome is due (null when uqd isn't up yet) and held back by bindle (§5.1).
+    let welcome = welcome::status(&link, welcome::runtime_dir().as_deref()).await;
     let hello = Outbound::Event {
         event: "Hello".into(),
-        data: json!({"v": 1, "uqd_up": link.is_up(), "locked": known_lock.unwrap_or(false)}),
+        data: json!({"v": 1, "uqd_up": link.is_up(), "locked": known_lock.unwrap_or(false),
+            "welcome_pending": welcome["pending"], "welcome_deferred": welcome["deferred"]}),
     };
     let _ = out_tx.send(hello).await;
 
@@ -223,8 +300,42 @@ where
     let providers = providers::Providers::new(
         out_tx.clone(),
         stop.clone(),
-        uq_core::launcher_providers::default_dirs(),
+        roots
+            .as_ref()
+            .map_or_else(uq_core::launcher_providers::default_dirs, |r| {
+                r.providers.clone()
+            }),
     );
+    // Widgets and app actions: their first events follow Hello.
+    let (widgets, actions) = match &roots {
+        Some(r) => (
+            Some(widgets::Widgets::new(
+                out_tx.clone(),
+                stop.clone(),
+                r.widgets.clone(),
+                r.bin_dir.clone(),
+                addr,
+                system,
+            )),
+            Some(appactions::AppActions::new(
+                out_tx.clone(),
+                stop.clone(),
+                r.actions.clone(),
+            )),
+        ),
+        None => (None, None),
+    };
+    let widget_task = widgets.clone().map(|w| tokio::spawn(w.run()));
+    let action_task = actions.clone().map(|a| tokio::spawn(a.run()));
+    let services = Services {
+        link: link.clone(),
+        net: net.clone(),
+        runs: runs.clone(),
+        providers: providers.clone(),
+        logind: logind.clone(),
+        widgets,
+        actions,
+    };
     let slots = Arc::new(Semaphore::new(MAX_IN_FLIGHT));
     let mut requests = tokio::task::JoinSet::new();
     let mut shell_seen = false;
@@ -240,20 +351,12 @@ where
                 let Ok(permit) = slots.clone().acquire_owned().await else {
                     break;
                 };
-                let (link, net, runs, providers, logind, tx) = (
-                    link.clone(),
-                    net.clone(),
-                    runs.clone(),
-                    providers.clone(),
-                    logind.clone(),
-                    out_tx.clone(),
-                );
+                let (services, tx) = (services.clone(), out_tx.clone());
                 requests.spawn(async move {
-                    let reply =
-                        match handle(&link, &net, &runs, &providers, &logind, &call, &args).await {
-                            Ok(ok) => Outbound::Ok { id, ok },
-                            Err(err) => Outbound::Err { id, err },
-                        };
+                    let reply = match handle(&services, &call, &args).await {
+                        Ok(ok) => Outbound::Ok { id, ok },
+                        Err(err) => Outbound::Err { id, err },
+                    };
                     let _ = tx.send(reply).await;
                     drop(permit);
                 });
@@ -290,6 +393,13 @@ where
     lock_relay.abort();
     // It may be stuck in a SetLockedHint call that logind never answers.
     hint_task.abort();
+    if let Some(t) = widget_task {
+        t.abort();
+    }
+    if let Some(t) = action_task {
+        t.abort();
+    }
+    drop(services);
     drop(net);
     drop(providers);
     drop(logind);
@@ -330,13 +440,15 @@ mod tests {
             Some(NO_BUS),
             Some(NO_BUS),
             no_locks(),
+            None,
         ));
         let mut out = BufReader::new(out_r);
 
         let hello = next(&mut out).await;
         assert_eq!(
             hello,
-            json!({"v":1,"event":"Hello","data":{"v":1,"uqd_up":false,"locked":false}})
+            json!({"v":1,"event":"Hello","data":{"v":1,"uqd_up":false,"locked":false,
+                "welcome_pending":null,"welcome_deferred":false}})
         );
         in_w.write_all(b"{\"v\":1,\"id\":1,\"call\":\"Ping\",\"args\":[]}\n")
             .await
@@ -371,11 +483,19 @@ mod tests {
         lock_tx.send(true).unwrap();
         let (in_w, in_r) = duplex(4096);
         let (out_w, out_r) = duplex(4096);
-        let task = tokio::spawn(run_with_bus(in_r, out_w, Some(NO_BUS), Some(NO_BUS), locks));
+        let task = tokio::spawn(run_with_bus(
+            in_r,
+            out_w,
+            Some(NO_BUS),
+            Some(NO_BUS),
+            locks,
+            None,
+        ));
         let mut out = BufReader::new(out_r);
         assert_eq!(
             next(&mut out).await,
-            json!({"v":1,"event":"Hello","data":{"v":1,"uqd_up":false,"locked":true}})
+            json!({"v":1,"event":"Hello","data":{"v":1,"uqd_up":false,"locked":true,
+                "welcome_pending":null,"welcome_deferred":false}})
         );
         let ev = json!({"v":1,"event":"LockState","data":{"locked":true}});
         assert_eq!(next(&mut out).await, ev);
@@ -392,7 +512,14 @@ mod tests {
         let (lock_tx, locks) = mpsc::unbounded_channel();
         let (mut in_w, in_r) = duplex(4096);
         let (out_w, out_r) = duplex(4096);
-        let task = tokio::spawn(run_with_bus(in_r, out_w, Some(NO_BUS), Some(NO_BUS), locks));
+        let task = tokio::spawn(run_with_bus(
+            in_r,
+            out_w,
+            Some(NO_BUS),
+            Some(NO_BUS),
+            locks,
+            None,
+        ));
         let mut out = BufReader::new(out_r);
         assert_eq!(next(&mut out).await["data"]["locked"], false);
         in_w.write_all(b"{\"v\":1,\"id\":1,\"call\":\"Ping\"}\n")
@@ -416,6 +543,7 @@ mod tests {
             Some(NO_BUS),
             Some(NO_BUS),
             no_locks(),
+            None,
         ));
         let mut out = BufReader::new(out_r);
         let _hello = next(&mut out).await;
@@ -440,6 +568,7 @@ mod tests {
             Some(NO_BUS),
             Some(NO_BUS),
             no_locks(),
+            None,
         ));
         let mut out = BufReader::new(out_r);
         let _hello = next(&mut out).await;
@@ -468,6 +597,7 @@ mod tests {
             Some(NO_BUS),
             Some(NO_BUS),
             no_locks(),
+            None,
         ));
         let mut out = BufReader::new(out_r);
         let _hello = next(&mut out).await;
@@ -511,6 +641,7 @@ mod tests {
             Some(NO_BUS),
             Some(NO_BUS),
             no_locks(),
+            None,
         ));
         tokio::time::sleep(Duration::from_millis(100)).await;
         drop(in_w);

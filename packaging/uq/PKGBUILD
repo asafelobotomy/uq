@@ -21,18 +21,20 @@ optdepends=(
   'bibata-cursor-theme: cursor theme used by every uQ theme'
   'ttf-jetbrains-mono: monospace font'
   'inter-font: interface font'
-  'wireplumber: volume keys'
+  'wireplumber: volume keys and the Sound settings page'
   'playerctl: media keys'
-  'networkmanager: network status in the shell'
+  'networkmanager: network status in the shell and the Network settings page'
   'scdr: CPU priorities for the focused app and builds (enable scdr-session; uQ starts it)'
   'tailscale: exit-node and VPN status in the shell'
-  'bluez: Bluetooth status in the shell'
+  'bluez: Bluetooth status in the shell and the Bluetooth settings page'
   'power-profiles-daemon: power profile switching'
   'hyprlock: fallback lock for the SUPER+CTRL+L recovery bind'
   'noti-fi: notification backend'
   'fprintd: fingerprint unlock'
   'crum-bs: uninstall apps with their leftovers and clean up storage'
   'greetd: the uQ login screen (run0 uqctl greeter enable)'
+  'networkmanager-openvpn: OpenVPN connections on the Network settings page'
+  'sound-theme-freedesktop: the test sound on the Sound settings page'
 )
 # Keep !lto: rustc links with lld, and makepkg's LTO flags make the cxx-qt C++ objects unreadable to it.
 options=(!lto)
@@ -83,6 +85,11 @@ package() {
   install -Dm644 config/hypr/base.lua "$pkgdir/usr/share/uq/hypr/base.lua"
   install -dm755 "$pkgdir/usr/share/uq"
   cp -r --no-preserve=ownership themes templates "$pkgdir/usr/share/uq/"
+  # templates/ also holds the integration templates (widget, settings page, provider) as
+  # reference copies; never a build of the provider example.
+  rm -rf "$pkgdir/usr/share/uq/templates/provider/target" \
+    "$pkgdir/usr/share/uq/templates/provider/Cargo.lock" \
+    "$pkgdir/usr/share/uq/templates/provider/.gitignore"
   # Every theme variant's tokens.json, rendered by uqd's renderer, for the greeter (it never reads
   # a home directory). The themes loader skips this rendered/ directory.
   target/release/uqctl render-themes --themes themes --templates templates \

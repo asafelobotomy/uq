@@ -1,0 +1,5 @@
+[App Action]
+Name=Gate action
+Icon=system-run
+Match=*
+Exec=/usr/bin/true --desktop-id %d
