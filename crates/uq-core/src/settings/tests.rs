@@ -179,8 +179,30 @@ fn mouse_profile_and_bools() {
 #[test]
 fn only_mouse_keys_render_config() {
     assert!(renders_config("mouse.sensitivity"));
+    assert!(renders_config("ui.reduce_motion"));
     assert!(!renders_config("idle.lock"));
     assert!(!renders_config("pinned"));
+}
+
+#[test]
+fn reduce_motion_is_a_bool_default_off_and_loads_leniently() {
+    let mut s = Settings::default();
+    assert!(!s.ui.reduce_motion);
+    s.apply("ui.reduce_motion", json!(true)).unwrap();
+    assert!(s.ui.reduce_motion);
+    assert!(s.apply("ui.reduce_motion", json!("yes")).is_err());
+    assert!(s.apply("ui.reduce_motion", Value::Null).is_err());
+    assert!(s.ui.reduce_motion);
+    assert_eq!(s.validated().0, s);
+    assert_eq!(
+        serde_json::to_value(&s).unwrap()["ui"],
+        json!({"reduce_motion": true})
+    );
+    // A wrong-typed value costs only the `ui` domain.
+    let t: Settings =
+        serde_json::from_value(json!({"ui": {"reduce_motion": "x"}, "pinned": ["a"]})).unwrap();
+    assert!(!t.ui.reduce_motion);
+    assert_eq!(t.pinned, vec!["a".to_string()]);
 }
 
 #[test]

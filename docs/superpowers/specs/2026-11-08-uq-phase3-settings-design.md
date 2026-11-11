@@ -140,7 +140,8 @@ first, keeping the original rollback point.
   can read them.
 - **Fallback:** a missing or unreadable image shows the fallback colour, which is the theme `bg`
   unless set.
-- **Transitions:** a 300 ms crossfade, skipped when `reduce_motion` is on.
+- **Transitions:** a 300 ms crossfade, skipped when the user setting `ui.reduce_motion` is on
+  (Look and layouts → Reduce motion).
 
 **Kvantum:** uqd renders `~/.local/state/uq/theme/Kvantum/uq/uq.kvconfig`.
 

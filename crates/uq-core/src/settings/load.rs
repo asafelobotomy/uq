@@ -136,6 +136,7 @@ impl Settings {
         let (input, repaired) = self.input.clone().sanitised();
         errors.extend(repaired);
         out.input = input;
+        out.ui = self.ui.clone();
         (out, errors)
     }
 }

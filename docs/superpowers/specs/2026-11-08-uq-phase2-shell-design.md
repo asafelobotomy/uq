@@ -502,8 +502,12 @@ asserts the shell reloads.
   - Spotlight: arrows move, Tab moves between groups, Enter activates, Esc closes.
   - The app menu also supports type-to-search.
   - Every control has an `Accessible.name`.
-- **Reduced motion.** `tokens.json` gains `ui.reduce_motion` (default false, a theme token);
-  when it's set, animations are skipped.
+- **Reduced motion.** `ui.reduce_motion` is a user setting (default false; a `SetSetting` key,
+  not a theme token, so it holds across themes), set from Settings → Look and layouts. The shell
+  reads it from uqd's settings (`Settings.reduceMotion`): the idle dim and the wallpaper
+  crossfade happen at once. uqd renders Hyprland's `animations.enabled = false` into
+  `generated.lua` while it is on, which also stops the open and close animations of windows and
+  of the shell's own surfaces (layers).
 
 ### 2.11 Network lookups
 

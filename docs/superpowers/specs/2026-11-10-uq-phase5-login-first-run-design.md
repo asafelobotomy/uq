@@ -132,7 +132,9 @@ Settings writes `greeter.toml`, the wallpaper and the monitor file through
   A logind refusal is shown as plain text.
 - **Keyboard.** Tab order user → password → session → power; Enter logs in; the keyboard layout
   comes from `localectl`'s X11 layout (read once at start) so passwords type as expected.
-- **Reduce motion** from `greeter.toml`, default off.
+- **Reduce motion** from `greeter.toml`, default off. The greeter's Hyprland always runs with
+  animations off and the greeter has no fades, so the flag only stops the user list coasting
+  when flicked or animating its scroll. It is separate from the user's own `ui.reduce_motion`.
 - **Crash recovery.** If Quickshell exits without a session starting, `uq-greeter-session` exits
   non-zero and greetd restarts the greeter. After 3 failures in 60 s it falls back to `agreety`
   (greetd's text greeter) on the same VT, so a broken greeter never locks the user out.

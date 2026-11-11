@@ -255,6 +255,10 @@ All notable changes to uQ are listed here. The format follows
   `Hello` after at most 2 seconds of waiting for Welcome's status (the shell asks again).
 - **`uqctl history | head` no longer panics.** uqctl stops quietly when the program reading its
   output closes the pipe.
+- **Reduce motion does something.** It is now your own setting (Settings → Look and layouts →
+  Reduce motion, `ui.reduce_motion`): the idle dim and wallpaper changes happen at once, and
+  window and panel animations are off. The login screen's own Reduce motion stops its user list
+  from coasting when flicked; it already had no other animations.
 
 ## [0.2.1] - 2026-11-10
 

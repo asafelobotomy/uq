@@ -1,7 +1,7 @@
 //! The Look and layouts page's logic: [`LookState`] talks to uqd (`org.uq.Desktop1`) and is plain
 //! Rust, tested against the fake uqd. `crate::look_model` is the thin QML object around it.
 //!
-//! The page's state is `{look, layouts, defaults, sources}`; the theme tokens that "Use theme"
+//! The page's state is `{look, layouts, defaults, sources, reduce_motion}`; the theme tokens that "Use theme"
 //! seeds come from `App.themeJson` in QML, not from here. A `layouts` write replaces the
 //! workspace rules, so every change reads the section, edits it and writes it back under the
 //! write lock.
@@ -10,7 +10,7 @@ use serde_json::{Map, Value, json};
 use tokio::sync::Mutex;
 use uq_core::client::DesktopProxy;
 
-use crate::pages::runner::{PageLogic, parse_json, patch_section, sources};
+use crate::pages::runner::{ORIGIN, PageLogic, parse_json, patch_section, sources};
 
 /// The `look` section's fields that [`Op::SetLook`] may change.
 const LOOK_FIELDS: [&str; 10] = [
@@ -52,6 +52,8 @@ pub enum Op {
         selector: String,
         layout: Option<String>,
     },
+    /// Turn reduce motion (`ui.reduce_motion`, a `SetSetting` key) on or off.
+    SetReduceMotion { on: bool },
 }
 
 /// What applies when a field is `null`: `config/hypr/base.lua`'s value where it sets one, else
@@ -178,6 +180,11 @@ impl PageLogic for LookState {
                 })
                 .await
             }
+            Op::SetReduceMotion { on } => {
+                proxy
+                    .set_setting("ui.reduce_motion", &json!(on).to_string(), ORIGIN)
+                    .await
+            }
             Op::SetWorkspace { selector, layout } => {
                 patch_section(&proxy, "layouts", |section| {
                     let rules = section
@@ -203,7 +210,12 @@ impl PageLogic for LookState {
         let look = parse_json(&proxy.get_section("look").await?)?;
         let layouts = parse_json(&proxy.get_section("layouts").await?)?;
         let sources = sources(&proxy, &["look", "layouts"]).await;
-        Ok(json!({ "look": look, "layouts": layouts, "defaults": defaults(), "sources": sources }))
+        let settings = parse_json(&proxy.get_settings().await?)?;
+        let reduce_motion = settings["ui"]["reduce_motion"].as_bool().unwrap_or(false);
+        Ok(
+            json!({ "look": look, "layouts": layouts, "defaults": defaults(), "sources": sources,
+                   "reduce_motion": reduce_motion }),
+        )
     }
 }
 
@@ -341,6 +353,21 @@ mod tests {
         let out = run(&page, look("rounding", json!(99))).await;
         assert!(out.error.unwrap().contains("rounding"));
         assert_eq!(out.state["look"]["gaps_out"], 12);
+    }
+
+    #[tokio::test]
+    async fn reduce_motion_is_a_setting() {
+        let (r, page) = rig().await;
+        let out = run(&page, Op::Refresh).await;
+        assert_eq!(out.state["reduce_motion"], false);
+        let out = run(&page, Op::SetReduceMotion { on: true }).await;
+        assert_eq!(out.error, None);
+        assert_eq!(out.state["reduce_motion"], true);
+        assert!(r.state.lock().unwrap().settings.ui.reduce_motion);
+        assert_eq!(out.state["look"]["gaps_in"], 4, "the look is untouched");
+        let out = run(&page, Op::SetReduceMotion { on: false }).await;
+        assert_eq!(out.state["reduce_motion"], false);
+        assert!(!r.state.lock().unwrap().settings.ui.reduce_motion);
     }
 
     #[tokio::test]

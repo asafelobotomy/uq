@@ -266,6 +266,20 @@ hl.animation({ leaf = "workspaces", enabled = true, speed = 1.94, bezier = "almo
     }
 
     #[test]
+    fn reduce_motion_turns_animations_off() {
+        let mut s = Settings::default();
+        assert!(!render(&s).contains("animations = {"));
+        s.ui.reduce_motion = true;
+        let out = render(&s);
+        assert!(out.contains("animations = { enabled = false },"), "{out}");
+        // Even when the look turns them on.
+        s.look.animations = Some(true);
+        let out = render(&s);
+        assert!(out.contains("animations = { enabled = false },"), "{out}");
+        assert!(!out.contains("animations = { enabled = true },"), "{out}");
+    }
+
+    #[test]
     fn speed_scales_leaves() {
         let mut s = Settings::default();
         s.look.animation_speed = Some(2.0);

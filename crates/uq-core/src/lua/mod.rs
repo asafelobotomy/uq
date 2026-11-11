@@ -1,7 +1,7 @@
 //! Emit `generated.lua`, the only Hyprland config file uqd writes (spec §2.1).
 
 use crate::rules::Rules;
-use crate::settings::Settings;
+use crate::settings::{Look, Settings};
 use crate::theme::Theme;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -118,7 +118,18 @@ pub fn emit_generated_with_apps(
     startup: &StartupRender,
 ) -> String {
     let (c, ui) = (&theme.colors, &theme.ui);
-    let (look, lo) = (&settings.look, &settings.layout_options);
+    // Reduce motion (`ui.reduce_motion`) turns Hyprland's animations off, whatever `look` says.
+    let reduced;
+    let look = if settings.ui.reduce_motion {
+        reduced = Look {
+            animations: Some(false),
+            ..settings.look.clone()
+        };
+        &reduced
+    } else {
+        &settings.look
+    };
+    let lo = &settings.layout_options;
     let mut out = String::new();
     let _ = writeln!(out, "{HEADER}");
     let _ = writeln!(

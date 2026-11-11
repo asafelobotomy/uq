@@ -52,7 +52,9 @@ it says so; enable one with `run0 systemctl enable <name>.service`.
   monitors show the wallpaper and the clock. Tab goes user → password → session → power; Enter
   logs in; Esc cancels.
 - **What it reads.** The greeter never reads a home directory. It reads only:
-  - `/etc/uq/greeter.toml`: theme, variant, `hide_users` and `reduce_motion` (Settings writes it);
+  - `/etc/uq/greeter.toml`: theme, variant, `hide_users` and `reduce_motion` (Settings writes it).
+    The greeter has no fades and its Hyprland runs with animations off either way; `reduce_motion`
+    also stops the user list coasting when flicked or animating its scroll;
   - `/usr/share/uq/themes/rendered/<theme>-<variant>/tokens.json`: every theme pre-rendered by the
     package (the default theme, dark, if the chosen one is missing);
   - `/var/lib/uq-greeter/wallpaper`: the login wallpaper (the theme's background colour if it's

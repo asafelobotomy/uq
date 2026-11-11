@@ -18,8 +18,8 @@ PanelWindow {
     // The formats Qt is expected to read. QML can't list the installed image plugins, so a slide
     // of a format without one (jxl, avif) errors and is skipped.
     readonly property var readableFormats: ["jpg", "jpeg", "png", "webp", "jxl", "avif"]
-    // ui.reduce_motion: no crossfade. Theme has no such token yet, so this stays false (as Dim.qml).
-    property bool reduceMotion: false
+    // ui.reduce_motion (Settings.reduceMotion): no crossfade.
+    property bool reduceMotion: Settings.reduceMotion
     readonly property int fadeMs: 300
 
     readonly property var entry: W.entryFor(Settings.values.wallpaper, modelData.name)

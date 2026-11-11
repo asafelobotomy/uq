@@ -170,7 +170,7 @@ static WALLPAPER_SETTINGS: [SearchEntry; 5] = [
     ),
 ];
 
-static LOOK_SETTINGS: [SearchEntry; 15] = [
+static LOOK_SETTINGS: [SearchEntry; 16] = [
     entry(
         "gaps-inner",
         "Gaps between windows",
@@ -216,6 +216,11 @@ static LOOK_SETTINGS: [SearchEntry; 15] = [
         "animation-speed",
         "Animation speed",
         &["faster", "slower", "motion", "transitions"],
+    ),
+    entry(
+        "reduce-motion",
+        "Reduce motion",
+        &["animations", "accessibility", "fade", "motion sickness"],
     ),
     entry(
         "default-layout",

@@ -292,6 +292,22 @@ QQC2.ScrollView {
             onChosen: v => page.setLook("animation_speed", v)
             Layout.fillWidth: true
         }
+        SwitchRow {
+            objectName: "reduceMotion"
+            settingId: "reduce-motion"
+            label: "Reduce motion"
+            highlight: App.highlight
+            value: !!page.snap.reduce_motion
+            enabled: page.ready && !lm.busy
+            Layout.fillWidth: true
+            onChosen: on => lm.setReduceMotion(on)
+        }
+        UqLabel {
+            text: "Turns window animations off, and the desktop's fades and wallpaper changes happen at once."
+            wrapMode: Text.WordWrap
+            opacity: 0.7
+            Layout.fillWidth: true
+        }
 
         UqLabel {
             text: "Layouts"
