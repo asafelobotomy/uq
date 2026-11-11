@@ -6,11 +6,15 @@
 //! there shows here at once.
 
 use serde_json::{Map, Value, json};
+use std::sync::Mutex as StdMutex;
 use tokio::sync::Mutex;
 use uq_core::client::DesktopProxy;
+use uq_core::gestures::Gesture;
 
-use crate::pages::runner::{PageLogic, parse_json, patch_section};
+use crate::pages::runner::{PageLogic, parse_json, patch_section, sources};
 use crate::xkb_lists::{self, XkbLists};
+
+pub mod gestures;
 
 const KEYBOARD_FIELDS: [&str; 4] = ["layouts", "switch_combo", "repeat_rate", "repeat_delay"];
 const MOUSE_FIELDS: [&str; 5] = [
@@ -56,6 +60,27 @@ pub enum Op {
     RemoveDevice {
         name: String,
     },
+    /// Save one touchpad gesture (`index` -1 adds it). The whole list is written, so a default
+    /// that is edited or turned off becomes part of the list.
+    SaveGesture {
+        index: i32,
+        gesture: Value,
+    },
+    RemoveGesture {
+        index: usize,
+    },
+    ToggleGesture {
+        index: usize,
+        enabled: bool,
+    },
+    /// Back to uQ's own gestures (`gestures: null`).
+    ResetGestures,
+    /// One swipe option (`distance`, `invert`, `create_new`, `cancel_ratio`); `null` clears it.
+    /// The gestures stay as they are.
+    SetSwipe {
+        field: String,
+        value: Value,
+    },
 }
 
 /// What applies when a field is unset: base.lua's value where it sets one (touchpad natural
@@ -76,6 +101,8 @@ pub struct InputState {
     conn: zbus::Connection,
     write: Mutex<()>,
     xkb: XkbLists,
+    /// The gestures in force as last read, for the editor's live warning.
+    gestures: StdMutex<Vec<Gesture>>,
 }
 
 impl InputState {
@@ -88,7 +115,18 @@ impl InputState {
             conn,
             write: Mutex::new(()),
             xkb,
+            gestures: StdMutex::new(Vec::new()),
         }
+    }
+
+    /// The editor's live warning for `draft` (a gesture as JSON) saved as gesture `index`:
+    /// plain text, "" when there is none or the draft can't be read yet.
+    pub fn draft_clash(&self, index: i32, draft: &Value) -> String {
+        let Ok(draft) = Gesture::from_value("gesture", draft) else {
+            return String::new();
+        };
+        let list = self.gestures.lock().unwrap();
+        gestures::draft_clash(&list, index, &draft).unwrap_or_default()
     }
 }
 
@@ -132,6 +170,17 @@ impl PageLogic for InputState {
     }
 
     async fn apply(&self, op: Op) -> zbus::Result<()> {
+        if matches!(
+            op,
+            Op::SaveGesture { .. }
+                | Op::RemoveGesture { .. }
+                | Op::ToggleGesture { .. }
+                | Op::ResetGestures
+                | Op::SetSwipe { .. }
+        ) {
+            let proxy = DesktopProxy::new(&self.conn).await?;
+            return gestures::apply(&proxy, op).await;
+        }
         let known = match &op {
             Op::SetKeyboard { field, .. } => KEYBOARD_FIELDS.contains(&field.as_str()),
             Op::SetMouse { field, value } => {
@@ -143,7 +192,7 @@ impl PageLogic for InputState {
             }
             Op::SetTouchpad { field, .. } => TOUCHPAD_FIELDS.contains(&field.as_str()),
             Op::SetDevice { field, .. } => DEVICE_FIELDS.contains(&field.as_str()),
-            Op::Refresh | Op::RemoveDevice { .. } => true,
+            _ => true,
         };
         if !known {
             let field = match &op {
@@ -158,6 +207,11 @@ impl PageLogic for InputState {
         let proxy = DesktopProxy::new(&self.conn).await?;
         match op {
             Op::Refresh => Ok(()),
+            Op::SaveGesture { .. }
+            | Op::RemoveGesture { .. }
+            | Op::ToggleGesture { .. }
+            | Op::ResetGestures
+            | Op::SetSwipe { .. } => Ok(()),
             Op::SetKeyboard { field, value } => {
                 patch_section(&proxy, "input", |s| set_in(s, "keyboard", field, value)).await
             }
@@ -204,12 +258,23 @@ impl PageLogic for InputState {
             Ok(text) => parse_json(&text).unwrap_or_else(|_| json!({})),
             Err(_) => json!({}),
         };
-        Ok(json!({
+        let explained = proxy
+            .explain("input")
+            .await
+            .ok()
+            .and_then(|t| parse_json(&t).ok());
+        *self.gestures.lock().unwrap() = gestures::effective(&input);
+        let mut out = json!({
             "input": input,
             "devices": devices,
             "xkb": self.xkb,
             "defaults": defaults(),
-        }))
+            "sources": sources(&proxy, &["input"]).await,
+        });
+        out.as_object_mut()
+            .expect("an object")
+            .extend(gestures::snapshot_parts(&input, explained.as_ref()));
+        Ok(out)
     }
 }
 

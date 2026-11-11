@@ -579,6 +579,16 @@ impl FakeUqd {
             };
             out.insert(row.json_key().to_string(), entry);
         }
+        if domain == "input" {
+            // Like uqd: whether the section holds a list of gestures; script a `user.lua`
+            // gesture with `Explain::set("input.gestures", {source, detail})`.
+            let stored = section.get("gestures").cloned().unwrap_or_default();
+            let source = if stored.is_null() { "default" } else { "uq" };
+            out.insert(
+                "gestures".into(),
+                json!({"source": source, "live": null, "stored": stored, "detail": null}),
+            );
+        }
         let mut out = Value::Object(out);
         if domain == "compat" {
             let rejected = self.explain.startup_rejected.lock().unwrap().clone();
