@@ -29,8 +29,8 @@ const MAX_ICON_CHARS: usize = 256;
 /// shared by x86, Arm, RISC-V, PowerPC, s390x and LoongArch); uq-core has no libc dependency.
 #[cfg(any(target_arch = "mips", target_arch = "mips64", target_arch = "sparc64"))]
 compile_error!("O_NONBLOCK and O_NOCTTY differ on this architecture");
-const O_NONBLOCK: i32 = 0o4000;
-const O_NOCTTY: i32 = 0o400;
+pub(crate) const O_NONBLOCK: i32 = 0o4000;
+pub(crate) const O_NOCTTY: i32 = 0o400;
 
 const NOT_APP: &str = "Not an app";
 const HIDDEN_SYSTEM: &str = "Turned off by the system";

@@ -28,6 +28,8 @@ pub struct Paths {
     pub profile_active: PathBuf,
     /// `$UQ_DATA_DIR/themes`
     pub themes_dir: PathBuf,
+    /// `~/.local/share/uq/themes`: the user's own themes, one `user-<slug>` folder each.
+    pub user_themes_dir: PathBuf,
     /// `$UQ_DATA_DIR/templates`
     pub templates_dir: PathBuf,
     /// `/usr/share/hypr/hyprland.lua`: Hyprland's stock config. A copy of it in `main_lua` is not
@@ -176,6 +178,7 @@ impl Paths {
             profiles_dir: state.join("uq/profiles"),
             profile_active: state.join("uq/profile-active.json"),
             themes_dir: data.join("themes"),
+            user_themes_dir: startup.data_home.join("uq/themes"),
             templates_dir: data.join("templates"),
             hypr_default: hypr_default.to_path_buf(),
             startup,
@@ -206,6 +209,10 @@ mod tests {
         assert_eq!(p.restore_dir, PathBuf::from("/st/uq/restore"));
         assert_eq!(p.base_lua, PathBuf::from("/opt/uq/hypr/base.lua"));
         assert_eq!(p.themes_dir, PathBuf::from("/opt/uq/themes"));
+        assert_eq!(
+            p.user_themes_dir,
+            PathBuf::from("/home/u/.local/share/uq/themes")
+        );
         assert_eq!(p.templates_dir, PathBuf::from("/opt/uq/templates"));
     }
 
@@ -234,6 +241,7 @@ mod tests {
             &p.restore_dir,
             &p.profiles_dir,
             &p.profile_active,
+            &p.user_themes_dir,
         ] {
             assert!(path.starts_with("/tmp/r"), "{path:?}");
         }
@@ -255,6 +263,16 @@ mod tests {
         for d in s.system_autostart().iter().chain(&s.app_dirs()) {
             assert!(d.starts_with(root), "{d:?}");
         }
+    }
+
+    #[test]
+    fn user_themes_dir_follows_data_home() {
+        let p = Paths::from_vars(|k| match k {
+            "HOME" => Some("/home/u".into()),
+            "XDG_DATA_HOME" => Some("/dh".into()),
+            _ => None,
+        });
+        assert_eq!(p.user_themes_dir, PathBuf::from("/dh/uq/themes"));
     }
 
     #[test]
