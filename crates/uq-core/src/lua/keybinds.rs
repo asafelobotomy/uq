@@ -2,7 +2,9 @@
 
 use super::lua_string;
 use crate::keybinds::combo::canonical;
-use crate::keybinds::hypr::{BIND_OPTIONS, CAPTURE_PLACEHOLDER, CAPTURE_SUBMAP, DESCRIPTION_PREFIX, UNBIND_ALL};
+use crate::keybinds::hypr::{
+    BIND_OPTIONS, CAPTURE_PLACEHOLDER, CAPTURE_SUBMAP, DESCRIPTION_PREFIX, UNBIND_ALL,
+};
 use crate::keybinds::{Effective, Keybinds};
 use std::fmt::Write as _;
 
