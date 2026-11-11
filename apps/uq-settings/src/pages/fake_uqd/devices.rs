@@ -18,6 +18,9 @@ pub struct Displays {
     pub live_outputs: Arc<Mutex<Vec<LiveOutput>>>,
     /// `(token, candidate)` of the apply waiting for a confirm.
     pub pending: Arc<Mutex<Option<(String, Monitors)>>>,
+    /// The id of an arrangement uqd skipped the last automatic switch for (`ListOutputs`'
+    /// `arrangement.failed`).
+    pub failed: Arc<Mutex<Option<String>>>,
     next_token: Arc<Mutex<u32>>,
 }
 
@@ -26,13 +29,15 @@ impl Default for Displays {
         Self {
             live_outputs: Arc::new(Mutex::new(parse_live(FIXTURE))),
             pending: Arc::default(),
+            failed: Arc::default(),
             next_token: Arc::default(),
         }
     }
 }
 
 impl Displays {
-    /// `{live, stored, pending}` as uqd's `ListOutputs`; a pending apply has 15 s left.
+    /// `{live, stored, roles, arrangement, pending}` as uqd's `ListOutputs`; a pending apply has
+    /// 15 s left.
     pub fn list(&self, stored: &Monitors) -> String {
         let pending = self
             .pending
@@ -40,19 +45,24 @@ impl Displays {
             .unwrap()
             .as_ref()
             .map(|(token, _)| json!({"token": token, "seconds_left": 15}));
+        let (roles, arrangement) = self.roles_and_arrangement(stored);
         json!({
             "live": *self.live_outputs.lock().unwrap(),
             "stored": stored,
+            "roles": roles,
+            "arrangement": arrangement,
             "pending": pending,
         })
         .to_string()
     }
 
-    /// uqd's checks, then a pending candidate under tokens `t1`, `t2`, …
-    pub fn apply(&self, json: &str) -> Result<String, FakeError> {
+    /// uqd's checks, then a pending candidate under tokens `t1`, `t2`, …: the stored settings
+    /// with the layout the JSON holds (R7), so a kept change keeps the arrangements and roles.
+    pub fn apply(&self, json: &str, stored: &Monitors) -> Result<String, FakeError> {
         let value: Value =
             serde_json::from_str(json).map_err(|e| invalid(format!("value is not JSON: {e}")))?;
-        let candidate = Monitors::from_section(&value).map_err(invalid)?;
+        let parsed = Monitors::from_section(&value).map_err(invalid)?;
+        let candidate = stored.with_layout(parsed.outputs);
         if !stays_visible(&candidate, &self.live_outputs.lock().unwrap()) {
             return Err(invalid("at least one display must stay on"));
         }
