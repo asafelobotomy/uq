@@ -50,6 +50,7 @@ pub fn label(domain: &str, key: &str) -> Option<String> {
         ("rules", "window") => "Window rules",
         ("rules", "layer") => "Panel rules",
         ("rules", "workspace") => "Workspace rules",
+        ("env", "vars") => "Environment variables",
         ("wallpaper", k) => return wallpaper(k),
         ("input", k) => return input(k),
         ("monitors", k) => return monitors(k),
@@ -250,6 +251,11 @@ mod tests {
                     "match": {"namespace": "x"}, "effects": {"blur": true}}],
                 "workspace": [{"workspace": "3", "persistent": true}],
             }),
+        )
+        .unwrap();
+        st.set_section(
+            "env",
+            serde_json::json!({"vars": [{"name": "GDK_BACKEND", "value": "x11"}]}),
         )
         .unwrap();
         let schedules = [

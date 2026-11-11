@@ -62,7 +62,7 @@ pub fn renders_config(key: &str) -> bool {
 }
 
 /// Whole-section domains handled by [`Settings::section`] / [`Settings::set_section`].
-pub const SECTION_DOMAINS: [&str; 8] = [
+pub const SECTION_DOMAINS: [&str; 9] = [
     "appearance",
     "wallpaper",
     "look",
@@ -71,6 +71,7 @@ pub const SECTION_DOMAINS: [&str; 8] = [
     "monitors",
     "input",
     "rules",
+    "env",
 ];
 
 /// Sections that change rendered config (theme env, Kvantum, cursor, Hyprland look and
@@ -79,7 +80,7 @@ pub const SECTION_DOMAINS: [&str; 8] = [
 pub fn renders_section(domain: &str) -> bool {
     matches!(
         domain,
-        "appearance" | "look" | "layouts" | "input" | "rules"
+        "appearance" | "look" | "layouts" | "input" | "rules" | "env"
     )
 }
 

@@ -115,6 +115,9 @@ pub fn summarize(domain: &str, before: &Value, after: &Value, labels: Labels) ->
     if domain == "rules" {
         return crate::rules::summary(before, after);
     }
+    if domain == "env" {
+        return crate::env::summary(before, after);
+    }
     let (b, a) = (leaf_map(domain, before), leaf_map(domain, after));
     let keys: BTreeSet<&String> = b.keys().chain(a.keys()).collect();
     let changed: Vec<String> = keys
@@ -358,5 +361,48 @@ mod tests {
             summarize("look", &before, &after, &|_, _| None),
             "blur: default → true, gaps_in: default → 1, gaps_out: default → 2, and 2 more"
         );
+    }
+    fn env_json(vars: &[(&str, &str)]) -> Value {
+        json!({"vars": vars.iter().map(|(n, v)| json!({"name": n, "value": v})).collect::<Vec<_>>()})
+    }
+
+    #[test]
+    fn env_summary_names_never_values() {
+        let none = env_json(&[]);
+        let one = env_json(&[("GDK_BACKEND", "s3cret")]);
+        let s = summarize("env", &none, &one, &|_, _| None);
+        assert_eq!(s, "Environment variable GDK_BACKEND added");
+        let changed = env_json(&[("GDK_BACKEND", "other")]);
+        let s = summarize("env", &one, &changed, &|_, _| None);
+        assert_eq!(s, "Environment variable GDK_BACKEND changed");
+        let s = summarize("env", &changed, &none, &|_, _| None);
+        assert_eq!(s, "Environment variable GDK_BACKEND removed");
+        let many = env_json(&[
+            ("A", "s3cret"),
+            ("B", "s3cret"),
+            ("C", "s3cret"),
+            ("D", "s3cret"),
+            ("E", "s3cret"),
+        ]);
+        let s = summarize("env", &none, &many, &|_, _| None);
+        assert_eq!(
+            s,
+            "Environment variable A added, Environment variable B added, \
+             Environment variable C added, and 2 more"
+        );
+        for line in [&s, &summarize("env", &many, &one, &|_, _| None)] {
+            assert!(!line.contains("s3cret"), "{line}");
+        }
+    }
+
+    #[test]
+    fn env_summaries_are_plain() {
+        let a = env_json(&[("A", "1"), ("B", "2")]);
+        let b = env_json(&[("B", "3"), ("C", "4")]);
+        let c = env_json(&[("B", "2"), ("A", "1")]);
+        for (x, y) in [(&a, &b), (&b, &a), (&a, &c), (&env_json(&[]), &a)] {
+            let s = summarize("env", x, y, &|_, _| None);
+            assert!(!s.contains(['{', '[']) && !s.contains("env."), "{s}");
+        }
     }
 }

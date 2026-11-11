@@ -238,11 +238,12 @@ fn section_round_trip() {
             "shell",
             "monitors",
             "input",
-            "rules"
+            "rules",
+            "env"
         ]
     );
     assert!(!renders_section("monitors") && renders_section("input"));
-    assert!(renders_section("rules"));
+    assert!(renders_section("rules") && renders_section("env"));
 }
 
 #[test]

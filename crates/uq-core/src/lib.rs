@@ -3,6 +3,7 @@ pub mod atomic;
 pub mod client;
 pub mod contrast;
 pub mod desktop_entry;
+pub mod env;
 pub mod history;
 pub mod launcher_providers;
 pub mod lua;

@@ -1,6 +1,7 @@
 //! uqd's persisted desktop state (`~/.local/state/uq/state.toml`).
 
 use crate::atomic::atomic_write;
+use crate::env::Env;
 use crate::lua::Layout;
 use crate::rules::Rules;
 use crate::schedule::Schedule;
@@ -23,6 +24,9 @@ pub struct State {
     /// Window, panel and workspace rules; each entry loads on its own.
     #[serde(default)]
     pub rules: Rules,
+    /// Environment variables for the session; each entry loads on its own.
+    #[serde(default)]
+    pub env: Env,
     /// The scheduled transition uqd last applied; a manual change holds until a newer one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub schedule_mark: Option<chrono::DateTime<chrono::Utc>>,
@@ -65,6 +69,7 @@ impl Default for State {
             schedule: Schedule::Off,
             layouts: BTreeMap::new(),
             rules: Rules::default(),
+            env: Env::default(),
             schedule_mark: None,
             settings: Settings::default(),
             launch_counts: BTreeMap::new(),
@@ -122,6 +127,7 @@ impl State {
         state.settings = valid;
         state.layouts = crate::settings::repair_rules(std::mem::take(&mut state.layouts));
         state.rules = std::mem::take(&mut state.rules).repaired();
+        state.env = std::mem::take(&mut state.env).repaired();
         Ok(state)
     }
 
@@ -153,6 +159,9 @@ impl State {
         if domain == "rules" {
             return Ok(serde_json::to_value(&self.rules).expect("rules serialise"));
         }
+        if domain == "env" {
+            return Ok(self.env.section());
+        }
         if domain != "layouts" {
             return self.settings.section(domain);
         }
@@ -172,6 +181,10 @@ impl State {
     ) -> Result<(), SettingError> {
         if domain == "rules" {
             self.rules = Rules::from_section(&value, &self.rules)?;
+            return Ok(());
+        }
+        if domain == "env" {
+            self.env = Env::from_section(&value)?;
             return Ok(());
         }
         if domain != "layouts" {
@@ -303,6 +316,12 @@ mod tests {
                 ("special:magic".into(), Layout::Master),
             ]),
             rules: Rules::default(),
+            env: Env {
+                vars: vec![crate::env::Var {
+                    name: "GDK_BACKEND".into(),
+                    value: "x11".into(),
+                }],
+            },
             schedule_mark: None,
             settings: Settings::default(),
             launch_counts: BTreeMap::new(),
