@@ -10,9 +10,11 @@ import Quickshell.Services.Pipewire
 import Quickshell.Services.SystemTray
 import Quickshell.Services.UPower
 import "../core"
+import "../widgets"
 import "../logic/net.js" as Net
 
-// Tray, media, network/VPN, audio, battery and the quick-settings button.
+// Widgets from other apps, tray, media, network/VPN, audio, battery and the quick-settings
+// button.
 // Tray tooltips, track titles, SSIDs and VPN names are untrusted: they only reach UqText.
 Island {
     id: root
@@ -225,11 +227,62 @@ Island {
         return d && d.isLaptopBattery ? d : null;
     }
 
+    // A widget's popup, or the widgets that didn't fit, under their icon.
+    WidgetPopup {
+        id: widgetPopup
+    }
+    Component {
+        id: overflowList
+        Column {
+            spacing: Theme.gapIn
+            Repeater {
+                model: widgetHost.overflow
+                delegate: Row {
+                    id: orow
+                    required property var modelData
+                    spacing: Theme.gapIn * 2
+                    Slot {
+                        kind: "bar"
+                        cell: root.cell
+                        widget: orow.modelData
+                    }
+                    UqText {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: Math.min(implicitWidth, 220)
+                        text: orow.modelData.name
+                    }
+                }
+            }
+        }
+    }
+
     RowLayout {
         id: row
         anchors.verticalCenter: parent.verticalCenter
         anchors.left: parent.left
         spacing: Theme.gapIn
+
+        // Widgets from other apps (Phase 4 spec §2.2): up to 4 icons, the rest under "…".
+        WidgetHost {
+            id: widgetHost
+            kind: "bar"
+            cell: root.cell
+            visible: loadedCount > 0 || overflow.length > 0
+            Layout.preferredWidth: implicitWidth
+            Layout.preferredHeight: root.cell
+            onPopupRequested: function (slot, open) {
+                if (open && slot.popup)
+                    widgetPopup.show(slot, slot.popup, slot.ctx);
+                else if (widgetPopup.anchorItem === slot)
+                    widgetPopup.hide();
+            }
+            onOverflowClicked: function (anchor) {
+                if (widgetPopup.open && widgetPopup.anchorItem === anchor)
+                    widgetPopup.hide();
+                else
+                    widgetPopup.show(anchor, overflowList);
+            }
+        }
 
         // tray
         Repeater {
