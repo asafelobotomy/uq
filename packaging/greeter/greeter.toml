@@ -1,0 +1,10 @@
+# The uQ login screen (/etc/uq/greeter.toml). Settings → System → Login screen writes this
+# file; the greeter only reads it.
+
+# A theme and variant uQ ships (see `uqctl theme list`).
+theme = "graphite"
+variant = "dark"
+# Show a user-name field instead of the list of users.
+hide_users = false
+# No motion on the login screen.
+reduce_motion = false

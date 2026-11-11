@@ -32,10 +32,11 @@ optdepends=(
   'noti-fi: notification backend'
   'fprintd: fingerprint unlock'
   'crum-bs: uninstall apps with their leftovers and clean up storage'
+  'greetd: the uQ login screen (run0 uqctl greeter enable)'
 )
 # Keep !lto: rustc links with lld, and makepkg's LTO flags make the cxx-qt C++ objects unreadable to it.
 options=(!lto)
-backup=(etc/pam.d/uq-lock etc/pam.d/uq-lock-fingerprint)
+backup=(etc/pam.d/uq-lock etc/pam.d/uq-lock-fingerprint etc/uq/greetd.toml etc/uq/greeter.toml)
 # The release asset, not GitHub's /archive/ tarball: that one is generated on demand and its bytes
 # (so its checksum) can change. The release workflow uploads exactly this file and prints its sum.
 source=("$pkgname-$_tag.tar.gz::$url/releases/download/v$_tag/$pkgname-$_tag.tar.gz")
@@ -94,6 +95,14 @@ package() {
   ln -s ../shell/core "$pkgdir/usr/share/uq/lock/core"
   ln -s ../shell/logic "$pkgdir/usr/share/uq/lock/logic"
   ln -s ../shell/auth "$pkgdir/usr/share/uq/lock/auth"
+  # The login screen (its own Quickshell config, run by greetd through uq-greeter-session).
+  find greeter -type f -exec install -Dm644 {} "$pkgdir/usr/share/uq/{}" \;
+  for d in core logic auth; do ln -s "../shell/$d" "$pkgdir/usr/share/uq/greeter/$d"; done
+  install -Dm755 packaging/uq-greeter-session "$pkgdir/usr/lib/uq/uq-greeter-session"
+  install -Dm644 packaging/greeter/greetd.toml "$pkgdir/etc/uq/greetd.toml"
+  install -Dm644 packaging/greeter/greeter.toml "$pkgdir/etc/uq/greeter.toml"
+  install -Dm644 packaging/greeter/greetd-uq.conf "$pkgdir/usr/lib/systemd/system/greetd.service.d/uq.conf"
+  install -Dm644 packaging/tmpfiles/uq-greeter.conf "$pkgdir/usr/lib/tmpfiles.d/uq-greeter.conf"
   install -Dm755 target/release/uq-settings "$pkgdir/usr/bin/uq-settings"
   install -Dm644 packaging/org.uq.Settings.desktop "$pkgdir/usr/share/applications/org.uq.Settings.desktop"
   install -Dm644 packaging/dbus/org.uq.Settings1.service "$pkgdir/usr/share/dbus-1/services/org.uq.Settings1.service"
