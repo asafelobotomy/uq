@@ -90,7 +90,7 @@ check SD6 "Electron on Wayland: new apps get ELECTRON_OZONE_PLATFORM_HINT=auto" 
 sd6() {
     local r
     r=$(merge compat '.electron_wayland = true') || { bad "$r"; return; }
-    gen_lua | grep -q 'hl.env("ELECTRON_OZONE_PLATFORM_HINT", "auto"' || bad "generated.lua sets no ELECTRON_OZONE_PLATFORM_HINT"
+    grep -qF 'hl.env("ELECTRON_OZONE_PLATFORM_HINT", "auto"' <<<"$(gen_lua)" || bad "generated.lua sets no ELECTRON_OZONE_PLATFORM_HINT"
     if [ -n "${HAVE[hypr]:-}" ]; then
         env_of sd6 || { bad "the test command didn't run"; return; }
         grep -qx 'ELECTRON_OZONE_PLATFORM_HINT=auto' "$WORK/env.sd6" || bad "a new app's environment has no ELECTRON_OZONE_PLATFORM_HINT=auto"
@@ -206,9 +206,9 @@ sd11() {
     local r n e v
     r=$(merge env '.vars += [{name: "UQLIVE_FOO", value: "bar"}]') || { bad "$r"; return; }
     grep -qx "UQLIVE_FOO='bar'" "$ENVD" || bad "60-uq.conf doesn't have UQLIVE_FOO='bar': $(cat "$ENVD" 2>/dev/null)"
-    gen_lua | grep -q 'hl.env("UQLIVE_FOO", "bar"' || bad "generated.lua doesn't set UQLIVE_FOO"
+    grep -qF 'hl.env("UQLIVE_FOO", "bar"' <<<"$(gen_lua)" || bad "generated.lua doesn't set UQLIVE_FOO"
     if [ -n "${HAVE[systemd]:-}" ]; then
-        systemctl --user show-environment | grep -qx 'UQLIVE_FOO=bar' || bad "systemctl --user show-environment has no UQLIVE_FOO=bar"
+        grep -qx 'UQLIVE_FOO=bar' <<<"$(systemctl --user show-environment)" || bad "systemctl --user show-environment has no UQLIVE_FOO=bar"
     fi
     if [ -n "${HAVE[hypr]:-}" ]; then
         if env_of sd11; then grep -qx 'UQLIVE_FOO=bar' "$WORK/env.sd11" || bad "a new app has no UQLIVE_FOO=bar"
