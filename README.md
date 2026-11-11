@@ -126,7 +126,12 @@ Profiles use `ListProfiles` (JSON), `GetProfile(id)` (the TOML text), `SetProfil
 (returns the id; `Conflict` if it exists and `replace` is false), `DeleteProfile(id)`,
 `ApplyProfile(id)` and `ProfileOff()` (both return a JSON report), and a `ProfileChanged(id)`
 signal, sent when the profile that's on or the list of profiles changes (`""` for none).
-Window rules use `GetSection("rules")` / `SetSection("rules", json, origin)`, like any section.
+Window rules use `GetSection("rules")` / `SetSection("rules", json, origin)`, like any section,
+and so do startup apps (`"autostart"`), environment variables (`"env"`) and Apps and scaling
+(`"compat"`); there is no separate write call for them. `ListAutostart()` returns each startup
+app's status as JSON, `ShellReady()` is what the bridge calls once the shell has sent its first
+request (so uqd knows when to start the login apps), and `AutostartChanged` is the signal sent
+when a status changes.
 `PickWindow()` asks the shell to let you click a window and returns only that window's details
 (JSON with a `status`), `PickDone(token, outcome)` is what the shell calls back with, `ListWindows()`
 returns the open windows' details (no addresses or process ids), and `PickRequested(token)` is the
@@ -169,6 +174,16 @@ so it was left out." (the lines stay in the file). **Back to normal** switches a
 it still has the value the profile gave it, so a switch you flipped by hand is kept and named.
 Workspace rules have no on/off switch and can't be in a profile, and keyboard shortcuts still
 can't be either.
+
+A profile can also hold environment variables (set one, or remove it while the profile is on), the
+five switches of Apps and scaling, a fix's **Run on** and **Size**, and the on/off switch and delay
+of a startup app that already exists on the computer (see the Startup and Apps and scaling pages
+below). It can't add a startup app or command, launch options, a fix's own variables or a launcher
+file, and it never turns on "Also when started from other launchers". It never removes a fix that
+also works in other launchers; those lines are left out with a notice. A startup app the profile
+names but this computer doesn't have is left out the same way. Startup changes take effect at the
+next login: nothing starts or stops when you turn a profile on, and apps that are already open
+keep their environment.
 
 Switch from the quick-settings **Profile** row (it shows only when you have profiles; **Normal**
 is Back to normal), from the page, or with `uqctl profile`. To switch with a key, add this to
@@ -228,6 +243,75 @@ The page then shows that rule as overridden in `user.lua`, with a button that op
 line that is only a `--` comment doesn't count. Rules written in `user.lua` itself aren't listed
 on the page. Manual checks are in
 [docs/notes/settings-slice-c-live-check.md](docs/notes/settings-slice-c-live-check.md).
+
+#### Startup page
+
+**Startup** (under System) lists the apps that start when you log in, and the environment
+variables every app gets. It reads the XDG autostart folders: `~/.config/autostart` and each
+`autostart` folder in `XDG_CONFIG_DIRS` (usually `/etc/xdg/autostart`); a file in your folder
+replaces a system file with the same name. Each row says where the app came from and why it
+won't start if it won't (hidden, not for this desktop, not installed, needs a terminal, or its
+command can't be read).
+
+uQ's login runner starts the apps once per session, after the shell is up (or 20 seconds after
+uqd starts if it never hears from the shell). Each app starts in its own scope under `app.slice`
+and its output goes to the journal under `uq-autostart-<id>`, so restarting uqd never stops an
+app, and a uqd that restarts in the same session starts nothing new. A row's status is one of:
+**Starts next time you log in** (turned on since this login), **Waiting** (with its delay),
+**Running**, **Started, then finished**, **Failed** (with the exit code and the last lines of its
+output), **Not started** (with the reason), **Off** or **Off in uQ**, or **Started earlier;
+finished** for an app a previous uqd started that has since ended. A **Start delay** of up to 600
+seconds makes an app wait after the shell is ready.
+
+Turn an app off with its switch. For a system entry, uQ writes a copy in `~/.config/autostart`
+with `Hidden=true` and `X-uQ-Autostart=true`; turning it on deletes that copy. uQ never edits a
+file of your own there: turning one off is kept in uQ's settings only, and the row says "Off in
+uQ". **Add an app or command** adds an installed app, or a command you type. A command is split
+into its words, the way a desktop file's `Exec` is, and run directly, with no shell: no pipes,
+no `$VAR`, no `&&`. At most 50 apps can be added.
+
+**Environment variables** are set for every app uQ starts. A change reaches apps you start after
+it; apps that are open keep theirs, and one that was removed stays set until you log out. uQ
+writes them to `generated.lua` (Hyprland passes them on to the user's services) and to
+`~/.config/environment.d/60-uq.conf` for the next login. A name uQ needs for the session
+(`WAYLAND_DISPLAY`, `XDG_SESSION_*`, `XDG_CONFIG_HOME`, `HOME` and a few more) or sets itself
+(the cursor and Qt theme names) is refused with a plain message; `PATH`, `LD_PRELOAD` and
+a few other risky names are allowed with a warning. A value can't contain `$`, because Hyprland
+and `environment.d` would read it differently. An `hl.env("NAME", ...)` line in `user.lua` wins, and
+the row says "Overridden in user.lua, line N". The scale-derived lines of Apps and scaling are
+not written to `environment.d`, since that file applies to every desktop of your account. Every
+change goes through History. Undo puts back the whole list the change was in (all startup apps,
+or all variables), as it was before, and the app asks first.
+
+In `uq-dev session` the runner starts nothing and says "Not started in a test session". Manual
+checks are in [docs/notes/settings-slice-d-live-check.md](docs/notes/settings-slice-d-live-check.md).
+
+#### Apps and scaling page
+
+Five switches, each applying to apps started after the change:
+
+- **Sharp X11 apps** turns on Hyprland's `xwayland:force_zero_scaling` and sets `GDK_SCALE` (the
+  main screen's scale, rounded to a whole number) for new apps. uQ doesn't set `QT_SCALE_FACTOR`
+  for everyone, because it would also enlarge Qt apps that already run on Wayland.
+- **Run Electron apps on Wayland**, **Run Chromium-based browsers on Wayland**, **Qt apps prefer
+  Wayland** (Wayland when an app can, X11 when it can't) and **Steam UI scale**.
+
+**Blurry right now** lists the open older X11 apps, the ones that get stretched on a scaled
+screen, each with a **Fix this app** button. A fix sets an app's **Run on** (Automatic, Wayland
+or X11), its **Size** (100 % to 300 % in steps of 25 %), extra variables and launch options. It
+applies when the app is started from uQ's launcher, Spotlight, a pin, `uqctl launch <id>` or
+the login runner (Startup), and not when something else starts it. **Also when started from
+other launchers** writes a copy of the app's desktop file into `~/.local/share/applications` that carries the fix,
+marked `X-uQ-Override=true`, so other launchers pick it up. It's refused if a file of yours is
+already there, and removing the fix, or turning the switch off, deletes the copy. For Chromium,
+Chrome, Brave, Vivaldi and Edge, uQ writes the browser's flags file in `~/.config` (such as
+`chromium-flags.conf`) with a first line saying uQ manages it; a file without that line is left
+alone and the page says so. A system change, such as an upgrade of an app's desktop file or a
+newly installed browser, is picked up within a minute.
+
+uQ changes only files it marked, and never a symlink. In `uq-dev session` the page refuses the
+elsewhere switch ("Not available in a test session"). Manual checks are in
+[docs/notes/settings-slice-d-live-check.md](docs/notes/settings-slice-d-live-check.md).
 
 #### History page
 
