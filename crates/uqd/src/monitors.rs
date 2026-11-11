@@ -86,6 +86,10 @@ impl Desktop {
     /// Apply `json` (a whole `monitors` section) live for [`REVERT_AFTER`]. Nothing is saved;
     /// returns the token `confirm_monitors` needs and the revert deadline. A second apply
     /// replaces the first and keeps the original rollback point.
+    ///
+    /// The window starts when the candidate is live, not at `now` (when the request came in):
+    /// checking the config can take seconds on a slow or busy machine, and that time must not
+    /// come out of the user's 15 s to see the change and keep it.
     pub async fn apply_monitors(
         &mut self,
         json: &str,
@@ -150,6 +154,10 @@ impl Desktop {
                 CompositorError::NotRunning => DesktopError::InvalidSetting(NO_DESKTOP.into()),
                 e => DesktopError::Io(e.to_string()),
             });
+        }
+        let deadline = now.max(Instant::now()) + self.revert_after;
+        if let Some(p) = self.pending.as_mut() {
+            p.deadline = deadline;
         }
         let _ = self.events.send(Event::MonitorsChanged);
         Ok((token, deadline))
