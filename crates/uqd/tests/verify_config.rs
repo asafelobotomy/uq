@@ -317,6 +317,8 @@ local function proxy(name)
       local args = {...}
       local first = args[1]
       local strs = {}
+      -- generated.lua starts its shortcuts with hl.unbind("all"): base.lua's fallback copies go.
+      if name == "hl.unbind" and args[1] == "all" then binds = {} end
       if name == "hl.bind" then
         binds[#binds + 1] = { key = args[1], dsp = desc[args[2]] or tostring(args[2]), opts = args[3] }
       end

@@ -199,6 +199,29 @@ fn conflicts_refused_with_both_names() {
         "{e}"
     );
     assert!(e.contains("Super + V"), "{e}");
+    // An override equal to its default is dropped, so the error key still names the entry as
+    // written: here [1], not [0].
+    let e = err(
+        json!({"overrides": [{"id": "uq.spotlight", "combo": "SUPER + Space"},
+                                     {"id": "uq.close", "combo": "SUPER + V"}]}),
+    );
+    assert!(e.contains("keybinds.overrides[1].combo"), "{e}");
+}
+
+#[test]
+fn unchecked_layout_and_media_never_reach_the_shell() {
+    let a = Action::Uq {
+        name: "layout".into(),
+        layout: Some("x; rm -rf ~".into()),
+        media: None,
+    };
+    assert!(a.lua().contains("current dwindle\")"), "{}", a.lua());
+    let a = Action::Uq {
+        name: "media".into(),
+        layout: None,
+        media: Some("$(id)".into()),
+    };
+    assert!(a.lua().contains("playerctl play-pause\")"), "{}", a.lua());
 }
 
 #[test]
@@ -259,6 +282,9 @@ fn lock_and_repeat_limits() {
     for action in [
         json!({"kind": "launch", "app": "firefox"}),
         json!({"kind": "command", "command": "ls"}),
+        term(),
+        json!({"kind": "uq", "name": "settings"}),
+        json!({"kind": "uq", "name": "layout", "layout": "master"}),
     ] {
         let mut b = custom("X", "SUPER + F1", action);
         b["repeating"] = json!(true);

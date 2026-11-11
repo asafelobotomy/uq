@@ -183,6 +183,9 @@ impl Keybinds {
             &["id", "combo", "enabled"],
         )?;
         let mut overrides = Vec::new();
+        // Where each kept override sat in the payload: a no-op before it shifts the list, but
+        // an error key must name the entry the caller wrote.
+        let mut at = Vec::new();
         let mut seen = BTreeSet::new();
         for (i, o) in raw.iter().enumerate() {
             if !seen.insert(o.id.clone()) {
@@ -193,6 +196,7 @@ impl Keybinds {
             }
             if let Some(o) = check::override_(i, o)? {
                 overrides.push(o);
+                at.push(i);
             }
         }
         let mut custom: Vec<CustomBind> = list(
@@ -232,7 +236,7 @@ impl Keybinds {
             }
         }
         let out = Keybinds { overrides, custom };
-        conflict::check(&out)?;
+        conflict::check_at(&out, &at)?;
         Ok(out)
     }
 

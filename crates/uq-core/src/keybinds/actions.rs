@@ -190,13 +190,14 @@ impl Action {
                 "exit" => exec(
                     "command -v hyprshutdown >/dev/null 2>&1 && hyprshutdown || hyprctl dispatch 'hl.dsp.exit()'",
                 ),
+                // From the closed lists, so a value that skipped the check still can't reach `sh`.
                 "layout" => exec(&format!(
                     "uqctl layout set current {}",
-                    layout.as_deref().unwrap_or("dwindle")
+                    pick(&LAYOUTS, layout.as_deref(), "dwindle")
                 )),
                 "media" => exec(&format!(
                     "playerctl {}",
-                    media.as_deref().unwrap_or("play-pause")
+                    pick(&MEDIA, media.as_deref(), "play-pause")
                 )),
                 "profile-next" => exec("uqctl profile next"),
                 _ => exec("uqctl settings"),
@@ -281,9 +282,23 @@ impl Action {
     }
 
     /// R7: whether holding the key may repeat it.
+    /// Only the volume-style actions make sense held down: starting an app, a command or a
+    /// terminal over and over is the harm the refusal names.
     pub fn may_repeat(&self) -> bool {
-        !matches!(self, Action::Launch { .. } | Action::Command { .. })
+        match self {
+            Action::Uq { name, .. } => name == "media",
+            Action::Launch { .. } | Action::Command { .. } => false,
+            _ => true,
+        }
     }
+}
+
+/// The entry of `list` equal to `v`, else `fallback`.
+fn pick(list: &'static [&'static str], v: Option<&str>, fallback: &'static str) -> &'static str {
+    list.iter()
+        .copied()
+        .find(|x| Some(*x) == v)
+        .unwrap_or(fallback)
 }
 
 /// A readable name from a desktop id: the last part, capitalised.
@@ -472,7 +487,9 @@ mod tests {
             let osd = matches!(&a, Action::Shell { name } if OSD_NAMES.contains(&name.as_str()));
             let media = matches!(&a, Action::Uq { name, .. } if name == "media");
             assert_eq!(a.may_lock(), osd || media, "{a:?}");
-            let starts = matches!(a, Action::Launch { .. } | Action::Command { .. });
+            // Only things that start something are refused; the uQ exec actions start one.
+            let starts = matches!(a, Action::Launch { .. } | Action::Command { .. })
+                || matches!(&a, Action::Uq { name, .. } if name != "media");
             assert_eq!(a.may_repeat(), !starts, "{a:?}");
         }
     }

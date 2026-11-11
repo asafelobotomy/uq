@@ -117,8 +117,11 @@ pub fn text(c: Combo) -> String {
 /// R9: true when the combo has no Super, Ctrl or Alt and its key isn't one that may stand alone
 /// (the media keys, Print, F13 to F24). Typing a bare letter would trigger it.
 pub fn needs_modifier(c: Combo) -> bool {
-    const REAL: u8 = 64 | 4 | 8;
-    if c.mods & REAL != 0 {
+    let real: u8 = MODIFIERS
+        .iter()
+        .filter(|m| m.0 != "SHIFT")
+        .fold(0, |a, m| a | m.1);
+    if c.mods & real != 0 {
         return false;
     }
     let k = row(c);

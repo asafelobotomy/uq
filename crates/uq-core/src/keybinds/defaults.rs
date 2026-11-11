@@ -245,7 +245,7 @@ static DEFAULTS: [Default; 55] = [
     },
     Default {
         id: "uq.focus.up",
-        label: "Focus the window to the up",
+        label: "Focus the window above",
         group: Group::Windows,
         combo: Some("SUPER + up"),
         action: DefaultAction::Raw("hl.dsp.focus({ direction = \"up\" })"),
@@ -256,7 +256,7 @@ static DEFAULTS: [Default; 55] = [
     },
     Default {
         id: "uq.focus.down",
-        label: "Focus the window to the down",
+        label: "Focus the window below",
         group: Group::Windows,
         combo: Some("SUPER + down"),
         action: DefaultAction::Raw("hl.dsp.focus({ direction = \"down\" })"),

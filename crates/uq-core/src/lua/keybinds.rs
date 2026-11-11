@@ -39,7 +39,8 @@ pub fn emit_bind(e: &Effective) -> String {
             "repeating" => e.repeating,
             "release" => e.release,
             "mouse" => e.mouse,
-            _ => false,
+            "description" => false,
+            other => unreachable!("bind option {other} has no state to render"),
         };
         if on {
             opts.push(format!("{} = true", o.lua));

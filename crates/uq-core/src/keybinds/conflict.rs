@@ -68,6 +68,13 @@ pub fn conflicts(kb: &Keybinds) -> Vec<Conflict> {
 /// Refuses the first conflict, naming both shortcuts. The key is the later shortcut's combo, or
 /// the earlier one's when the later is an untouched default.
 pub fn check(kb: &Keybinds) -> Result<(), SettingError> {
+    let at: Vec<usize> = (0..kb.overrides.len()).collect();
+    check_at(kb, &at)
+}
+
+/// [`check`] for a list whose overrides sat at other places in what was written: `at[i]` is the
+/// payload index of `kb.overrides[i]`.
+pub fn check_at(kb: &Keybinds, at: &[usize]) -> Result<(), SettingError> {
     let Some(c) = conflicts(kb).into_iter().next() else {
         return Ok(());
     };
@@ -78,7 +85,12 @@ pub fn check(kb: &Keybinds) -> Result<(), SettingError> {
         .find_map(|id| {
             custom(id)
                 .map(|i| format!("keybinds.custom[{i}].combo"))
-                .or_else(|| over(id).map(|i| format!("keybinds.overrides[{i}].combo")))
+                .or_else(|| {
+                    over(id).map(|i| {
+                        let i = at.get(i).copied().unwrap_or(i);
+                        format!("keybinds.overrides[{i}].combo")
+                    })
+                })
         })
         .unwrap_or_else(|| "keybinds".into());
     Err(invalid(&key, message(&c)))

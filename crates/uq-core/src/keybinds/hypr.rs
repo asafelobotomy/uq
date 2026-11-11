@@ -11,7 +11,8 @@
 //!   (`LuaBindingsToplevel.cpp`, `LuaBindingsDispatchers.cpp`).
 //! - `hyprctl binds -j` (`src/debug/HyprCtl.cpp`, `bindsRequest`, line 1026 at 0.56.2) prints
 //!   `modmask`, `description`, `dispatcher` and `arg` per bind.
-//! - Modifier bits are Hyprland's `eKeyboardModifiers` (`src/devices/IKeyboard.hpp`):
+//! - Modifier bits are Hyprland's `eKeyboardModifiers`, read at both tags: 0.56.2
+//!   `src/devices/IKeyboard.hpp` lines 13-22, 0.57.0 `src/input/Keys.hpp` lines 8-18 (moved):
 //!   `SHIFT` 1<<0, `CAPS` 1<<1, `CTRL` 1<<2, `ALT` 1<<3, `MOD2` 1<<4, `MOD3` 1<<5,
 //!   `META` (Super) 1<<6, `MOD5` 1<<7, so `binds -j`'s `modmask` maps straight back.
 //!
