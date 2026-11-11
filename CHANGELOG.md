@@ -17,6 +17,18 @@ All notable changes to uQ are listed here. The format follows
   gaps, corners and effects. `uqctl theme list --long|import|export|delete` do the same, and the
   shell's quick settings show names. New `uqd` calls `ListThemeInfo`, `ExportTheme`,
   `ImportTheme`, `DeleteTheme` and the `ThemesChanged` signal.
+- **uQ session.** A "uQ" entry in your display manager's session list. Its first login sets up
+  uQ for you (no `uqctl setup` needed); if setup reports a problem, the problem goes to
+  `~/.local/state/uq/session.log` and the desktop starts anyway. `uqctl setup` gains `--quiet`.
+- **Login screen.** uQ's own greeter for greetd, in uQ's look: users with their pictures, the
+  password field, the session to start (uQ first), and Suspend, Restart and Shut down (click
+  twice). It follows the theme, variant and wallpaper chosen for it and never reads anyone's home
+  folder. Wrong passwords, locked accounts and other login messages show as plain text; an
+  expired password asks for a new one twice and checks they match. If it fails 3 times in a
+  minute, greetd's text login takes over so nobody is locked out. Turn it on with
+  `run0 uqctl greeter enable` (needs `greetd`) and off with `run0 uqctl greeter disable`, which
+  brings back the display manager it replaced. See docs/greeter.md.
+
 - **`uq-dev`.** Use uQ and develop it on the same machine: `uq-dev session` opens a nested
   uQ desktop running a checkout's uqd and shell on a private bus with sandboxed config,
   `uq-dev run` runs an app from its checkout with throwaway config, and `uq-dev promote` /
@@ -109,6 +121,34 @@ All notable changes to uQ are listed here. The format follows
   `uqd` gains `ListAutostart`, `ShellReady` and an `AutostartChanged` signal, and the `env`,
   `compat` and `autostart` sections use `GetSection` / `SetSection`. `uqctl launch <desktop-id>`
   launches an app the way uQ's launcher does.
+- **Settings helper.** A small system service, `uq-settings-helper`, lets Settings change a few
+  system-wide things after you confirm with an administrator password: what the lid and power
+  button do, and the login screen's theme, wallpaper, monitor layout and auto-login. Each change
+  writes one fixed file and accepts only a fixed list of values; it never restarts logind (the
+  lid and power-button change applies at its next reload). The wallpaper is copied as-is, up to
+  20 MiB, and never opened as an image. Turning auto-login on or off asks for the password every
+  time. It starts when needed, runs in a tight sandbox with no special privileges beyond root's
+  own files, and quits after 30 seconds without use.
+- **Settings pages from other apps can do more.** A page's `page.toml` can now list fixed
+  commands it may run (`[[command]]`), conditions for it to show (`[requires]`: a program in
+  `/usr/bin`, a running service) and the one D-Bus object it talks to (`[dbus]`, on the session
+  or system bus). The page gets `ctx.command.run` and `ctx.dbus.call` / `ctx.dbus.get`; a
+  command marked `confirm` asks "Are you sure?" with the page's own question first. Commands
+  run without a shell, with a clean environment, time limits and output limits. A page's id
+  must now match its folder name. Pages installed or removed while Settings is open appear or
+  go within a second or two. Writing one: `docs/settings-pages.md` and
+  `templates/settings-page/`.
+- **`uqctl integrations`.** `uqctl integrations list [--json]` shows every widget, settings
+  page, launcher provider and app action uQ found under `/usr/share/uq/`, whether it shows, and
+  why not. `uqctl integrations check <dir>` checks an app's `uq/` folder before packaging (the
+  layout, every file, the plain-text rule, that each command's program exists).
+- **Launcher providers can be started on demand.** A `.provider` file may say
+  `Activatable=true` (read now; starting such providers when the launcher opens comes next).
+- **`uq-tokens` for web apps.** A small JavaScript module and CSS file (`web/uq-tokens/`) that
+  Tauri, Electron and browser apps copy in to follow the uQ theme: colours, rounding, gaps and
+  fonts become `--uq-*` CSS properties and update live when the theme changes. Bad values are
+  ignored, and without uQ the app's own theme applies. The README has the Tauri and Electron
+  recipes and a version check for vendored copies.
 
 ### Changed
 
@@ -118,6 +158,11 @@ All notable changes to uQ are listed here. The format follows
   After an upgrade Hyprland shows its own default animations until `uqd` re-renders
   `generated.lua` (restart `uqd` or change any setting). `hl.animation` calls in `user.lua`
   still win.
+
+### Fixed
+
+- **Restore points saved in the same second list newest first.** They used to sort by a
+  random suffix, so "the newest point" could be an older one.
 
 ## [0.2.1] - 2026-11-10
 

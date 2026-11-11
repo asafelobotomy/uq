@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/uq-core", "crates/uqd", "crates/uqctl", "apps/uq-settings"]
+members = ["crates/uq-core", "crates/uqd", "crates/uqctl", "crates/uq-settings-helper", "apps/uq-settings"]
 
 [workspace.package]
 edition = "2024"

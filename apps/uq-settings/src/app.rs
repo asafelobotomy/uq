@@ -7,7 +7,7 @@
 use std::pin::Pin;
 use std::sync::Mutex;
 
-use cxx_qt::{CxxQtThread, Threading};
+use cxx_qt::{CxxQtThread, CxxQtType, Threading};
 use cxx_qt_lib::QString;
 
 use crate::registry::{self, PageEntry};
@@ -68,7 +68,7 @@ pub mod qobject {
 use qobject::App;
 
 pub struct AppRust {
-    /// Core pages, then the plugin pages found at startup.
+    /// Core pages, then the plugin pages on show (updated as pages come and go).
     entries: Vec<PageEntry>,
     page: QString,
     page_requested: bool,
@@ -119,6 +119,9 @@ pub enum Event {
     },
     UqdUp(bool),
     ScreenshotDir(String),
+    /// The plugin pages to show changed (one was installed or removed, or the bus name it
+    /// waits for came or went).
+    Plugins(Vec<plugins::PluginPage>),
 }
 
 /// Where events go: kept until `App` exists, then queued to it, then dropped once it is gone.
@@ -190,6 +193,22 @@ impl App {
             }
             Event::UqdUp(up) => self.set_uqd_up(up),
             Event::ScreenshotDir(dir) => self.set_screenshot_dir(QString::from(&dir)),
+            Event::Plugins(pages) => self.set_plugins(&pages),
+        }
+    }
+
+    /// Replace the plugin pages in the sidebar and the search. If the page on show went away,
+    /// show the first page instead.
+    fn set_plugins(mut self: Pin<&mut Self>, pages: &[plugins::PluginPage]) {
+        let entries = registry::all_pages(pages);
+        let json = QString::from(&registry::pages_json(&entries));
+        let current = self.page().to_string();
+        let first = entries.first().map(|p| p.id.clone()).unwrap_or_default();
+        let gone = !entries.iter().any(|p| p.id == current);
+        self.as_mut().rust_mut().get_mut().entries = entries;
+        self.as_mut().set_pages_json(json);
+        if gone {
+            self.set_page(QString::from(&first));
         }
     }
 

@@ -52,6 +52,10 @@ nothing. The result is in the exit code, and `--json` prints it as one object on
 
 Theme files kept by `--apps` are reported but never change the exit code.
 
+You don't have to run `uqctl setup` yourself: the package adds a **uQ** session to your display
+manager, and its first login runs setup for you. uQ also has its own login screen for greetd:
+`run0 pacman -S greetd && run0 uqctl greeter enable` (see [docs/greeter.md](docs/greeter.md)).
+
 Hyprland is pinned to **0.56.2–0.57.x** (`uq-hyprland-pin`): Manjaro ships 0.56.2 and Arch
 0.57.1 as of 2026-11-08. The Lua API uQ uses is identical in the 0.56.2 and 0.57 sources; CI runs
 `Hyprland --verify-config` on every theme against Arch's current release.

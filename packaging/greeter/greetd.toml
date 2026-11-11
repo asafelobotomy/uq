@@ -1,0 +1,14 @@
+# uQ's greetd configuration (/etc/uq/greetd.toml). greetd reads it instead of
+# /etc/greetd/config.toml through /usr/lib/systemd/system/greetd.service.d/uq.conf, which
+# applies only while this file exists. `run0 uqctl greeter enable` makes greetd the display
+# manager. Settings → Users writes an [initial_session] table here for auto-login.
+
+[terminal]
+# The VT greetd runs the greeter on.
+vt = 1
+
+[default_session]
+# uQ's greeter: Hyprland with a fixed config, running the Quickshell login screen. It falls back
+# to agreety (greetd's text greeter) if it fails 3 times in 60 seconds.
+command = "/usr/lib/uq/uq-greeter-session"
+user = "greeter"

@@ -66,7 +66,7 @@ Kirigami.ApplicationWindow {
             return;
         // A plugin page is loaded by PluginPage, which turns a QML error into a card.
         if (page.plugin)
-            stack.replace(null, Qt.resolvedUrl("PluginPage.qml"), { source: page.qml, theme: JSON.parse(App.themeJson || "{}"), highlight: Qt.binding(() => App.highlight) });
+            stack.replace(null, Qt.resolvedUrl("PluginPage.qml"), { source: page.qml, pageId: page.id, host: PluginHost, theme: JSON.parse(App.themeJson || "{}"), highlight: Qt.binding(() => App.highlight) });
         else
             stack.replace(null, Qt.resolvedUrl(page.qml));
     }

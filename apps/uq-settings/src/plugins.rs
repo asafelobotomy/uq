@@ -1,20 +1,21 @@
-//! Plugin settings pages (spec §2.5): `<dir>/<id>/page.toml` plus one QML file. Read only from
-//! the system directory (or `--plugin-dir`); a bad page is skipped with a reason, never fatal.
+//! Plugin settings pages (Phase 3 spec §2.5, Phase 4 spec §2.3): `<dir>/<id>/page.toml` plus one
+//! QML file. Read only from the system directory (or `--plugin-dir`); a bad page is skipped with
+//! a reason, never fatal. The manifest is `uq_core::integration::manifest::PageManifest`; pages
+//! whose `[requires]` don't hold are hidden, and the directory is watched so an installed or
+//! removed page appears or goes without restarting the app.
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 
-use serde::Deserialize;
+use uq_core::integration::manifest::{BIN_DIR, Bus, Loaded, PageManifest};
+use uq_core::integration::scan::scan_pages;
+use uq_core::integration::watch::{DEBOUNCE, watch_dirs};
 
 use crate::registry::{self, OwnedSearchEntry};
 
 /// The only directory read by default: root-owned, never a user-writable one.
 pub const SYSTEM_DIR: &str = "/usr/share/uq/settings/pages";
-
-const MAX_MANIFEST_BYTES: u64 = 64 * 1024;
-const MAX_SETTINGS: usize = 200;
-const MAX_KEYWORDS: usize = 32;
 
 static DIR: OnceLock<PathBuf> = OnceLock::new();
 
@@ -33,225 +34,295 @@ pub struct PluginPage {
     pub name: String,
     pub icon: String,
     pub qml_path: PathBuf,
-    #[allow(dead_code, reason = "the dbus context helper comes in slice 6")]
+    #[allow(dead_code, reason = "the page's context reads it from the manifest")]
     pub dbus_name: Option<String>,
     pub keywords: Vec<String>,
     pub settings: Vec<OwnedSearchEntry>,
 }
 
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Manifest {
-    id: String,
-    name: String,
-    icon: Option<String>,
-    category: Option<String>,
-    qml: String,
-    dbus_name: Option<String>,
-    #[serde(default)]
-    keywords: Vec<String>,
-    #[serde(default)]
-    setting: Vec<RawSetting>,
+/// A loaded page and its whole manifest (`[[command]]`, `[requires]`, `[dbus]`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Found {
+    pub page: PluginPage,
+    pub manifest: PageManifest,
 }
 
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct RawSetting {
-    id: String,
-    label: String,
-    #[serde(default)]
-    keywords: Vec<String>,
+impl Found {
+    /// `requires.bus_name` and the bus it is watched on (the `[dbus]` table's; session if none).
+    pub fn waits_for(&self) -> Option<(String, Bus)> {
+        let bus = self.manifest.dbus.as_ref().map_or(Bus::Session, |d| d.bus);
+        self.manifest.requires.bus_name.clone().map(|n| (n, bus))
+    }
 }
 
-/// `^[a-z0-9-]{1,40}$`
-fn valid_page_id(id: &str) -> bool {
-    (1..=40).contains(&id.len())
-        && id
-            .bytes()
-            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+fn found(loaded: Loaded<PageManifest>) -> Found {
+    let m = loaded.manifest;
+    Found {
+        page: PluginPage {
+            qml_path: loaded.qml_path,
+            id: m.id.clone(),
+            name: m.name.clone(),
+            icon: m
+                .icon
+                .clone()
+                .unwrap_or_else(|| "application-x-executable".into()),
+            dbus_name: m.dbus_name.clone(),
+            keywords: m.keywords.clone(),
+            settings: m
+                .settings
+                .iter()
+                .map(|s| OwnedSearchEntry {
+                    id: s.id.clone(),
+                    label: s.label.clone(),
+                    keywords: s.keywords.clone(),
+                })
+                .collect(),
+        },
+        manifest: m,
+    }
 }
 
-/// `^[A-Za-z0-9._-]{1,64}$`
-fn valid_setting_id(id: &str) -> bool {
-    (1..=64).contains(&id.len())
-        && id
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))
-}
-
-/// A theme icon name, `^[A-Za-z0-9._-]{1,64}$`: no paths or URLs.
-fn valid_icon_name(name: &str) -> bool {
-    valid_setting_id(name)
-}
-
-fn valid_text(s: &str, max: usize) -> bool {
-    (1..=max).contains(&s.chars().count()) && !s.chars().any(char::is_control)
-}
-
-fn valid_keywords(words: &[String]) -> bool {
-    words.len() <= MAX_KEYWORDS && words.iter().all(|k| valid_text(k, 64))
-}
-
-/// A bare file name ending `.qml`: no directories, no `..`, no hidden or empty stem.
-fn valid_qml_name(name: &str) -> bool {
-    name.len() <= 100
-        && name.len() > ".qml".len()
-        && name.ends_with(".qml")
-        && !name.starts_with('.')
-        && !name
-            .chars()
-            .any(|c| c.is_control() || matches!(c, '/' | '\\' | '%' | '?' | '#'))
-}
-
-fn parse(dir: &Path, text: &str) -> Result<PluginPage, String> {
-    let m: Manifest = toml::from_str(text).map_err(|e| format!("page.toml: {}", e.message()))?;
-    if !valid_page_id(&m.id) {
-        return Err(format!("id {:?} must match [a-z0-9-]{{1,40}}", m.id));
-    }
-    if let Some(c) = &m.category
-        && c != "apps"
-    {
-        return Err(format!("category must be \"apps\", not {c:?}"));
-    }
-    if !valid_text(&m.name, 100) {
-        return Err("name must be 1-100 characters without control characters".into());
-    }
-    if let Some(icon) = &m.icon
-        && !valid_icon_name(icon)
-    {
-        return Err(format!(
-            "icon {icon:?} must be an icon name matching [A-Za-z0-9._-]{{1,64}}"
-        ));
-    }
-    if !valid_qml_name(&m.qml) {
-        return Err(format!(
-            "qml {:?} must be a bare file name ending .qml",
-            m.qml
-        ));
-    }
-    if let Some(n) = &m.dbus_name
-        && !valid_text(n, 255)
-    {
-        return Err("dbus_name must be 1-255 characters without control characters".into());
-    }
-    if !valid_keywords(&m.keywords) {
-        return Err("keywords: at most 32, each 1-64 characters".into());
-    }
-    if m.setting.len() > MAX_SETTINGS {
-        return Err(format!("at most {MAX_SETTINGS} [[setting]] entries"));
-    }
-    let mut settings: Vec<OwnedSearchEntry> = Vec::new();
-    for s in m.setting {
-        if !valid_setting_id(&s.id) {
-            return Err(format!(
-                "setting id {:?} must match [A-Za-z0-9._-]{{1,64}}",
-                s.id
-            ));
-        }
-        if settings.iter().any(|o| o.id == s.id) {
-            return Err(format!("duplicate setting id {:?}", s.id));
-        }
-        if !valid_text(&s.label, 200) || !valid_keywords(&s.keywords) {
-            return Err(format!("setting {:?}: bad label or keywords", s.id));
-        }
-        settings.push(OwnedSearchEntry {
-            id: s.id,
-            label: s.label,
-            keywords: s.keywords,
-        });
-    }
-    Ok(PluginPage {
-        qml_path: dir.join(&m.qml),
-        id: m.id,
-        name: m.name,
-        icon: m.icon.unwrap_or_else(|| "application-x-executable".into()),
-        dbus_name: m.dbus_name,
-        keywords: m.keywords,
-        settings,
-    })
-}
-
-/// Load one page directory. `root` is the canonical plugin directory. A page directory, its
-/// manifest or its QML file that is a symlink resolving outside it is refused, and `qml_path` is
-/// the canonical path of an existing regular file.
+/// Every valid plugin page under `dir` whose `requires.bins` are installed (in `bin_dir`), in
+/// directory-name order, and one `"<dir name>: <reason>"` line for each directory skipped. A
+/// page's id must equal its directory name (Phase 4 spec §2.6); an id that collides with a core
+/// page is skipped. A missing `dir` is no plugins, not an error. Pages that wait for a bus name
+/// are included; [`shown`] filters them.
 ///
-/// This is hygiene, not a sandbox: plugin QML can still `import "../x"` or read any file the
-/// user can.
-fn load(dir: &Path, root: &Path) -> Result<PluginPage, String> {
-    let dir = fs::canonicalize(dir).map_err(|e| format!("{e}"))?;
-    if !dir.starts_with(root) {
-        return Err("resolves outside the plugin directory".into());
-    }
-    let manifest =
-        fs::canonicalize(dir.join("page.toml")).map_err(|e| format!("page.toml: {e}"))?;
-    if !manifest.starts_with(&dir) {
-        return Err("page.toml resolves outside the page directory".into());
-    }
-    let meta = fs::metadata(&manifest).map_err(|e| format!("page.toml: {e}"))?;
-    if !meta.is_file() || meta.len() > MAX_MANIFEST_BYTES {
-        return Err("page.toml is not a regular file under 64 KiB".into());
-    }
-    let text = fs::read_to_string(&manifest).map_err(|e| format!("page.toml: {e}"))?;
-    let mut page = parse(&dir, &text)?;
-    let qml = fs::canonicalize(&page.qml_path).map_err(|e| {
-        format!(
-            "qml {:?}: {e}",
-            page.qml_path.file_name().unwrap_or_default()
-        )
-    })?;
-    if !qml.starts_with(&dir) || !qml.is_file() {
-        return Err("qml resolves outside the page directory or is not a file".into());
-    }
-    page.qml_path = qml;
-    Ok(page)
-}
-
-/// Every valid plugin page under `dir`, in directory-name order, and one
-/// `"<dir name>: <reason>"` line for each directory skipped. An id that collides with a core
-/// page or an earlier plugin is skipped. A missing `dir` is no plugins, not an error.
-pub fn scan(dir: &Path) -> (Vec<PluginPage>, Vec<String>) {
-    let mut pages: Vec<PluginPage> = Vec::new();
+/// Loading follows `uq_core::integration::manifest::load_page`: a page directory, its manifest
+/// or its QML file that is a symlink resolving outside it is refused. This is hygiene, not a
+/// sandbox: plugin QML can still `import "../x"` or read any file the user can.
+pub fn scan(dir: &Path, bin_dir: &Path) -> (Vec<Found>, Vec<String>) {
+    let mut pages: Vec<Found> = Vec::new();
     let mut skipped = Vec::new();
-    let entries = match fs::read_dir(dir) {
-        Ok(rd) => rd,
+    let list = match scan_pages(dir) {
+        Ok(list) => list,
         Err(e) => {
-            if e.kind() != std::io::ErrorKind::NotFound {
-                skipped.push(format!("{}: {e}", dir.display()));
-            }
+            skipped.push(e);
             return (pages, skipped);
         }
     };
-    let root = fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf());
-    let mut names: Vec<_> = entries.filter_map(Result::ok).map(|e| e.path()).collect();
-    names.sort();
-    for path in names {
+    for (path, result) in list {
         let name = path
             .file_name()
             .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
-        if !path.is_dir() {
-            continue;
-        }
-        match load(&path, &root) {
-            Ok(page) if registry::find(&page.id).is_some() => {
-                skipped.push(format!("{name}: id {:?} is a core page", page.id));
+        match result.map(found) {
+            Ok(f) if registry::find(&f.page.id).is_some() => {
+                skipped.push(format!("{name}: id {:?} is a core page", f.page.id));
             }
-            Ok(page) if pages.iter().any(|p| p.id == page.id) => {
-                skipped.push(format!("{name}: duplicate id {:?}", page.id));
+            Ok(f) => {
+                let missing = f.manifest.requires.missing_bins(bin_dir);
+                if missing.is_empty() {
+                    pages.push(f);
+                } else {
+                    skipped.push(format!(
+                        "{name}: hidden until {} is installed",
+                        missing.join(", ")
+                    ));
+                }
             }
-            Ok(page) => pages.push(page),
             Err(reason) => skipped.push(format!("{name}: {reason}")),
         }
     }
     (pages, skipped)
 }
 
-/// Scan the configured directory, logging what was skipped.
-pub fn scan_configured() -> Vec<PluginPage> {
-    let (pages, skipped) = scan(&absolute(dir()));
+/// The pages to show: those that wait for no bus name, and those whose name has an owner.
+pub fn shown(found: &[Found], has_owner: impl Fn(&str, Bus) -> bool) -> Vec<Found> {
+    found
+        .iter()
+        .filter(|f| f.waits_for().is_none_or(|(n, bus)| has_owner(&n, bus)))
+        .cloned()
+        .collect()
+}
+
+/// The manifests of the pages on show, for the page context (`crate::plugin_host`).
+static SHOWN: Mutex<Vec<Found>> = Mutex::new(Vec::new());
+
+/// Remember the pages on show and return them as the sidebar takes them.
+pub fn set_shown(found: Vec<Found>) -> Vec<PluginPage> {
+    let pages = found.iter().map(|f| f.page.clone()).collect();
+    *SHOWN.lock().unwrap_or_else(|e| e.into_inner()) = found;
+    pages
+}
+
+/// The manifest of page `id`, if it is on show.
+pub fn manifest(id: &str) -> Option<PageManifest> {
+    SHOWN
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .iter()
+        .find(|f| f.page.id == id)
+        .map(|f| f.manifest.clone())
+}
+
+/// Scan the configured directory, logging each reason a page was skipped once per run.
+fn scan_logged() -> Vec<Found> {
+    static LOGGED: Mutex<Vec<String>> = Mutex::new(Vec::new());
+    let (pages, skipped) = scan(&absolute(dir()), Path::new(BIN_DIR));
+    let mut logged = LOGGED.lock().unwrap_or_else(|e| e.into_inner());
     for line in skipped {
-        eprintln!("uq-settings: skipping plugin page {line}");
+        if !logged.contains(&line) {
+            eprintln!("uq-settings: skipping plugin page {line}");
+            logged.push(line);
+        }
     }
     pages
+}
+
+/// The pages to show at startup: those that wait for no bus name. Pages that do are added by
+/// [`watch`] once their name is seen to have an owner.
+pub fn scan_configured() -> Vec<PluginPage> {
+    set_shown(shown(&scan_logged(), |_, _| false))
+}
+
+/// Follow the plugin directory (inotify, debounced 1 s; Phase 4 spec §2.3) and the bus names
+/// pages wait for, and post the pages to show whenever they change. Runs on `handle`; without
+/// inotify it logs once and the list stays as it was at startup.
+pub fn watch(handle: &tokio::runtime::Handle, post: impl Fn(Vec<PluginPage>) + Send + 'static) {
+    handle.spawn(async move {
+        let mut changes = match watch_dirs(vec![absolute(dir())], DEBOUNCE) {
+            Ok(rx) => rx,
+            Err(e) => {
+                eprintln!(
+                    "uq-settings: can't watch {} for new pages: {e}",
+                    dir().display()
+                );
+                return;
+            }
+        };
+        let (owner_tx, mut owner_rx) = tokio::sync::mpsc::channel::<()>(1);
+        let mut owners = Owners::default();
+        let mut last: Option<Vec<Found>> = None;
+        loop {
+            let found = scan_logged();
+            owners.follow(&found, &owner_tx).await;
+            let now = owners.filter(&found).await;
+            if last.as_ref() != Some(&now) {
+                last = Some(now.clone());
+                post(set_shown(now));
+            }
+            tokio::select! {
+                c = changes.recv() => if c.is_none() { return },
+                _ = owner_rx.recv() => {}
+            }
+        }
+    });
+}
+
+/// The session and system bus connections used to check `requires.bus_name`, each with a task
+/// that pings on a `NameOwnerChanged` for one of the names pages wait for.
+#[derive(Default)]
+struct Owners {
+    session: Option<Option<zbus::Connection>>,
+    system: Option<Option<zbus::Connection>>,
+    wanted: std::sync::Arc<Mutex<Vec<String>>>,
+}
+
+impl Owners {
+    async fn conn(
+        &mut self,
+        bus: Bus,
+        ping: &tokio::sync::mpsc::Sender<()>,
+    ) -> Option<zbus::Connection> {
+        let slot = match bus {
+            Bus::Session => &mut self.session,
+            Bus::System => &mut self.system,
+        };
+        if slot.is_none() {
+            let conn = match bus {
+                Bus::Session => match crate::session::bus() {
+                    Some((_, c)) => Ok(c),
+                    None => zbus::Connection::session().await,
+                },
+                Bus::System => zbus::Connection::system().await,
+            };
+            let conn = conn
+                .map_err(|e| {
+                    eprintln!("uq-settings: plugin pages can't watch the {bus:?} bus: {e}")
+                })
+                .ok();
+            if let Some(c) = &conn {
+                follow_owner_changes(c.clone(), ping.clone(), self.wanted.clone()).await;
+            }
+            *slot = Some(conn);
+        }
+        slot.clone().flatten()
+    }
+
+    /// Connect (once) to each bus a page waits on.
+    async fn follow(&mut self, found: &[Found], ping: &tokio::sync::mpsc::Sender<()>) {
+        *self.wanted.lock().unwrap_or_else(|e| e.into_inner()) = found
+            .iter()
+            .filter_map(|f| f.waits_for())
+            .map(|(n, _)| n)
+            .collect();
+        for f in found {
+            if let Some((_, bus)) = f.waits_for() {
+                self.conn(bus, ping).await;
+            }
+        }
+    }
+
+    async fn filter(&mut self, found: &[Found]) -> Vec<Found> {
+        let mut owned: Vec<(String, Bus)> = Vec::new();
+        for f in found {
+            let Some((name, bus)) = f.waits_for() else {
+                continue;
+            };
+            let conn = match bus {
+                Bus::Session => self.session.clone().flatten(),
+                Bus::System => self.system.clone().flatten(),
+            };
+            if let Some(c) = conn
+                && has_owner(&c, &name).await
+            {
+                owned.push((name, bus));
+            }
+        }
+        shown(found, |n, b| owned.iter().any(|(o, ob)| o == n && *ob == b))
+    }
+}
+
+async fn has_owner(conn: &zbus::Connection, name: &str) -> bool {
+    let Ok(dbus) = zbus::fdo::DBusProxy::new(conn).await else {
+        return false;
+    };
+    let Ok(name) = zbus::names::BusName::try_from(name) else {
+        return false;
+    };
+    matches!(
+        tokio::time::timeout(std::time::Duration::from_secs(2), dbus.name_has_owner(name)).await,
+        Ok(Ok(true))
+    )
+}
+
+async fn follow_owner_changes(
+    conn: zbus::Connection,
+    ping: tokio::sync::mpsc::Sender<()>,
+    wanted: std::sync::Arc<Mutex<Vec<String>>>,
+) {
+    use futures_util::StreamExt;
+    let Ok(dbus) = zbus::fdo::DBusProxy::new(&conn).await else {
+        return;
+    };
+    let Ok(mut stream) = dbus.receive_name_owner_changed().await else {
+        return;
+    };
+    tokio::spawn(async move {
+        while let Some(sig) = stream.next().await {
+            let relevant = sig.args().is_ok_and(|a| {
+                wanted
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .iter()
+                    .any(|w| w == a.name().as_str())
+            });
+            // A full channel already holds a ping: the rescan will see this change too.
+            if relevant && ping.try_send(()).is_err() && ping.is_closed() {
+                return;
+            }
+        }
+    });
 }
 
 fn absolute(dir: &Path) -> PathBuf {
@@ -288,65 +359,87 @@ mod tests {
         format!("id = \"{id}\"\nname = \"Name {id}\"\nqml = \"Page.qml\"\n{extra}")
     }
 
+    fn ids(found: &[Found]) -> Vec<&str> {
+        found.iter().map(|f| f.page.id.as_str()).collect()
+    }
+
     #[test]
     fn scan_skips_bad_manifests() {
         let tmp = tempfile::tempdir().unwrap();
         let r = tmp.path();
+        let bins = tempfile::tempdir().unwrap();
+        fs::write(bins.path().join("tailscale"), "").unwrap();
         write(
             r,
             "a-good",
             &manifest(
-                "good",
+                "a-good",
                 "icon = \"folder\"\ncategory = \"apps\"\ndbus_name = \"org.example.Good\"\n\
-                 keywords = [\"tools\"]\n[[setting]]\nid = \"mode\"\nlabel = \"Mode\"\n\
-                 keywords = [\"kind\"]\n",
+                 keywords = [\"tools\"]\n[requires]\nbins = [\"tailscale\"]\n\
+                 [[setting]]\nid = \"mode\"\nlabel = \"Mode\"\nkeywords = [\"kind\"]\n",
             ),
         );
         fs::create_dir_all(r.join("b-no-manifest")).unwrap();
         fs::write(r.join("a-file.txt"), "not a directory").unwrap();
-        write(r, "c-unknown-key", &manifest("unknown", "surprise = 1\n"));
-        write(r, "d-dup-1", &manifest("dup", ""));
-        write(r, "d-dup-2", &manifest("dup", ""));
-        write(r, "e-core", &manifest("appearance", ""));
+        write(
+            r,
+            "c-unknown-key",
+            &manifest("c-unknown-key", "surprise = 1\n"),
+        );
+        write(r, "d-not-folder-name", &manifest("dup", ""));
+        write(r, "appearance", &manifest("appearance", ""));
         write(
             r,
             "f-dotdot",
-            &manifest("dotdot", "").replace("Page.qml", "../x.qml"),
+            &manifest("f-dotdot", "").replace("Page.qml", "../x.qml"),
         );
         write(
             r,
             "f-slash",
-            &manifest("slash", "").replace("Page.qml", "sub/x.qml"),
+            &manifest("f-slash", "").replace("Page.qml", "sub/x.qml"),
         );
         write(
             r,
             "f-ext",
-            &manifest("ext", "").replace("Page.qml", "Page.js"),
+            &manifest("f-ext", "").replace("Page.qml", "Page.js"),
         );
         write(r, "g-bad-id", &manifest("Bad_Id", ""));
-        write(r, "g-category", &manifest("cat", "category = \"system\"\n"));
+        write(
+            r,
+            "g-category",
+            &manifest("g-category", "category = \"system\"\n"),
+        );
         write(r, "h-syntax", "id = \n");
         write(
             r,
             "i-dup-setting",
             &manifest(
-                "dupset",
+                "i-dup-setting",
                 "[[setting]]\nid = \"a\"\nlabel = \"A\"\n[[setting]]\nid = \"a\"\nlabel = \"B\"\n",
             ),
         );
         write(
             r,
             "j-unknown-setting-key",
-            &manifest("us", "[[setting]]\nid = \"a\"\nlabel = \"A\"\nx = 1\n"),
+            &manifest(
+                "j-unknown-setting-key",
+                "[[setting]]\nid = \"a\"\nlabel = \"A\"\nx = 1\n",
+            ),
         );
-        write(r, "z-after", &manifest("after", ""));
+        write(
+            r,
+            "j-missing-bin",
+            &manifest("j-missing-bin", "[requires]\nbins = [\"nope\"]\n"),
+        );
+        write(r, "j-newer", &manifest("j-newer", "uq_api = 2\n"));
+        write(r, "z-after", &manifest("z-after", "uq_api = 1\n"));
 
         // Symlinks: a page directory pointing outside, a qml file pointing outside, a manifest
         // pointing outside, and a missing qml file.
         let outside = tempfile::tempdir().unwrap();
-        write(outside.path(), "evil", &manifest("evil", ""));
-        symlink(outside.path().join("evil"), r.join("k-dir-link")).unwrap();
-        write(r, "l-qml-link", &manifest("qmllink", ""));
+        write(outside.path(), "k-dir-link", &manifest("k-dir-link", ""));
+        symlink(outside.path().join("k-dir-link"), r.join("k-dir-link")).unwrap();
+        write(r, "l-qml-link", &manifest("l-qml-link", ""));
         fs::remove_file(r.join("l-qml-link/Page.qml")).unwrap();
         fs::write(outside.path().join("Out.qml"), "import QtQuick\nItem {}\n").unwrap();
         symlink(
@@ -356,16 +449,16 @@ mod tests {
         .unwrap();
         write(r, "m-toml-link", "");
         fs::remove_file(r.join("m-toml-link/page.toml")).unwrap();
-        fs::write(outside.path().join("x.toml"), manifest("tomllink", "")).unwrap();
+        fs::write(outside.path().join("x.toml"), manifest("m-toml-link", "")).unwrap();
         symlink(
             outside.path().join("x.toml"),
             r.join("m-toml-link/page.toml"),
         )
         .unwrap();
-        write(r, "n-no-qml", &manifest("noqml", ""));
+        write(r, "n-no-qml", &manifest("n-no-qml", ""));
         fs::remove_file(r.join("n-no-qml/Page.qml")).unwrap();
         // A link that stays inside its own page directory is fine.
-        write(r, "o-inner-link", &manifest("inner", ""));
+        write(r, "o-inner-link", &manifest("o-inner-link", ""));
         fs::rename(
             r.join("o-inner-link/Page.qml"),
             r.join("o-inner-link/Real.qml"),
@@ -373,25 +466,27 @@ mod tests {
         .unwrap();
         symlink("Real.qml", r.join("o-inner-link/Page.qml")).unwrap();
 
-        let (pages, skipped) = scan(r);
-        let ids: Vec<_> = pages.iter().map(|p| p.id.as_str()).collect();
+        let (pages, skipped) = scan(r, bins.path());
         assert_eq!(
-            ids,
-            ["good", "dup", "inner", "after"],
+            ids(&pages),
+            ["a-good", "o-inner-link", "z-after"],
             "in directory-name order"
         );
         let r_canon = fs::canonicalize(r).unwrap();
-        assert_eq!(pages[0].qml_path, r_canon.join("a-good/Page.qml"));
-        assert_eq!(pages[2].qml_path, r_canon.join("o-inner-link/Real.qml"));
-        assert_eq!(pages[0].icon, "folder");
-        assert_eq!(pages[0].dbus_name.as_deref(), Some("org.example.Good"));
-        assert_eq!(pages[0].settings[0].keywords, ["kind"]);
+        assert_eq!(pages[0].page.qml_path, r_canon.join("a-good/Page.qml"));
+        assert_eq!(
+            pages[1].page.qml_path,
+            r_canon.join("o-inner-link/Real.qml")
+        );
+        assert_eq!(pages[0].page.icon, "folder");
+        assert_eq!(pages[0].page.dbus_name.as_deref(), Some("org.example.Good"));
+        assert_eq!(pages[0].page.settings[0].keywords, ["kind"]);
         let joined = skipped.join("\n");
         for dir in [
             "b-no-manifest",
             "c-unknown-key",
-            "d-dup-2",
-            "e-core",
+            "d-not-folder-name",
+            "appearance",
             "f-dotdot",
             "f-slash",
             "f-ext",
@@ -400,6 +495,8 @@ mod tests {
             "h-syntax",
             "i-dup-setting",
             "j-unknown-setting-key",
+            "j-missing-bin",
+            "j-newer",
             "k-dir-link",
             "l-qml-link",
             "m-toml-link",
@@ -410,34 +507,100 @@ mod tests {
                 "{dir} not skipped with a reason:\n{joined}"
             );
         }
-        assert_eq!(skipped.len(), 16, "{joined}");
+        assert_eq!(skipped.len(), 18, "{joined}");
         assert!(joined.contains("unknown field"), "{joined}");
+        assert!(joined.contains("needs a newer uQ"), "{joined}");
+        assert!(joined.contains("is a core page"), "{joined}");
     }
 
     #[test]
-    fn icon_is_a_bare_icon_name() {
-        let dir = Path::new("/p/x");
-        let with = |icon: &str| parse(dir, &manifest("x", &format!("icon = {icon:?}\n")));
-        for bad in [
-            "/usr/share/icons/x.png",
-            "file:///x.png",
-            "https://example.org/x.png",
-            "../x",
-            "a b",
-            "",
-            &"i".repeat(65),
-        ] {
-            assert!(with(bad).is_err(), "{bad:?}");
-        }
+    fn pages_waiting_for_a_bus_name_show_only_with_an_owner() {
+        let tmp = tempfile::tempdir().unwrap();
+        let r = tmp.path();
+        write(r, "plain", &manifest("plain", ""));
+        write(
+            r,
+            "waits",
+            &manifest("waits", "[requires]\nbus_name = \"org.example.Daemon1\"\n"),
+        );
+        write(
+            r,
+            "system",
+            &manifest(
+                "system",
+                "[requires]\nbus_name = \"org.example.Sys1\"\n\
+                 [dbus]\nname = \"org.example.Sys1\"\npath = \"/\"\n\
+                 interface = \"org.example.Sys1\"\nbus = \"system\"\n",
+            ),
+        );
+        let (found, _) = scan(r, Path::new("/nonexistent"));
+        assert_eq!(ids(&found), ["plain", "system", "waits"]);
+        assert_eq!(ids(&shown(&found, |_, _| false)), ["plain"]);
         assert_eq!(
-            with("org.example.App_2-x").unwrap().icon,
-            "org.example.App_2-x"
+            ids(&shown(&found, |n, b| n == "org.example.Daemon1"
+                && b == Bus::Session)),
+            ["plain", "waits"]
+        );
+        assert_eq!(
+            ids(&shown(&found, |n, b| n == "org.example.Sys1" && b == Bus::System)),
+            ["plain", "system"]
         );
     }
 
     #[test]
+    fn shown_pages_keep_their_manifest() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(
+            tmp.path(),
+            "cmds",
+            &manifest(
+                "cmds",
+                "[[command]]\nid = \"status\"\nargv = [\"/usr/bin/true\"]\noutput = \"none\"\n",
+            ),
+        );
+        let (found, _) = scan(tmp.path(), Path::new("/nonexistent"));
+        let pages = set_shown(found);
+        assert_eq!(pages[0].id, "cmds");
+        assert_eq!(super::manifest("cmds").unwrap().commands[0].id, "status");
+        assert!(super::manifest("nope").is_none());
+        set_shown(Vec::new());
+        assert!(super::manifest("cmds").is_none());
+    }
+
+    /// Live discovery: a page installed while the app runs is posted, and so is its removal.
+    /// The only test that sets the plugin directory (it is process-wide).
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn installed_and_removed_pages_are_posted() {
+        let tmp = tempfile::tempdir().unwrap();
+        let pages = tmp.path().join("pages");
+        set_dir(pages.clone());
+        assert_eq!(dir(), pages.as_path());
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<Vec<String>>();
+        watch(&tokio::runtime::Handle::current(), move |p| {
+            let _ = tx.send(p.into_iter().map(|p| p.id).collect());
+        });
+        async fn next(rx: &mut tokio::sync::mpsc::UnboundedReceiver<Vec<String>>) -> Vec<String> {
+            tokio::time::timeout(std::time::Duration::from_secs(10), rx.recv())
+                .await
+                .expect("no update within 10 s")
+                .unwrap()
+        }
+        assert!(next(&mut rx).await.is_empty(), "nothing installed yet");
+
+        // The directory itself doesn't exist yet: installing the first page creates it.
+        let staged = tempfile::tempdir().unwrap();
+        write(staged.path(), "live", &manifest("live", ""));
+        fs::create_dir_all(&pages).unwrap();
+        fs::rename(staged.path().join("live"), pages.join("live")).unwrap();
+        assert_eq!(next(&mut rx).await, ["live"]);
+
+        fs::remove_dir_all(pages.join("live")).unwrap();
+        assert!(next(&mut rx).await.is_empty(), "removed");
+    }
+
+    #[test]
     fn a_missing_directory_is_no_plugins() {
-        let (pages, skipped) = scan(Path::new("/nonexistent/uq/pages"));
+        let (pages, skipped) = scan(Path::new("/nonexistent/uq/pages"), Path::new("/usr/bin"));
         assert!(pages.is_empty() && skipped.is_empty());
     }
 

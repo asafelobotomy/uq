@@ -1,0 +1,51 @@
+[Unit]
+Description=uQ settings helper (writes a few system files for uQ Settings)
+Documentation=https://github.com/asafelobotomy/uq
+
+# Started only by D-Bus activation (org.uq.SettingsHelper1); no [Install] section. It exits
+# after 30 s with no calls. Every method checks its own polkit action before it writes.
+[Service]
+Type=dbus
+BusName=org.uq.SettingsHelper1
+ExecStart=/usr/lib/uq/uq-settings-helper
+User=root
+UMask=0022
+
+# The only places it may write. A missing directory stays read-only (the leading '-'); the
+# package and tmpfiles.d create all three.
+ProtectSystem=strict
+ReadWritePaths=-/etc/systemd/logind.conf.d -/etc/uq -/var/lib/uq-greeter
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+DevicePolicy=closed
+PrivateNetwork=yes
+IPAddressDeny=any
+RestrictAddressFamilies=AF_UNIX
+PrivateIPC=yes
+KeyringMode=private
+
+# Root without any capability: every file and directory it writes is root-owned and 0755/0644,
+# so the owner permission bits are enough (no CAP_DAC_OVERRIDE, CAP_CHOWN or CAP_FOWNER). The
+# wallpaper fd arrives already open, so reading it needs no capability either.
+CapabilityBoundingSet=
+AmbientCapabilities=
+NoNewPrivileges=yes
+RestrictSUIDSGID=yes
+
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+ProcSubset=pid
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged
+SystemCallErrorNumber=EPERM
