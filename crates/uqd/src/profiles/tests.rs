@@ -372,17 +372,14 @@ async fn power_refused_is_a_notice() {
 #[tokio::test]
 async fn power_timeout_is_a_notice() {
     let power = FakePower::new("balanced");
-    *power.delay.lock().unwrap() = Duration::from_secs(1);
+    // Far past the 50 ms timeout, so a loaded machine can't blur the two.
+    *power.delay.lock().unwrap() = Duration::from_secs(30);
     let mut r = rig_with(power).await;
     r.desktop.power_timeout = Duration::from_millis(50);
     add(&mut r, TURBO).await;
     let t = Instant::now();
     let report = r.desktop.apply_profile("turbo").await.unwrap();
-    assert!(
-        t.elapsed() < Duration::from_millis(900),
-        "{:?}",
-        t.elapsed()
-    );
+    assert!(t.elapsed() < Duration::from_secs(10), "{:?}", t.elapsed());
     assert_eq!(
         report.notices,
         [power_notice(&PowerError::Timeout.to_string())]

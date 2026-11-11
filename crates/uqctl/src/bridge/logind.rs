@@ -860,7 +860,14 @@ mod tests {
 
     #[tokio::test]
     async fn stale_fallback_spares_next_sleeps_inhibitor() {
-        let mut r = rig().await;
+        // An 8 s fallback, so the windows below have seconds of slack on a loaded machine.
+        let (tx, rx) = mpsc::channel(16);
+        let fake = Fake {
+            delay_usec: Some(8_500_000),
+            ..Fake::default()
+        };
+        let mut r = rig_with(Logind::new(tx), rx, fake).await;
+        let fallback = Duration::from_millis(fallback_ms(Some(8_500_000)));
         let t1 = Instant::now();
         r.prepare(true).await;
         assert_eq!(r.next().await, sleeping(true));
@@ -874,7 +881,6 @@ mod tests {
         let t2 = Instant::now();
         r.prepare(true).await;
         assert_eq!(r.next().await, sleeping(true));
-        let fallback = Duration::from_millis(TEST_FALLBACK_MS);
         assert!(t2 - t1 < fallback, "sleep 2 starts inside sleep 1's window");
 
         // Past sleep 1's deadline (and before sleep 2's), the fresh inhibitor is still held.
@@ -885,7 +891,7 @@ mod tests {
             "sleep 1's timer must not release sleep 2's inhibitor"
         );
         // Sleep 2's own fallback releases it.
-        assert!(r.wait_closed(1, Duration::from_millis(1500)).await);
+        assert!(r.wait_closed(1, fallback).await);
         assert!(t2.elapsed() >= fallback - Duration::from_millis(50));
     }
 

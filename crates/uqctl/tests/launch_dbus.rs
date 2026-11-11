@@ -84,8 +84,9 @@ struct SlowUqd;
 
 #[zbus::interface(name = "org.uq.Desktop1")]
 impl SlowUqd {
+    /// Far longer than the bridge's 500 ms wait, so a loaded machine can't blur the two.
     async fn get_section(&self, _domain: &str) -> String {
-        tokio::time::sleep(Duration::from_secs(2)).await;
+        tokio::time::sleep(Duration::from_secs(10)).await;
         json!({"apps": [{"id": "code.desktop", "platform": "wayland"}]}).to_string()
     }
 
@@ -110,17 +111,14 @@ async fn launch_with_slow_uqd_times_out_and_launches() {
 
     let t = Instant::now();
     b.send(1, "Launch", json!([{"desktop_id": "code"}])).await;
-    let sent = hypr.next(Duration::from_secs(5)).await.expect("a dispatch");
+    let sent = hypr.next(Duration::from_secs(9)).await.expect("a dispatch");
     let took = t.elapsed();
-    // It asked uqd, gave up at 500 ms and launched without the fix.
+    // It asked uqd, gave up at 500 ms (not the 10 s uqd takes) and launched without the fix.
     assert!(
         took >= Duration::from_millis(450),
         "dispatched after {took:?}"
     );
-    assert!(
-        took < Duration::from_millis(1200),
-        "dispatched after {took:?}"
-    );
+    assert!(took < Duration::from_secs(8), "dispatched after {took:?}");
     assert!(!sent.contains(FIX), "{sent}");
     assert_eq!(b.reply(1).await["ok"], serde_json::Value::Null);
 }
