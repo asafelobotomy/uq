@@ -350,9 +350,11 @@ enum Request {
     ApplyProfile(String),
     ProfileOff,
     PickDone(String, String),
-    /// The bridge's own calls; the shell can't make them (`handle()` doesn't pass them on).
+    /// The bridge's own calls; the shell can't make them (`handle()` doesn't pass them on;
+    /// `GetWelcome` reaches the shell only inside `Hello` and `WelcomeStatus`).
     GetSection(String),
     ShellReady,
+    GetWelcome,
 }
 
 fn string_arg(args: &[Value], i: usize, what: &str) -> Result<String, String> {
@@ -383,6 +385,7 @@ impl Request {
             "ListProfiles" => (0, Request::ListProfiles),
             "ProfileOff" => (0, Request::ProfileOff),
             "ShellReady" => (0, Request::ShellReady),
+            "GetWelcome" => (0, Request::GetWelcome),
             "GetSection" => {
                 arity(call, args, 1)?;
                 (1, Request::GetSection(string_arg(args, 0, "domain")?))
@@ -509,6 +512,10 @@ impl Request {
                 serde_json::from_str(&s).map_err(|e| format!("bad section: {e}"))
             }
             Request::ShellReady => unit(proxy.call("ShellReady", &()).await),
+            Request::GetWelcome => {
+                let s: String = proxy.call("GetWelcome", &()).await.map_err(describe)?;
+                serde_json::from_str(&s).map_err(|e| format!("bad welcome status: {e}"))
+            }
         }
     }
 }

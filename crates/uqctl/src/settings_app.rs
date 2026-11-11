@@ -8,7 +8,7 @@ const APP: &str = "uq-settings";
 
 /// Show the page on the running instance; when there is none, call `spawn` with the argv of a
 /// fresh one.
-async fn open(
+pub(crate) async fn open(
     conn: &zbus::Connection,
     page: &str,
     setting: &str,
@@ -31,7 +31,7 @@ async fn open(
 }
 
 /// Start the app in its own process group, so it outlives uqctl, with no stdio. Never waited on.
-fn spawn_detached(argv: &[String]) -> std::io::Result<()> {
+pub(crate) fn spawn_detached(argv: &[String]) -> std::io::Result<()> {
     Command::new(&argv[0])
         .args(&argv[1..])
         .stdin(Stdio::null())
@@ -43,7 +43,7 @@ fn spawn_detached(argv: &[String]) -> std::io::Result<()> {
 }
 
 /// Like every other uqctl command, never hang a keybind: give up after `limit`.
-async fn within<T>(
+pub(crate) async fn within<T>(
     limit: std::time::Duration,
     fut: impl std::future::Future<Output = Result<T, String>>,
 ) -> Result<T, String> {

@@ -14,11 +14,13 @@ async fn bridge_forwards_set_theme() {
     let bus = private_bus();
     let dir = tempfile::tempdir().unwrap();
     let _uqd = serve_uqd(&bus, dir.path()).await;
-    let mut b = Bridge::start(&bus);
+    let run = dir.path().join("run");
+    let mut b = Bridge::start_with_env(&bus, &[("XDG_RUNTIME_DIR", run.as_os_str())]);
     let hello = b.next().await;
     assert_eq!(
         hello,
-        json!({"v":1,"event":"Hello","data":{"v":1,"uqd_up":true,"locked":false}})
+        json!({"v":1,"event":"Hello","data":{"v":1,"uqd_up":true,"locked":false,
+            "welcome_pending":true,"welcome_deferred":false}})
     );
 
     // Signal and reply race (uqd may emit inside the method), so do not assume an order.
@@ -354,4 +356,68 @@ async fn bridge_calls_shell_ready_after_first_request() {
     assert_eq!(r["err"], "unknown call GetSection");
     tokio::time::sleep(Duration::from_millis(200)).await;
     assert_eq!(ready_calls(&uqd).await, 2);
+}
+
+/// `Hello` says whether Welcome is due and whether bindle's defer file holds it back;
+/// `WelcomeStatus` asks again (spec §5.1–5.2).
+#[tokio::test]
+async fn bridge_reports_welcome_status() {
+    let bus = private_bus();
+    let dir = tempfile::tempdir().unwrap();
+    let uqd = serve_uqd(&bus, dir.path()).await;
+    let run = dir.path().join("run");
+    let defer = uq_core::welcome::defer_path(&run);
+    std::fs::create_dir_all(defer.parent().unwrap()).unwrap();
+    std::fs::write(&defer, "").unwrap();
+
+    let mut b = Bridge::start_with_env(&bus, &[("XDG_RUNTIME_DIR", run.as_os_str())]);
+    let hello = b.next().await;
+    assert_eq!(hello["data"]["welcome_pending"], true, "{hello}");
+    assert_eq!(hello["data"]["welcome_deferred"], true, "{hello}");
+
+    // bindle hands off: the file goes, and Welcome is marked done once shown.
+    std::fs::remove_file(&defer).unwrap();
+    assert_eq!(
+        b.call(1, "WelcomeStatus", json!([])).await["ok"],
+        json!({"pending": true, "deferred": false})
+    );
+    let proxy = uq_core::client::DesktopProxy::new(&uqd).await.unwrap();
+    proxy
+        .set_welcome_done(uq_core::welcome::CURRENT_WELCOME_VERSION)
+        .await
+        .unwrap();
+    assert_eq!(
+        b.call(2, "WelcomeStatus", json!([])).await["ok"],
+        json!({"pending": false, "deferred": false})
+    );
+    // A stale file (a crashed bindle) is ignored.
+    std::fs::write(&defer, "").unwrap();
+    std::fs::File::options()
+        .write(true)
+        .open(&defer)
+        .unwrap()
+        .set_modified(std::time::SystemTime::now() - Duration::from_secs(31 * 60))
+        .unwrap();
+    assert_eq!(
+        b.call(3, "WelcomeStatus", json!([])).await["ok"]["deferred"],
+        false
+    );
+    let bad = b.call(4, "WelcomeStatus", json!([1])).await;
+    assert!(bad["err"].is_string(), "{bad}");
+}
+
+/// uqd isn't up at `Hello`: Welcome's status is unknown (null), never "not due".
+#[tokio::test]
+async fn bridge_hello_without_uqd_leaves_welcome_unknown() {
+    let bus = private_bus();
+    let dir = tempfile::tempdir().unwrap();
+    let run = dir.path().join("run");
+    let mut b = Bridge::start_with_env(&bus, &[("XDG_RUNTIME_DIR", run.as_os_str())]);
+    let hello = b.next().await;
+    assert_eq!(hello["data"]["uqd_up"], false, "{hello}");
+    assert_eq!(hello["data"]["welcome_pending"], Value::Null, "{hello}");
+    assert_eq!(
+        b.call(1, "WelcomeStatus", json!([])).await["ok"],
+        json!({"pending": null, "deferred": false})
+    );
 }
