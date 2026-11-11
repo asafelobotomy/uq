@@ -7,6 +7,8 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0-rc.1] - 2026-11-11
+
 ### Added
 
 - **Settings pages: longer D-Bus deadlines for writes that may ask for a password.** A page's
