@@ -232,6 +232,8 @@ impl ThemesState {
         let Some(session) = session else {
             return Err(failure("There's no theme to save."));
         };
+        // A draft that can't be saved is refused before uqd is asked anything.
+        editor::to_file(&session, draft, &[]).map_err(failure)?;
         let taken = Self::user_ids(proxy).await?;
         let (text, replace) = editor::to_file(&session, draft, &taken).map_err(failure)?;
         let id = proxy.import_theme(&text, replace, false, ORIGIN).await?;

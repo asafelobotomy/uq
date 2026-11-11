@@ -298,6 +298,13 @@ QQC2.ScrollView {
             detail: am.error
             Layout.fillWidth: true
         }
+        ErrorCard {
+            objectName: "themeError"
+            visible: tm.error !== "" && !themeEditor.opened
+            title: "That theme change wasn't made"
+            detail: tm.error
+            Layout.fillWidth: true
+        }
 
         UqLabel {
             text: "Theme"

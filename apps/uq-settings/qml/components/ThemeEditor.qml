@@ -34,7 +34,7 @@ Kirigami.Dialog {
     property var colors: ({ dark: {}, light: {} })
     /// "dark" or "light": the tab that is open, and the one the preview shows.
     property string variant: "dark"
-    property var result: ({
+    property var previewResult: ({
         dark: { tokens: {}, problems: [] },
         light: { tokens: {}, problems: [] },
         ok: false,
@@ -45,9 +45,9 @@ Kirigami.Dialog {
     property bool saving: false
     /// Why the last Save didn't happen, as plain text ("" for none).
     property string saveError
-    readonly property var shown: result[variant] || { tokens: {}, problems: [] }
-    readonly property var otherShown: result[variant === "dark" ? "light" : "dark"] || { problems: [] }
-    readonly property bool saveEnabled: canSave && !saving && result.ok === true
+    readonly property var shown: previewResult[variant] || { tokens: {}, problems: [] }
+    readonly property var otherShown: previewResult[variant === "dark" ? "light" : "dark"] || { problems: [] }
+    readonly property bool saveEnabled: canSave && !saving && previewResult.ok === true
     readonly property alias body: body
     readonly property alias nameField: nameBox
     readonly property alias authorField: authorBox
@@ -98,10 +98,10 @@ Kirigami.Dialog {
         if (typeof editor.preview !== "function")
             return;
         try {
-            editor.result = JSON.parse(editor.preview(editor.draftJson()));
+            editor.previewResult = JSON.parse(editor.preview(editor.draftJson()));
         } catch (e) {
             // Unreadable: nothing can be saved.
-            editor.result = Object.assign({}, editor.result, { ok: false });
+            editor.previewResult = Object.assign({}, editor.previewResult, { ok: false });
         }
     }
     /// A colour from the chooser as `#rrggbb`.
@@ -177,8 +177,8 @@ Kirigami.Dialog {
         }
         UqLabel {
             objectName: "nameProblem"
-            visible: String(editor.result.nameProblem || "") !== ""
-            text: String(editor.result.nameProblem || "")
+            visible: String(editor.previewResult.nameProblem || "") !== ""
+            text: String(editor.previewResult.nameProblem || "")
             wrapMode: Text.Wrap
             color: Kirigami.Theme.negativeTextColor
             Layout.fillWidth: true
@@ -196,8 +196,8 @@ Kirigami.Dialog {
         }
         UqLabel {
             objectName: "authorProblem"
-            visible: String(editor.result.authorProblem || "") !== ""
-            text: String(editor.result.authorProblem || "")
+            visible: String(editor.previewResult.authorProblem || "") !== ""
+            text: String(editor.previewResult.authorProblem || "")
             wrapMode: Text.Wrap
             color: Kirigami.Theme.negativeTextColor
             Layout.fillWidth: true
@@ -272,6 +272,7 @@ Kirigami.Dialog {
                             Binding {
                                 target: hexBox
                                 property: "text"
+                restoreMode: Binding.RestoreNone
                                 value: colorRow.hex
                                 when: !hexBox.activeFocus
                             }
