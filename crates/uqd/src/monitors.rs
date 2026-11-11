@@ -228,10 +228,6 @@ impl Desktop {
         self.after_window().await;
     }
 
-    /// The change window just closed (kept, reverted or expired). Runs a screen change that
-    /// was held meanwhile (R9); Task 8 gives this its body.
-    pub(crate) async fn after_window(&mut self) {}
-
     /// After anything reloads Hyprland during a window, apply the candidate again, or the
     /// reload would quietly revert it early.
     pub(crate) async fn reapply_pending(&self) {
@@ -273,7 +269,11 @@ impl Desktop {
             .await
             .map(|j| parse_live(&j))
             .unwrap_or_default();
-        let mut out = crate::outputs::outputs_json(&self.state, &live, None);
+        let mut out = crate::outputs::outputs_json(
+            &self.state,
+            &live,
+            self.hotplug.notified.iter().next().map(String::as_str),
+        );
         out["pending"] = self.pending.as_ref().map_or(serde_json::Value::Null, |p| {
             serde_json::json!({
                 "token": p.token,

@@ -47,11 +47,15 @@ impl Desktop {
                     "displays change through ApplyMonitors".into(),
                 ));
             }
-            if new.primary != old.primary || new.workspaces != old.workspaces {
+            let primary_changed = new.primary != old.primary;
+            if primary_changed || new.workspaces != old.workspaces {
                 // These change the rendered config, and `commit_section` never reloads.
                 self.write_monitors(next, origin).await?;
             } else {
                 self.commit_section(domain, next, origin).await?;
+            }
+            if primary_changed {
+                self.sync_x11_primary_now().await;
             }
             let _ = self.events.send(Event::MonitorsChanged);
             return Ok(());

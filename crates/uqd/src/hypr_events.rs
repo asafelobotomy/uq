@@ -174,10 +174,5 @@ pub async fn run(shared: SharedDesktop, path: PathBuf) {
     }
 }
 
-impl crate::service::Desktop {
-    /// The screens changed (`added`: one came). Task 8 gives this its body.
-    pub(crate) async fn outputs_changed(&mut self, _added: bool) {}
-}
-
 #[cfg(test)]
 mod tests;

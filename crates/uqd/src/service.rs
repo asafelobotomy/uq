@@ -147,6 +147,12 @@ pub struct Desktop {
     pub(crate) user_themes: uq_core::theme::user::Fingerprint,
     /// The theme folders the last scan left out, and why.
     pub(crate) skipped_themes: Vec<uq_core::theme::user::Skipped>,
+    /// Says things to the user on its own (a skipped display arrangement); silent until `main`.
+    pub(crate) notifier: Arc<dyn crate::notify::Notifier>,
+    /// Tells X11 apps which display is the main one; does nothing until `main` gives it a binary.
+    pub(crate) xrandr: Arc<dyn crate::xrandr::Xrandr>,
+    /// What the screen-change matcher remembers between events.
+    pub(crate) hotplug: crate::hotplug::HotplugState,
 }
 
 /// `explain`'s dotted key as a profile path.
@@ -280,6 +286,9 @@ impl Desktop {
             files: FileReport::default(),
             user_themes: Vec::new(),
             skipped_themes: Vec::new(),
+            notifier: Arc::new(crate::notify::NoNotifier),
+            xrandr: Arc::new(crate::xrandr::NoXrandr),
+            hotplug: Default::default(),
         };
         // The user's themes first, so a saved `user-…` theme survives a restart.
         desktop.load_user_themes();
@@ -296,6 +305,28 @@ impl Desktop {
             desktop.state.theme = State::default().theme;
         }
         Ok(desktop)
+    }
+
+    /// Say things through `n` instead of nowhere (the session bus in `main`, a fake in tests).
+    pub fn with_notifier(mut self, n: Arc<dyn crate::notify::Notifier>) -> Self {
+        self.notifier = n;
+        self
+    }
+
+    /// Set the notifier once the session connection exists (`main`, after `serve_with`).
+    pub fn set_notifier(&mut self, n: Arc<dyn crate::notify::Notifier>) {
+        self.notifier = n;
+    }
+
+    /// Set the X11 main display through `x` instead of not at all.
+    pub fn with_xrandr(mut self, x: Arc<dyn crate::xrandr::Xrandr>) -> Self {
+        self.xrandr = x;
+        self
+    }
+
+    /// [`with_xrandr`](Self::with_xrandr) for a desktop that is already shared.
+    pub fn set_xrandr(&mut self, x: Arc<dyn crate::xrandr::Xrandr>) {
+        self.xrandr = x;
     }
 
     /// Use `p` for power modes instead of none (the system's service in `main`, a fake in tests).
@@ -967,7 +998,8 @@ impl Desktop {
         let old = std::mem::replace(&mut self.state, next);
         self.sync_files(&old);
         // A schedule tick keeps the last entry ids, so it never moves the undo target.
-        if origin == Origin::Schedule {
+        // A hotplug switch is automatic, like a schedule flip: never journalled, no restore point.
+        if matches!(origin, Origin::Schedule | Origin::Hotplug) {
             return Ok(());
         }
         self.last_entry_ids.clear();

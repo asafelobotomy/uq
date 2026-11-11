@@ -35,6 +35,7 @@ optdepends=(
   'greetd: the uQ login screen (run0 uqctl greeter enable)'
   'networkmanager-openvpn: OpenVPN connections on the Network settings page'
   'sound-theme-freedesktop: the test sound on the Sound settings page'
+  'xorg-xrandr: tells X11 apps which display is the main one'
 )
 # Keep !lto: rustc links with lld, and makepkg's LTO flags make the cxx-qt C++ objects unreadable to it.
 options=(!lto)
