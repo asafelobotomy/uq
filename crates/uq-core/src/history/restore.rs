@@ -97,7 +97,7 @@ impl RestoreStore {
         now: i64,
     ) -> io::Result<RestorePoint> {
         let id = loop {
-            let id = format!("{:010}-{:06x}", now.max(0), random_suffix());
+            let id = format!("{:010}-{:06x}", now.max(0), self.next_suffix(now));
             if !self.state_path(&id).exists() && !self.meta_path(&id).exists() {
                 break id;
             }
@@ -114,7 +114,31 @@ impl RestoreStore {
         Ok(point)
     }
 
-    /// All points, newest first. Unreadable metadata is skipped.
+    /// The suffix for a new point saved at `now`. Points of the same second are listed by id,
+    /// so a later one gets a larger suffix than any already there (a restore saves its
+    /// "before" point in the same second as the point being restored, and it must list first).
+    /// The first point of a second gets a random one in the lower half, which leaves room.
+    fn next_suffix(&self, now: i64) -> u32 {
+        let prefix = format!("{:010}-", now.max(0));
+        let max = std::fs::read_dir(&self.dir)
+            .into_iter()
+            .flatten()
+            .filter_map(Result::ok)
+            .filter_map(|e| {
+                let name = e.file_name().to_string_lossy().into_owned();
+                let hex = name.strip_prefix(&prefix)?.split('.').next()?.to_owned();
+                u32::from_str_radix(&hex, 16).ok()
+            })
+            .max();
+        match max {
+            Some(m) if m < 0x00ff_ffff => m + 1,
+            Some(_) => random_suffix(),
+            None => random_suffix() & 0x007f_ffff,
+        }
+    }
+
+    /// All points, newest first (by time, then by id within a second). Unreadable metadata is
+    /// skipped.
     pub fn list(&self) -> Vec<RestorePoint> {
         let Ok(rd) = std::fs::read_dir(&self.dir) else {
             return Vec::new();
@@ -195,6 +219,24 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let s = RestoreStore::open(dir.path().join("restore"));
         (dir, s)
+    }
+
+    #[test]
+    fn points_of_one_second_list_newest_first() {
+        let (_d, s) = store();
+        let state = State::default();
+        let ids: Vec<String> = (0..20)
+            .map(|i| {
+                s.save(&state, &format!("p{i}"), PointKind::Manual, 1_700_000_000)
+                    .unwrap()
+                    .id
+            })
+            .collect();
+        let listed: Vec<String> = s.list().into_iter().map(|p| p.id).collect();
+        let mut want = ids.clone();
+        want.reverse();
+        assert_eq!(listed, want);
+        assert!(ids.iter().all(|id| valid_id(id)));
     }
 
     #[test]

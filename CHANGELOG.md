@@ -136,6 +136,11 @@ All notable changes to uQ are listed here. The format follows
   layout, every file, the plain-text rule, that each command's program exists).
 - **Launcher providers can be started on demand.** A `.provider` file may say
   `Activatable=true` (read now; starting such providers when the launcher opens comes next).
+- **`uq-tokens` for web apps.** A small JavaScript module and CSS file (`web/uq-tokens/`) that
+  Tauri, Electron and browser apps copy in to follow the uQ theme: colours, rounding, gaps and
+  fonts become `--uq-*` CSS properties and update live when the theme changes. Bad values are
+  ignored, and without uQ the app's own theme applies. The README has the Tauri and Electron
+  recipes and a version check for vendored copies.
 
 ### Changed
 
@@ -145,6 +150,11 @@ All notable changes to uQ are listed here. The format follows
   After an upgrade Hyprland shows its own default animations until `uqd` re-renders
   `generated.lua` (restart `uqd` or change any setting). `hl.animation` calls in `user.lua`
   still win.
+
+### Fixed
+
+- **Restore points saved in the same second list newest first.** They used to sort by a
+  random suffix, so "the newest point" could be an older one.
 
 ## [0.2.1] - 2026-11-10
 

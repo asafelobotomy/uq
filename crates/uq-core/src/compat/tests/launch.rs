@@ -321,3 +321,26 @@ fn override_text_refuses_source_without_exec() {
         assert!(msg.contains("no command"), "{msg}");
     }
 }
+
+#[test]
+fn override_text_keeps_flatpak_markers_after_the_options() {
+    let fix = one_fix(
+        json!({"id": "org.chromium.Chromium.desktop", "platform": "wayland",
+        "args": ["--y"]}),
+    );
+    let src = "[Desktop Entry]\nExec=/usr/bin/flatpak run --branch=stable \
+               --command=chromium --file-forwarding org.chromium.Chromium @@u %U @@\n";
+    let text = override_text(
+        src,
+        "/var/lib/flatpak/exports/share/applications/org.chromium.Chromium.desktop",
+        &fix,
+        "org.chromium.Chromium.desktop",
+    )
+    .unwrap()
+    .unwrap();
+    let line = exec_lines(&text)[0];
+    assert!(
+        line.ends_with("org.chromium.Chromium --y @@u %U @@"),
+        "{line}"
+    );
+}
