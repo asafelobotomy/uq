@@ -40,3 +40,34 @@ outputs where possible. Tick each item.
   override goes back to the general value.
 - [ ] **No xkeyboard-config list:** with `/usr/share/X11/xkb/rules/evdev.lst` missing, the page
   offers a layout code field instead of the list.
+
+## VM run (2026-11-11)
+
+Run in the `tests/vm` guest with two outputs (`UQVM_GPU2="bochs-display,xres=1280,yres=800"`,
+uq at this branch, Hyprland v0.57.2, Quickshell 0.3.2), by the new `checks/40-displays.sh` and
+`checks/50-input.sh` plus two manual reboots:
+
+```
+UQVM_GPU2="bochs-display,xres=1280,yres=800" tests/vm/run.sh --only '^(D|I)'
+```
+
+**Result: 18 PASS of 18, plus both reboot checks.** The 15 s is timed inside the guest
+(`guest/uq-revert-timer`): every automatic revert came 15.1 to 15.3 s after the change went live.
+
+- **Bug found and fixed here:** the window started when `ApplyMonitors` arrived, before the
+  config check and the eval. In the VM an apply took up to 18.6 s, which left the new layout on
+  screen for 1 s. It now starts when the change is live (uqd, `apply_monitors`).
+- Blackout (D1), revert (D1b), only output off (D2), crash (D3), uqd SIGKILL (D4), second apply
+  (D7), mirror and on/off (D8), scale 1.25/1.5 at 1920x1080 and 1920x1440 (D9), VRR accepted
+  (D10), gaps during the window (D11), Keep then History/Undo (D14), `eval` without a save (D15):
+  PASS. Reboot during the window came back on the old layout; Keep then reboot came back on the
+  new one.
+- Keyboard layouts, combo, reorder and remove (I1), repeat values (I2), `uqctl mouse speed -0.5`
+  on the open Input page (I3), touchpad options (I4), per-device override (I5), and the layout
+  code field without `evdev.lst` (I6, screenshot): PASS.
+- **Hyprland snaps scales:** 1.5 on a 1280x800 output runs at 1.6 (Hyprland only takes scales
+  that divide the mode evenly). uQ stores 1.5.
+- **Not covered in the VM, still for real hardware:** a mode the panel truly can't show (the VM
+  falls back to a mode it has), VRR actually on, a 4K panel, how the 250 ms repeat feels, real
+  touchpad gestures, and dragging in the arrangement and Escape/Enter in the live dialog (both
+  covered offscreen by `tst_display_arrangement.qml` and `tst_revert_dialog.qml`).

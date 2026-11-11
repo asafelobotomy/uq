@@ -1,0 +1,41 @@
+#!/bin/bash
+# Installed in the guest as /usr/local/bin/uq-revert-timer by the Displays checks.
+#   uq-revert-timer JSON [TIMEOUT_S]
+# Applies JSON through uqd (ApplyMonitors), then polls `hyprctl monitors all -j` every 0.1 s until
+# the live layout is the one from before the apply. Prints one JSON line:
+#   {"reply": <busctl output>, "returned_ms": N, "live_ms": N|null, "back_ms": N|null}
+# Times are milliseconds since the call was sent; timing here, not over ssh, keeps them honest.
+# A candidate Hyprland can't show may leave the layout as it was; then back_ms is when uqd stops
+# reporting a pending change.
+ms() { echo $(($(date +%s%N) / 1000000)); }
+sig() { hyprctl monitors all -j 2>/dev/null | jq -c '[.[]|{name,width,height,x,y,scale,disabled,mirrorOf,transform}]' 2>/dev/null; }
+pending() {
+    busctl --user call org.uq.Desktop1 /org/uq/Desktop1 org.uq.Desktop1 ListOutputs 2>/dev/null |
+        sed 's/^s //' | jq -r 'fromjson | .pending' 2>/dev/null
+}
+before=""
+while [ -z "$before" ]; do before=$(sig); done
+t0=$(ms)
+reply=$(busctl --user call org.uq.Desktop1 /org/uq/Desktop1 org.uq.Desktop1 ApplyMonitors s "$1" 2>&1)
+returned=$(($(ms) - t0))
+live=null back=null
+limit=$((${2:-35} * 1000))
+if [[ $reply == s\ * ]]; then
+    while [ $(($(ms) - t0)) -lt "$limit" ]; do
+        s=$(sig)
+        if [ -n "$s" ]; then
+            if [ "$s" != "$before" ] && [ "$live" = null ]; then live=$(($(ms) - t0)); fi
+            if [ "$s" = "$before" ] && [ "$live" != null ]; then
+                back=$(($(ms) - t0))
+                break
+            fi
+            if [ "$live" = null ] && [ $(($(ms) - t0)) -gt 3000 ] && [ "$(pending)" = null ]; then
+                back=$(($(ms) - t0))
+                break
+            fi
+        fi
+        sleep 0.1
+    done
+fi
+jq -cn --arg reply "$reply" --argjson r "$returned" --argjson l "$live" --argjson b "$back" \
+    '{reply: $reply, returned_ms: $r, live_ms: $l, back_ms: $b}'
