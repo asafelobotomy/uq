@@ -53,7 +53,7 @@ const FALLBACK_TERMINAL: [&str; 2] = ["kitty", "-e"];
 /// (none chosen, not installed, hidden, `TryExec` missing, bad `Exec`, or itself a terminal
 /// app) gives `kitty -e`: a launch is never refused over the terminal. Nothing here goes
 /// through a shell.
-fn terminal_prefix(dirs: &Dirs, terminal: Option<&str>) -> Vec<String> {
+pub(crate) fn terminal_prefix(dirs: &Dirs, terminal: Option<&str>) -> Vec<String> {
     let fallback = || FALLBACK_TERMINAL.map(String::from).to_vec();
     let Some(id) = terminal.filter(|t| valid_pinned_id(t)) else {
         return fallback();

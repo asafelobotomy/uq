@@ -168,6 +168,24 @@ All notable changes to uQ are listed here. The format follows
     other line in it stays.
   - **About:** the computer's name (editable), system, kernel, processor, graphics, memory, and
     the uQ, Hyprland and Quickshell versions.
+  `Activatable=true`. When Spotlight or the app menu opens, uQ asks the session bus to start each
+  such provider that isn't running (at most once every 30 seconds each, never while you type), so
+  a provider no longer has to run all the time. Results still come only from running providers,
+  so the first keystrokes after a cold start may miss them.
+- **Widgets from other apps.** An app can add a small widget to the bar (an icon in the Status
+  island; up to four, the rest under a "…" button) or a tile to a new **Apps** group at the bottom
+  of quick settings, by installing a folder to `/usr/share/uq/shell/widgets/`. Widgets appear
+  and go a second or two after their package is installed or removed, without logging out, and
+  only while what they need (a program, a running service) is there. A widget that fails to load
+  or breaks is hidden on its own and tried again a minute later; it never takes the bar down. A
+  widget can only call the D-Bus methods and run the commands its `widget.toml` lists.
+- **App actions.** Right-clicking an app in Spotlight or the app menu lists actions other apps
+  added for it, such as "Uninstall…" or "Check for update". The action runs as its file says,
+  in your terminal when it asks for one; the clicked app's id is the only thing filled in.
+- **Writing integrations.** `docs/integrating.md` covers all four ways an app can plug into uQ
+  (theme, settings page, widget, launcher provider and app actions), what uQ checks, and a
+  checklist for each. New templates: `templates/widget/` and `templates/provider/` (a small Rust
+  launcher provider that quits after a minute without use).
 
 ### Changed
 

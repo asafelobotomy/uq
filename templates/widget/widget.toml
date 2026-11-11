@@ -1,0 +1,31 @@
+# A uQ widget. Copy this folder to your app's uq/widgets/<id>/ and rename <id> everywhere.
+# Installed to /usr/share/uq/shell/widgets/<id>/ by your app's package.
+# Reference: docs/integrating.md in the uQ repository.
+uq_api = 1
+id = "example"            # [a-z0-9-]{1,40}, must equal the folder name
+name = "Example"          # shown in Settings and in the "…" list
+slot = "bar"              # "bar": an icon in the Status island; "quick": a quick-settings tile
+qml = "Widget.qml"        # a file in this folder
+order = 50                # 0-100; ties break on id
+
+# Show the widget only while these hold (both optional).
+[requires]
+bins = ["example"]                    # /usr/bin/example must exist
+# bus_name = "org.example.Example1"   # ...and this name must have an owner
+
+# What ctx.dbus may reach (optional). Only these members, on this one object.
+# [dbus]
+# name = "org.example.Example1"
+# path = "/org/example/Example1"
+# interface = "org.example.Example1"
+# methods = ["Pause", "Resume"]
+# properties = ["ActiveCount"]
+# signals = ["Finished"]
+# bus = "session"                     # or "system"
+
+# What ctx.command.run() may run. argv[0] lives in /usr/bin or /usr/lib; no shell is involved.
+[[command]]
+id = "status"
+argv = ["/usr/bin/example", "status", "--json"]
+output = "json"           # "json" | "text" | "none"
+timeout_ms = 3000         # default 10000, at most 600000

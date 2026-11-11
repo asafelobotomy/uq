@@ -23,6 +23,9 @@ pub fn private_bus() -> Bus {
 
 pub struct Bridge {
     pub child: Child,
+    /// The integration root (`--root`) when the test didn't give one: empty, so nothing under
+    /// `/usr/share/uq` on the test machine leaks in.
+    _root: Option<tempfile::TempDir>,
     pub stdin: Option<ChildStdin>,
     pub out: BufReader<ChildStdout>,
     /// Events that arrived while waiting for a reply; signals and replies race.
@@ -35,8 +38,23 @@ impl Bridge {
     }
 
     pub fn start_with_env(bus: &Bus, env: &[(&str, &std::ffi::OsStr)]) -> Bridge {
+        let root = tempfile::tempdir().unwrap();
+        let mut b = Bridge::start_with_root(bus, env, root.path());
+        b._root = Some(root);
+        b
+    }
+
+    /// Start a bridge reading widgets, app actions and providers from `root` (laid out like
+    /// `/usr/share/uq`).
+    pub fn start_with_root(
+        bus: &Bus,
+        env: &[(&str, &std::ffi::OsStr)],
+        root: &std::path::Path,
+    ) -> Bridge {
         let mut child = Command::new(env!("CARGO_BIN_EXE_uqctl"))
             .arg("bridge")
+            .arg("--root")
+            .arg(root)
             .envs(env.iter().copied())
             .env("DBUS_SESSION_BUS_ADDRESS", &bus.address)
             // The private bus has no logind: the bridge never touches the real system bus.
@@ -47,7 +65,11 @@ impl Bridge {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             // Its expected "logind unavailable" and "lock-notify off" lines would clutter test output.
-            .stderr(Stdio::null())
+            .stderr(if std::env::var_os("UQ_TEST_STDERR").is_some() {
+                Stdio::inherit()
+            } else {
+                Stdio::null()
+            })
             .kill_on_drop(true)
             .spawn()
             .unwrap();
@@ -55,6 +77,7 @@ impl Bridge {
         let out = BufReader::new(child.stdout.take().unwrap());
         Bridge {
             child,
+            _root: None,
             stdin,
             out,
             events: Default::default(),
