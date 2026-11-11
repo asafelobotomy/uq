@@ -18,6 +18,7 @@ mod app;
 mod appearance_model;
 mod compat_model;
 mod datetime_model;
+mod defaultapps_model;
 mod desktop_entries;
 mod displays_model;
 mod history_model;

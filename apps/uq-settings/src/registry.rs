@@ -712,6 +712,46 @@ static REGION_SETTINGS: [SearchEntry; 3] = [
     ),
 ];
 
+static DEFAULT_APPS_SETTINGS: [SearchEntry; 9] = [
+    entry(
+        "default-browser",
+        "Web browser",
+        &["browser", "internet", "links", "web"],
+    ),
+    entry("default-mail", "Email", &["mail", "email", "mailto"]),
+    entry(
+        "default-files",
+        "Files",
+        &["file manager", "folders", "directory"],
+    ),
+    entry("default-text", "Text editor", &["text", "editor", "notes"]),
+    entry(
+        "default-images",
+        "Pictures",
+        &["image viewer", "photos", "images"],
+    ),
+    entry(
+        "default-video",
+        "Videos",
+        &["video player", "movies", "film"],
+    ),
+    entry(
+        "default-music",
+        "Music",
+        &["audio player", "songs", "music player"],
+    ),
+    entry(
+        "default-pdf",
+        "PDF documents",
+        &["pdf", "document viewer", "reader"],
+    ),
+    entry(
+        "default-terminal",
+        "Terminal",
+        &["terminal", "console", "command line", "shell"],
+    ),
+];
+
 static ABOUT_SETTINGS: [SearchEntry; 2] = [
     entry(
         "hostname",
@@ -736,7 +776,7 @@ static ABOUT_SETTINGS: [SearchEntry; 2] = [
     ),
 ];
 
-static CORE_PAGES: [PageInfo; 17] = [
+static CORE_PAGES: [PageInfo; 18] = [
     PageInfo {
         id: "appearance",
         name: "Appearance",
@@ -879,6 +919,15 @@ static CORE_PAGES: [PageInfo; 17] = [
         category: Category::System,
         qml: "pages/RegionPage.qml",
         settings: &REGION_SETTINGS,
+        domains: &[],
+    },
+    PageInfo {
+        id: "default-apps",
+        name: "Default apps",
+        icon: "preferences-desktop-default-applications",
+        category: Category::System,
+        qml: "pages/DefaultAppsPage.qml",
+        settings: &DEFAULT_APPS_SETTINGS,
         domains: &[],
     },
     PageInfo {
@@ -1227,6 +1276,7 @@ mod tests {
                 "login-screen",
                 "datetime",
                 "region",
+                "default-apps",
                 "about"
             ]
         );
@@ -1441,5 +1491,17 @@ mod tests {
         drop_unavailable(&mut pages, false);
         assert!(!pages.iter().any(|p| p.id == "login-screen"));
         assert!(pages.iter().any(|p| p.id == "users"));
+    }
+
+    #[test]
+    fn default_apps_rows_match_the_kinds() {
+        let page = find("default-apps").unwrap();
+        let mut ids: Vec<String> = crate::pages::defaultapps::KINDS
+            .iter()
+            .map(|k| format!("default-{}", k.id))
+            .collect();
+        ids.push("default-terminal".into());
+        let listed: Vec<String> = page.settings.iter().map(|s| s.id.to_string()).collect();
+        assert_eq!(listed, ids);
     }
 }

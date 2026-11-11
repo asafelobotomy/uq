@@ -4,6 +4,7 @@ pub mod about;
 pub mod appearance;
 pub mod compat;
 pub mod datetime;
+pub mod defaultapps;
 pub mod displays;
 #[cfg(test)]
 pub mod fake_system;

@@ -275,3 +275,16 @@ fn valid_override_source_checks_dir_and_id() {
         None
     );
 }
+
+#[test]
+fn mime_types_are_listed() {
+    let e = read_entry(
+        "[Desktop Entry]\nType=Application\nName=Viewer\nMimeType=image/png;image/jpeg;\n[Desktop Action x]\nMimeType=text/plain;\n",
+    );
+    assert_eq!(e.mime_types, ["image/png", "image/jpeg"]);
+    assert!(
+        read_entry("[Desktop Entry]\nName=A\n")
+            .mime_types
+            .is_empty()
+    );
+}
