@@ -19,6 +19,8 @@ const UNSAFE: &str = "This app's command starts with a name and =, so uQ can't p
                       settings in front of it.";
 const BAD_EXEC: &str = "uQ can't safely change this app's launcher file.";
 const NO_COMMAND: &str = "This app has no command to run.";
+const NO_LAUNCHER_COMMAND: &str =
+    "This app's launcher file has no command, so uQ can't add its fix to it.";
 
 /// Why a fix can't be applied. The launch then goes ahead without the fix.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -31,13 +33,14 @@ pub enum CompatError {
     BadExec(String),
 }
 
-/// The main screen's scale (R13): the enabled output at 0,0, else the first enabled output by
-/// name. `None` with no enabled output.
+/// The main screen's scale (R13): the enabled output at 0,0 (the first by name if several sit
+/// there), else the first enabled output by name. `None` with no enabled output.
 pub fn main_scale(live: &[LiveOutput]) -> Option<f64> {
     let on = || live.iter().filter(|o| !o.disabled);
-    on().find(|o| o.x == 0 && o.y == 0)
-        .or_else(|| on().min_by(|a, b| a.name.cmp(&b.name)))
-        .map(|o| o.scale)
+    let first_by_name = |it: &mut dyn Iterator<Item = &LiveOutput>| {
+        it.min_by(|a, b| a.name.cmp(&b.name)).map(|o| o.scale)
+    };
+    first_by_name(&mut on().filter(|o| o.x == 0 && o.y == 0)).or_else(|| first_by_name(&mut on()))
 }
 
 /// GTK's whole-number scale (R14): nearest, with .5 rounding down, at least 1.
@@ -170,7 +173,8 @@ fn wrap_exec(raw: &str, env: &[(String, String)], extra: &[String]) -> Result<St
 /// The launcher-file override for `id`: the source copied line for line, every `Exec` in
 /// `[Desktop Entry]` and each `[Desktop Action *]` wrapped, `DBusActivatable` turned off, and
 /// the marker and the source path added, under a header. `None` when the fix adds nothing to
-/// the command line. A source `Exec` that can't be rewritten exactly is refused (F12).
+/// the command line. A source `Exec` that can't be rewritten exactly is refused (F12), and so is
+/// a source whose `[Desktop Entry]` has no `Exec`.
 pub fn override_text(
     source: &str,
     source_path: &str,
@@ -181,6 +185,11 @@ pub fn override_text(
     let extra = extra_args(fix, id);
     if env.is_empty() && extra.is_empty() {
         return Ok(None);
+    }
+    // Without its own command (a D-Bus-only entry, or commands only in actions), the override
+    // would turn D-Bus off and leave other launchers nothing to run.
+    if get_key(source, "Desktop Entry", "Exec").is_none() {
+        return Err(CompatError::BadExec(NO_LAUNCHER_COMMAND.into()));
     }
     let mut text = source.to_string();
     for group in groups_with_exec(source) {

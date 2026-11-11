@@ -264,6 +264,16 @@ fn main_scale_picks_origin_output() {
         out("DP-1", 1920, 0, 1.75, false),
     ];
     assert_eq!(main_scale(&disabled), Some(1.75));
+    // Several at 0,0 (mirrored or overlapping): the first by name, whatever the list order.
+    let tied = [
+        out("HDMI-A-1", 0, 0, 2.0, false),
+        out("eDP-1", 0, 0, 1.25, false),
+        out("DP-1", 1920, 0, 1.0, false),
+    ];
+    assert_eq!(main_scale(&tied), Some(2.0));
+    let mut swapped = tied.clone();
+    swapped.swap(0, 1);
+    assert_eq!(main_scale(&swapped), Some(2.0));
     assert_eq!(main_scale(&[]), None);
     assert_eq!(main_scale(&[out("eDP-1", 0, 0, 2.0, true)]), None);
 }

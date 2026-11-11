@@ -305,3 +305,19 @@ fn unescape_exec(v: &str) -> String {
         .exec
         .unwrap()
 }
+
+#[test]
+fn override_text_refuses_source_without_exec() {
+    for src in [
+        "[Desktop Entry]\nType=Application\nName=Foo\nDBusActivatable=true\n",
+        "[Desktop Entry]\nType=Application\nName=Foo\nDBusActivatable=true\n\n\
+         [Desktop Action new-window]\nName=New Window\nExec=foo --new-window\n",
+        "[Desktop Entry]\nName=Foo\n# Exec=foo\n",
+    ] {
+        let e = override_text(src, "/s/foo.desktop", &code_fix(), "foo.desktop").unwrap_err();
+        let CompatError::BadExec(msg) = e else {
+            panic!("{src:?}: {e:?}");
+        };
+        assert!(msg.contains("no command"), "{msg}");
+    }
+}
