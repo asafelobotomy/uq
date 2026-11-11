@@ -2134,6 +2134,7 @@ dependencies = [
  "chrono",
  "clap",
  "futures-util",
+ "regex",
  "reqwest",
  "serde",
  "serde_json",
