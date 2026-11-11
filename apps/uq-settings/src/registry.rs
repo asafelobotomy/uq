@@ -894,9 +894,9 @@ mod tests {
         domains.extend(["theme", "schedule", "settings"]);
         assert!(domains.contains(&"rules"));
         for domain in domains {
-            // The Startup and Apps and scaling pages (Task 12) own env and compat; until
-            // then they have no page.
-            if domain == "env" || domain == "compat" {
+            // The Startup and Apps and scaling pages (Task 12) own env, compat and
+            // autostart; until then they have no page.
+            if domain == "env" || domain == "compat" || domain == "autostart" {
                 continue;
             }
             let pages: Vec<_> = core_pages()

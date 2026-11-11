@@ -1,6 +1,7 @@
 //! uqd's persisted desktop state (`~/.local/state/uq/state.toml`).
 
 use crate::atomic::atomic_write;
+use crate::autostart::Autostart;
 use crate::compat::Compat;
 use crate::env::Env;
 use crate::lua::Layout;
@@ -31,6 +32,9 @@ pub struct State {
     /// Apps and scaling: the switches and the per-app fixes; each fix loads on its own.
     #[serde(default)]
     pub compat: Compat,
+    /// Startup apps: choices about the XDG entries, and the user's own; each loads on its own.
+    #[serde(default)]
+    pub autostart: Autostart,
     /// The scheduled transition uqd last applied; a manual change holds until a newer one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub schedule_mark: Option<chrono::DateTime<chrono::Utc>>,
@@ -75,6 +79,7 @@ impl Default for State {
             rules: Rules::default(),
             env: Env::default(),
             compat: Compat::default(),
+            autostart: Autostart::default(),
             schedule_mark: None,
             settings: Settings::default(),
             launch_counts: BTreeMap::new(),
@@ -134,6 +139,7 @@ impl State {
         state.rules = std::mem::take(&mut state.rules).repaired();
         state.env = std::mem::take(&mut state.env).repaired();
         state.compat = std::mem::take(&mut state.compat).repaired();
+        state.autostart = std::mem::take(&mut state.autostart).repaired();
         Ok(state)
     }
 
@@ -171,6 +177,9 @@ impl State {
         if domain == "compat" {
             return Ok(self.compat.section());
         }
+        if domain == "autostart" {
+            return Ok(self.autostart.section());
+        }
         if domain != "layouts" {
             return self.settings.section(domain);
         }
@@ -198,6 +207,10 @@ impl State {
         }
         if domain == "compat" {
             self.compat = Compat::from_section(&value)?;
+            return Ok(());
+        }
+        if domain == "autostart" {
+            self.autostart = Autostart::from_section(&value, &self.autostart)?;
             return Ok(());
         }
         if domain != "layouts" {
@@ -342,6 +355,20 @@ mod tests {
                     ..crate::compat::AppFix::new("code.desktop")
                 }],
                 ..Compat::default()
+            },
+            autostart: Autostart {
+                files: vec![crate::autostart::FileChoice {
+                    id: "nm-applet.desktop".into(),
+                    enabled: Some(false),
+                    delay: None,
+                }],
+                added: vec![crate::autostart::Added::Command {
+                    id: "a-0b12".into(),
+                    name: "Backup check".into(),
+                    argv: vec!["backup-check".into(), "--quiet".into()],
+                    enabled: true,
+                    delay: Some(10),
+                }],
             },
             schedule_mark: None,
             settings: Settings::default(),

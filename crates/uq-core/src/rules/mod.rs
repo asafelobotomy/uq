@@ -229,11 +229,16 @@ pub fn valid_id(id: &str) -> bool {
 
 /// `r-` and 4 random hex digits, not in `taken`.
 pub fn fresh_id(taken: &BTreeSet<String>) -> String {
+    fresh_prefixed("r-", taken)
+}
+
+/// `prefix` and 4 random hex digits, not in `taken`.
+pub fn fresh_prefixed(prefix: &str, taken: &BTreeSet<String>) -> String {
     loop {
         let n = std::collections::hash_map::RandomState::new()
             .build_hasher()
             .finish() as u16;
-        let id = format!("r-{n:04x}");
+        let id = format!("{prefix}{n:04x}");
         if !taken.contains(&id) {
             return id;
         }

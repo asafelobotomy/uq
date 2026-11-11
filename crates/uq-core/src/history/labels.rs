@@ -57,6 +57,8 @@ pub fn label(domain: &str, key: &str) -> Option<String> {
         ("compat", "qt_wayland") => "Qt apps prefer Wayland",
         ("compat", "steam_scale") => "Steam UI scale",
         ("compat", "apps") => "App fixes",
+        ("autostart", "files") => "Startup apps",
+        ("autostart", "added") => "Apps and commands you added to startup",
         ("wallpaper", k) => return wallpaper(k),
         ("input", k) => return input(k),
         ("monitors", k) => return monitors(k),
@@ -271,6 +273,14 @@ mod tests {
                 "apps": [{"id": "code.desktop", "platform": "wayland", "scale": 1.5,
                     "env": [{"name": "FOO", "value": "1"}], "args": ["--x"],
                     "elsewhere": true}]}),
+        )
+        .unwrap();
+        st.set_section(
+            "autostart",
+            serde_json::json!({"files": [{"id": "nm-applet.desktop", "enabled": false,
+                    "delay": 5}],
+                "added": [{"name": "Sync", "app": "syncthing.desktop", "delay": 10},
+                    {"name": "Backup", "argv": ["backup", "--quiet"], "enabled": false}]}),
         )
         .unwrap();
         let schedules = [

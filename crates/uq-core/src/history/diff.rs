@@ -121,6 +121,9 @@ pub fn summarize(domain: &str, before: &Value, after: &Value, labels: Labels) ->
     if domain == "compat" {
         return crate::compat::summary(before, after);
     }
+    if domain == "autostart" {
+        return crate::autostart::summary(before, after);
+    }
     let (b, a) = (leaf_map(domain, before), leaf_map(domain, after));
     let keys: BTreeSet<&String> = b.keys().chain(a.keys()).collect();
     let changed: Vec<String> = keys
@@ -486,3 +489,6 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod autostart_tests;

@@ -1,5 +1,6 @@
 //! uQ core library: theme model, renderers, Lua emitter, state and schedule.
 pub mod atomic;
+pub mod autostart;
 pub mod client;
 pub mod compat;
 pub mod contrast;
