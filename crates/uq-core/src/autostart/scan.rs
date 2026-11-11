@@ -25,11 +25,12 @@ const MAX_LISTED: usize = 4096;
 const MAX_NAME_CHARS: usize = 100;
 const MAX_ICON_CHARS: usize = 256;
 
-/// Linux's `O_NONBLOCK` on the architectures uQ builds for (the generic value, shared by x86,
-/// Arm, RISC-V, PowerPC, s390x and LoongArch); uq-core has no libc dependency.
+/// Linux's `O_NONBLOCK` and `O_NOCTTY` on the architectures uQ builds for (the generic values,
+/// shared by x86, Arm, RISC-V, PowerPC, s390x and LoongArch); uq-core has no libc dependency.
 #[cfg(any(target_arch = "mips", target_arch = "mips64", target_arch = "sparc64"))]
-compile_error!("O_NONBLOCK differs on this architecture");
+compile_error!("O_NONBLOCK and O_NOCTTY differ on this architecture");
 const O_NONBLOCK: i32 = 0o4000;
+const O_NOCTTY: i32 = 0o400;
 
 const NOT_APP: &str = "Not an app";
 const HIDDEN_SYSTEM: &str = "Turned off by the system";
@@ -92,13 +93,14 @@ pub struct Resolved {
     pub orphan_copy: Option<PathBuf>,
 }
 
-/// Read a desktop file safely (F14): opened non-blocking so a FIFO can't stall, a regular file
+/// Read a desktop file safely (F14): opened non-blocking so a FIFO can't stall (and without
+/// becoming a controlling terminal should the name be a terminal device), a regular file
 /// once opened, at most [`MAX_BYTES`] (a bigger file is `None`), decoded lossily. Symlinks are
 /// followed for reading.
 pub fn read_capped(path: &Path) -> Option<String> {
     let f = OpenOptions::new()
         .read(true)
-        .custom_flags(O_NONBLOCK)
+        .custom_flags(O_NONBLOCK | O_NOCTTY)
         .open(path)
         .ok()?;
     if !f.metadata().ok()?.is_file() {
