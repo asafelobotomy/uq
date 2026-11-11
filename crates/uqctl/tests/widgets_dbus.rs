@@ -517,22 +517,25 @@ async fn app_actions_are_listed_and_launched_by_the_bridge() {
 }
 
 /// A session service file whose Exec appends a line to `<dir>/<tag>.count` and exits without
-/// taking the name (so the start fails, and is logged).
+/// taking the name (so the start fails, and is logged). The script is run by `/bin/sh`, never
+/// exec'd itself: a file just written can't be exec'd while another test thread's fork still
+/// holds it open for writing (ETXTBSY).
 fn counting_service(bus: &Bus, name: &str, tag: &str) {
     let script = bus.dir().join(format!("{tag}.sh"));
     std::fs::write(
         &script,
         format!(
-            "#!/bin/sh\necho x >> {}\n",
+            "echo x >> {}\n",
             bus.dir().join(format!("{tag}.count")).display()
         ),
     )
     .unwrap();
-    use std::os::unix::fs::PermissionsExt;
-    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
     std::fs::write(
         bus.dir().join("s").join(format!("{tag}.service")),
-        format!("[D-BUS Service]\nName={name}\nExec={}\n", script.display()),
+        format!(
+            "[D-BUS Service]\nName={name}\nExec=/bin/sh {}\n",
+            script.display()
+        ),
     )
     .unwrap();
 }
