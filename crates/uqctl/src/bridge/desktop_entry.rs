@@ -1,85 +1,13 @@
-//! Desktop-entry parsing: the `Exec` line, the `[Desktop Entry]` keys launching needs, and where
-//! entries live. Pure parsing; nothing here runs a process.
+//! The bridge's view of desktop entries: the shared parser from `uq_core::desktop_entry`, where
+//! entries live, and what a launch needs from one. Pure parsing; nothing here runs a process.
+
+pub use uq_core::desktop_entry::*;
 
 use std::path::{Path, PathBuf};
 
-#[derive(Debug, PartialEq, Eq, thiserror::Error)]
-pub enum ExecError {
-    #[error("empty Exec line")]
-    Empty,
-    #[error("unterminated quote in Exec")]
-    Unterminated,
-    #[error("deprecated field code %{0} in Exec")]
-    Deprecated(char),
-    #[error("unknown field code %{0} in Exec")]
-    Unknown(char),
-    #[error("dangling % at end of Exec")]
-    DanglingPercent,
-}
-
-/// Split a desktop-entry `Exec` value into argv. Quoting uses `"`; inside quotes a backslash
-/// escapes one of `" ` $ \`. `%%` is a literal `%`, the plain field codes are dropped (this
-/// launcher passes no files or URLs), and deprecated or unknown codes are errors.
-pub fn parse_exec(exec: &str) -> Result<Vec<String>, ExecError> {
-    let mut args: Vec<String> = Vec::new();
-    let mut cur = String::new();
-    // An argument exists once it has literal text or was quoted (so "" is an empty argument).
-    let mut live = false;
-    let mut quoted = false;
-    let mut chars = exec.chars();
-    while let Some(c) = chars.next() {
-        match c {
-            '"' => {
-                quoted = !quoted;
-                live = true;
-            }
-            '\\' if quoted => match chars.next() {
-                Some(n @ ('"' | '`' | '$' | '\\')) => cur.push(n),
-                Some(n) => {
-                    cur.push('\\');
-                    cur.push(n);
-                }
-                None => return Err(ExecError::Unterminated),
-            },
-            '%' => match chars.next() {
-                Some('%') => {
-                    cur.push('%');
-                    live = true;
-                }
-                Some('f' | 'F' | 'u' | 'U' | 'i' | 'c' | 'k') => {}
-                Some(d @ ('d' | 'D' | 'n' | 'N' | 'v' | 'm')) => {
-                    return Err(ExecError::Deprecated(d));
-                }
-                Some(o) => return Err(ExecError::Unknown(o)),
-                None => return Err(ExecError::DanglingPercent),
-            },
-            c if c.is_ascii_whitespace() && !quoted => {
-                if live || !cur.is_empty() {
-                    args.push(std::mem::take(&mut cur));
-                    live = false;
-                }
-            }
-            c => {
-                cur.push(c);
-                live = true;
-            }
-        }
-    }
-    if quoted {
-        return Err(ExecError::Unterminated);
-    }
-    if live || !cur.is_empty() {
-        args.push(cur);
-    }
-    if args.is_empty() {
-        return Err(ExecError::Empty);
-    }
-    Ok(args)
-}
-
 /// The parts of a desktop entry that launching needs.
 #[derive(Debug, PartialEq, Eq)]
-pub(super) struct Entry {
+pub(super) struct LaunchEntry {
     pub(super) exec: String,
     pub(super) terminal: bool,
     pub(super) try_exec: Option<String>,
@@ -87,69 +15,20 @@ pub(super) struct Entry {
     pub(super) terminal_arg: Option<String>,
 }
 
-/// Undo the key-value escapes of the desktop-entry format (`\s \n \t \r \\`).
-fn unescape_value(v: &str) -> String {
-    let mut out = String::with_capacity(v.len());
-    let mut it = v.chars();
-    while let Some(c) = it.next() {
-        if c != '\\' {
-            out.push(c);
-            continue;
-        }
-        match it.next() {
-            Some('s') => out.push(' '),
-            Some('n') => out.push('\n'),
-            Some('t') => out.push('\t'),
-            Some('r') => out.push('\r'),
-            Some('\\') => out.push('\\'),
-            Some(o) => {
-                out.push('\\');
-                out.push(o);
-            }
-            None => out.push('\\'),
-        }
-    }
-    out
-}
-
-/// Read the `[Desktop Entry]` group. Only `Exec`, `Terminal`, `TryExec`, `X-TerminalArgExec`, `Type` and `Hidden` count.
-pub(super) fn parse_entry(text: &str) -> Result<Entry, String> {
-    let (mut in_group, mut exec, mut terminal, mut try_exec) = (false, None, false, None);
-    let (mut hidden, mut kind, mut terminal_arg) = (false, None, None);
-    for line in text.lines() {
-        let line = line.trim();
-        if line.starts_with('[') {
-            in_group = line == "[Desktop Entry]";
-            continue;
-        }
-        if !in_group || line.starts_with('#') {
-            continue;
-        }
-        let Some((k, v)) = line.split_once('=') else {
-            continue;
-        };
-        let v = v.trim();
-        match k.trim() {
-            "Exec" => exec = Some(unescape_value(v)),
-            "TryExec" => try_exec = Some(unescape_value(v)),
-            "Terminal" => terminal = v == "true",
-            "X-TerminalArgExec" => terminal_arg = Some(unescape_value(v)),
-            "Hidden" => hidden = v == "true",
-            "Type" => kind = Some(v.to_string()),
-            _ => {}
-        }
-    }
-    if hidden {
+/// Read a launchable entry: not hidden, an Application (or untyped) and with an `Exec`.
+pub(super) fn parse_entry(text: &str) -> Result<LaunchEntry, String> {
+    let e = read_entry(text);
+    if e.hidden {
         return Err("desktop entry is hidden".into());
     }
-    if kind.as_deref().is_some_and(|k| k != "Application") {
+    if e.kind.as_deref().is_some_and(|k| k != "Application") {
         return Err("desktop entry is not an application".into());
     }
-    Ok(Entry {
-        exec: exec.ok_or("desktop entry has no Exec")?,
-        terminal,
-        try_exec,
-        terminal_arg,
+    Ok(LaunchEntry {
+        exec: e.exec.ok_or("desktop entry has no Exec")?,
+        terminal: e.terminal,
+        try_exec: e.try_exec,
+        terminal_arg: e.terminal_arg,
     })
 }
 
@@ -173,11 +52,7 @@ impl Dirs {
     }
 
     pub(super) fn find(&self, id: &str) -> Option<PathBuf> {
-        let file = if id.ends_with(".desktop") {
-            id.to_string()
-        } else {
-            format!("{id}.desktop")
-        };
+        let file = normalise_id(id);
         self.0.iter().map(|d| d.join(&file)).find(|p| p.is_file())
     }
 }

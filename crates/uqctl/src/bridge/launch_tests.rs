@@ -15,7 +15,7 @@ fn shell_quote_single_quotes() {
 fn launch_wraps_in_systemd_run_scope() {
     assert_eq!(
         scope_command("org.mozilla.firefox", &v(&["firefox"]), 0xabcd),
-        "systemd-run --user --scope --collect --unit=app-uq-org_mozilla_firefox-0000abcd -- 'firefox'"
+        "systemd-run --user --scope --collect --slice=app.slice --unit=app-uq-org_mozilla_firefox-0000abcd -- 'firefox'"
     );
     let long = "x".repeat(100);
     let cmd = scope_command(&format!("{long}/../a b"), &v(&["a"]), 1);
@@ -70,7 +70,7 @@ fn desktop_id_plans_scope_and_records() {
     .unwrap();
     assert_eq!(
         p.command,
-        "systemd-run --user --scope --collect --unit=app-uq-org_a_B-00000001 -- 'b' '--x'"
+        "systemd-run --user --scope --collect --slice=app.slice --unit=app-uq-org_a_B-00000001 -- 'b' '--x'"
     );
     assert_eq!(p.record.as_deref(), Some("org.a.B"));
 }
@@ -218,7 +218,7 @@ fn argv_and_run_id_and_junk() {
     .unwrap();
     assert_eq!(
         p.command,
-        "systemd-run --user --scope --collect --unit=app-uq-foot-00000002 -- '/usr/bin/foot' '-e' 'a b'"
+        "systemd-run --user --scope --collect --slice=app.slice --unit=app-uq-foot-00000002 -- '/usr/bin/foot' '-e' 'a b'"
     );
     assert_eq!(p.record, None);
     let mut runs = RunState::default();
@@ -226,7 +226,7 @@ fn argv_and_run_id_and_junk() {
     let p = plan(Some(&json!({"run_id":"run-7"})), &d, 3, &runs, None).unwrap();
     assert_eq!(
         p.command,
-        "systemd-run --user --scope --collect --unit=app-uq-run-00000003 -- 'sh' '-c' 'echo hi'"
+        "systemd-run --user --scope --collect --slice=app.slice --unit=app-uq-run-00000003 -- 'sh' '-c' 'echo hi'"
     );
     assert_eq!(p.record, None);
     assert_eq!(

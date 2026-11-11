@@ -4,10 +4,11 @@
 //! the app is never a child of the shell or the bridge. Every argument is single-quoted for the
 //! shell that `exec_cmd` uses, and the whole string is then Lua-escaped.
 
-use super::desktop_entry::{Dirs, binary_exists, parse_entry, parse_exec};
+use super::desktop_entry::{Dirs, binary_exists, parse_entry, parse_exec, unit_id};
 use super::uqd::Link;
 use serde_json::Value;
 use std::path::Path;
+pub use uq_core::desktop_entry::random_suffix;
 use uq_core::lua::lua_string;
 use uq_core::settings::{provider_enabled, valid_pinned_id};
 use uqd::compositor::CompositorError;
@@ -20,20 +21,10 @@ pub fn shell_quote(arg: &str) -> String {
 
 /// The command Hyprland's `exec_cmd` runs: a transient user scope named after the app.
 pub fn scope_command(app_id: &str, argv: &[String], rand: u32) -> String {
-    let id: String = app_id
-        .chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() || c == '_' || c == '-' {
-                c
-            } else {
-                '_'
-            }
-        })
-        .take(64)
-        .collect();
+    let id = unit_id(app_id);
     let quoted: Vec<String> = argv.iter().map(|a| shell_quote(a)).collect();
     format!(
-        "systemd-run --user --scope --collect --unit=app-uq-{id}-{rand:08x} -- {}",
+        "systemd-run --user --scope --collect --slice=app.slice --unit=app-uq-{id}-{rand:08x} -- {}",
         quoted.join(" ")
     )
 }
@@ -151,20 +142,6 @@ pub fn plan(
         command: scope_command(id.strip_suffix(".desktop").unwrap_or(id), &argv, rand),
         record: Some(id.to_string()),
     })
-}
-
-/// A small non-cryptographic value: it only keeps scope names apart.
-pub fn random_suffix() -> u32 {
-    use std::sync::atomic::{AtomicU32, Ordering};
-    static N: AtomicU32 = AtomicU32::new(0);
-    let nanos = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.subsec_nanos());
-    let mut x =
-        nanos ^ std::process::id().rotate_left(16) ^ N.fetch_add(0x9e37_79b9, Ordering::Relaxed);
-    x ^= x << 13;
-    x ^= x >> 17;
-    x ^ (x << 5)
 }
 
 /// Send a plan to Hyprland; Ok means Hyprland accepted the eval.
