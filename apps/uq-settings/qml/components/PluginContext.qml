@@ -4,6 +4,8 @@
 //                                               {code, output} or {error, …}
 //   ctx.dbus.call(method, args, callback[, target])
 //   ctx.dbus.get(property, callback[, target])  callback gets {value} or {error}
+//   ctx.openApp(desktopId[, callback])          open an app ("name.desktop") as the launcher
+//                                               does; callback gets {ok: true} or {error}
 // `target` is {path, interface}, needed only by a page without a [dbus] table.
 // Everything goes through `host` (the PluginHost singleton); without one every request fails
 // with an error. A command with `confirm` raises confirmNeeded; the page shows the dialog and
@@ -32,7 +34,8 @@ QtObject {
             dbus: {
                 call: (method, args, callback, target) => context.call(method, args, callback, target),
                 get: (property, callback, target) => context.get(property, callback, target)
-            }
+            },
+            openApp: (desktopId, callback) => context.openApp(desktopId, callback)
         })
 
     function finish(callback, result) {
@@ -78,6 +81,12 @@ QtObject {
         if (!context.host)
             return context.unavailable(callback);
         return context.track(context.host.dbusGet(context.pageId, String(property), context.targetJson(target)), callback);
+    }
+
+    function openApp(desktopId, callback) {
+        if (!context.host)
+            return context.unavailable(callback);
+        return context.track(context.host.openApp(context.pageId, String(desktopId)), callback);
     }
 
     /// The person's answer to confirmNeeded(request, …).

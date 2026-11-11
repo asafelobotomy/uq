@@ -50,6 +50,12 @@ Item {
             later(() => finished(req, JSON.stringify({ value: [method, JSON.parse(argsJson)] })));
             return req;
         }
+        function openApp(page, desktopId) {
+            const req = ++next;
+            calls.push(["open", page, desktopId]);
+            later(() => finished(req, JSON.stringify(desktopId.endsWith(".desktop") ? { ok: true } : { error: "not an app id" })));
+            return req;
+        }
         function dbusGet(page, property, targetJson) {
             const req = ++next;
             calls.push(["get", page, property, targetJson]);
@@ -101,6 +107,7 @@ Item {
             compare(typeof c.ctx.command.run, "function");
             compare(typeof c.ctx.dbus.call, "function");
             compare(typeof c.ctx.dbus.get, "function");
+            compare(typeof c.ctx.openApp, "function");
         }
 
         function test_run_without_confirm() {
@@ -190,12 +197,24 @@ Item {
             compare(tc.results[1].error, "nope");
         }
 
+        function test_open_app() {
+            const [c] = make(fakeHost);
+            c.ctx.openApp("org.example.App.desktop", collect);
+            c.ctx.openApp("../x", collect);
+            c.ctx.openApp("org.example.App.desktop");
+            compare(fakeHost.calls[0], ["open", "demo", "org.example.App.desktop"]);
+            tryCompare(tc.results, "length", 2);
+            verify(tc.results[0].ok);
+            verify(tc.results[1].error.length > 0);
+        }
+
         function test_without_a_host_everything_fails_softly() {
             const [c] = make(null);
             c.ctx.command.run("status", [], collect);
             c.ctx.dbus.call("Pause", [], collect);
             c.ctx.dbus.get("Count", collect);
-            tryCompare(tc.results, "length", 3);
+            c.ctx.openApp("x.desktop", collect);
+            tryCompare(tc.results, "length", 4);
             verify(tc.results.every(r => r.error.length > 0));
         }
     }

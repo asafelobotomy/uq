@@ -19,6 +19,9 @@ All notable changes to uQ are listed here. The format follows
 - **Settings pages may ship sibling files.** A page folder may hold a `logic.js` imported from
   its QML (`import "logic.js" as Logic`) and further component files; tested and documented in
   docs/settings-pages.md.
+- **`ctx.openApp(desktopId)` for Settings pages.** A page can open an app (its own full app,
+  say) by its `name.desktop` id, the way the launcher does (`uqctl launch`), detached from
+  Settings. Paths and other ids are refused.
 - **Keyboard shortcuts.** A Keyboard shortcuts page lists every uQ shortcut by what it does:
   change its keys (press them to capture, or pick them), turn it off, reset it, or put all back.
   Add your own shortcuts: open a uQ panel, a window or workspace action, a layout, start an app

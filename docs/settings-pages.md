@@ -176,6 +176,19 @@ list.
 - A page with `requires.bus_name` never starts its service: if the name has no owner, the
   request fails.
 
+### `ctx.openApp(desktopId[, callback])`
+
+Opens an app, such as your own full app, the way the app launcher does: through `uqctl launch`,
+so it gets its fix from **Apps and scaling**, runs in its own scope apart from Settings, and
+counts as a launch. Use it for a "More in <app>" button instead of a `[[command]]`: a command's
+output is read until the program ends, so a GUI app started by a command holds it up until its
+timeout and is then stopped.
+
+- `desktopId` is a plain desktop file name, `org.example.App.desktop`: letters, digits, `.`, `_`
+  and `-`, ending `.desktop`, not starting with `.` or `-`. No paths.
+- `callback(result)` (optional) gets `{ok: true}` once the app was handed over, or `{error}` (a
+  bad id, or no such app).
+
 ## Threat model
 
 Pages are trusted code from installed packages, read only from root-owned `/usr/share/uq/`.

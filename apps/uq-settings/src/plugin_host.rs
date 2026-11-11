@@ -16,6 +16,9 @@
 //!   at most 8 requests in flight per page. A page that waits for its name
 //!   (`requires.bus_name`) never starts the service.
 //!
+//! - **Opening an app** (`ctx.openApp`): a plain `name.desktop` id, started by `uqctl launch`,
+//!   the shell's own launch path (the app's fix, its own scope, counted), detached from Settings.
+//!
 //! This limits mistakes, not attacks: a page is trusted package code.
 
 use std::collections::HashMap;
@@ -80,6 +83,11 @@ pub mod qobject {
             target_json: &QString,
         ) -> i32;
 
+        /// Open the app `desktop_id` (`name.desktop`) as the launcher does. Returns the request
+        /// id; `finished` gets `{ok: true}` or `{error}`.
+        #[qinvokable]
+        fn open_app(self: Pin<&mut PluginHost>, page: &QString, desktop_id: &QString) -> i32;
+
         /// A request ended: `{code, output}` or `{error, …}` for commands, `{value}` or
         /// `{error}` for D-Bus, `{error, cancelled: true}` when a confirmation was declined.
         #[qsignal]
@@ -100,6 +108,43 @@ pub mod qobject {
 }
 
 use qobject::PluginHost;
+
+/// How long `uqctl launch` may take to hand the app to Hyprland.
+const OPEN_APP_WAIT: Duration = Duration::from_secs(10);
+
+/// The command that opens `desktop_id` for a page: `uqctl launch <id>`, the launcher's path.
+pub fn open_app_argv(desktop_id: &str) -> Result<Vec<String>, String> {
+    if !uq_core::integration::appaction::valid_desktop_id(desktop_id) {
+        return Err(format!(
+            "{} is not an app id (expected a name like org.example.App.desktop)",
+            uq_core::desktop_entry::clean_display(desktop_id, 80)
+        ));
+    }
+    Ok(vec!["uqctl".into(), "launch".into(), desktop_id.into()])
+}
+
+/// Run `argv` detached from Settings (own process group, no stdio) and wait for it, so it is
+/// reaped: `{ok: true}` on exit 0, else `{error}`.
+pub async fn launch(argv: &[String], within: Duration) -> Value {
+    let child = tokio::process::Command::new(&argv[0])
+        .args(&argv[1..])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .process_group(0)
+        .spawn();
+    let mut child = match child {
+        Ok(c) => c,
+        Err(e) => return error(format!("the app couldn't be opened: {e}")),
+    };
+    match tokio::time::timeout(within, child.wait()).await {
+        Ok(Ok(status)) if status.success() => json!({"ok": true}),
+        Ok(Ok(_)) => error("the app couldn't be opened (is it installed?)"),
+        Ok(Err(e)) => error(format!("the app couldn't be opened: {e}")),
+        // Still going: leave it running and let tokio reap it later.
+        Err(_) => json!({"ok": true}),
+    }
+}
 
 /// At most this many D-Bus requests in flight per page (Phase 4 spec §2.2).
 const MAX_IN_FLIGHT: usize = 8;
@@ -378,6 +423,36 @@ impl PluginHost {
         });
     }
 
+    fn open_app(mut self: Pin<&mut Self>, page: &QString, desktop_id: &QString) -> i32 {
+        let id = self.as_mut().next_id();
+        let page = page.to_string();
+        if plugins::manifest(&page).is_none() {
+            self.deliver(id, error("this page is not installed any more"));
+            return id;
+        }
+        let argv = match open_app_argv(&desktop_id.to_string()) {
+            Ok(a) => a,
+            Err(e) => {
+                self.deliver(id, error(e));
+                return id;
+            }
+        };
+        let Some(rt) = RUNTIME.get() else {
+            self.deliver(id, error("apps can't be opened right now"));
+            return id;
+        };
+        let qt = self.qt_thread();
+        rt.spawn(async move {
+            let value = launch(&argv, OPEN_APP_WAIT).await;
+            if let Some(e) = value.get("error") {
+                eprintln!("uq-settings: page {page}: opening {}: {e}", argv[2]);
+            }
+            let json = QString::from(&value.to_string());
+            let _ = qt.queue(move |host| host.finished(id, json));
+        });
+        id
+    }
+
     fn dbus_call(
         self: Pin<&mut Self>,
         page: &QString,
@@ -559,6 +634,41 @@ mod tests {
             "other path"
         );
         assert!(dbus_target(table(), "Pause", false, r#"{"path": "/o"}"#).is_ok());
+    }
+
+    #[test]
+    fn open_app_takes_plain_desktop_ids_only() {
+        assert_eq!(
+            open_app_argv("org.noti_fi.App.desktop").unwrap(),
+            ["uqctl", "launch", "org.noti_fi.App.desktop"]
+        );
+        for bad in [
+            "",
+            "firefox",
+            "../x.desktop",
+            "/usr/share/applications/x.desktop",
+            "a/b.desktop",
+            "-x.desktop",
+            ".x.desktop",
+            "x y.desktop",
+            "x.desktop\n",
+        ] {
+            assert!(open_app_argv(bad).is_err(), "{bad:?}");
+        }
+    }
+
+    #[tokio::test]
+    async fn launch_reports_the_exit() {
+        let wait = Duration::from_secs(5);
+        assert_eq!(launch(&["true".into()], wait).await, json!({"ok": true}));
+        assert!(launch(&["false".into()], wait).await["error"].is_string());
+        assert!(launch(&["/nonexistent/uq-launch".into()], wait).await["error"].is_string());
+        // Slower than the wait: left running, reported as opened.
+        let slow = ["sleep".to_string(), "2".to_string()];
+        assert_eq!(
+            launch(&slow, Duration::from_millis(100)).await,
+            json!({"ok": true})
+        );
     }
 
     #[test]
