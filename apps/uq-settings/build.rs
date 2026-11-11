@@ -41,6 +41,7 @@ fn main() {
         QmlFile::from("qml/components/EnvVarRow.qml"),
         QmlFile::from("qml/components/AppFixDialog.qml"),
         QmlFile::from("qml/components/AddStartupDialog.qml"),
+        QmlFile::from("qml/components/SecretField.qml"),
         QmlFile::from("qml/pages/AppearancePage.qml"),
         QmlFile::from("qml/pages/AppsScalingPage.qml"),
         QmlFile::from("qml/pages/DisplaysPage.qml"),
@@ -52,6 +53,13 @@ fn main() {
         QmlFile::from("qml/pages/ShellPage.qml"),
         QmlFile::from("qml/pages/StartupPage.qml"),
         QmlFile::from("qml/pages/WallpaperPage.qml"),
+        QmlFile::from("qml/pages/PowerPage.qml"),
+        QmlFile::from("qml/pages/UsersPage.qml"),
+        QmlFile::from("qml/pages/LoginScreenPage.qml"),
+        QmlFile::from("qml/pages/DateTimePage.qml"),
+        QmlFile::from("qml/pages/RegionPage.qml"),
+        QmlFile::from("qml/pages/DefaultAppsPage.qml"),
+        QmlFile::from("qml/pages/AboutPage.qml"),
     ]))
     .qt_module("Gui")
     .qt_module("Quick")
@@ -72,6 +80,13 @@ fn main() {
         "src/shell_model.rs",
         "src/startup_model.rs",
         "src/wallpaper_model.rs",
+        "src/power_model.rs",
+        "src/users_model.rs",
+        "src/login_screen_model.rs",
+        "src/datetime_model.rs",
+        "src/region_model.rs",
+        "src/defaultapps_model.rs",
+        "src/about_model.rs",
     ])
     .cpp_file("cpp/window.cpp");
     // SAFETY: only adds a warning flag; GCC 16 warns about Qt's own headers.

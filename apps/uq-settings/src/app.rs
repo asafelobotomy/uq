@@ -81,7 +81,11 @@ pub struct AppRust {
 
 impl Default for AppRust {
     fn default() -> Self {
-        let entries = registry::all_pages(&plugins::scan_configured());
+        let mut entries = registry::all_pages(&plugins::scan_configured());
+        registry::drop_unavailable(
+            &mut entries,
+            crate::pages::login_screen::greeter_installed(),
+        );
         let first = entries.first().map_or("", |p| p.id.as_str());
         Self {
             page: QString::from(first),
