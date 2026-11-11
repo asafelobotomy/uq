@@ -7,6 +7,7 @@ pub mod displays;
 pub mod fake_uqd;
 pub mod history;
 pub mod input;
+pub mod keybinds;
 pub mod look;
 pub mod profiles;
 pub mod rules;

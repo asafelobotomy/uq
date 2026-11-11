@@ -21,12 +21,14 @@ use uq_core::test_bus::{Bus, connect, private_bus};
 use zbus::object_server::SignalEmitter;
 
 mod autostart;
+mod binds;
 mod compat;
 mod devices;
 mod profiles;
 mod themes;
 mod windows;
 pub use autostart::FakeAutostart;
+pub use binds::FakeBinds;
 pub use devices::Displays;
 pub use profiles::FakeProfiles;
 pub use themes::FakeThemes;
@@ -64,6 +66,7 @@ pub struct FakeUqd {
     pub windows: FakeWindows,
     pub autostart: FakeAutostart,
     pub themes: FakeThemes,
+    pub binds: FakeBinds,
     /// What uqd's file sync found, for `Explain("env")` and `Explain("autostart")`.
     pub files: Arc<Mutex<FileReport>>,
 }
@@ -136,6 +139,7 @@ impl FakeUqd {
             .collect();
         *s = next;
         *self.explain.rules_rejected.lock().unwrap() = None;
+        *self.explain.keybinds_rejected.lock().unwrap() = None;
         let ids = entries.iter().map(|e| e.id.clone()).collect();
         self.history.entries.lock().unwrap().extend(entries);
         Ok(ids)
@@ -155,6 +159,8 @@ pub struct Explain {
     /// The message of the last `rules` write refused with `ConfigInvalid`; a good `rules`
     /// write clears it. `Explain("rules")` reports it as uqd does.
     pub rules_rejected: Arc<Mutex<Option<String>>>,
+    /// Likewise for `keybinds`.
+    pub keybinds_rejected: Arc<Mutex<Option<String>>>,
     /// `(domain, message)` of the last `env`, `compat` or `autostart` write refused with
     /// `ConfigInvalid`, as uqd's `last_rejected`; a good write of that domain clears it.
     pub startup_rejected: Arc<Mutex<Option<(String, String)>>>,
@@ -297,6 +303,11 @@ impl FakeUqd {
                 Err(_) => {}
             }
         }
+        if domain == "keybinds"
+            && let Err(FakeError::ConfigInvalid(m)) = &done
+        {
+            *self.explain.keybinds_rejected.lock().unwrap() = Some(m.clone());
+        }
         if matches!(domain, "env" | "compat" | "autostart") {
             let mut rejected = self.explain.startup_rejected.lock().unwrap();
             match &done {
@@ -355,6 +366,19 @@ impl FakeUqd {
 
     fn pick_window(&self) -> Result<String, FakeError> {
         self.windows.pick()
+    }
+
+    fn list_binds(&self) -> String {
+        let kb = self.state.lock().unwrap().keybinds.clone();
+        self.binds.list(&kb)
+    }
+
+    fn pause_shortcuts(&self) -> Result<String, FakeError> {
+        self.binds.pause()
+    }
+
+    fn resume_shortcuts(&self, token: &str) -> Result<(), FakeError> {
+        self.binds.resume(token)
     }
 
     fn list_input_devices(&self) -> String {
@@ -486,6 +510,14 @@ impl FakeUqd {
                 &overrides,
             );
             return Ok(out.to_string());
+        }
+        if domain == "keybinds" {
+            let kb = self.state.lock().unwrap().keybinds.clone();
+            let rejected = self.explain.keybinds_rejected.lock().unwrap().clone();
+            return Ok(self
+                .binds
+                .explain(&kb, rejected.as_deref(), &overrides)
+                .to_string());
         }
         if domain == "rules" {
             // uqd's pure function; overrides are keyed `rules.<row key>`.
@@ -663,6 +695,8 @@ pub struct Rig {
     pub autostart: FakeAutostart,
     /// The system and user themes, and the theme calls made.
     pub themes: FakeThemes,
+    /// The shortcuts' `user.lua` and the key-capture pause.
+    pub binds: FakeBinds,
     /// What the file sync found, for `Explain`.
     pub files: Arc<Mutex<FileReport>>,
 }
@@ -694,6 +728,7 @@ pub async fn rig(state: State) -> Rig {
     let windows = FakeWindows::default();
     let autostart = FakeAutostart::default();
     let themes = FakeThemes::default();
+    let binds = FakeBinds::default();
     let files = Arc::new(Mutex::new(FileReport::default()));
     let uqd = connect(&bus).await;
     uqd.object_server()
@@ -710,6 +745,7 @@ pub async fn rig(state: State) -> Rig {
                 windows: windows.clone(),
                 autostart: autostart.clone(),
                 themes: themes.clone(),
+                binds: binds.clone(),
                 files: files.clone(),
             },
         )
@@ -731,6 +767,7 @@ pub async fn rig(state: State) -> Rig {
         windows,
         autostart,
         themes,
+        binds,
         files,
     }
 }
