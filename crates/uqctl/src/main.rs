@@ -181,7 +181,13 @@ enum IntegrationsCmd {
         root: Option<std::path::PathBuf>,
     },
     /// Check an app's uq/ folder before packaging. Exit 0: clean; 1: problems listed.
-    Check { dir: std::path::PathBuf },
+    Check {
+        dir: std::path::PathBuf,
+        /// Don't check that the programs commands and app actions run are installed (for the
+        /// CI of an app whose programs aren't installed there). Paths are still checked.
+        #[arg(long)]
+        no_programs: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -524,7 +530,7 @@ async fn main() -> ExitCode {
         // Local files, plus a bounded look at the bus for `requires.bus_name`.
         return match cmd {
             IntegrationsCmd::List { json, root } => integrations::list(json, root).await,
-            IntegrationsCmd::Check { dir } => integrations::check(&dir),
+            IntegrationsCmd::Check { dir, no_programs } => integrations::check(&dir, !no_programs),
         };
     }
     if let Cmd::Settings { page, setting } = cli.cmd {
@@ -682,7 +688,21 @@ mod tests {
                 .unwrap()
                 .cmd,
             Cmd::Integrations {
-                cmd: IntegrationsCmd::Check { .. }
+                cmd: IntegrationsCmd::Check {
+                    no_programs: false,
+                    ..
+                }
+            }
+        ));
+        assert!(matches!(
+            Cli::try_parse_from(["uqctl", "integrations", "check", "--no-programs", "uq"])
+                .unwrap()
+                .cmd,
+            Cmd::Integrations {
+                cmd: IntegrationsCmd::Check {
+                    no_programs: true,
+                    ..
+                }
             }
         ));
     }

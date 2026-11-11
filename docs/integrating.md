@@ -42,7 +42,9 @@ Tools:
 - `uqctl integrations check uq/` checks the whole folder before packaging: the layout, every
   manifest and file, the plain-text rule for QML, that each command's program exists, that
   each provider's bus name is valid, and every `rules.toml`. Exit 0 means clean. Run it in your CI, pinned to a uQ
-  release.
+  release. In a CI where your app's programs aren't installed, add `--no-programs`: whether each
+  command's and app action's program exists is then not checked (its path still is, so it must
+  still be under `/usr/bin` or `/usr/lib`), and the summary ends "(programs not checked)".
 - `uqctl integrations list [--json]` shows what an installed uQ found, whether each item shows,
   and why not.
 - uQ's own gate test, `tests/shell/integrations_gate.sh`, installs fixture `uq/` folders into an

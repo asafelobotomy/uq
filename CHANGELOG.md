@@ -13,6 +13,9 @@ All notable changes to uQ are listed here. The format follows
   `[dbus]` table takes `timeout_ms = { Method = <ms> }`, up to 120 seconds, for listed methods
   only; every other request still ends within 2 seconds. Checked by the manifest loader and
   `uqctl integrations check`. See docs/settings-pages.md.
+- **`uqctl integrations check --no-programs`.** Skips only the check that each command's and
+  app action's program is installed, so an app's CI can check its `uq/` folder without
+  installing the app. Paths are still checked.
 - **Keyboard shortcuts.** A Keyboard shortcuts page lists every uQ shortcut by what it does:
   change its keys (press them to capture, or pick them), turn it off, reset it, or put all back.
   Add your own shortcuts: open a uQ panel, a window or workspace action, a layout, start an app

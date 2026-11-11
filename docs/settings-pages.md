@@ -168,7 +168,8 @@ interprets it, and must show every piece of text through `UqLabel`.
 
 - `uqctl integrations check uq/` checks the whole folder before packaging: the layout, every
   manifest, the text rule, that each `[[command]]` program exists, and more. Exit 0 means clean.
-  Run it in your CI, pinned to a uQ release.
+  Run it in your CI, pinned to a uQ release. `--no-programs` skips only the "program exists"
+  check, for a CI that doesn't install your app.
 - `uq-settings --plugin-dir <dir>` reads pages from `<dir>` instead of
   `/usr/share/uq/settings/pages/`, so you can try a page without installing it. Pages added to
   or removed from it come and go while it runs.

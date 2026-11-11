@@ -307,3 +307,45 @@ fn dbus_timeouts_are_checked() {
         assert!(out.contains(needle), "{needle:?} missing from:\n{out}");
     }
 }
+
+/// `--no-programs`: an app's CI without its programs installed. Missing programs are not
+/// problems; everything else still is, including an `argv[0]` outside /usr/bin and /usr/lib.
+#[test]
+fn no_programs_skips_only_the_installed_check() {
+    let d = tempfile::tempdir().unwrap();
+    let uq = d.path().join("uq");
+    good_folder(&uq);
+    put(
+        &uq.join("widgets/demo/widget.toml"),
+        "uq_api = 1\nid = \"demo\"\nname = \"Demo\"\nslot = \"quick\"\nqml = \"Widget.qml\"\n\
+         [[command]]\nid = \"status\"\nargv = [\"/usr/bin/uq-test-no-such-program\"]\n\
+         output = \"text\"\n",
+    );
+    put(
+        &uq.join("launcher/actions/demo-check.appaction"),
+        "[App Action]\nName=Check\nMatch=demo-*.desktop\nExec=/usr/lib/uq-test-no-such/x %d\n",
+    );
+    let dir = uq.to_str().unwrap();
+    let (ok, out) = uqctl(&["integrations", "check", dir]);
+    assert!(!ok, "{out}");
+    assert!(out.contains("2 problem(s)"), "{out}");
+
+    let (ok, out) = uqctl(&["integrations", "check", "--no-programs", dir]);
+    assert!(ok, "{out}");
+    assert!(
+        out.ends_with("1 rule file(s) (programs not checked)\n"),
+        "{out}"
+    );
+
+    put(
+        &uq.join("pages/demo/page.toml"),
+        "uq_api = 1\nid = \"demo\"\nname = \"Demo\"\nqml = \"Page.qml\"\n\
+         [[command]]\nid = \"x\"\nargv = [\"/opt/demo/x\"]\noutput = \"text\"\n",
+    );
+    let (ok, out) = uqctl(&["integrations", "check", "--no-programs", dir]);
+    assert!(
+        !ok,
+        "a path outside /usr/bin and /usr/lib is still refused: {out}"
+    );
+    assert!(out.contains("must be an absolute path under"), "{out}");
+}
