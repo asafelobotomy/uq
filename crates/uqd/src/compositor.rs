@@ -36,6 +36,8 @@ pub trait Compositor: Send + Sync {
     async fn clients(&self) -> Result<String, CompositorError>;
     /// The cursor position as JSON (`hyprctl cursorpos -j`).
     async fn cursor_pos(&self) -> Result<String, CompositorError>;
+    /// Open workspaces as JSON (`hyprctl workspaces -j`).
+    async fn workspaces(&self) -> Result<String, CompositorError>;
     /// Every bind Hyprland has, as JSON (`hyprctl binds -j`).
     async fn binds(&self) -> Result<String, CompositorError>;
     /// One option's live value (`hyprctl -j getoption <path>`, path like `general:gaps_in`):
@@ -175,6 +177,10 @@ impl Compositor for Hyprland {
         self.socket.request("j/cursorpos").await
     }
 
+    async fn workspaces(&self) -> Result<String, CompositorError> {
+        self.socket.request("j/workspaces").await
+    }
+
     async fn binds(&self) -> Result<String, CompositorError> {
         self.socket.request("j/binds").await
     }
@@ -206,6 +212,8 @@ pub mod fake {
         pub clients_json: Mutex<String>,
         /// What `cursor_pos` returns (`cursorpos -j`); empty means `{"x":0,"y":0}`.
         pub cursor_json: Mutex<String>,
+        /// What `workspaces` returns (`workspaces -j`); empty means `[]`.
+        pub workspaces_json: Mutex<String>,
         /// What `binds` returns (`binds -j`); empty means `[]`.
         pub binds_json: Mutex<String>,
         /// `Some(msg)` makes the next `eval` return `Rejected(msg)`, once.
@@ -308,6 +316,11 @@ pub mod fake {
             } else {
                 j
             })
+        }
+        async fn workspaces(&self) -> Result<String, CompositorError> {
+            self.record("workspaces".into())?;
+            let j = self.workspaces_json.lock().unwrap().clone();
+            Ok(if j.is_empty() { "[]".into() } else { j })
         }
         async fn binds(&self) -> Result<String, CompositorError> {
             self.record("binds".into())?;
@@ -566,6 +579,34 @@ mod tests {
             server.await.unwrap(),
             vec!["j/clients", "j/cursorpos", "j/binds"]
         );
+    }
+
+    #[tokio::test]
+    async fn workspaces_request() {
+        let dir = tempfile::tempdir().unwrap();
+        let sock_dir = dir.path().join("hypr/SIG");
+        std::fs::create_dir_all(&sock_dir).unwrap();
+        let listener = UnixListener::bind(sock_dir.join(".socket.sock")).unwrap();
+        let server = tokio::spawn(async move {
+            let (mut s, _) = listener.accept().await.unwrap();
+            let mut buf = vec![0u8; 1024];
+            let n = s.read(&mut buf).await.unwrap();
+            s.write_all(br#"[{"id":3,"monitor":"eDP-1"}]"#)
+                .await
+                .unwrap();
+            String::from_utf8_lossy(&buf[..n]).into_owned()
+        });
+        let h = Hyprland::new(Some(dir.path().into()), Some("SIG".into()));
+        assert_eq!(
+            h.workspaces().await.unwrap(),
+            r#"[{"id":3,"monitor":"eDP-1"}]"#
+        );
+        assert_eq!(server.await.unwrap(), "j/workspaces");
+        assert_eq!(
+            HyprSocket::new(Some(dir.path().into()), Some("SIG".into())).event_path(),
+            Some(sock_dir.join(".socket2.sock"))
+        );
+        assert_eq!(HyprSocket::new(None, None).event_path(), None);
     }
 
     #[tokio::test]

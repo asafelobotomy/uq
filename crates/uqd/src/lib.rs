@@ -5,6 +5,7 @@ pub mod compositor;
 pub mod dbus;
 mod files;
 pub mod hypr;
+pub mod hypr_events;
 mod keybinds;
 mod monitors;
 pub mod pick;
