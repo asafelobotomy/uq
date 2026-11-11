@@ -337,6 +337,7 @@ enum Request {
     GetTheme,
     SetTheme(String, String),
     ListThemes,
+    ListThemeInfo,
     GetLayouts,
     SetLayout(String, String),
     GetSchedule,
@@ -375,6 +376,7 @@ impl Request {
         let r = match call {
             "GetTheme" => (0, Request::GetTheme),
             "ListThemes" => (0, Request::ListThemes),
+            "ListThemeInfo" => (0, Request::ListThemeInfo),
             "GetLayouts" => (0, Request::GetLayouts),
             "GetSchedule" => (0, Request::GetSchedule),
             "Reload" => (0, Request::Reload),
@@ -463,6 +465,10 @@ impl Request {
             Request::ListThemes => {
                 let ids: Vec<String> = proxy.call("ListThemes", &()).await.map_err(describe)?;
                 Ok(json!(ids))
+            }
+            Request::ListThemeInfo => {
+                let s: String = proxy.call("ListThemeInfo", &()).await.map_err(describe)?;
+                serde_json::from_str(&s).map_err(|e| format!("bad theme list: {e}"))
             }
             Request::GetLayouts => {
                 let m: HashMap<String, String> =

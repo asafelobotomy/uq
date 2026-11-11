@@ -355,3 +355,40 @@ async fn bridge_calls_shell_ready_after_first_request() {
     tokio::time::sleep(Duration::from_millis(200)).await;
     assert_eq!(ready_calls(&uqd).await, 2);
 }
+
+#[tokio::test]
+async fn list_theme_info_passes_through() {
+    let bus = private_bus();
+    let dir = tempfile::tempdir().unwrap();
+    let _uqd = serve_uqd(&bus, dir.path()).await;
+    let mut b = Bridge::start(&bus);
+    b.next().await;
+    let info = b.call(1, "ListThemeInfo", json!([])).await;
+    let themes = info["ok"]["themes"].as_array().expect("an array");
+    assert_eq!(themes.len(), 7, "{info}");
+    assert!(
+        themes
+            .iter()
+            .all(|t| t["name"].is_string() && t["user"] == false)
+    );
+    assert_eq!(info["ok"]["root_is_link"], false);
+    let bad = b.call(2, "ListThemeInfo", json!(["x"])).await;
+    assert!(bad["err"].is_string(), "{bad}");
+}
+
+#[tokio::test]
+async fn bridge_refuses_theme_writes() {
+    let bus = private_bus();
+    let dir = tempfile::tempdir().unwrap();
+    let _uqd = serve_uqd(&bus, dir.path()).await;
+    let mut b = Bridge::start(&bus);
+    b.next().await;
+    for (n, call, args) in [
+        (1, "ImportTheme", json!(["x", false, false])),
+        (2, "ExportTheme", json!(["gruvbox", false])),
+        (3, "DeleteTheme", json!(["user-x"])),
+    ] {
+        let r = b.call(n, call, args).await;
+        assert_eq!(r["err"], format!("unknown call {call}"), "{r}");
+    }
+}
