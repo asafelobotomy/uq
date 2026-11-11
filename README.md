@@ -403,6 +403,8 @@ a terminal. Manual checks are in
 
 - `SUPER+Space` opens or closes Spotlight: apps, a calculator (`=2+2`), a command runner
   (`>cmd`) and any installed search providers.
+- `SUPER+.` opens Spotlight at `:`, the emoji search. It needs an emoji provider (emobie);
+  without one Spotlight says "No emoji provider installed".
 - Tapping `SUPER` (left SUPER, pressed and released alone) opens or closes the app menu. It
   doesn't open when you press and release another key or mouse button while SUPER is held. On
   Hyprland 0.56 it can still open if you release SUPER while that other key is still down.

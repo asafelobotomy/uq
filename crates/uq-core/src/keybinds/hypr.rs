@@ -188,13 +188,7 @@ mod tests {
                 }
             }
         }
-        // `emoji` is registered by the shell in uq#27; until that merges the shell has no such
-        // shortcut. Drop this line then, and the test checks it too.
-        let want: BTreeSet<String> = SHELL_NAMES
-            .iter()
-            .filter(|s| **s != "emoji")
-            .map(|s| s.to_string())
-            .collect();
+        let want: BTreeSet<String> = SHELL_NAMES.iter().map(|s| s.to_string()).collect();
         assert_eq!(found, want);
     }
 }

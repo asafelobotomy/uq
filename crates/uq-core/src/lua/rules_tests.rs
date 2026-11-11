@@ -351,3 +351,76 @@ fn hostile_strings_stay_inside_lua_strings() {
         assert!(!stripped.contains("exec_cmd"), "{stripped}");
     }
 }
+
+#[test]
+fn rules_from_apps_go_between_workspace_and_window_rules() {
+    use crate::integration::rules::parse_rules;
+    let text = r#"
+[[window_rule]]
+id = "romforge.emulators"
+class = ["^(retroarch|x\"y)$", "^b\\\\$"]
+title = "]] hl.exec_cmd(\"x\") --"
+workspace = "name:game"
+fullscreen = true
+"#;
+    let app = parse_rules(text, "romforge").unwrap().remove(0);
+    let app_rules = app.window_rules();
+    let rules = Rules {
+        window: vec![pavucontrol()],
+        workspace: vec![WorkspaceRule {
+            workspace: "4".into(),
+            monitor: None,
+            default: None,
+            persistent: Some(true),
+            gaps_in: None,
+            gaps_out: None,
+            border_size: None,
+        }],
+        ..Default::default()
+    };
+    let out = crate::lua::emit_generated_with_apps(
+        &theme(),
+        &Default::default(),
+        &rules,
+        &app_rules,
+        &crate::keybinds::Keybinds::default(),
+        &Settings::default(),
+        &StartupRender::default(),
+    );
+    let ws = out.find("-- Workspace rules").unwrap();
+    let apps = out.find("\n-- Rules from apps\n").expect("app block");
+    let own = out.find("-- Window rules").unwrap();
+    assert!(ws < apps && apps < own, "{out}");
+    let block: Vec<&str> = out[apps..own]
+        .lines()
+        .filter(|l| l.starts_with("hl."))
+        .collect();
+    assert_eq!(block.len(), 2, "one call per class pattern: {out}");
+    assert_eq!(
+        block[0],
+        r#"hl.window_rule({ name = "uq:app:romforge.emulators.1", enabled = true, match = { class = "^(retroarch|x\"y)$", title = "]] hl.exec_cmd(\"x\") --" }, fullscreen = true, workspace = "name:game" })"#
+    );
+    assert!(block[1].contains(r#"class = "^b\\\\$""#), "{}", block[1]);
+    // With no app rules, the output is exactly emit_generated's.
+    let plain = emit_generated(
+        &theme(),
+        &Default::default(),
+        &rules,
+        &crate::keybinds::Keybinds::default(),
+        &Settings::default(),
+        &StartupRender::default(),
+    );
+    assert!(!plain.contains("Rules from apps"));
+    assert_eq!(
+        plain,
+        crate::lua::emit_generated_with_apps(
+            &theme(),
+            &Default::default(),
+            &rules,
+            &[],
+            &crate::keybinds::Keybinds::default(),
+            &Settings::default(),
+            &StartupRender::default(),
+        )
+    );
+}

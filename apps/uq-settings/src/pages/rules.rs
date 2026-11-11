@@ -5,6 +5,7 @@
 //! the write lock), shows which open windows a rule matches, and lets the person click a window
 //! to fill a rule or ask "why did this window get these rules".
 
+mod apps;
 mod fields;
 mod rows;
 mod save;
@@ -65,6 +66,11 @@ pub enum Op {
     /// Let the person click a window: `"match"` (fill a rule) or `"why"`.
     Pick {
         purpose: String,
+    },
+    /// Turn a rule from an app (`<integration>.<rule>`) on or off.
+    SetAppRule {
+        id: String,
+        on: bool,
     },
 }
 
@@ -351,7 +357,8 @@ impl RulesState {
 }
 
 /// The state is the snapshot described in the plan's Task 9: `{window, layer, workspace,
-/// section, windows, why, pick, reopen, templates, fields, limits, notice}`.
+/// section, windows, why, pick, reopen, templates, fields, limits, notice}`, plus `apps`, the
+/// rules from apps (`{rules, problems, missing}`, see `apps.rs`).
 impl PageLogic for RulesState {
     type Op = Op;
 
@@ -429,6 +436,9 @@ impl PageLogic for RulesState {
                 .await
             }
             Op::Pick { purpose } => self.pick(&proxy, &purpose).await,
+            Op::SetAppRule { id, on } => {
+                patch_section(&proxy, "integration_rules", |s| apps::set(s, &id, on)).await
+            }
         }
     }
 
@@ -462,6 +472,7 @@ impl RulesState {
             Err(e) if client::no_owner(&e) => return Err(e),
             Err(_) => json!({}),
         };
+        let apps = apps::read(&proxy).await?;
         let windows = self.windows.lock().unwrap().clone();
         let mut out = Self::rows(&rules, &windows, &explained, &layouts);
         let rejected = &explained["rules"];
@@ -501,6 +512,7 @@ impl RulesState {
             "workspace": MAX_WORKSPACE_RULES, "name": MAX_NAME_CHARS,
             "pattern": MAX_PATTERN_CHARS});
         out["notice"] = json!({"seq": shown.notice_seq, "text": shown.notice});
+        out["apps"] = apps;
         Ok(out)
     }
 }

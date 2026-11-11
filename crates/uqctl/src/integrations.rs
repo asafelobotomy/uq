@@ -9,6 +9,7 @@ use regex::Regex;
 use serde_json::json;
 use uq_core::integration::appaction::load_app_action;
 use uq_core::integration::manifest::{Bus, CommandSpec, load_page, load_widget, valid_bus_name};
+use uq_core::integration::rules::{RULES_FILE, load_rules};
 use uq_core::integration::scan::{Entry, Roots, scan_all};
 use uq_core::launcher_providers::parse_def;
 
@@ -19,6 +20,7 @@ pub fn roots_under(prefix: &Path) -> Roots {
         pages: prefix.join("settings/pages"),
         providers: vec![prefix.join("launcher")],
         actions: prefix.join("launcher/actions"),
+        integrations: prefix.join("integrations"),
         bin_dir: uq_core::integration::manifest::BIN_DIR.into(),
     }
 }
@@ -200,7 +202,7 @@ pub struct Checker {
     /// Bus names of activatable providers, to match against `dbus/*.service`.
     activatable: Vec<(PathBuf, String)>,
     services: Vec<String>,
-    counts: [usize; 5],
+    counts: [usize; 6],
 }
 
 impl Checker {
@@ -322,6 +324,39 @@ impl Checker {
         }
     }
 
+    /// `integrations/<name>/rules.toml` (Phase 4 spec §3.3): the folder name is the
+    /// integration's name and every rule id starts with it.
+    fn integrations(&mut self, dir: &Path) {
+        let Ok(list) = sorted_entries(dir) else {
+            return self.problem(dir, "can't be read");
+        };
+        let root = std::fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf());
+        for p in list {
+            if !p.is_dir() {
+                self.problem(&p, "only <name>/ folders belong in integrations/");
+                continue;
+            }
+            let Ok(files) = sorted_entries(&p) else {
+                self.problem(&p, "can't be read");
+                continue;
+            };
+            for f in files.iter().filter(|f| name_of(f) != RULES_FILE) {
+                self.problem(
+                    f,
+                    format!("only {RULES_FILE} belongs in integrations/<name>/"),
+                );
+            }
+            if !files.iter().any(|f| name_of(f) == RULES_FILE) {
+                self.problem(&p, format!("has no {RULES_FILE}"));
+                continue;
+            }
+            match load_rules(&p, &root) {
+                Ok(_) => self.counts[5] += 1,
+                Err(e) => self.problem(&p.join(RULES_FILE), e),
+            }
+        }
+    }
+
     fn dbus(&mut self, dir: &Path) {
         let Ok(list) = sorted_entries(dir) else {
             return self.problem(dir, "can't be read");
@@ -364,14 +399,15 @@ impl Checker {
 }
 
 /// Check a repo's `uq/` folder: its layout, every manifest, the QML text lint, that every
-/// command's program exists, provider bus names, and service files for activatable providers.
+/// command's program exists, provider bus names, service files for activatable providers, and
+/// `integrations/<name>/rules.toml` window rules.
 /// Returns the problems and a one-line summary.
 pub fn check_dir(dir: &Path) -> (Vec<String>, String) {
     let mut c = Checker {
         problems: Vec::new(),
         activatable: Vec::new(),
         services: Vec::new(),
-        counts: [0; 5],
+        counts: [0; 6],
     };
     match sorted_entries(dir) {
         Err(e) => c.problems.push(e),
@@ -382,10 +418,12 @@ pub fn check_dir(dir: &Path) -> (Vec<String>, String) {
                     ("pages", true) => c.folders(&p, "page"),
                     ("launcher", true) => c.launcher(&p),
                     ("dbus", true) => c.dbus(&p),
+                    ("integrations", true) => c.integrations(&p),
                     ("README.md", false) => {}
                     _ => c.problem(
                         &p,
-                        "not part of a uq/ folder (widgets/, pages/, launcher/, dbus/, README.md)",
+                        "not part of a uq/ folder (widgets/, pages/, launcher/, dbus/, \
+                         integrations/, README.md)",
                     ),
                 }
             }
@@ -399,9 +437,10 @@ pub fn check_dir(dir: &Path) -> (Vec<String>, String) {
             );
         }
     }
-    let [w, pg, pr, a, s] = c.counts;
+    let [w, pg, pr, a, s, r] = c.counts;
     let summary = format!(
-        "{w} widget(s), {pg} page(s), {pr} provider(s), {a} app action(s), {s} service file(s)"
+        "{w} widget(s), {pg} page(s), {pr} provider(s), {a} app action(s), {s} service file(s), \
+         {r} rule file(s)"
     );
     (c.problems, summary)
 }

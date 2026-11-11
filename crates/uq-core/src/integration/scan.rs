@@ -1,6 +1,6 @@
 //! Everything the integration roots hold, valid or not (Phase 4 spec §2.7 `uqctl integrations
-//! list`, §5): widgets, settings pages, launcher providers and app actions, each with its source
-//! path, whether it is valid, whether it shows, and why not.
+//! list`, §5): widgets, settings pages, launcher providers, app actions and window rule files, each
+//! with its source path, whether it is valid, whether it shows, and why not.
 
 use std::path::{Path, PathBuf};
 
@@ -11,12 +11,15 @@ use crate::integration::manifest::{
     BIN_DIR, Bus, Loaded, ManifestError, PageManifest, Requires, WidgetManifest, load_page,
     load_widget,
 };
+use crate::integration::rules::{RuleFile, scan_rules};
 use crate::launcher_providers::scan_defs;
 
 pub const WIDGETS_DIR: &str = "/usr/share/uq/shell/widgets";
 pub const PAGES_DIR: &str = "/usr/share/uq/settings/pages";
 pub const LAUNCHER_DIR: &str = "/usr/share/uq/launcher";
 pub const ACTIONS_DIR: &str = "/usr/share/uq/launcher/actions";
+/// `<name>/rules.toml` window rules (§3.3).
+pub const INTEGRATIONS_DIR: &str = "/usr/share/uq/integrations";
 
 /// Where to look. [`Roots::system`] is what uQ reads; tests and `uqctl integrations check`
 /// point it elsewhere.
@@ -27,6 +30,8 @@ pub struct Roots {
     /// Provider directories in priority order (system, then the user's, as Phase 2 defined).
     pub providers: Vec<PathBuf>,
     pub actions: PathBuf,
+    /// `<name>/rules.toml` folders.
+    pub integrations: PathBuf,
     /// Where `[requires] bins` must exist.
     pub bin_dir: PathBuf,
 }
@@ -38,6 +43,7 @@ impl Roots {
             pages: PAGES_DIR.into(),
             providers: crate::launcher_providers::default_dirs(),
             actions: ACTIONS_DIR.into(),
+            integrations: INTEGRATIONS_DIR.into(),
             bin_dir: BIN_DIR.into(),
         }
     }
@@ -51,6 +57,8 @@ pub enum Kind {
     Page,
     Provider,
     AppAction,
+    /// An integration folder's `rules.toml`; its id is the folder name.
+    Rules,
 }
 
 impl Kind {
@@ -60,6 +68,7 @@ impl Kind {
             Kind::Page => "page",
             Kind::Provider => "provider",
             Kind::AppAction => "app_action",
+            Kind::Rules => "rules",
         }
     }
 }
@@ -197,7 +206,7 @@ fn folder_entries<M>(
     }
 }
 
-/// Widgets, then pages, then providers, then app actions, each in name order.
+/// Widgets, then pages, then providers, then app actions, then rule files, each in name order.
 pub fn scan_all(roots: &Roots) -> Vec<Entry> {
     let bin_dir = roots.bin_dir.as_path();
     let mut out = folder_entries(
@@ -246,7 +255,37 @@ pub fn scan_all(roots: &Roots) -> Vec<Entry> {
     for (path, r) in scan_app_actions(&roots.actions) {
         out.push(app_action_entry(path, r));
     }
+    match scan_rules(&roots.integrations) {
+        Ok(files) => out.extend(files.into_iter().map(rules_entry)),
+        Err(e) => out.push(Entry::refused(
+            Kind::Rules,
+            String::new(),
+            roots.integrations.clone(),
+            e,
+        )),
+    }
     out
+}
+
+/// A rule file is never "hidden": each rule is off until the person turns it on.
+fn rules_entry(f: RuleFile) -> Entry {
+    match f.rules {
+        Ok(rules) => Entry {
+            kind: Kind::Rules,
+            id: f.integration,
+            name: Some(match rules.len() {
+                1 => "1 window rule".to_string(),
+                n => format!("{n} window rules"),
+            }),
+            source: f.path,
+            valid: true,
+            visible: true,
+            error: None,
+            waits_for: None,
+            bus: Bus::Session,
+        },
+        Err(e) => Entry::refused(Kind::Rules, f.integration, f.path, e.to_string()),
+    }
 }
 
 fn app_action_entry(path: PathBuf, r: Result<AppAction, String>) -> Entry {
@@ -287,6 +326,7 @@ mod tests {
             pages: base.join("settings/pages"),
             providers: vec![base.join("launcher")],
             actions: base.join("launcher/actions"),
+            integrations: base.join("integrations"),
             bin_dir: base.join("bin"),
         }
     }
@@ -345,6 +385,17 @@ mod tests {
             "[App Action]\nName=Shell\nExec=/bin/sh -c true\n",
         );
 
+        put(
+            &r.integrations.join("romforge/rules.toml"),
+            "[[window_rule]]\nid = \"romforge.emulators\"\nclass = [\"^retroarch$\"]\n\
+             workspace = \"name:game\"\nfullscreen = true\n",
+        );
+        put(
+            &r.integrations.join("broken/rules.toml"),
+            "[[window_rule]]\nid = \"other.x\"\nclass = [\"a\"]\nfloat = true\n",
+        );
+        put(&r.integrations.join("no-rules/README.md"), "");
+
         let all = scan_all(&r);
         let find = |kind: Kind, id: &str| {
             all.iter()
@@ -374,7 +425,17 @@ mod tests {
         assert!(u.valid && !u.visible, "a missing program hides the action");
         assert!(u.error.as_ref().unwrap().contains("missing"));
         assert!(find(Kind::AppAction, "sh").visible);
-        assert_eq!(all.len(), 9, "{all:#?}");
+        let rf = find(Kind::Rules, "romforge");
+        assert!(rf.valid && rf.visible, "{rf:?}");
+        assert_eq!(rf.name.as_deref(), Some("1 window rule"));
+        assert!(rf.source.ends_with("integrations/romforge/rules.toml"));
+        let bad = find(Kind::Rules, "broken");
+        assert!(!bad.valid);
+        assert!(
+            bad.error.as_ref().unwrap().contains("broken.<rule>"),
+            "{bad:?}"
+        );
+        assert_eq!(all.len(), 11, "{all:#?}");
         let kinds: Vec<Kind> = all.iter().map(|e| e.kind).collect();
         let mut sorted = kinds.clone();
         sorted.sort_by_key(|k| *k as u8);

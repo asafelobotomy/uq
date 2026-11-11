@@ -8,6 +8,7 @@
 //! - [`appaction`]: `.appaction` files, app actions on launcher rows (§2.4.2).
 //! - [`command`]: the declared-command runner (§2.3).
 //! - [`dbus_json`]: JSON ↔ D-Bus values by signature, and deadline-bound calls (§2.2 limits).
+//! - [`rules`]: `rules.toml` window rules and the `integration_rules` domain (§3.3).
 //! - [`scan`]: everything found under the integration roots, valid or not (§2.7, §5).
 //! - [`watch`]: a debounced inotify watch on the integration directories (§2.2, §2.3).
 //!
@@ -18,6 +19,7 @@ pub mod appaction;
 pub mod command;
 pub mod dbus_json;
 pub mod manifest;
+pub mod rules;
 pub mod scan;
 pub mod watch;
 

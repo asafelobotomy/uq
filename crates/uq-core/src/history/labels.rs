@@ -61,6 +61,7 @@ pub fn label(domain: &str, key: &str) -> Option<String> {
         ("compat", "apps") => "App fixes",
         ("autostart", "files") => "Startup apps",
         ("autostart", "added") => "Apps and commands you added to startup",
+        ("integration_rules", "enabled") => "Rules from apps",
         ("wallpaper", k) => return wallpaper(k),
         ("input", k) => return input(k),
         ("monitors", k) => return monitors(k),
@@ -293,6 +294,11 @@ mod tests {
                 "custom": [{"id": "k-3f9c", "name": "Screenshot",
                     "combo": "SUPER + SHIFT + P", "action":
                     {"kind": "command", "command": "grim shot.png"}}]}),
+        )
+        .unwrap();
+        st.set_section(
+            "integration_rules",
+            serde_json::json!({"enabled": ["romforge.emulators"]}),
         )
         .unwrap();
         let schedules = [

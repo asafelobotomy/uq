@@ -14,7 +14,9 @@ use uq_core::history::{
     AutoReason, Entry, Journal, MAX_ENTRIES, Origin, PointKind, RestorePoint, RestoreStore, diff,
     revert_changed,
 };
-use uq_core::lua::{Layout, emit_generated, emit_workspace_rule, lua_string, startup_render};
+use uq_core::lua::{
+    Layout, emit_generated_with_apps, emit_workspace_rule, lua_string, startup_render,
+};
 use uq_core::paths::Paths;
 use uq_core::profile::{ActiveProfile, ProfileStore, holds, load_active};
 use uq_core::render::{RenderedFiles, kvantum_base, render};
@@ -177,6 +179,7 @@ fn domain_label(domain: &str) -> &'static str {
         "env" => "The list of environment variables",
         "compat" => "Apps and scaling",
         "autostart" => "The list of startup apps",
+        "integration_rules" => "Rules from apps",
         "wallpaper" => "Wallpaper",
         "shell" => "Shell",
         "settings" => "A setting",
@@ -715,6 +718,9 @@ impl Desktop {
         if domain == "keybinds" {
             return Ok(self.explain_keybinds().await);
         }
+        if domain == "integration_rules" {
+            return Ok(self.explain_integration_rules());
+        }
         if matches!(domain, "env" | "autostart") {
             return Ok(self.explain_startup(domain, Value::Null));
         }
@@ -1029,10 +1035,11 @@ impl Desktop {
         } else {
             None
         };
-        let generated = emit_generated(
+        let generated = emit_generated_with_apps(
             &theme,
             &next.layouts,
             &next.rules,
+            &self.app_rules_for(next),
             &next.keybinds,
             &next.settings,
             &startup_render(next, main_scale, self.dev_session),

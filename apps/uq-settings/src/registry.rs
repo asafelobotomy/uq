@@ -347,7 +347,7 @@ static PROFILES_SETTINGS: [SearchEntry; 2] = [
     ),
 ];
 
-static RULES_SETTINGS: [SearchEntry; 5] = [
+static RULES_SETTINGS: [SearchEntry; 6] = [
     entry(
         "window-rules",
         "Window rules",
@@ -380,6 +380,11 @@ static RULES_SETTINGS: [SearchEntry; 5] = [
         "workspace-rules",
         "Workspace rules",
         &["monitor", "persistent", "gaps"],
+    ),
+    entry(
+        "rules-from-apps",
+        "Rules from apps",
+        &["game", "emulator", "fullscreen", "installed", "integration"],
     ),
 ];
 
@@ -1031,7 +1036,7 @@ static CORE_PAGES: [PageInfo; 22] = [
         category: Category::Uq,
         qml: "pages/RulesPage.qml",
         settings: &RULES_SETTINGS,
-        domains: &["rules"],
+        domains: &["rules", "integration_rules"],
     },
     PageInfo {
         id: "history",
@@ -1360,7 +1365,7 @@ mod tests {
         assert_eq!(page.category, Category::Uq);
         assert_eq!(page.icon, "preferences-system-windows");
         assert_eq!(page.qml, "pages/RulesPage.qml");
-        assert_eq!(page.domains, ["rules"]);
+        assert_eq!(page.domains, ["rules", "integration_rules"]);
         let entries: Vec<_> = page
             .settings
             .iter()
@@ -1401,6 +1406,11 @@ mod tests {
                     "workspace-rules",
                     "Workspace rules",
                     &["monitor", "persistent", "gaps"][..]
+                ),
+                (
+                    "rules-from-apps",
+                    "Rules from apps",
+                    &["game", "emulator", "fullscreen", "installed", "integration"][..]
                 ),
             ]
         );

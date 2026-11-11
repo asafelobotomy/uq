@@ -428,6 +428,16 @@ impl DesktopIface {
         serde_json::to_string(&report).map_err(|e| UqError::Io(e.to_string()))
     }
 
+    /// Window rules from apps (Phase 4 spec §3.3) as JSON: `{rules, problems, missing}`; each
+    /// rule has `enabled`. Turn one on or off with `SetSection("integration_rules")`.
+    async fn list_integration_rules(&self) -> String {
+        self.desktop
+            .lock()
+            .await
+            .list_integration_rules()
+            .to_string()
+    }
+
     /// The startup apps as a JSON array of `{id, name, icon, source, enabled, can_toggle,
     /// delay, status, reason?, exit?, signal?, log?, argv?}` (spec §7.3). `status` is
     /// `waiting`, `running`, `exited`, `failed`, `off`, `skipped`, `not_started` or

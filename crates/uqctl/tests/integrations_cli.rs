@@ -42,6 +42,11 @@ fn good_folder(uq: &Path) {
         &uq.join("dbus/org.demo.Provider.service"),
         "[D-BUS Service]\nName=org.demo.Provider\nExec=/usr/bin/demo-provider\n",
     );
+    put(
+        &uq.join("integrations/demo/rules.toml"),
+        "[[window_rule]]\nid = \"demo.games\"\nclass = [\"^(demo-game)$\"]\n\
+         workspace = \"name:game\"\nfullscreen = true\n",
+    );
 }
 
 fn uqctl(args: &[&str]) -> (bool, String) {
@@ -69,7 +74,8 @@ fn a_clean_folder_passes() {
     assert!(ok, "{out}");
     assert_eq!(
         out.trim(),
-        "ok: 1 widget(s), 1 page(s), 1 provider(s), 1 app action(s), 1 service file(s)"
+        "ok: 1 widget(s), 1 page(s), 1 provider(s), 1 app action(s), 1 service file(s), \
+         1 rule file(s)"
     );
 }
 
@@ -115,6 +121,26 @@ fn problems_are_listed_and_fail() {
     );
     put(&uq.join("pages/extra/Page.qml"), "Item {}\n");
     put(&uq.join("icons/x.svg"), "<svg/>");
+    // Rule files: a bad pattern, an id without the folder name, an unknown key, a bad
+    // workspace, a stray file, and a folder with no rules.toml.
+    put(
+        &uq.join("integrations/demo/rules.toml"),
+        "[[window_rule]]\nid = \"demo.games\"\nclass = [\"(\"]\nfullscreen = true\n",
+    );
+    put(
+        &uq.join("integrations/thief/rules.toml"),
+        "[[window_rule]]\nid = \"demo.games\"\nclass = [\"a\"]\nfloat = true\n",
+    );
+    put(
+        &uq.join("integrations/keys/rules.toml"),
+        "[[window_rule]]\nid = \"keys.x\"\nclass = [\"a\"]\nfloat = true\nexec = \"x\"\n",
+    );
+    put(
+        &uq.join("integrations/ws/rules.toml"),
+        "[[window_rule]]\nid = \"ws.x\"\nclass = [\"a\"]\nworkspace = \"game\"\n",
+    );
+    put(&uq.join("integrations/ws/rules.lua"), "hl.exec_cmd('x')");
+    put(&uq.join("integrations/empty/README.md"), "");
 
     let (ok, out) = uqctl(&["integrations", "check", uq.to_str().unwrap()]);
     assert!(!ok, "{out}");
@@ -128,7 +154,13 @@ fn problems_are_listed_and_fail() {
         "Exec program /usr/bin/uq-test-no-such-program does not exist",
         "unknown field",
         "icons: not part of a uq/ folder",
-        "9 problem(s)",
+        "demo/rules.toml: window_rule \"demo.games\": class[0]: this pattern can't be used",
+        "thief/rules.toml: window_rule[0]: id \"demo.games\" must be \"thief.<rule>\"",
+        "keys/rules.toml: rules.toml line 5: unknown field `exec`",
+        "ws/rules.toml: window_rule \"ws.x\": workspace must be",
+        "rules.lua: only rules.toml belongs in integrations/<name>/",
+        "empty: has no rules.toml",
+        "16 problem(s)",
     ] {
         assert!(out.contains(needle), "{needle:?} missing from:\n{out}");
     }
@@ -152,6 +184,7 @@ fn list_reads_a_tree_laid_out_like_usr_share_uq() {
     std::fs::rename(uq.join("widgets"), root.join("shell/widgets")).unwrap();
     std::fs::rename(uq.join("pages"), root.join("settings/pages")).unwrap();
     std::fs::rename(uq.join("launcher"), root.join("launcher")).unwrap();
+    std::fs::rename(uq.join("integrations"), root.join("integrations")).unwrap();
     put(
         &root.join("settings/pages/waits/page.toml"),
         "id = \"waits\"\nname = \"W\"\nqml = \"Page.qml\"\n[requires]\nbus_name = \"org.uq.TestNobody\"\n",
@@ -161,7 +194,7 @@ fn list_reads_a_tree_laid_out_like_usr_share_uq() {
     let (ok, out) = uqctl(&["integrations", "list", "--root", root.to_str().unwrap()]);
     assert!(ok, "{out}");
     let lines: Vec<&str> = out.lines().collect();
-    assert_eq!(lines.len(), 5, "{out}");
+    assert_eq!(lines.len(), 6, "{out}");
     assert!(lines[0].starts_with("widget\tdemo\tshown\t"), "{out}");
     assert!(lines[1].starts_with("page\tdemo\tshown\t"), "{out}");
     assert!(
@@ -176,6 +209,10 @@ fn list_reads_a_tree_laid_out_like_usr_share_uq() {
         lines[4].starts_with("app_action\tdemo-check\tshown\t"),
         "{out}"
     );
+    assert!(
+        lines[5].starts_with("rules\tdemo\tshown\t") && lines[5].ends_with("rules.toml"),
+        "{out}"
+    );
 
     let (ok, json) = uqctl(&[
         "integrations",
@@ -186,7 +223,9 @@ fn list_reads_a_tree_laid_out_like_usr_share_uq() {
     ]);
     assert!(ok);
     let v: serde_json::Value = serde_json::from_str(&json).unwrap();
-    assert_eq!(v.as_array().unwrap().len(), 5);
+    assert_eq!(v.as_array().unwrap().len(), 6);
+    assert_eq!(v[5]["kind"], "rules");
+    assert_eq!(v[5]["name"], "1 window rule");
     assert_eq!(v[2]["waits_for"], "org.uq.TestNobody");
     assert_eq!(v[3]["kind"], "provider");
 

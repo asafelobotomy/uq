@@ -242,7 +242,8 @@ fn section_round_trip() {
             "env",
             "compat",
             "autostart",
-            "keybinds"
+            "keybinds",
+            "integration_rules"
         ]
     );
     assert!(!renders_section("monitors") && renders_section("input"));

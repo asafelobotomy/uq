@@ -40,6 +40,9 @@ impl Desktop {
         if domain == "compat" {
             self.check_compat_files(&next)?;
         }
+        if domain == "integration_rules" {
+            self.check_integration_rules(&next)?;
+        }
         self.commit_section(domain, next, origin).await
     }
 

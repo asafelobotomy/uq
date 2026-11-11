@@ -1,6 +1,6 @@
 # Integrating an app with uQ
 
-An app can plug into uQ in four ways. None of them makes uQ a dependency of the app, or the app a
+An app can plug into uQ in five ways. None of them makes uQ a dependency of the app, or the app a
 dependency of uQ: the files are inert where uQ isn't installed, and uQ runs fine without them.
 
 | Extension point | What the app ships | What the user sees |
@@ -9,6 +9,7 @@ dependency of uQ: the files are inert where uQ isn't installed, and uQ runs fine
 | [Settings page](#settings-pages) | `page.toml` and a QML file | a page under **Apps** in uQ Settings |
 | [Widget](#widgets) | `widget.toml` and a QML file | an icon in the bar or a tile in quick settings |
 | [Launcher provider](#launcher-providers) and [app actions](#app-actions) | a `.provider` file and a D-Bus service; `.appaction` files | results in Spotlight; entries in an app's right-click menu |
+| [Window rules](#window-rules) | a `rules.toml` file | rules under **Rules from apps** on the Window rules page, each off until turned on |
 
 Design: `docs/superpowers/specs/2026-11-10-uq-phase4-integrations-design.md` (Phase 4).
 
@@ -23,6 +24,7 @@ Keep everything in a `uq/` folder in your own repository, installed by your own 
   launcher/<name>.provider                  → /usr/share/uq/launcher/
   launcher/actions/<id>.appaction           → /usr/share/uq/launcher/actions/
   dbus/<bus name>.service                   → /usr/share/dbus-1/services/
+  integrations/<name>/rules.toml            → /usr/share/uq/integrations/<name>/
   README.md                                 what the folder adds and how you tested it
 ```
 
@@ -38,8 +40,8 @@ Keep everything in a `uq/` folder in your own repository, installed by your own 
 Tools:
 
 - `uqctl integrations check uq/` checks the whole folder before packaging: the layout, every
-  manifest and file, the plain-text rule for QML, that each command's program exists and that
-  each provider's bus name is valid. Exit 0 means clean. Run it in your CI, pinned to a uQ
+  manifest and file, the plain-text rule for QML, that each command's program exists, that
+  each provider's bus name is valid, and every `rules.toml`. Exit 0 means clean. Run it in your CI, pinned to a uQ
   release.
 - `uqctl integrations list [--json]` shows what an installed uQ found, whether each item shows,
   and why not.
@@ -70,6 +72,9 @@ What uQ enforces:
   Argument types come from the service's introspection data, never from the QML. Only `b y n q i
   u x t d s o`, arrays of those, `a{sv}` and `a{ss}` cross, both ways. Arguments are at most
   16 KiB of JSON, results at most 256 KiB, and every request ends within 2 seconds.
+- **Window rules** are data, never Lua: uqd checks each one against a closed schema and writes
+  it into `generated.lua` itself, with every value quoted, then has Hyprland check the result.
+  None applies until the user turns it on.
 - **App actions** have one placeholder, `%d`, filled with a validated desktop id as one whole
   argument.
 - Nothing runs as root on an integration's behalf. Admin work goes through your app's own polkit
@@ -293,4 +298,51 @@ Checklist:
 - [ ] The program confirms anything destructive itself (`Terminal=true` for an interactive
       prompt).
 - [ ] The program treats the desktop id as data and looks the app up itself.
+- [ ] `uqctl integrations check uq/` is clean.
+
+## Window rules
+
+An app can offer window rules, such as "open the emulators full screen on the game workspace".
+They are off until the user turns each one on under **Rules from apps** on the Window rules page
+of uQ Settings, and the user can turn them off again or undo the change from History. One file
+per app: `/usr/share/uq/integrations/<name>/rules.toml`, where `<name>` is `[a-z0-9-]{1,40}`.
+
+```toml
+uq_api = 1                                  # optional
+
+[[window_rule]]
+id = "romforge.emulators"                   # "<name>.<rule>", the folder name first
+name = "Emulators open full screen"         # optional: what Settings shows (else the id)
+class = ["^(retroarch|duckstation-qt|PPSSPPSDL|dolphin-emu|pcsx2-qt|rpcs3|azahar)$"]
+title = "^.*$"                              # optional: one window title pattern
+workspace = "name:game"                     # optional: "name:<name>" or a number 1-100
+fullscreen = true                           # optional
+float = false                               # optional
+```
+
+- `id` is required and must start with the folder name and a dot; the rest is
+  `[a-z0-9-]{1,40}`. Ids are unique in the file. Turned-on rules are remembered by id, so keep an
+  id stable across releases and give a rule whose meaning changes a new one.
+- `class` is required: 1 to 8 app ID patterns. Patterns use Hyprland's syntax (RE2): each is at
+  most 256 characters, must compile, and is matched against the whole app ID. Look-arounds and
+  back-references are refused because Hyprland can't use them. Each pattern becomes its own
+  Hyprland rule with the same effects.
+- `workspace` names are letters, digits, spaces, `_` and `-`, up to 32, after `name:`.
+- At least one of `workspace`, `fullscreen` and `float` is set. A file holds at most 16 rules
+  and 64 KiB. Unknown keys, wrong types and bad patterns refuse the whole file.
+- uqd reads the file at every change it renders. When the user turns a rule on, uqd checks it
+  again, renders it as one `hl.window_rule` call per pattern (named `uq:app:<id>`, after the
+  workspace rules and before the user's own window rules, so their rules win), and has Hyprland
+  verify the config. Any refusal leaves the rule off and shows the reason.
+- A rule that is on but whose file was removed, or no longer passes the checks, is left out of
+  the config at the next change. Its id stays on, so it applies again when the package is back;
+  Settings lists it as not installed.
+- Nothing else changes when a rule is turned on. If the rule wants a workspace to look a certain
+  way (say, no gaps for games), say so in your README; the user sets that on the Look and Window
+  rules pages.
+
+Checklist:
+
+- [ ] Every pattern is anchored (`^…$`) and as narrow as it can be.
+- [ ] `name` says what the rule does in plain words.
 - [ ] `uqctl integrations check uq/` is clean.

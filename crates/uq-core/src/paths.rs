@@ -32,6 +32,10 @@ pub struct Paths {
     pub user_themes_dir: PathBuf,
     /// `$UQ_DATA_DIR/templates`
     pub templates_dir: PathBuf,
+    /// `/usr/share/uq/integrations`: `<name>/rules.toml` window rules from apps (Phase 4 §3.3).
+    /// Fixed like the other integration roots (`integration::scan::Roots`), not under
+    /// `$UQ_DATA_DIR`.
+    pub integrations_dir: PathBuf,
     /// `/usr/share/hypr/hyprland.lua`: Hyprland's stock config. A copy of it in `main_lua` is not
     /// the user's own work, so `uqctl setup` may replace it.
     pub hypr_default: PathBuf,
@@ -137,13 +141,15 @@ impl Paths {
         let data = get("UQ_DATA_DIR")
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from("/usr/share/uq"));
-        Paths::build(
+        let mut p = Paths::build(
             &config,
             &state,
             &data,
             Path::new("/usr/share/hypr/hyprland.lua"),
             StartupPaths::from_vars(get),
-        )
+        );
+        p.integrations_dir = crate::integration::scan::INTEGRATIONS_DIR.into();
+        p
     }
 
     /// Everything under one root, for tests.
@@ -180,6 +186,7 @@ impl Paths {
             themes_dir: data.join("themes"),
             user_themes_dir: startup.data_home.join("uq/themes"),
             templates_dir: data.join("templates"),
+            integrations_dir: data.join("integrations"),
             hypr_default: hypr_default.to_path_buf(),
             startup,
         }
@@ -214,6 +221,11 @@ mod tests {
             PathBuf::from("/home/u/.local/share/uq/themes")
         );
         assert_eq!(p.templates_dir, PathBuf::from("/opt/uq/templates"));
+        assert_eq!(
+            p.integrations_dir,
+            PathBuf::from("/usr/share/uq/integrations"),
+            "fixed, like the other integration roots"
+        );
     }
 
     #[test]
@@ -242,6 +254,7 @@ mod tests {
             &p.profiles_dir,
             &p.profile_active,
             &p.user_themes_dir,
+            &p.integrations_dir,
         ] {
             assert!(path.starts_with("/tmp/r"), "{path:?}");
         }

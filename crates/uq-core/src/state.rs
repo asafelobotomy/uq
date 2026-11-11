@@ -4,6 +4,7 @@ use crate::atomic::atomic_write;
 use crate::autostart::Autostart;
 use crate::compat::Compat;
 use crate::env::Env;
+use crate::integration::rules::IntegrationRules;
 use crate::keybinds::Keybinds;
 use crate::lua::Layout;
 use crate::rules::Rules;
@@ -40,6 +41,10 @@ pub struct State {
     /// Startup apps: choices about the XDG entries, and the user's own; each loads on its own.
     #[serde(default)]
     pub autostart: Autostart,
+    /// Window rules from apps (packaged `rules.toml`) the person turned on, by id; each loads on
+    /// its own. Empty: every packaged rule is opt-in.
+    #[serde(default, skip_serializing_if = "is_empty_rules")]
+    pub integration_rules: IntegrationRules,
     /// The scheduled transition uqd last applied; a manual change holds until a newer one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub schedule_mark: Option<chrono::DateTime<chrono::Utc>>,
@@ -74,6 +79,10 @@ fn lenient_rules<'de, D: serde::Deserializer<'de>>(
         .collect())
 }
 
+fn is_empty_rules(r: &IntegrationRules) -> bool {
+    r.enabled.is_empty()
+}
+
 /// TOML has no null, so a disabled idle stage (`None`) is stored as 0 in `state.toml`.
 const IDLE_STAGES: [&str; 4] = ["dim", "lock", "screen_off", "suspend_battery"];
 
@@ -89,6 +98,7 @@ impl Default for State {
             env: Env::default(),
             compat: Compat::default(),
             autostart: Autostart::default(),
+            integration_rules: IntegrationRules::default(),
             schedule_mark: None,
             welcome: Welcome::default(),
             settings: Settings::default(),
@@ -151,6 +161,7 @@ impl State {
         state.env = std::mem::take(&mut state.env).repaired();
         state.compat = std::mem::take(&mut state.compat).repaired();
         state.autostart = std::mem::take(&mut state.autostart).repaired();
+        state.integration_rules = std::mem::take(&mut state.integration_rules).repaired();
         Ok(state)
     }
 
@@ -194,6 +205,9 @@ impl State {
         if domain == "autostart" {
             return Ok(self.autostart.section());
         }
+        if domain == crate::integration::rules::DOMAIN {
+            return Ok(self.integration_rules.section());
+        }
         if domain != "layouts" {
             return self.settings.section(domain);
         }
@@ -229,6 +243,10 @@ impl State {
         }
         if domain == "autostart" {
             self.autostart = Autostart::from_section(&value, &self.autostart)?;
+            return Ok(());
+        }
+        if domain == crate::integration::rules::DOMAIN {
+            self.integration_rules = IntegrationRules::from_section(&value)?;
             return Ok(());
         }
         if domain != "layouts" {
@@ -388,6 +406,9 @@ mod tests {
                     enabled: true,
                     delay: Some(10),
                 }],
+            },
+            integration_rules: IntegrationRules {
+                enabled: vec!["romforge.emulators".into()],
             },
             schedule_mark: None,
             welcome: Welcome {
@@ -685,5 +706,45 @@ terminal = \"kitty\"
         .unwrap();
         st.save(&p).unwrap();
         assert_eq!(State::load(&p), st);
+    }
+
+    #[test]
+    fn integration_rules_load_on_their_own() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("state.toml");
+        std::fs::write(
+            &p,
+            "theme = \"rosewood\"\n[integration_rules]\nenabled = [\"romforge.emulators\", 4, \"bad\"]\n",
+        )
+        .unwrap();
+        let s = State::load(&p);
+        assert_eq!(s.theme, "rosewood");
+        assert_eq!(s.integration_rules.enabled, ["romforge.emulators"]);
+        std::fs::write(&p, "theme = \"rosewood\"\nintegration_rules = 5\n").unwrap();
+        let s = State::load(&p);
+        assert_eq!(s.theme, "rosewood");
+        assert!(s.integration_rules.enabled.is_empty());
+        assert!(p.exists(), "not moved aside");
+        // Empty, it isn't written at all.
+        State::default().save(&p).unwrap();
+        assert!(
+            !std::fs::read_to_string(&p)
+                .unwrap()
+                .contains("integration_rules")
+        );
+        let mut st = State::default();
+        st.set_section(
+            "integration_rules",
+            serde_json::json!({"enabled": ["romforge.emulators"]}),
+        )
+        .unwrap();
+        assert_eq!(
+            st.section("integration_rules").unwrap(),
+            serde_json::json!({"enabled": ["romforge.emulators"]})
+        );
+        assert!(
+            st.set_section("integration_rules", serde_json::json!({"enabled": ["x"]}))
+                .is_err()
+        );
     }
 }
