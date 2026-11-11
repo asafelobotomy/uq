@@ -144,7 +144,7 @@ pub fn argv(fix: Option<&AppFix>, id: &str, exec: Vec<String>) -> Result<Vec<Str
 }
 
 /// One `Exec` value with the fix applied: the env wrapper in front, the flags and options before
-/// the first file or URL field code (or at the end). Field codes are kept.
+/// the first file or URL field code (or Flatpak's `@@` marker) (or at the end). Field codes are kept.
 fn wrap_exec(raw: &str, env: &[(String, String)], extra: &[String]) -> Result<String, CompatError> {
     let bad = || CompatError::BadExec(BAD_EXEC.into());
     let lexed = exec_tokens(raw).map_err(|_| bad())?;
@@ -159,9 +159,15 @@ fn wrap_exec(raw: &str, env: &[(String, String)], extra: &[String]) -> Result<St
         Some(Token::Arg(_)) => {}
         _ => return Err(bad()),
     }
+    // Flatpak wraps the file or URL fields as `@@u %U @@`: options go before the opening marker,
+    // or Flatpak would treat them as files.
     let at = tokens
         .iter()
-        .position(|t| matches!(t, Token::Field('f' | 'F' | 'u' | 'U')))
+        .position(|t| match t {
+            Token::Field('f' | 'F' | 'u' | 'U') => true,
+            Token::Arg(a) => matches!(a.as_str(), "@@" | "@@u" | "@@f"),
+            _ => false,
+        })
         .unwrap_or(tokens.len());
     tokens.splice(at..at, extra.iter().cloned().map(Token::Arg));
     if !env.is_empty() {
