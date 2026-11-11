@@ -1,6 +1,6 @@
 //! Fake system services for the System pages' tests, on a private bus that stands in for the
 //! system bus (spec §5): AccountsService, timedated, localed, hostnamed, power-profiles-daemon,
-//! UPower and logind, plus the real `uq-settings-helper` service with a mock polkit authority
+//! UPower, logind, NetworkManager and BlueZ, plus the real `uq-settings-helper` service with a mock polkit authority
 //! and its files under a temporary root.
 //!
 //! Each fake keeps its state behind an `Arc<Mutex<…>>` the test can read and change, and a
@@ -14,7 +14,9 @@ use uq_core::test_bus::{Bus, connect, private_bus};
 use super::sysbus::SystemBus;
 
 mod accounts;
+pub mod bluez;
 mod helper;
+pub mod nm;
 mod power;
 mod systemd;
 
