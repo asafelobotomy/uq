@@ -299,6 +299,8 @@ async fn forward(
                 .map(|(d, j)| json!({"domain": d, "value": parse_json(&j)})),
             "LaunchCountsChanged" => body.deserialize::<HashMap<String, u32>>().map(|c| json!(c)),
             "ProfileChanged" => body.deserialize::<String>().map(|id| json!({"id": id})),
+            // No arguments: the shell asks `ListOutputs` again.
+            "MonitorsChanged" => Ok(json!({})),
             "PickRequested" => body
                 .deserialize::<String>()
                 .map(|token| json!({"token": token})),
@@ -348,6 +350,7 @@ enum Request {
     GetLaunchCounts,
     RecordLaunch(String),
     ListProfiles,
+    ListOutputs,
     ApplyProfile(String),
     ProfileOff,
     PickDone(String, String),
@@ -385,6 +388,7 @@ impl Request {
             "GetSettings" => (0, Request::GetSettings),
             "GetLaunchCounts" => (0, Request::GetLaunchCounts),
             "ListProfiles" => (0, Request::ListProfiles),
+            "ListOutputs" => (0, Request::ListOutputs),
             "ProfileOff" => (0, Request::ProfileOff),
             "ShellReady" => (0, Request::ShellReady),
             "GetWelcome" => (0, Request::GetWelcome),
@@ -509,6 +513,10 @@ impl Request {
                 let s: String = proxy.call("ListProfiles", &()).await.map_err(describe)?;
                 serde_json::from_str(&s).map_err(|e| format!("bad profile list: {e}"))
             }
+            Request::ListOutputs => {
+                let s: String = proxy.call("ListOutputs", &()).await.map_err(describe)?;
+                serde_json::from_str(&s).map_err(|e| format!("bad output list: {e}"))
+            }
             Request::ApplyProfile(id) => {
                 report(proxy.call("ApplyProfile", &(id,)).await.map_err(describe)?)
             }
@@ -574,6 +582,15 @@ mod tests {
         assert!(Request::parse("ApplyProfile", &[json!("a"), json!("b")]).is_err());
         assert!(Request::parse("ProfileOff", &[]).is_ok());
         assert!(Request::parse("ProfileOff", &[json!("x")]).is_err());
+    }
+
+    #[test]
+    fn list_outputs_is_a_shell_call() {
+        assert!(matches!(
+            Request::parse("ListOutputs", &[]),
+            Ok(Request::ListOutputs)
+        ));
+        assert!(Request::parse("ListOutputs", &[json!(1)]).is_err());
     }
 
     #[test]

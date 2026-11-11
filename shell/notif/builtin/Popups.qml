@@ -30,7 +30,8 @@ PanelWindow {
     readonly property bool shown: !Bridge.locked && Builtin.popups.length > 0 && Surfaces.open !== "notifcentre"
 
     visible: shown
-    screen: screenFor(Hyprland.focusedMonitor)
+    // The main display when one is chosen, else the focused screen.
+    screen: Outputs.primaryScreen(Quickshell.screens) || screenFor(Hyprland.focusedMonitor)
     color: "transparent"
     WlrLayershell.layer: WlrLayer.Top
     WlrLayershell.namespace: "uq-notif"
