@@ -241,12 +241,14 @@ fn section_round_trip() {
             "rules",
             "env",
             "compat",
-            "autostart"
+            "autostart",
+            "keybinds"
         ]
     );
     assert!(!renders_section("monitors") && renders_section("input"));
     assert!(renders_section("rules") && renders_section("env") && renders_section("compat"));
     assert!(!renders_section("autostart"));
+    assert!(renders_section("keybinds"));
 }
 
 #[test]

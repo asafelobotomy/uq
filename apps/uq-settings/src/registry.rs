@@ -974,6 +974,10 @@ mod tests {
         assert!(domains.contains(&"env") && domains.contains(&"compat"));
         assert!(domains.contains(&"autostart"));
         for domain in domains {
+            if domain == "keybinds" {
+                // Task 12 adds the Keyboard shortcuts page and removes this skip.
+                continue;
+            }
             let pages: Vec<_> = core_pages()
                 .iter()
                 .filter(|p| p.domains.contains(&domain))

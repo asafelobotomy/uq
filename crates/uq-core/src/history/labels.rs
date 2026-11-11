@@ -50,6 +50,8 @@ pub fn label(domain: &str, key: &str) -> Option<String> {
         ("rules", "window") => "Window rules",
         ("rules", "layer") => "Panel rules",
         ("rules", "workspace") => "Workspace rules",
+        ("keybinds", "overrides") => "uQ's shortcuts",
+        ("keybinds", "custom") => "Your own shortcuts",
         ("env", "vars") => "Environment variables",
         ("compat", "sharp_x11") => "Sharp X11 apps",
         ("compat", "electron_wayland") => "Run Electron apps on Wayland",
@@ -281,6 +283,16 @@ mod tests {
                     "delay": 5}],
                 "added": [{"name": "Sync", "app": "syncthing.desktop", "delay": 10},
                     {"name": "Backup", "argv": ["backup", "--quiet"], "enabled": false}]}),
+        )
+        .unwrap();
+        st.set_section(
+            "keybinds",
+            serde_json::json!({"overrides": [
+                    {"id": "uq.spotlight", "combo": "SUPER + K"},
+                    {"id": "uq.close", "enabled": false}],
+                "custom": [{"id": "k-3f9c", "name": "Screenshot",
+                    "combo": "SUPER + SHIFT + P", "action":
+                    {"kind": "command", "command": "grim shot.png"}}]}),
         )
         .unwrap();
         let schedules = [
