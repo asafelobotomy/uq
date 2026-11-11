@@ -1,6 +1,8 @@
 [workspace]
 resolver = "3"
 members = ["crates/uq-core", "crates/uqd", "crates/uqctl", "crates/uq-settings-helper", "apps/uq-settings"]
+# A standalone example for other apps' repositories; never built with uQ.
+exclude = ["templates/provider"]
 
 [workspace.package]
 edition = "2024"

@@ -1,0 +1,4 @@
+[Launcher Provider]
+BusName=org.uq.test.GateProvider
+Name=Gate provider
+Prefix=gt:

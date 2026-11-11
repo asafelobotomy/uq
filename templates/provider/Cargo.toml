@@ -1,0 +1,16 @@
+# A uQ launcher provider. A standalone example crate: it is not part of uQ's workspace.
+# Copy this folder into your repository and rename `example-provider` and
+# `org.example.Provider` everywhere. Reference: docs/integrating.md in the uQ repository.
+[package]
+name = "example-provider"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[dependencies]
+tokio = { version = "1", features = ["rt", "macros", "time", "sync"] }
+zbus = { version = "5", default-features = false, features = ["tokio"] }
+
+# Keeps this crate out of any workspace it is copied next to.
+[workspace]

@@ -1,0 +1,4 @@
+uq_api = 1
+id = "gate-page"
+name = "Gate page"
+qml = "Page.qml"
