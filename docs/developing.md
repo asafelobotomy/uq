@@ -63,3 +63,6 @@ the AUR. `uq-dev status` lists the promoted packages still installed.
 For quick daemon iteration without packaging, stop the installed unit and run the dev binary in
 a terminal, for example `sudo systemctl stop scdrd; sudo target/debug/scdrd --state-dir
 /tmp/scdr-dev`, then `sudo systemctl start scdrd`. Test bindle only in its VM (`tests/vm`).
+
+On a freshly installed machine, [fresh-install-plan.md](fresh-install-plan.md) walks through the
+install, the first `uq-dev session` and every live check that needs real hardware.
