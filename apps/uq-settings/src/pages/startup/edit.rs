@@ -1,9 +1,10 @@
-//! Changing a section: read it, edit it, check it with uq-core's own rules so a refusal reads
+//! Changing a section (`env`, `autostart` or `compat`): read it, edit it, check it with uq-core's own rules so a refusal reads
 //! as a plain reason (F21), and write it back.
 
 use serde_json::{Map, Value, json};
 use uq_core::autostart::Autostart;
 use uq_core::client::{self, DesktopProxy};
+use uq_core::compat::Compat;
 use uq_core::desktop_entry::ExecError;
 use uq_core::env::Env;
 use uq_core::settings::SettingError;
@@ -11,12 +12,12 @@ use uq_core::settings::SettingError;
 use super::UNCLOSED_QUOTE;
 use crate::pages::runner::{ORIGIN, message, parse_json, plain_refusal};
 
-pub(super) fn failure(text: impl Into<String>) -> zbus::Error {
+pub(crate) fn failure(text: impl Into<String>) -> zbus::Error {
     zbus::Error::Failure(text.into())
 }
 
 /// The plain reason of a refusal, without the key (F21).
-pub(super) fn reason(e: &SettingError) -> String {
+pub(crate) fn reason(e: &SettingError) -> String {
     match e {
         SettingError::Invalid { reason, .. } => reason.clone(),
         other => other.to_string(),
@@ -36,9 +37,10 @@ pub(super) fn command_error(e: &ExecError) -> &'static str {
 }
 
 /// uq-core's check of a whole section, before it is sent.
-pub(super) fn precheck(domain: &str, section: &Value) -> zbus::Result<()> {
+pub(crate) fn precheck(domain: &str, section: &Value) -> zbus::Result<()> {
     let checked = match domain {
         "env" => Env::from_section(section).map(drop),
+        "compat" => Compat::from_section(section).map(drop),
         _ => Autostart::from_section(section, &Autostart::default()).map(drop),
     };
     checked.map_err(|e| failure(reason(&e)))
@@ -46,7 +48,7 @@ pub(super) fn precheck(domain: &str, section: &Value) -> zbus::Result<()> {
 
 /// Read `domain`'s section, let `edit` change it, check it and write it back with origin
 /// `settings`. Call it under the write lock. uqd's own refusal loses its key (F21).
-pub(super) async fn write_section(
+pub(crate) async fn write_section(
     proxy: &DesktopProxy<'_>,
     domain: &str,
     edit: impl FnOnce(&mut Map<String, Value>) -> zbus::Result<()>,
@@ -69,7 +71,7 @@ pub(super) async fn write_section(
         })
 }
 
-pub(super) fn list_mut<'a>(
+pub(crate) fn list_mut<'a>(
     o: &'a mut Map<String, Value>,
     field: &str,
 ) -> zbus::Result<&'a mut Vec<Value>> {
@@ -79,7 +81,7 @@ pub(super) fn list_mut<'a>(
         .ok_or_else(|| failure(format!("the {field} list isn't a list")))
 }
 
-pub(super) fn find(list: &[Value], field: &str, key: &str) -> Option<usize> {
+pub(crate) fn find(list: &[Value], field: &str, key: &str) -> Option<usize> {
     list.iter().position(|e| e[field] == key)
 }
 

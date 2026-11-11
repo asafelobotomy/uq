@@ -7,8 +7,8 @@
 //! own rules so a refusal reads as a plain reason (F21), and writes it back under the write
 //! lock. The §6 switches are shown read-only.
 
-mod edit;
-mod rows;
+pub(crate) mod edit;
+pub(crate) mod rows;
 
 use std::path::PathBuf;
 use std::sync::Mutex as StdMutex;
@@ -341,7 +341,7 @@ impl PageLogic for StartupState {
 
 /// uqd's `Explain` rows for `domain`; a failure other than uqd being gone leaves the rows
 /// without a source.
-async fn explain(proxy: &DesktopProxy<'_>, domain: &str) -> zbus::Result<Value> {
+pub(crate) async fn explain(proxy: &DesktopProxy<'_>, domain: &str) -> zbus::Result<Value> {
     match proxy.explain(domain).await.and_then(|t| parse_json(&t)) {
         Ok(v) => Ok(v),
         Err(e) if client::no_owner(&e) => Err(e),

@@ -9,7 +9,7 @@ use uq_core::env;
 pub(super) const NEXT_LOGIN: &str = "Starts next time you log in";
 
 /// The Explain entry for `key` as the page shows it: `{source, detail}`, or null.
-pub(super) fn origin(explained: &Value, key: &str) -> Value {
+pub(crate) fn origin(explained: &Value, key: &str) -> Value {
     explained.get(key).map_or(
         Value::Null,
         |r| json!({"source": r["source"], "detail": r["detail"]}),
@@ -17,7 +17,7 @@ pub(super) fn origin(explained: &Value, key: &str) -> Value {
 }
 
 /// A section row that says the last write failed: `{source, message}`, or null.
-pub(super) fn section_error(explained: &Value, key: &str) -> Value {
+pub(crate) fn section_error(explained: &Value, key: &str) -> Value {
     match explained.get(key) {
         Some(r) if r["source"] == "error" => {
             json!({"source": "error", "message": r["detail"]["message"]})

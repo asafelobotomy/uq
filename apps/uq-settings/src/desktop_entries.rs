@@ -7,6 +7,7 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
+use uq_core::desktop_entry::{FieldCtx, exec_argv, read_entry};
 use uq_core::settings::{valid_pinned_id, valid_terminal};
 
 const MAX_NAME_CHARS: usize = 200;
@@ -18,6 +19,10 @@ pub struct AppEntry {
     pub name: String,
     pub icon: String,
     pub terminal_emulator: bool,
+    /// `StartupWMClass`: the window class the app's windows carry.
+    pub wm_class: Option<String>,
+    /// The file name of the program `Exec` runs (F43), `code` for `/usr/bin/code %F`.
+    pub exec_name: Option<String>,
 }
 
 /// `$XDG_DATA_HOME/applications`, then `/usr/share/applications`.
@@ -73,11 +78,23 @@ fn parse(id: &str, text: &str) -> Option<AppEntry> {
         return None;
     }
     let name = name.filter(|n| !n.is_empty())?;
+    let entry = read_entry(text);
+    let cleaned = |s: &str| Some(clean_name(s)).filter(|s| !s.is_empty());
+    let exec_name = entry
+        .exec
+        .as_deref()
+        .and_then(|e| exec_argv(e, &FieldCtx::default()).ok())
+        .and_then(|argv| {
+            let program = argv.into_iter().next()?;
+            cleaned(program.rsplit('/').next().unwrap_or_default())
+        });
     Some(AppEntry {
         id: id.to_string(),
         name,
         icon,
         terminal_emulator,
+        wm_class: entry.wm_class.as_deref().and_then(cleaned),
+        exec_name,
     })
 }
 
@@ -155,13 +172,17 @@ mod tests {
                     id: "firefox.desktop".into(),
                     name: "Firefox".into(),
                     icon: "firefox".into(),
-                    terminal_emulator: false
+                    terminal_emulator: false,
+                    wm_class: None,
+                    exec_name: None,
                 },
                 AppEntry {
                     id: "kitty.desktop".into(),
                     name: "Kitty".into(),
                     icon: "kitty".into(),
-                    terminal_emulator: true
+                    terminal_emulator: true,
+                    wm_class: None,
+                    exec_name: None,
                 },
             ]
         );
@@ -205,6 +226,31 @@ mod tests {
         assert_eq!(apps.len(), 5, "every app is still listed (for pins)");
         let ids: Vec<_> = terminals(&apps).iter().map(|a| a.id.as_str()).collect();
         assert_eq!(ids, ["foot.desktop"]);
+    }
+
+    #[test]
+    fn wm_class_and_program_name_read() {
+        let d = tempfile::tempdir().unwrap();
+        write(
+            d.path(),
+            "code.desktop",
+            "[Desktop Entry]\nName=Code\nExec=\"/usr/share/code/bin/co de\" --new %F\n\
+             StartupWMClass=Co\u{7}de\n",
+        );
+        write(
+            d.path(),
+            "bad.desktop",
+            "[Desktop Entry]\nName=Bad\nExec=\"unclosed\nStartupWMClass=\n",
+        );
+        let apps = scan(&[d.path().to_path_buf()]);
+        assert_eq!(apps[1].id, "code.desktop");
+        assert_eq!(apps[1].wm_class.as_deref(), Some("Code"));
+        assert_eq!(apps[1].exec_name.as_deref(), Some("co de"));
+        assert_eq!(apps[0].id, "bad.desktop");
+        assert_eq!(
+            (apps[0].wm_class.as_deref(), apps[0].exec_name.as_deref()),
+            (None, None)
+        );
     }
 
     #[test]
