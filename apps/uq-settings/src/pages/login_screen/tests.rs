@@ -231,6 +231,12 @@ async fn my_display_layout_is_copied_without_names() {
         "{toml}"
     );
     assert!(!toml.contains("Dell"), "descriptions are dropped");
+
+    // "Use automatic layout" removes the copy.
+    let out = run(&t.page, Op::AutomaticDisplays).await;
+    assert_eq!(out.error, None);
+    assert_eq!(out.state["monitors"]["set"], false);
+    assert!(t.helper.read(GREETER_MONITORS).is_none());
 }
 
 #[tokio::test]

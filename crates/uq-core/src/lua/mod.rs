@@ -15,7 +15,7 @@ mod rules;
 mod startup;
 pub use input::emit_devices;
 pub use look::{ANIMATION_LEAVES, CURVES};
-pub use monitors::{emit_monitor_line, emit_monitors};
+pub use monitors::{MAX_GREETER_MONITORS, emit_monitor_line, emit_monitors, greeter_monitors_lua};
 pub use rules::{emit_layer_rule, emit_window_rule, emit_workspace_rules};
 pub use startup::{StartupRender, emit_startup_env, emit_xwayland, startup_render};
 

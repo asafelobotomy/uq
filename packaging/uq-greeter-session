@@ -3,7 +3,8 @@
 # as the `greeter` user (spec phase 5 §2.1, §2.4).
 #
 #   uq-greeter-session          Start Hyprland with /usr/share/uq/greeter/hyprland.lua (plus the
-#                               keyboard layout from `localectl`). Exit 0 once a session was
+#                               keyboard layout from `localectl` and the monitor layout from
+#                               /etc/uq/greeter-monitors.toml, if any). Exit 0 once a session was
 #                               launched; otherwise record a failure and exit 1, so greetd starts
 #                               the greeter again. After 3 failures in 60 s, exec `agreety` (greetd's
 #                               text greeter) on the same VT, so a broken greeter never locks
@@ -25,6 +26,8 @@ hyprland=${UQ_GREETER_HYPRLAND:-Hyprland}
 hyprctl=${UQ_GREETER_HYPRCTL:-hyprctl}
 qs=${UQ_GREETER_QS:-quickshell}
 agreety=${UQ_GREETER_AGREETY:-agreety}
+uqctl=${UQ_GREETER_UQCTL:-/usr/bin/uqctl}
+monitors_file=${UQ_GREETER_MONITORS:-/etc/uq/greeter-monitors.toml}
 ready_timeout=${UQ_GREETER_READY_TIMEOUT:-30}
 session_cmd=/usr/bin/uq-session
 window=60
@@ -95,6 +98,17 @@ valid() { [[ "$1" =~ ^[A-Za-z0-9_,()-]{1,64}$ ]]; }
             printf 'hl.config({ input = { kb_layout = "%s", kb_variant = "%s" } })\n' "$layout" "$variant"
         else
             printf 'hl.config({ input = { kb_layout = "%s" } })\n' "$layout"
+        fi
+    fi
+    # The monitor layout chosen in Settings (Login screen), if any: `uqctl` checks it as uqd checks
+    # its own `monitors` and prints `hl.monitor` lines with every value quoted for Lua. A bad file
+    # prints nothing and exits non-zero; then Hyprland's automatic layout (the fixed config's)
+    # stays. Nothing is used unless the whole file passed.
+    if [ -e "$monitors_file" ]; then
+        if lines=$("$uqctl" greeter monitors-lua --file "$monitors_file"); then
+            printf '%s\n' "$lines" | grep -E '^hl\.monitor\(\{ .* \}\)$'
+        else
+            say "the login screen's monitor layout was not used; using the automatic layout"
         fi
     fi
 } >"$rt/hyprland.lua"

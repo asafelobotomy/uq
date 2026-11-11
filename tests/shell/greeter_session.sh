@@ -10,6 +10,9 @@
 #   - a greeter that never gets ready is stopped after the timeout and counts as a failure
 #   - a hostile localectl layout never reaches the config
 #   - Quickshell's greetd log lines are dropped
+#   - /etc/uq/greeter-monitors.toml (UQ_GREETER_MONITORS): a good file's hl.monitor lines reach the
+#     config (through the real `uqctl greeter monitors-lua` when target/debug/uqctl is built); a bad
+#     or missing file, a failing uqctl or stray output leaves the automatic layout
 set -u
 root=$(cd "$(dirname "$0")/../.." && pwd)
 script="$root/packaging/uq-greeter-session"
@@ -54,6 +57,7 @@ run() { # QS_MODE [extra env]
         UQ_GREETER_STATE_DIR="$tmp/state" UQ_GREETER_CONFIG=/usr/share/uq/greeter/hyprland.lua \
         UQ_GREETER_DIR=/usr/share/uq/greeter UQ_GREETER_HYPRLAND="$tmp/bin/Hyprland" \
         UQ_GREETER_HYPRCTL="$tmp/bin/hyprctl" UQ_GREETER_QS="$tmp/bin/qs" UQ_GREETER_AGREETY="$tmp/bin/agreety" \
+        UQ_GREETER_MONITORS="${MONITORS:-$tmp/no-monitors.toml}" UQ_GREETER_UQCTL="${UQCTL:-$tmp/bin/no-uqctl}" \
         "$@" "$script" 2>"$tmp/stderr"
 }
 
@@ -115,6 +119,49 @@ LAYOUT='us" } }) hl.exec_cmd("touch /tmp/pwned") --' run launch
 grep -q 'exec_cmd\|kb_layout' "$tmp/last-config.lua" && { echo "FAIL: hostile layout written: $(cat "$tmp/last-config.lua")"; fail=1; }
 LAYOUT='us' VARIANT='$(id)' run launch
 grep -qx 'hl.config({ input = { kb_layout = "us" } })' "$tmp/last-config.lua" || { echo "FAIL: bad variant handling: $(cat "$tmp/last-config.lua")"; fail=1; }
+
+# 10. The login screen's monitor layout.
+grep -q 'hl.monitor' "$tmp/last-config.lua" && { echo "FAIL: monitor lines without a file"; fail=1; }
+# A stub uqctl: prints good lines, stray lines, or fails.
+cat > "$tmp/bin/uqctl-stub" <<'SH'
+#!/bin/sh
+[ "$1 $2 $3 $4" = "greeter monitors-lua --file $MONITORS" ] || { echo "bad args: $*" >&2; exit 2; }
+case "$UQCTL_MODE" in
+    good) printf '%s\n' 'hl.monitor({ output = "DP-1", mode = "1920x1080@60", position = "0x0", scale = "1.0" })' ;;
+    stray) printf '%s\n' 'hl.exec_cmd("touch /tmp/pwned")' 'hl.monitor({ output = "DP-2", disabled = true })' ;;
+    fail) echo "uqctl: refused" >&2; exit 1 ;;
+esac
+SH
+chmod +x "$tmp/bin/uqctl-stub"
+echo '[outputs.DP-1]' > "$tmp/monitors.toml"
+MONITORS="$tmp/monitors.toml" UQCTL="$tmp/bin/uqctl-stub" UQCTL_MODE=good run launch
+grep -qx 'hl.monitor({ output = "DP-1", mode = "1920x1080@60", position = "0x0", scale = "1.0" })' "$tmp/last-config.lua" \
+    || { echo "FAIL: monitor line missing: $(cat "$tmp/last-config.lua") $(cat "$tmp/stderr")"; fail=1; }
+[ "$(sed -n 1p "$tmp/last-config.lua")" = 'require("/usr/share/uq/greeter/hyprland.lua")' ] \
+    || { echo "FAIL: monitor lines must follow the fixed config"; fail=1; }
+MONITORS="$tmp/monitors.toml" UQCTL="$tmp/bin/uqctl-stub" UQCTL_MODE=stray run launch
+grep -q 'exec_cmd' "$tmp/last-config.lua" && { echo "FAIL: stray uqctl output reached the config"; fail=1; }
+grep -qx 'hl.monitor({ output = "DP-2", disabled = true })' "$tmp/last-config.lua" || { echo "FAIL: good line dropped with the stray one"; fail=1; }
+MONITORS="$tmp/monitors.toml" UQCTL="$tmp/bin/uqctl-stub" UQCTL_MODE=fail run launch; rc=$?
+[ "$rc" = 0 ] || { echo "FAIL: a refused monitor layout stopped the greeter ($rc)"; fail=1; }
+grep -q 'hl.monitor' "$tmp/last-config.lua" && { echo "FAIL: monitor lines after uqctl refused"; fail=1; }
+grep -q 'automatic layout' "$tmp/stderr" || { echo "FAIL: no message for the refused layout"; fail=1; }
+MONITORS="$tmp/monitors.toml" run launch
+grep -q 'hl.monitor' "$tmp/last-config.lua" && { echo "FAIL: monitor lines without uqctl"; fail=1; }
+# The real uqctl, when built.
+real="$root/target/debug/uqctl"
+if [ -x "$real" ]; then
+    printf '[outputs.DP-1]\nmode = "2560x1440@144"\nscale = 1.25\n\n[outputs.DP-1.position]\nx = 0\ny = 0\n' > "$tmp/monitors.toml"
+    MONITORS="$tmp/monitors.toml" UQCTL="$real" run launch
+    grep -qx 'hl.monitor({ output = "DP-1", mode = "2560x1440@144", position = "0x0", scale = "1.25" })' "$tmp/last-config.lua" \
+        || { echo "FAIL: real uqctl: $(cat "$tmp/last-config.lua") $(cat "$tmp/stderr")"; fail=1; }
+    printf '[outputs."DP-1\\")os.exit()--"]\nmode = "preferred"\n' > "$tmp/monitors.toml"
+    MONITORS="$tmp/monitors.toml" UQCTL="$real" run launch
+    grep -q 'hl.monitor\|os.exit' "$tmp/last-config.lua" && { echo "FAIL: real uqctl let a bad name through"; fail=1; }
+    grep -q 'automatic layout' "$tmp/stderr" || { echo "FAIL: real uqctl: no message for a bad file"; fail=1; }
+else
+    echo "greeter_session: target/debug/uqctl not built; the real-uqctl monitor checks were skipped"
+fi
 
 # 9. --shell without a status path ends Hyprland rather than hanging.
 : > "$tmp/calls"

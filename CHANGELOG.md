@@ -259,6 +259,10 @@ All notable changes to uQ are listed here. The format follows
   Reduce motion, `ui.reduce_motion`): the idle dim and wallpaper changes happen at once, and
   window and panel animations are off. The login screen's own Reduce motion stops its user list
   from coasting when flicked; it already had no other animations.
+- **"Use my display layout at login" is used.** The login screen now arranges its screens from
+  the copied layout (`/etc/uq/greeter-monitors.toml`, checked like your own; a bad file falls back
+  to the automatic layout). Settings → Login screen has **Use automatic layout** to go back
+  (new helper call `ClearGreeterMonitors`).
 
 ## [0.2.1] - 2026-11-10
 

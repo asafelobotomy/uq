@@ -190,6 +190,7 @@ Each method is a closed operation with its own polkit action, as in Phase 3 §3.
 | `SetGreeterWallpaper(h fd)` | `/var/lib/uq-greeter/wallpaper`, copied from the fd (regular file only, ≤ 20 MiB, never decoded), atomic | `org.uq.settings.greeter` |
 | `ClearGreeterWallpaper()` | removes it | `org.uq.settings.greeter` |
 | `SetGreeterMonitors(s json)` | `/etc/uq/greeter-monitors.toml`, validated by `uq_core::settings::monitors` | `org.uq.settings.greeter` |
+| `ClearGreeterMonitors()` | removes it (Hyprland's automatic layout again) | `org.uq.settings.greeter` |
 | `SetAutoLogin(s user)` | `[initial_session]` in `/etc/uq/greetd.toml` (empty string removes it); the user must exist with uid ≥ 1000 | `org.uq.settings.autologin` (`auth_admin`) |
 
 The helper unit's `ReadWritePaths` grows by `/etc/uq` and `/var/lib/uq-greeter`. All other

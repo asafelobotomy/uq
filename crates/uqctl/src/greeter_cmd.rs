@@ -17,6 +17,36 @@ pub enum GreeterCmd {
     Enable,
     /// Switch back to the display manager uQ's login screen replaced.
     Disable,
+    /// For uq-greeter-session: print the `hl.monitor` lines for the login screen from
+    /// /etc/uq/greeter-monitors.toml. Prints nothing (automatic layout) when the file is missing;
+    /// exits 1, printing nothing, when it is unreadable or doesn't pass uqd's monitor checks.
+    #[command(hide = true)]
+    MonitorsLua {
+        #[arg(long, value_name = "FILE", default_value = GREETER_MONITORS)]
+        file: PathBuf,
+    },
+}
+
+/// Written by uq-settings-helper's `SetGreeterMonitors`.
+pub const GREETER_MONITORS: &str = "/etc/uq/greeter-monitors.toml";
+
+/// `monitors-lua`: the lines to print, or why the file was refused. A missing file is the
+/// automatic layout: no lines.
+pub fn monitors_lua(file: &std::path::Path) -> Result<String, String> {
+    use std::io::Read;
+    let f = match std::fs::File::open(file) {
+        Ok(f) => f,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(String::new()),
+        Err(e) => return Err(format!("{}: {e}", file.display())),
+    };
+    if !f.metadata().map_err(|e| e.to_string())?.is_file() {
+        return Err(format!("{}: not a regular file", file.display()));
+    }
+    let mut text = String::new();
+    f.take(uq_core::lua::MAX_GREETER_MONITORS as u64 + 1)
+        .read_to_string(&mut text)
+        .map_err(|e| format!("{}: {e}", file.display()))?;
+    uq_core::lua::greeter_monitors_lua(&text).map_err(|e| format!("{}: {e}", file.display()))
 }
 
 /// Runs a system command (`systemctl …`, `systemd-tmpfiles …`); Err carries its message.
@@ -197,6 +227,18 @@ pub fn main(cmd: &GreeterCmd) -> ExitCode {
     let res = match cmd {
         GreeterCmd::Enable => enable(&root, uid, &mut SystemRunner),
         GreeterCmd::Disable => disable(&root, uid, &mut SystemRunner),
+        GreeterCmd::MonitorsLua { file } => {
+            return match monitors_lua(file) {
+                Ok(lines) => {
+                    print!("{lines}");
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("uqctl: the login screen's monitor layout was not used: {e}");
+                    ExitCode::FAILURE
+                }
+            };
+        }
     };
     match res {
         Ok(lines) => {
@@ -397,5 +439,23 @@ mod tests {
         assert!(!valid_unit("-x.service"));
         assert!(!valid_unit("a b.service"));
         assert!(!valid_unit("sddm"));
+    }
+
+    #[test]
+    fn monitors_lua_reads_the_helper_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("greeter-monitors.toml");
+        assert_eq!(monitors_lua(&file).unwrap(), "", "missing: automatic");
+        fs::write(&file, "[outputs.DP-1]\nmode = \"1920x1080@60\"\n").unwrap();
+        assert_eq!(
+            monitors_lua(&file).unwrap(),
+            "hl.monitor({ output = \"DP-1\", mode = \"1920x1080@60\", position = \"auto\", \
+             scale = \"auto\" })\n"
+        );
+        fs::write(&file, "[outputs.DP-1]\nmode = \"1920x1080@60\"\nhack = 1\n").unwrap();
+        assert!(monitors_lua(&file).unwrap_err().contains("hack"));
+        fs::write(&file, vec![b'#'; uq_core::lua::MAX_GREETER_MONITORS + 10]).unwrap();
+        assert!(monitors_lua(&file).is_err());
+        assert!(monitors_lua(dir.path()).is_err(), "a directory");
     }
 }

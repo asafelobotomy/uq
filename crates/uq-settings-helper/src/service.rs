@@ -197,6 +197,15 @@ impl Helper {
             .await
     }
 
+    /// `ClearGreeterMonitors`: remove `/etc/uq/greeter-monitors.toml`, so the login screen uses
+    /// Hyprland's automatic layout again.
+    pub async fn clear_greeter_monitors(&self, sender: &str) -> Result<(), HelperError> {
+        self.authorize(sender, Action::Greeter).await?;
+        let path = self.cfg.greeter_monitors();
+        let _g = self.lock.lock().await;
+        remove(&path).map_err(|e| failed(&path, e))
+    }
+
     /// `SetAutoLogin`: set (or with `""`, remove) `[initial_session]` in `/etc/uq/greetd.toml`.
     /// The user must exist with a regular uid; the command is always the uQ session.
     pub async fn set_auto_login(&self, sender: &str, user: &str) -> Result<(), HelperError> {
@@ -395,6 +404,15 @@ impl HelperIface {
         let _busy = self.helper.activity.begin();
         let sender = sender_of(&header)?;
         self.helper.set_greeter_monitors(&sender, json).await
+    }
+
+    async fn clear_greeter_monitors(
+        &self,
+        #[zbus(header)] header: zbus::message::Header<'_>,
+    ) -> Result<(), HelperError> {
+        let _busy = self.helper.activity.begin();
+        let sender = sender_of(&header)?;
+        self.helper.clear_greeter_monitors(&sender).await
     }
 
     async fn set_auto_login(

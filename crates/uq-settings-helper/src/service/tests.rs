@@ -376,6 +376,23 @@ async fn clear_wallpaper_removes_it_and_is_idempotent() {
 }
 
 #[tokio::test]
+async fn clear_monitors_removes_the_file_and_is_idempotent() {
+    let f = Fixture::new(true);
+    f.helper
+        .set_greeter_monitors(":1.5", r#"{"outputs":{"DP-1":{"mode":"1920x1080@60"}}}"#)
+        .await
+        .unwrap();
+    assert!(f.path("etc/uq/greeter-monitors.toml").exists());
+    f.helper.clear_greeter_monitors(":1.5").await.unwrap();
+    assert!(!f.path("etc/uq/greeter-monitors.toml").exists());
+    f.helper.clear_greeter_monitors(":1.5").await.unwrap();
+    assert_eq!(
+        f.checks().iter().map(|c| c.1).collect::<Vec<_>>(),
+        [Action::Greeter; 3]
+    );
+}
+
+#[tokio::test]
 async fn monitors_go_through_uq_core_validation() {
     let f = Fixture::new(true);
     f.helper
@@ -554,6 +571,7 @@ async fn an_unauthorised_caller_writes_nothing() {
         assert!(is_denied(
             h.set_greeter_monitors(":1.9", r#"{"outputs":{}}"#).await
         ));
+        assert!(is_denied(h.clear_greeter_monitors(":1.9").await));
         assert!(is_denied(h.set_auto_login(":1.9", "alice").await));
         assert!(is_denied(h.set_auto_login(":1.9", "").await));
         assert_eq!(f.written(), ["var/lib/uq-greeter/wallpaper"]);
@@ -570,6 +588,7 @@ async fn an_unauthorised_caller_writes_nothing() {
             actions,
             [
                 Action::Power,
+                Action::Greeter,
                 Action::Greeter,
                 Action::Greeter,
                 Action::Greeter,

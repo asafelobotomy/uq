@@ -63,6 +63,11 @@ it says so; enable one with `run0 systemctl enable <name>.service`.
     `/var/lib/AccountsService/icons/`), read with `busctl` over the system bus;
   - the `Name` and `Exec` of each `/usr/share/wayland-sessions/*.desktop`;
   - its own `/var/cache/uq-greeter/state.toml`: the last user and each user's last session.
+  - `/etc/uq/greeter-monitors.toml`, read by `uq-greeter-session` before Hyprland starts: the
+    display layout copied with Settings → Login screen → **Use my display layout at login**. It
+    goes through the same checks as your own layout (`uqctl greeter monitors-lua`) and becomes
+    `hl.monitor` lines; if it is missing, doesn't pass, or turns every screen off, the login
+    screen arranges the screens automatically. **Use automatic layout** removes it.
 - **Passwords and messages.** PAM runs inside greetd with `/etc/pam.d/greetd` (from the greetd
   package; uQ doesn't ship or edit it). Password fields are cleared after every attempt and
   nothing the greeter logs contains a password or a PAM message. A wrong password, a locked
