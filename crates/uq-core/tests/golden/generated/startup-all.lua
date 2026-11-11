@@ -53,7 +53,7 @@ hl.workspace_rule({ workspace = "2", layout = "scrolling" })
 
 -- Keyboard shortcuts (uQ Settings). These replace base.lua's fallback copies.
 hl.unbind("all")
-hl.define_submap("uq_capture", function() end)
+hl.define_submap("uq_capture", function() hl.bind("SUPER + SHIFT + CTRL + ALT + XF86Launch9", hl.dsp.submap("reset")) end)
 hl.bind("SUPER + Return", hl.dsp.exec_cmd("kitty"), { description = "uq:uq.terminal" })
 hl.bind("SUPER + Q", hl.dsp.window.close(), { description = "uq:uq.close" })
 hl.bind("SUPER + V", hl.dsp.window.float({ action = "toggle" }), { description = "uq:uq.float" })

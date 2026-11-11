@@ -2,7 +2,7 @@
 
 use super::lua_string;
 use crate::keybinds::combo::canonical;
-use crate::keybinds::hypr::{BIND_OPTIONS, CAPTURE_SUBMAP, DESCRIPTION_PREFIX, UNBIND_ALL};
+use crate::keybinds::hypr::{BIND_OPTIONS, CAPTURE_PLACEHOLDER, CAPTURE_SUBMAP, DESCRIPTION_PREFIX, UNBIND_ALL};
 use crate::keybinds::{Effective, Keybinds};
 use std::fmt::Write as _;
 
@@ -17,8 +17,9 @@ pub fn emit_binds(kb: &Keybinds) -> String {
     let _ = writeln!(out, "{UNBIND_ALL}");
     let _ = writeln!(
         out,
-        "hl.define_submap({}, function() end)",
-        lua_string(CAPTURE_SUBMAP)
+        "hl.define_submap({}, function() {} end)",
+        lua_string(CAPTURE_SUBMAP),
+        CAPTURE_PLACEHOLDER
     );
     for e in kb.effective() {
         if e.enabled && e.combo.is_some() {
@@ -90,12 +91,18 @@ mod tests {
             "-- Keyboard shortcuts (uQ Settings). These replace base.lua's fallback copies."
         );
         assert_eq!(l[1], "hl.unbind(\"all\")");
-        assert_eq!(l[2], "hl.define_submap(\"uq_capture\", function() end)");
+        assert_eq!(
+            l[2],
+            format!(
+                "hl.define_submap(\"uq_capture\", function() {} end)",
+                CAPTURE_PLACEHOLDER
+            )
+        );
         assert_eq!(
             l[3],
             "hl.bind(\"SUPER + Return\", hl.dsp.exec_cmd(\"kitty\"), { description = \"uq:uq.terminal\" })"
         );
-        assert_eq!(out.matches("hl.bind(").count(), 55);
+        assert_eq!(out.matches("hl.bind(").count(), 56);
         assert!(!out.contains("uq.profile.next"));
         assert!(out.ends_with('\n'));
     }
@@ -143,7 +150,7 @@ mod tests {
         assert!(out.contains("hl.bind(\"SUPER + K\", hl.dsp.global(\"uq:spotlight\")"));
         assert!(!out.contains("\"SUPER + Space\""));
         assert!(!out.contains("uq:uq.close"));
-        assert_eq!(out.matches("hl.bind(").count(), 54);
+        assert_eq!(out.matches("hl.bind(").count(), 55);
     }
 
     #[test]
@@ -160,7 +167,7 @@ mod tests {
         assert!(out.contains(
             "hl.bind(\"SUPER + ALT + P\", hl.dsp.exec_cmd(\"uqctl profile next\"), { description = \"uq:uq.profile.next\" })"
         ));
-        assert_eq!(out.matches("hl.bind(").count(), 56);
+        assert_eq!(out.matches("hl.bind(").count(), 57);
     }
 
     #[test]
@@ -244,7 +251,7 @@ mod tests {
             let out = emit_binds(&kb);
             let l = lines(&out);
             let base = l.len() - 2;
-            assert_eq!(out.matches("hl.bind(").count(), 57, "{h:?}");
+            assert_eq!(out.matches("hl.bind(").count(), 58, "{h:?}");
             for (line, is_command) in [(l[base], true), (l[base + 1], false)] {
                 assert!(line.starts_with("hl.bind(\"SUPER + F"), "{line}");
                 let arg_at = line.find("hl.dsp.exec_cmd(").unwrap() + "hl.dsp.exec_cmd(".len();
