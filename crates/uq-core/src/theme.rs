@@ -8,6 +8,7 @@ use std::str::FromStr;
 
 use crate::settings::Appearance;
 
+pub mod uqtheme;
 pub mod user;
 
 #[derive(Debug, thiserror::Error)]
