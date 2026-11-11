@@ -16,7 +16,7 @@ jobs:
     container: archlinux:latest
     steps:
       - name: Install toolchain, dbus, lua, Hyprland and Quickshell
-        run: pacman -Syu --noconfirm --needed rust dbus lua hyprland git quickshell qt6-declarative jq ttf-dejavu libnotify kirigami qqc2-desktop-style kvantum
+        run: pacman -Syu --noconfirm --needed rust dbus lua hyprland git quickshell qt6-declarative jq ttf-dejavu libnotify kirigami qqc2-desktop-style kvantum nodejs
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           persist-credentials: false
@@ -47,7 +47,8 @@ jobs:
             scripts/lint-settings.sh
             for t in tests/shell/*.sh; do echo \"== \$t\"; bash \"\$t\"; done
             QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -import shell -input tests/qml
-            QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -import apps/uq-settings/qml -input tests/settings-qml"
+            QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -import apps/uq-settings/qml -input tests/settings-qml
+            node --test 'web/uq-tokens/test/*.test.js'"
 
   smoke:
     # The shell on a real Hyprland (scripts/smoke-shell.sh). Hyprland cannot start without a DRM

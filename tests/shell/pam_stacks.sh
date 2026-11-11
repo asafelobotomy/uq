@@ -42,6 +42,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Services.Pam
 ShellRoot {
+    id: root
     property var finished: ({})
     // Each context reports once (an error is followed by a completed): quit when both have.
     function done(which) {
@@ -76,7 +77,13 @@ ShellRoot {
         onCompleted: result => { console.log("FP_RESULT", name(result)); done("fp"); }
         onError: error => { console.log("FP_ERROR", PamError.toString(error)); done("fp"); }
     }
-    Component.onCompleted: {
+    // Start once loading has settled, never from Component.onCompleted. PamContext forks a child
+    // that then runs pam_start (dlopen of every module). Forking while another thread of this
+    // process holds the loader or malloc lock (Qt is still loading the config and its plugins at
+    // onCompleted) leaves the child deadlocked before its first prompt: the intermittent CI
+    // "the password stack never asked for the password" failure.
+    Timer { interval: 1500; running: true; onTriggered: root.begin() }
+    function begin() {
         var a = pw.start(), b = fp.start();
         console.log("PW_START", a);
         console.log("FP_START", b);
