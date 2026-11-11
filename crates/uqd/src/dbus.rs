@@ -74,12 +74,12 @@ impl DesktopIface {
         let v: Variant = variant
             .parse()
             .map_err(|e: uq_core::theme::ThemeError| UqError::InvalidArgument(e.to_string()))?;
-        Ok(self
-            .desktop
-            .lock()
-            .await
-            .set_theme(name, v, Origin::parse(origin))
-            .await?)
+        let mut desktop = self.desktop.lock().await;
+        // A folder copied in by hand a moment ago: look again before refusing it.
+        if name.starts_with("user-") && !desktop.theme_ids().iter().any(|t| t == name) {
+            desktop.refresh_themes();
+        }
+        Ok(desktop.set_theme(name, v, Origin::parse(origin)).await?)
     }
 
     async fn get_theme(&self) -> (String, String) {
@@ -128,7 +128,9 @@ impl DesktopIface {
     }
 
     async fn list_themes(&self) -> Vec<String> {
-        self.desktop.lock().await.theme_ids()
+        let mut desktop = self.desktop.lock().await;
+        desktop.refresh_themes();
+        desktop.theme_ids()
     }
 
     /// The settings as JSON (never includes launch counts).

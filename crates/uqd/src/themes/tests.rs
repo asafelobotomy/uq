@@ -495,6 +495,63 @@ async fn active_theme_kept_when_folder_removed() {
 }
 
 #[tokio::test]
+async fn missing_theme_goes_once_another_is_picked() {
+    let mut r = rig().await;
+    let text = file(&r.desktop, "ocean", "Ocean");
+    r.import(&text, false, false).await.unwrap();
+    r.desktop
+        .set_theme("user-ocean", Variant::Dark, Origin::Settings)
+        .await
+        .unwrap();
+    std::fs::remove_dir_all(r.root().join("user-ocean")).unwrap();
+    assert!(
+        r.desktop.theme_info()["themes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|t| t["id"] == "user-ocean")
+    );
+    r.desktop
+        .set_theme("graphite", Variant::Dark, Origin::Settings)
+        .await
+        .unwrap();
+    let info = r.desktop.theme_info();
+    assert!(
+        info["themes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|t| t["id"] != "user-ocean"),
+        "{info}"
+    );
+}
+
+#[tokio::test]
+async fn unknown_theme_reads_as_a_sentence() {
+    let mut r = rig().await;
+    let err = r
+        .desktop
+        .set_theme("user-nope", Variant::Dark, Origin::Settings)
+        .await
+        .unwrap_err();
+    assert_eq!(err, DesktopError::UnknownTheme("user-nope".into()));
+    assert_eq!(err.to_string(), "That theme isn't installed any more.");
+}
+
+#[tokio::test]
+async fn replace_refuses_a_directory_named_like_a_variant() {
+    let mut r = rig().await;
+    let text = file(&r.desktop, "ocean", "Ocean");
+    r.import(&text, false, false).await.unwrap();
+    let dark = r.root().join("user-ocean/dark.toml");
+    std::fs::remove_file(&dark).unwrap();
+    std::fs::create_dir(&dark).unwrap();
+    std::fs::write(dark.join("keep.txt"), "mine").unwrap();
+    assert!(r.import(&text, true, false).await.is_err());
+    assert!(dark.join("keep.txt").exists());
+}
+
+#[tokio::test]
 async fn refresh_without_change_reads_nothing() {
     let mut r = rig().await;
     let text = file(&r.desktop, "ocean", "Ocean");

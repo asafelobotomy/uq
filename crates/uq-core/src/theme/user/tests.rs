@@ -317,7 +317,7 @@ fn fingerprint_changes_only_with_files() {
     let root = tempfile::tempdir().unwrap();
     good(root.path(), "user-a");
     let before = fingerprint(root.path());
-    assert_eq!(before.len(), 2);
+    assert_eq!(before.len(), 3, "the folder and its two files");
     assert_eq!(fingerprint(root.path()), before);
     fs::write(root.path().join("stray.txt"), "x").unwrap();
     assert_eq!(fingerprint(root.path()), before);
@@ -327,6 +327,14 @@ fn fingerprint_changes_only_with_files() {
         .unwrap();
     f.set_modified(std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_000_000))
         .unwrap();
+    assert_ne!(fingerprint(root.path()), before);
+}
+
+#[test]
+fn fingerprint_follows_links_without_reading_them() {
+    let root = tempfile::tempdir().unwrap();
+    let before = fingerprint(root.path());
+    std::os::unix::fs::symlink("/etc", root.path().join("user-etc")).unwrap();
     assert_ne!(fingerprint(root.path()), before);
 }
 

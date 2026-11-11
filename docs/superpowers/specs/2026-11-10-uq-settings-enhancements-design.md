@@ -454,7 +454,7 @@ These come from KDE and COSMIC complaints, and a lint or test checks each one wh
 `GetProfile`, `SetProfile`, `DeleteProfile`, `ApplyProfile`, `ProfileOff`, `PickWindow → s`,
 `ListAutostart`, `ShellReady`, `ListThemeInfo`, `ExportTheme`, `ImportTheme`, `DeleteTheme`; the `autostart`, `env` and `compat` sections are written with
 `SetSection("autostart" | "env" | "compat", json, origin)`. Signals: `HistoryChanged`, `ProfileChanged(s id)`,
-`AutostartChanged`, `ThemesChanged`. `uqctl theme` gains `delete`.
+`AutostartChanged`, `ThemesChanged`. `uqctl theme` gains `import`, `export`, `delete` and `list --long`.
 
 **Security.**
 

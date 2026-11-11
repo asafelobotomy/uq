@@ -20,14 +20,14 @@ CI. Tick each item. Before you start, note `user.lua`'s modification time:
 - [ ] **5. Hostile files.** Import each file in `crates/uq-core/tests/fixtures/uqtheme/bad/`.
   Each is refused with one plain sentence shown on the page, and no folder appears. A FIFO named
   `x.uqtheme` (`mkfifo`) doesn't hang the dialog.
-- [ ] **6. Links.** `ln -s /etc ~/.local/share/uq/themes/user-etc`: nothing new in the list.
+- [ ] **6. Links.** `ln -s /etc ~/.local/share/uq/themes/user-etc`: nothing new in the list (the "couldn't be used" line says it is a link).
   Replace the themes folder with a symlink: the page says the folder is a link, and imports are
   refused.
 - [ ] **7. By hand.** Copy a good theme folder in with `cp -r`. It appears within 60 s, or at
   once when the Appearance page is opened.
 - [ ] **8. Delete.** Delete the active user theme: uQ switches to the default first, and
   History shows the switch. A profile that used it is named in the result. Applying that profile
-  gives the plain unknown-theme message.
+  says "That theme isn't installed any more." (so does Ctrl+Z on the delete's switch).
 - [ ] **9. Gone while active.** `rm -r` the active theme's folder. The list says its files were
   removed, other settings still save, and after `systemctl --user restart uqd` the default
   theme is in use.

@@ -13,7 +13,7 @@ All notable changes to uQ are listed here. The format follows
   this one…** (seven colours per version, live contrast check, a version that is hard to read
   can't be saved), **Import…**, **Export…** and **Delete…**, and shows the theme names. Themes
   are `.uqtheme` files (TOML, `format = 1`, size-capped, schema-checked, never run) saved in
-  `~/.local/share/uq/themes/user-<name>/`; imports save a restore point and can bring window
+  `~/.local/share/uq/themes/user-<slug>/`; imports save a restore point and can bring window
   gaps, corners and effects. `uqctl theme list --long|import|export|delete` do the same, and the
   shell's quick settings show names. New `uqd` calls `ListThemeInfo`, `ExportTheme`,
   `ImportTheme`, `DeleteTheme` and the `ThemesChanged` signal.

@@ -234,7 +234,16 @@ impl ThemesState {
         };
         // A draft that can't be saved is refused before uqd is asked anything.
         editor::to_file(&session, draft, &[]).map_err(failure)?;
-        let taken = Self::user_ids(proxy).await?;
+        // A folder uQ skipped still holds its name on disk, so a new theme can't take it.
+        let info = Self::info(proxy).await?;
+        let mut taken = Self::user_ids(proxy).await?;
+        taken.extend(
+            info["skipped"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|s| s["folder"].as_str().map(str::to_string)),
+        );
         let (text, replace) = editor::to_file(&session, draft, &taken).map_err(failure)?;
         let id = proxy.import_theme(&text, replace, false, ORIGIN).await?;
         *self.session.lock().unwrap() = None;

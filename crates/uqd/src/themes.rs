@@ -43,7 +43,13 @@ impl Desktop {
     /// Reload the user's themes if the folder changed since it was last read. Returns whether
     /// anything changed; nothing is read when it didn't.
     pub fn refresh_themes(&mut self) -> bool {
-        if user::fingerprint(&self.paths.user_themes_dir) == self.user_themes {
+        // A "missing" theme the user has switched away from goes too (G-F10).
+        let stale = self
+            .themes
+            .infos()
+            .iter()
+            .any(|i| i.missing && i.id != self.state.theme);
+        if !stale && user::fingerprint(&self.paths.user_themes_dir) == self.user_themes {
             return false;
         }
         self.load_user_themes();
@@ -181,8 +187,12 @@ impl Desktop {
         ) {
             tracing::warn!("saving before-import point: {e}");
         }
-        atomic_replace_dir(&folder, &uqtheme::install_files(&theme))
-            .map_err(|e| DesktopError::Io(format!("Couldn't save the theme: {e}")))?;
+        if let Err(e) = atomic_replace_dir(&folder, &uqtheme::install_files(&theme)) {
+            // The new files may be in place even so (the old copy couldn't be removed).
+            self.load_user_themes();
+            let _ = self.events.send(Event::ThemesChanged);
+            return Err(DesktopError::Io(format!("Couldn't save the theme: {e}")));
+        }
         self.load_user_themes();
         let res = self.after_import(&theme, with_look, origin).await;
         let _ = self.events.send(Event::ThemesChanged);
@@ -308,12 +318,14 @@ impl Desktop {
 
 /// Whether `folder` holds anything besides the two variant files.
 fn has_other_files(folder: &Path) -> bool {
+    // A folder that can't be listed is not known to be ours.
     let Ok(rd) = std::fs::read_dir(folder) else {
-        return false;
+        return true;
     };
     rd.flatten().any(|e| {
         let name = e.file_name();
-        name != "dark.toml" && name != "light.toml"
+        let ours = name == "dark.toml" || name == "light.toml";
+        !(ours && e.file_type().is_ok_and(|t| t.is_file()))
     })
 }
 

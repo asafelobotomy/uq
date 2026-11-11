@@ -353,9 +353,15 @@ pub fn fingerprint(root: &Path) -> Fingerprint {
         let Ok(m) = std::fs::symlink_metadata(root.join(folder)) else {
             continue;
         };
+        // A link or a folder counts even without variant files, so "couldn't be used" follows it.
+        if m.file_type().is_symlink() {
+            out.push((folder.to_string(), 0, 1, 0));
+            continue;
+        }
         if !m.is_dir() {
             continue;
         }
+        out.push((folder.to_string(), 0, 0, 0));
         for v in Variant::ALL {
             let Ok(f) = std::fs::symlink_metadata(root.join(folder).join(format!("{v}.toml")))
             else {

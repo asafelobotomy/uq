@@ -43,7 +43,13 @@ async fn bridge_forwards_set_theme() {
     assert_eq!(themes["ok"].as_array().unwrap().len(), 7);
     assert!(b.call(4, "GetLayouts", json!([])).await["ok"].is_object());
     let bad = b.call(5, "SetTheme", json!(["nope", "light"])).await;
-    assert!(bad["err"].as_str().unwrap().contains("nope"), "{bad}");
+    assert!(
+        bad["err"]
+            .as_str()
+            .unwrap()
+            .contains("isn't installed any more"),
+        "{bad}"
+    );
     let bad = b.call(6, "SetTheme", json!(["dracula"])).await;
     assert!(bad["err"].is_string(), "{bad}");
 }

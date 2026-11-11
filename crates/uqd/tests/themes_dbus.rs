@@ -142,6 +142,16 @@ async fn import_errors_have_plain_names() {
         .unwrap_err();
     assert_eq!(error_name(&err), "org.uq.Desktop1.Error.InvalidArgument");
     assert_eq!(error_text(&err), "This file isn't a uQ theme.");
+    let err = s
+        .proxy
+        .call::<_, _, String>("DeleteTheme", &("user-nope", "settings"))
+        .await
+        .unwrap_err();
+    let text = error_text(&err);
+    assert!(
+        text.starts_with(char::is_uppercase) && text.ends_with('.'),
+        "{text}"
+    );
 }
 
 #[tokio::test]

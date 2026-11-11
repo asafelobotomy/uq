@@ -66,7 +66,7 @@ pub enum Event {
 
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum DesktopError {
-    #[error("unknown theme {0:?}")]
+    #[error("That theme isn't installed any more.")]
     UnknownTheme(String),
     #[error("unknown layout {0:?} (expected dwindle, master or scrolling)")]
     InvalidLayout(String),
