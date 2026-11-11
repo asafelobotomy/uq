@@ -60,6 +60,15 @@ fn main() {
         QmlFile::from("qml/pages/RegionPage.qml"),
         QmlFile::from("qml/pages/DefaultAppsPage.qml"),
         QmlFile::from("qml/pages/AboutPage.qml"),
+        QmlFile::from("qml/components/WelcomeNav.qml"),
+        QmlFile::from("qml/components/KeybindList.qml"),
+        QmlFile::from("qml/welcome/WelcomeFlow.qml"),
+        QmlFile::from("qml/welcome/HelloStep.qml"),
+        QmlFile::from("qml/welcome/LookStep.qml"),
+        QmlFile::from("qml/welcome/LayoutsStep.qml"),
+        QmlFile::from("qml/welcome/AppsStep.qml"),
+        QmlFile::from("qml/welcome/FingerprintStep.qml"),
+        QmlFile::from("qml/welcome/DoneStep.qml"),
     ]))
     .qt_module("Gui")
     .qt_module("Quick")
@@ -87,6 +96,7 @@ fn main() {
         "src/region_model.rs",
         "src/defaultapps_model.rs",
         "src/about_model.rs",
+        "src/welcome_model.rs",
     ])
     .cpp_file("cpp/window.cpp");
     // SAFETY: only adds a warning flag; GCC 16 warns about Qt's own headers.

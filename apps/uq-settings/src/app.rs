@@ -41,6 +41,11 @@ pub mod qobject {
         #[qproperty(QString, theme_json)]
         /// `--screenshots <dir>`: QML visits each page, saves it here, then quits.
         #[qproperty(QString, screenshot_dir)]
+        /// Welcome (Phase 5 spec §5.1) is on show in place of the pages: `--welcome`,
+        /// `ShowPage("welcome", "")` or Settings → About → Show Welcome.
+        #[qproperty(bool, welcome)]
+        /// Welcome shows every step, not only those added since the user last saw it.
+        #[qproperty(bool, welcome_full)]
         type App = super::AppRust;
 
         /// Show `page` (unknown ids are logged and ignored) and highlight `setting`.
@@ -51,6 +56,14 @@ pub mod qobject {
         /// best first; "" for an empty query.
         #[qinvokable]
         fn search(self: &App, query: &QString) -> QString;
+
+        /// Show Welcome from its first step, with every step (Settings → About).
+        #[qinvokable]
+        fn show_welcome(self: Pin<&mut App>);
+
+        /// Leave Welcome for the pages.
+        #[qinvokable]
+        fn close_welcome(self: Pin<&mut App>);
 
         /// Save the window as a PNG (`--screenshots`).
         #[qinvokable]
@@ -77,6 +90,8 @@ pub struct AppRust {
     pages_json: QString,
     screenshot_dir: QString,
     theme_json: QString,
+    welcome: bool,
+    welcome_full: bool,
 }
 
 impl Default for AppRust {
@@ -96,6 +111,8 @@ impl Default for AppRust {
             uqd_up: false,
             screenshot_dir: QString::default(),
             theme_json: QString::from(&read_tokens()),
+            welcome: false,
+            welcome_full: false,
         }
     }
 }
@@ -176,6 +193,10 @@ impl cxx_qt::Initialize for App {
     }
 }
 
+/// The `ShowPage` page id that opens Welcome (`uqctl welcome`, `uq-settings --welcome`). It is
+/// not a sidebar page.
+pub const WELCOME_PAGE: &str = "welcome";
+
 /// What a `ShowPage(page, setting)` does to the page: `None` keeps the current one.
 pub fn target_page<'a>(entries: &'a [PageEntry], page: &str) -> Option<&'a str> {
     if page.is_empty() {
@@ -217,6 +238,14 @@ impl App {
     }
 
     fn show(mut self: Pin<&mut Self>, page: &str, setting: &str) {
+        if page == WELCOME_PAGE {
+            // Already on show: keep the step the user is on.
+            if !*self.welcome() {
+                self.as_mut().set_welcome_full(false);
+                self.set_welcome(true);
+            }
+            return;
+        }
         let Some(id) = target_page(&self.entries, page).map(str::to_owned) else {
             return;
         };
@@ -233,6 +262,17 @@ impl App {
     fn search(&self, query: &QString) -> QString {
         let hits = search::search(&self.entries, &query.to_string());
         QString::from(&serde_json::to_string(&hits).unwrap_or_else(|_| "[]".into()))
+    }
+
+    fn show_welcome(mut self: Pin<&mut Self>) {
+        // Leave and come back, so the flow starts over at its first step.
+        self.as_mut().set_welcome(false);
+        self.as_mut().set_welcome_full(true);
+        self.set_welcome(true);
+    }
+
+    fn close_welcome(self: Pin<&mut Self>) {
+        self.set_welcome(false);
     }
 
     fn grab_window(&self, path: &QString) -> bool {

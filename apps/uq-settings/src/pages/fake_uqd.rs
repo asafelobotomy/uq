@@ -588,6 +588,25 @@ impl FakeUqd {
         self.state.lock().unwrap().launch_counts.clear();
     }
 
+    fn get_welcome(&self) -> String {
+        self.state.lock().unwrap().welcome.status_json().to_string()
+    }
+
+    fn set_welcome_done(&self, version: u32) -> Result<(), FakeError> {
+        if version == 0 || version > uq_core::welcome::CURRENT_WELCOME_VERSION {
+            return Err(FakeError::InvalidArgument(format!("bad version {version}")));
+        }
+        self.state.lock().unwrap().welcome = uq_core::welcome::Welcome {
+            done: true,
+            version,
+        };
+        Ok(())
+    }
+
+    fn reset_welcome(&self) {
+        self.state.lock().unwrap().welcome = uq_core::welcome::Welcome::default();
+    }
+
     fn get_launch_counts(&self) -> HashMap<String, u32> {
         let s = self.state.lock().unwrap();
         s.launch_counts

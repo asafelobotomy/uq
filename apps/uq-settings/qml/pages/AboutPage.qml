@@ -1,7 +1,7 @@
 // About (spec §2.6): the computer's name (changing it asks for an administrator password), the
 // system, the hardware and the versions of uQ and what it runs on. Names and versions come from
 // files and other programs, so every line is a UqLabel (plain text). Two slots are kept for later
-// work: "Integrations" (aboutIntegrations) and the "Show Welcome" button (showWelcome).
+// work: "Integrations" (aboutIntegrations). "Show Welcome" (showWelcome) opens Welcome again.
 import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
@@ -218,14 +218,15 @@ QQC2.ScrollView {
             }
         }
 
-        // Kept for Phase 5's Welcome: shown once Welcome exists.
+        // Welcome again from its first step, with every step (Phase 5 spec §5.1).
         QQC2.Button {
             id: showWelcome
             objectName: "showWelcome"
-            visible: false
             text: "Show Welcome"
             icon.name: "help-about"
+            Accessible.description: "The first-run tour: look, wallpaper, layouts, apps and the keys to know"
             Layout.topMargin: Kirigami.Units.largeSpacing
+            onClicked: App.showWelcome()
         }
 
         // Settings → About → Integrations is added here later; it loads into this slot.

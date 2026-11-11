@@ -20,6 +20,17 @@ All notable changes to uQ are listed here. The format follows
   minute, greetd's text login takes over so nobody is locked out. Turn it on with
   `run0 uqctl greeter enable` (needs `greetd`) and off with `run0 uqctl greeter disable`, which
   brings back the display manager it replaced. See docs/greeter.md.
+- **Welcome.** A short tour in Settings the first time you log in: what uQ is and the three keys
+  to know, then the theme (with automatic light and dark), the wallpaper, how windows are
+  arranged, your screens (only with more than one), the apps made for uQ that are installed and
+  where to get the others, and saving a fingerprint for the lock screen (only with a reader and
+  no finger saved yet). Every step can be skipped and every choice applies at once. Welcome
+  shows once: closing it at any step counts as done. See it again from Settings → About → Show
+  Welcome, or with `uqctl welcome --reset`.
+- **Installer hand-off.** An installer's first-login window (bindle's app picker) can hold
+  Welcome back with `$XDG_RUNTIME_DIR/uq/welcome.defer` and open it afterwards with
+  `uqctl welcome`, so the two never show at once. A file older than 30 minutes is ignored, so a
+  crashed installer can't hide Welcome for good. See docs/welcome.md.
 
 - **`uq-dev`.** Use uQ and develop it on the same machine: `uq-dev session` opens a nested
   uQ desktop running a checkout's uqd and shell on a private bus with sandboxed config,
