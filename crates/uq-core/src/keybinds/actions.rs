@@ -301,6 +301,75 @@ fn pick(list: &'static [&'static str], v: Option<&str>, fallback: &'static str) 
         .unwrap_or(fallback)
 }
 
+/// Every action a shortcut of your own can pick from a list, grouped as the page shows them:
+/// `shell`, `window`, `workspace` and `uq`. (`launch` and `command` take text, so they aren't
+/// listed.) The page never copies this list.
+pub fn catalogue() -> Vec<(&'static str, Action)> {
+    let mut v = Vec::new();
+    for n in SHELL_NAMES {
+        v.push(("shell", Action::Shell { name: n.into() }));
+    }
+    for n in ["close", "float", "pin"] {
+        v.push((
+            "window",
+            Action::Window {
+                name: n.into(),
+                direction: None,
+            },
+        ));
+    }
+    for d in DIRECTIONS {
+        v.push((
+            "window",
+            Action::Window {
+                name: "focus".into(),
+                direction: Some(d.into()),
+            },
+        ));
+    }
+    for n in ["focus", "move"] {
+        for w in 1..=10 {
+            v.push((
+                "workspace",
+                Action::Workspace {
+                    name: n.into(),
+                    workspace: Some(w),
+                },
+            ));
+        }
+    }
+    for n in ["toggle_special", "move_special", "next", "prev"] {
+        v.push((
+            "workspace",
+            Action::Workspace {
+                name: n.into(),
+                workspace: None,
+            },
+        ));
+    }
+    let uq = |name: &str, layout: Option<&str>, media: Option<&str>| {
+        (
+            "uq",
+            Action::Uq {
+                name: name.into(),
+                layout: layout.map(Into::into),
+                media: media.map(Into::into),
+            },
+        )
+    };
+    v.push(uq("terminal", None, None));
+    v.push(uq("exit", None, None));
+    for l in LAYOUTS {
+        v.push(uq("layout", Some(l), None));
+    }
+    for m in MEDIA {
+        v.push(uq("media", None, Some(m)));
+    }
+    v.push(uq("profile-next", None, None));
+    v.push(uq("settings", None, None));
+    v
+}
+
 /// A readable name from a desktop id: the last part, capitalised.
 fn app_name(app: &str) -> String {
     let id = app.strip_suffix(".desktop").unwrap_or(app);

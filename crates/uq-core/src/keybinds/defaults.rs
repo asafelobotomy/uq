@@ -18,6 +18,18 @@ pub enum Group {
 }
 
 impl Group {
+    /// The page's name for the section, in `snake_case`.
+    pub fn id(self) -> &'static str {
+        match self {
+            Group::AppsAndDesktop => "apps_and_desktop",
+            Group::Windows => "windows",
+            Group::Workspaces => "workspaces",
+            Group::SoundAndBrightness => "sound_and_brightness",
+            Group::Media => "media",
+            Group::Profiles => "profiles",
+        }
+    }
+
     pub fn label(self) -> &'static str {
         match self {
             Group::AppsAndDesktop => "Apps and desktop",

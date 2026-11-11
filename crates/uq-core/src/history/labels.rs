@@ -427,4 +427,23 @@ mod tests {
         let lines: Vec<_> = changes.iter().map(|c| c.summary.as_str()).collect();
         assert_eq!(lines, ["Window rule “Pavucontrol floats” added"]);
     }
+
+    #[test]
+    fn keybinds_summary_uses_labels() {
+        let old = State::default();
+        let mut new = old.clone();
+        new.set_section(
+            "keybinds",
+            serde_json::json!({"overrides": [{"id": "uq.spotlight", "combo": "SUPER + K"}],
+                "custom": [{"name": "Screenshot", "combo": "SUPER + SHIFT + P",
+                    "action": {"kind": "command", "command": "grim shot.png"}}]}),
+        )
+        .unwrap();
+        let changes = crate::history::diff(&old, &new, &label);
+        let lines: Vec<_> = changes.iter().map(|c| c.summary.as_str()).collect();
+        assert_eq!(
+            lines,
+            ["“Open Spotlight” now uses Super + K, Shortcut “Screenshot” added"]
+        );
+    }
 }

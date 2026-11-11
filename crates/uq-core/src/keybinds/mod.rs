@@ -6,12 +6,15 @@ pub mod check;
 pub mod combo;
 pub mod conflict;
 pub mod defaults;
+pub mod explain;
 pub mod hypr;
 pub mod keys;
+pub mod list;
 mod summary;
 
 pub use actions::Action;
 pub use combo::{Combo, ComboError};
+pub use explain::{LiveBind, explain, live_binds};
 pub use summary::summary;
 
 use crate::rules::fresh_prefixed;
