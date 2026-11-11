@@ -12,6 +12,8 @@ use std::fs;
 use std::path::{Component, Path, PathBuf};
 
 use regex::Regex;
+
+use super::command_watch::{RawWatch, WatchSpec, watch_from};
 use serde::Deserialize;
 use zbus::names::{InterfaceName, MemberName, WellKnownName};
 use zbus::zvariant::ObjectPath;
@@ -284,6 +286,8 @@ pub struct CommandSpec {
     pub args: Vec<ArgSpec>,
     /// A fixed question shown before running; at most one `%s` (the first argument).
     pub confirm: Option<String>,
+    /// Re-run this read when a file changes or a signal arrives (pages only).
+    pub watch: Option<WatchSpec>,
 }
 
 impl CommandSpec {
@@ -339,6 +343,7 @@ struct RawCommand {
     #[serde(default)]
     args: Vec<RawArg>,
     confirm: Option<String>,
+    watch: Option<RawWatch>,
 }
 
 fn requires_from(raw: Option<RawRequires>) -> Result<Requires, ManifestError> {
@@ -488,6 +493,12 @@ fn command_from(raw: RawCommand, prefixes: &[PathBuf]) -> Result<CommandSpec, St
             return Err(what("confirm has %s but the command declares no args"));
         }
     }
+    let watch = match raw.watch {
+        None => None,
+        Some(w) => {
+            Some(watch_from(w, !args.is_empty(), raw.confirm.is_some()).map_err(|e| what(&e))?)
+        }
+    };
     Ok(CommandSpec {
         id,
         argv: raw.argv,
@@ -495,6 +506,7 @@ fn command_from(raw: RawCommand, prefixes: &[PathBuf]) -> Result<CommandSpec, St
         timeout_ms,
         args,
         confirm: raw.confirm,
+        watch,
     })
 }
 
@@ -639,8 +651,15 @@ pub fn parse_widget(text: &str) -> Result<WidgetManifest, ManifestError> {
         ));
     }
     check_requires_bus(&requires, dbus.as_ref())?;
+    let commands = commands_from(m.command)?;
+    if let Some(c) = commands.iter().find(|c| c.watch.is_some()) {
+        return Err(invalid(format!(
+            "command {:?}: watch is for settings pages only; widgets follow [dbus] signals",
+            c.id
+        )));
+    }
     Ok(WidgetManifest {
-        commands: commands_from(m.command)?,
+        commands,
         id: m.id,
         name: m.name,
         slot: m.slot,

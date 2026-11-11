@@ -23,8 +23,18 @@ QtObject {
     /// Command ids that have `confirm` in page.toml.
     property var confirmed: []
     /// What the page asked for, in order: ["run", id, args], ["call", method, args, target],
-    /// ["get", property, target], ["openApp", desktopId].
+    /// ["get", property, target], ["openApp", desktopId], ["watch", id], ["unwatch", handle].
     property var calls: []
+    /// handle -> {id, callback} for ctx.command.watch; change(id) runs them again.
+    property var watches: ({})
+    property int nextWatch: 0
+
+    /// Pretend the files or signals of watched command `id` changed: it runs again.
+    function change(id) {
+        for (const h in fake.watches)
+            if (fake.watches[h].id === id)
+                fake.run(id, [], fake.watches[h].callback);
+    }
 
     function answer(callback, result) {
         if (typeof callback === "function")
@@ -48,7 +58,18 @@ QtObject {
     readonly property var ctx: ({
             theme: fake.theme,
             command: {
-                run: (id, args, callback) => fake.run(id, args, callback)
+                run: (id, args, callback) => fake.run(id, args, callback),
+                watch: (id, callback) => {
+                    fake.calls.push(["watch", id]);
+                    const handle = ++fake.nextWatch;
+                    fake.watches[handle] = { id: id, callback: callback };
+                    fake.run(id, [], callback);
+                    return handle;
+                },
+                unwatch: handle => {
+                    fake.calls.push(["unwatch", handle]);
+                    delete fake.watches[handle];
+                }
             },
             dbus: {
                 call: (method, args, callback, target) => {

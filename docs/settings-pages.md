@@ -77,6 +77,7 @@ output = "json"                 # "json" | "text" | "none"
 timeout_ms = 3000               # default 10000, at most 600000
 args = [{ name = "peer", pattern = "^[A-Za-z0-9._-]{1,64}$" }]   # optional
 confirm = "Disconnect from %s?" # optional
+watch = { files = ["~/.config/tailscale/x.conf"], signals = [{ bus = "system", interface = "org.example.App1", member = "Changed" }] }   # optional, see "Following changes"
 ```
 
 Every key is checked strictly. An unknown key, a bad value or a QML file that resolves outside
@@ -182,6 +183,42 @@ What is enforced, whatever the page does:
   `{error: "already running"}`.
 - Nothing runs as root. A command that needs it uses your app's own polkit action; uQ's polkit
   agent shows the prompt.
+
+### Following changes: `watch` and `ctx.command.watch(id, callback)`
+
+Instead of polling a read on a timer, give its `[[command]]` a `watch` table and call
+`ctx.command.watch(id, callback)`: the command runs now, and again after each change to a
+watched file or each watched D-Bus signal. `callback` gets each result, as for `run`.
+`watch` returns a handle for `ctx.command.unwatch(handle)`; closing the page stops all its
+watches.
+
+```toml
+[[command]]
+id = "status"
+argv = ["/usr/bin/example", "status", "--json"]
+output = "json"
+
+[command.watch]                 # or inline: watch = { files = [...], signals = [...] }
+files = ["~/.config/example/config.toml", "/etc/example.conf"]
+signals = [
+  { bus = "system", interface = "org.example.Example1", member = "StateChanged",
+    path = "/org/example/Example1", sender = "org.example.Example1" },
+]
+```
+
+- Only a read can be watched: the command takes no `args` and has no `confirm`. Widgets don't
+  have `watch` (they follow their `[dbus] signals`).
+- `files`: at most 8, each an absolute path or one starting `~/` (your home folder), with no
+  `.`, `..` or `//`. The file's folder is followed, so a save that writes a new file and renames
+  it over the old one counts, and a file or folder that doesn't exist yet is picked up when it
+  appears. Nothing is read. Files under `/proc` and `/sys` never report changes.
+- `signals`: at most 8, each a match on `bus` (`"session"`, the default, or `"system"`),
+  `interface` and `member`, and optionally `path` and `sender` (a well-known name). Give `path`
+  and `sender` when you can, so only your service's signal counts.
+- Changes are debounced: a burst re-runs the command once, half a second after it goes quiet.
+  One run at a time: a change while it runs makes one more run afterwards.
+- At most 8 watches per page at once. If a watch can't start (its bus isn't there, say), the page
+  still gets the first result, and Settings logs why.
 
 ### `ctx.dbus.call(method, args, callback[, target])` and `ctx.dbus.get(property, callback[, target])`
 

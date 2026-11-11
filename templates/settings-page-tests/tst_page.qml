@@ -50,7 +50,16 @@ Item {
 
         function test_reads_status_on_open() {
             tryVerify(() => findLabel(loader.item, "Running: running") !== null);
-            compare(fake.calls[0], ["run", "status", []]);
+            compare(fake.calls[0], ["watch", "status"]);
+            compare(fake.calls[1], ["run", "status", []]);
+        }
+
+        function test_a_change_reads_again() {
+            tryVerify(() => findLabel(loader.item, "Running: running") !== null);
+            fake.commands = ({ status: { code: 0, output: { state: "paused", last: "" } } });
+            fake.change("status");
+            tryVerify(() => findLabel(loader.item, "Running: paused") !== null);
+            fake.commands = ({ status: { code: 0, output: { state: "running", last: "notes" } }, forget: { code: 0, output: null } });
         }
 
         function test_a_failed_read_shows_the_error() {

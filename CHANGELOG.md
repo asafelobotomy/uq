@@ -19,6 +19,11 @@ All notable changes to uQ are listed here. The format follows
 - **Settings pages may ship sibling files.** A page folder may hold a `logic.js` imported from
   its QML (`import "logic.js" as Logic`) and further component files; tested and documented in
   docs/settings-pages.md.
+- **Settings pages follow changes instead of polling.** A page's read `[[command]]` takes a
+  `watch` table (files, absolute or under `~/`, and D-Bus signal matches on the session or system
+  bus); `ctx.command.watch(id, callback)` runs it now and again after each debounced burst of
+  changes, one run at a time, until `ctx.command.unwatch` or the page closes. See
+  docs/settings-pages.md.
 - **`ctx.openApp(desktopId)` for Settings pages.** A page can open an app (its own full app,
   say) by its `name.desktop` id, the way the launcher does (`uqctl launch`), detached from
   Settings. Paths and other ids are refused.

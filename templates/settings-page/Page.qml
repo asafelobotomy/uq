@@ -19,14 +19,20 @@ Item {
     function refresh() {
         if (!page.ctx)
             return;
-        page.ctx.command.run("status", [], result => {
-            page.problem = Logic.problemOf(result);
-            if (page.problem === "")
-                page.status = result.output;
-        });
+        page.ctx.command.run("status", [], page.show);
     }
 
-    onCtxChanged: refresh()
+    function show(result) {
+        page.problem = Logic.problemOf(result);
+        if (page.problem === "")
+            page.status = result.output;
+    }
+
+    // Read now and again whenever the watched file changes (page.toml `watch`).
+    onCtxChanged: {
+        if (page.ctx)
+            page.ctx.command.watch("status", page.show);
+    }
 
     ColumnLayout {
         anchors.fill: parent

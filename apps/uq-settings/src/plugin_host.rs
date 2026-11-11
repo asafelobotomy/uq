@@ -16,12 +16,17 @@
 //!   at most 8 requests in flight per page. A page that waits for its name
 //!   (`requires.bus_name`) never starts the service.
 //!
+//! - **Watches** (`ctx.command.watch`): a command with a `watch` table is followed (files with
+//!   inotify, D-Bus signals by match rule, `uq_core::integration::command_watch`); each quiet
+//!   burst of changes emits `commandChanged(watch)` and the page's context re-runs it. At most
+//!   [`MAX_WATCHES`] per page; `unwatch` (or the page closing) stops it.
 //! - **Opening an app** (`ctx.openApp`): a plain `name.desktop` id, started by `uqctl launch`,
 //!   the shell's own launch path (the app's fix, its own scope, counted), detached from Settings.
 //!
 //! This limits mistakes, not attacks: a page is trusted package code.
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
@@ -30,6 +35,7 @@ use cxx_qt::{CxxQtType, Threading};
 use cxx_qt_lib::QString;
 use serde_json::{Value, json};
 use uq_core::integration::command::{self, BusySet, CommandError, Runner};
+use uq_core::integration::command_watch::{self, WATCH_DEBOUNCE, WatchSpec};
 use uq_core::integration::dbus_json::{self, Target};
 use uq_core::integration::manifest::{Bus, CommandSpec, PageManifest};
 
@@ -83,6 +89,19 @@ pub mod qobject {
             target_json: &QString,
         ) -> i32;
 
+        /// Follow `command` of page `page` (it must have a `watch` table). Returns the watch id
+        /// (`commandChanged(id)` after each change), or 0 with a reason on stderr.
+        #[qinvokable]
+        fn watch_command(self: Pin<&mut PluginHost>, page: &QString, command: &QString) -> i32;
+
+        /// Stop the watch `watch`.
+        #[qinvokable]
+        fn unwatch(self: Pin<&mut PluginHost>, watch: i32);
+
+        /// A watched command's files or signals changed: run it again.
+        #[qsignal]
+        fn command_changed(self: Pin<&mut PluginHost>, watch: i32);
+
         /// Open the app `desktop_id` (`name.desktop`) as the launcher does. Returns the request
         /// id; `finished` gets `{ok: true}` or `{error}`.
         #[qinvokable]
@@ -108,6 +127,18 @@ pub mod qobject {
 }
 
 use qobject::PluginHost;
+
+/// At most this many watches per page at once.
+const MAX_WATCHES: usize = 8;
+
+/// The `watch` table of `command` on `page`, or why it can't be followed.
+pub fn watch_spec(manifest: Option<PageManifest>, command: &str) -> Result<WatchSpec, String> {
+    let m = manifest.ok_or("this page is not installed any more")?;
+    let spec = command::find(&m.commands, command).map_err(|e| e.to_string())?;
+    spec.watch
+        .clone()
+        .ok_or_else(|| format!("command {command:?} has no watch in page.toml"))
+}
 
 /// How long `uqctl launch` may take to hand the app to Hyprland.
 const OPEN_APP_WAIT: Duration = Duration::from_secs(10);
@@ -205,6 +236,8 @@ struct Pending {
 pub struct PluginHostRust {
     next: i32,
     pending: HashMap<i32, Pending>,
+    /// watch id -> (page, the task following it; aborting it stops the watch).
+    watches: HashMap<i32, (String, tokio::task::JoinHandle<()>)>,
 }
 
 fn error(msg: impl std::fmt::Display) -> Value {
@@ -423,6 +456,72 @@ impl PluginHost {
         });
     }
 
+    fn watch_command(mut self: Pin<&mut Self>, page: &QString, command: &QString) -> i32 {
+        let (page, command) = (page.to_string(), command.to_string());
+        let spec = match watch_spec(plugins::manifest(&page), &command) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("uq-settings: page {page}: can't watch {command}: {e}");
+                return 0;
+            }
+        };
+        let watches = &mut self.as_mut().rust_mut().get_mut().watches;
+        watches.retain(|_, (_, task)| !task.is_finished());
+        let open = watches.values().filter(|(p, _)| *p == page).count();
+        if open >= MAX_WATCHES {
+            eprintln!("uq-settings: page {page}: more than {MAX_WATCHES} watches at once");
+            return 0;
+        }
+        let Some(rt) = RUNTIME.get() else {
+            return 0;
+        };
+        let id = self.as_mut().next_id();
+        let qt = self.qt_thread();
+        let label = format!("{page}: {command}");
+        let task = rt.spawn(async move {
+            let uses = |b: Bus| spec.signals.iter().any(|s| s.bus == b);
+            let session = if uses(Bus::Session) {
+                connection(Bus::Session).await.ok()
+            } else {
+                None
+            };
+            let system = if uses(Bus::System) {
+                connection(Bus::System).await.ok()
+            } else {
+                None
+            };
+            let home = std::env::var_os("HOME").map_or_else(|| "/".into(), PathBuf::from);
+            let watch = command_watch::start(
+                &spec,
+                &home,
+                session.as_ref(),
+                system.as_ref(),
+                WATCH_DEBOUNCE,
+            )
+            .await;
+            let mut watch = match watch {
+                Ok(w) => w,
+                Err(e) => {
+                    eprintln!("uq-settings: page {label}: can't follow changes: {e}");
+                    return;
+                }
+            };
+            while watch.changes.recv().await.is_some() {
+                if qt.queue(move |host| host.command_changed(id)).is_err() {
+                    return;
+                }
+            }
+        });
+        self.as_mut().rust_mut().watches.insert(id, (page, task));
+        id
+    }
+
+    fn unwatch(mut self: Pin<&mut Self>, watch: i32) {
+        if let Some((_, task)) = self.as_mut().rust_mut().watches.remove(&watch) {
+            task.abort();
+        }
+    }
+
     fn open_app(mut self: Pin<&mut Self>, page: &QString, desktop_id: &QString) -> i32 {
         let id = self.as_mut().next_id();
         let page = page.to_string();
@@ -634,6 +733,21 @@ mod tests {
             "other path"
         );
         assert!(dbus_target(table(), "Pause", false, r#"{"path": "/o"}"#).is_ok());
+    }
+
+    #[test]
+    fn only_commands_with_a_watch_are_followed() {
+        let p = || {
+            page(
+                "[[command]]\nid = \"status\"\nargv = [\"/usr/bin/x\"]\noutput = \"json\"\n\
+                  watch = { files = [\"/etc/x.conf\"] }\n\
+                  [[command]]\nid = \"plain\"\nargv = [\"/usr/bin/x\"]\noutput = \"json\"\n",
+            )
+        };
+        assert_eq!(watch_spec(p(), "status").unwrap().files, ["/etc/x.conf"]);
+        assert!(watch_spec(p(), "plain").is_err());
+        assert!(watch_spec(p(), "nope").is_err());
+        assert!(watch_spec(None, "status").is_err());
     }
 
     #[test]

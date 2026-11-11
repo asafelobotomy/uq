@@ -254,3 +254,55 @@ async fn no_auto_start_needs_an_owner() {
         Err(DbusJsonError::Call(_))
     ));
 }
+
+/// A page command's `watch` signal match: the named signal re-runs it, others don't.
+#[tokio::test]
+async fn a_watched_signal_is_reported_once_quiet() {
+    use uq_core::integration::command_watch::{SignalMatch, WatchSpec, start};
+    use uq_core::integration::manifest::Bus;
+
+    let bus = private_bus();
+    let svc = serve(&bus).await;
+    let c = connect(&bus).await;
+    let spec = WatchSpec {
+        files: Vec::new(),
+        signals: vec![SignalMatch {
+            bus: Bus::Session,
+            interface: NAME.into(),
+            member: "Changed".into(),
+            path: Some("/org/uq/Test1".into()),
+            sender: Some(NAME.into()),
+        }],
+    };
+    let mut w = start(
+        &spec,
+        std::path::Path::new("/"),
+        Some(&c),
+        None,
+        Duration::from_millis(150),
+    )
+    .await
+    .unwrap();
+    let emit = |member: &'static str, path: &'static str| {
+        let svc = svc.clone();
+        async move {
+            svc.emit_signal(None::<&str>, path, NAME, member, &())
+                .await
+                .unwrap()
+        }
+    };
+    emit("Other", "/org/uq/Test1").await;
+    emit("Changed", "/elsewhere").await;
+    assert!(!changed(&mut w, 400).await, "another member or path");
+    for _ in 0..5 {
+        emit("Changed", "/org/uq/Test1").await;
+    }
+    assert!(changed(&mut w, 3000).await, "the signal arrived");
+    assert!(!changed(&mut w, 400).await, "a burst is one report");
+}
+
+async fn changed(w: &mut uq_core::integration::command_watch::Watch, within_ms: u64) -> bool {
+    tokio::time::timeout(Duration::from_millis(within_ms), w.changes.recv())
+        .await
+        .is_ok()
+}

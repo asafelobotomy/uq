@@ -19,11 +19,23 @@ Item {
 
         signal finished(int request, string resultJson)
         signal confirmRequested(int request, string page, string text)
+        signal commandChanged(int watch)
+        property var watching: []
 
         function reset() {
             next = 0;
             calls = [];
             answers = [];
+            watching = [];
+        }
+        function watchCommand(page, id) {
+            if (id !== "status")
+                return 0;
+            watching.push(77);
+            return 77;
+        }
+        function unwatch(watch) {
+            watching = watching.filter(w => w !== watch);
         }
         function later(fn) {
             Qt.callLater(fn);
@@ -195,6 +207,38 @@ Item {
             tryCompare(tc.results, "length", 3);
             compare(tc.results[0].value[0], "Pause");
             compare(tc.results[1].error, "nope");
+        }
+
+        function test_watch_reruns_on_change_until_unwatched() {
+            const [c] = make(fakeHost);
+            const handle = c.ctx.command.watch("status", collect);
+            compare(handle, 77);
+            tryCompare(tc.results, "length", 1);
+            fakeHost.commandChanged(77);
+            tryCompare(tc.results, "length", 2);
+            compare(fakeHost.calls.filter(x => x[0] === "run").length, 2);
+            // Two changes during one run: one more run after it.
+            fakeHost.commandChanged(77);
+            fakeHost.commandChanged(77);
+            fakeHost.commandChanged(77);
+            tryCompare(tc.results, "length", 4);
+            wait(50);
+            compare(tc.results.length, 4);
+            fakeHost.commandChanged(12);
+            c.ctx.command.unwatch(handle);
+            compare(fakeHost.watching, []);
+            fakeHost.commandChanged(77);
+            wait(50);
+            compare(tc.results.length, 4, "nothing after unwatch");
+            compare(c.ctx.command.watch("nope", collect), 0, "no watch in page.toml");
+        }
+
+        function test_closing_the_page_stops_its_watches() {
+            const [c] = make(fakeHost);
+            c.ctx.command.watch("status", collect);
+            compare(fakeHost.watching, [77]);
+            c.destroy();
+            tryCompare(fakeHost, "watching", []);
         }
 
         function test_open_app() {
