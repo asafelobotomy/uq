@@ -523,7 +523,7 @@ static DISPLAYS_SETTINGS: [SearchEntry; 14] = [
     ),
 ];
 
-static INPUT_SETTINGS: [SearchEntry; 14] = [
+static INPUT_SETTINGS: [SearchEntry; 19] = [
     entry(
         "keyboard-layouts",
         "Keyboard layouts",
@@ -595,6 +595,53 @@ static INPUT_SETTINGS: [SearchEntry; 14] = [
         "device-overrides",
         "Settings for one pointing device",
         &["mouse", "touchpad", "trackball", "per device", "device"],
+    ),
+    entry(
+        "gestures",
+        "Touchpad gestures",
+        &[
+            "gesture",
+            "swipe",
+            "pinch",
+            "fingers",
+            "three fingers",
+            "four fingers",
+            "touchpad",
+            "trackpad",
+        ],
+    ),
+    entry(
+        "gesture-swipe-distance",
+        "Swipe distance",
+        &["swipe", "gesture", "workspace", "how far", "sensitivity"],
+    ),
+    entry(
+        "gesture-swipe-invert",
+        "Reverse swipe direction",
+        &[
+            "swipe",
+            "gesture",
+            "natural",
+            "invert",
+            "reverse",
+            "direction",
+        ],
+    ),
+    entry(
+        "gesture-swipe-create",
+        "Swipe past the last workspace to make a new one",
+        &[
+            "swipe",
+            "gesture",
+            "new workspace",
+            "create",
+            "empty workspace",
+        ],
+    ),
+    entry(
+        "gesture-swipe-cancel",
+        "How far to swipe before it switches",
+        &["swipe", "gesture", "cancel", "threshold", "halfway"],
     ),
 ];
 
@@ -1312,17 +1359,7 @@ mod tests {
             .iter()
             .flat_map(|p| p.settings.iter().map(|s| s.id))
             .collect();
-        // The swipe rows name settings the Input page lists once it has them (Task 14).
-        let later = [
-            "gesture-swipe-distance",
-            "gesture-swipe-invert",
-            "gesture-swipe-create",
-            "gesture-swipe-cancel",
-        ];
         for row in uq_core::settings::provenance::OPTIONS {
-            if later.contains(&row.setting_id) {
-                continue;
-            }
             assert!(
                 ids.contains(row.setting_id),
                 "{} names setting {:?}, which no page lists",
@@ -1786,6 +1823,47 @@ mod tests {
         assert!(found("remember", "display-remember"));
         assert!(found("planner", "display-workspaces"));
         assert!(found("return", "display-workspaces-back"));
+    }
+
+    #[test]
+    fn gesture_settings_have_keywords() {
+        let page = find("input").expect("the input page is registered");
+        assert_eq!(page.settings.len(), 19);
+        for (id, label) in [
+            ("gestures", "Touchpad gestures"),
+            ("gesture-swipe-distance", "Swipe distance"),
+            ("gesture-swipe-invert", "Reverse swipe direction"),
+            (
+                "gesture-swipe-create",
+                "Swipe past the last workspace to make a new one",
+            ),
+            (
+                "gesture-swipe-cancel",
+                "How far to swipe before it switches",
+            ),
+        ] {
+            let s = page.settings.iter().find(|s| s.id == id).unwrap();
+            assert_eq!(s.label, label);
+            assert!(!s.keywords.is_empty(), "{id}");
+        }
+    }
+
+    #[test]
+    fn search_finds_gestures() {
+        let entries: Vec<_> = core_pages().iter().map(PageEntry::from).collect();
+        let found = |q: &str, id: &str| {
+            crate::search::search(&entries, q)
+                .iter()
+                .any(|h| h.page_id == "input" && h.setting_id == id)
+        };
+        assert!(found("gesture", "gestures"));
+        assert!(found("swipe", "gestures"));
+        assert!(found("pinch", "gestures"));
+        assert!(found("three fingers", "gestures"));
+        assert!(found("swipe distance", "gesture-swipe-distance"));
+        assert!(found("natural", "gesture-swipe-invert"));
+        assert!(found("new workspace", "gesture-swipe-create"));
+        assert!(found("cancel", "gesture-swipe-cancel"));
     }
 
     #[test]

@@ -94,6 +94,13 @@ pub fn defaults() -> Value {
             "disable_while_typing": true,
             "scroll_factor": 1.0,
         },
+        // Hyprland's own, for the swipe options left unset.
+        "swipe": {
+            "distance": 300,
+            "invert": true,
+            "create_new": true,
+            "cancel_ratio": 0.5,
+        },
     })
 }
 

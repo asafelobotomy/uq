@@ -55,6 +55,29 @@ pub mod qobject {
 
         #[qinvokable]
         fn remove_device(self: Pin<&mut InputModel>, name: &QString);
+
+        /// Save one gesture as JSON; `index` -1 adds it.
+        #[qinvokable]
+        fn save_gesture(self: Pin<&mut InputModel>, index: i32, json_value: &QString);
+
+        #[qinvokable]
+        fn remove_gesture(self: Pin<&mut InputModel>, index: i32);
+
+        #[qinvokable]
+        fn toggle_gesture(self: Pin<&mut InputModel>, index: i32, enabled: bool);
+
+        /// Back to uQ's own gestures.
+        #[qinvokable]
+        fn reset_gestures(self: Pin<&mut InputModel>);
+
+        /// One swipe option (`distance`, `invert`, `create_new`, `cancel_ratio`); `null` clears it.
+        #[qinvokable]
+        fn set_swipe(self: Pin<&mut InputModel>, field: &QString, json_value: &QString);
+
+        /// The clash a gesture (JSON) would make if saved as gesture `index` (-1 adds it), in
+        /// plain words; "" when there is none. Asks nobody: it checks the gestures read last.
+        #[qinvokable]
+        fn draft_clash(self: &InputModel, index: i32, json_value: &QString) -> QString;
     }
 
     impl cxx_qt::Threading for InputModel {}
@@ -173,5 +196,45 @@ impl InputModel {
                 name: name.to_string(),
             },
         );
+    }
+
+    fn save_gesture(self: Pin<&mut Self>, index: i32, json_value: &QString) {
+        self.with_value(&QString::from("gesture"), json_value, |gesture| {
+            Op::SaveGesture { index, gesture }
+        });
+    }
+
+    fn remove_gesture(self: Pin<&mut Self>, index: i32) {
+        match usize::try_from(index) {
+            Ok(index) => model_core::start(self, Op::RemoveGesture { index }),
+            Err(_) => self.set_error(QString::from("That gesture isn't there any more.")),
+        }
+    }
+
+    fn toggle_gesture(self: Pin<&mut Self>, index: i32, enabled: bool) {
+        match usize::try_from(index) {
+            Ok(index) => model_core::start(self, Op::ToggleGesture { index, enabled }),
+            Err(_) => self.set_error(QString::from("That gesture isn't there any more.")),
+        }
+    }
+
+    fn reset_gestures(self: Pin<&mut Self>) {
+        model_core::start(self, Op::ResetGestures);
+    }
+
+    fn set_swipe(self: Pin<&mut Self>, field: &QString, json_value: &QString) {
+        let f = field.to_string();
+        self.with_value(field, json_value, |value| Op::SetSwipe { field: f, value });
+    }
+
+    fn draft_clash(&self, index: i32, json_value: &QString) -> QString {
+        let text = match (
+            serde_json::from_str::<Value>(&json_value.to_string()),
+            self.core().logic(),
+        ) {
+            (Ok(draft), Some(logic)) => logic.draft_clash(index, &draft),
+            _ => String::new(),
+        };
+        QString::from(&text)
     }
 }

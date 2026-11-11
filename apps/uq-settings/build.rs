@@ -31,6 +31,8 @@ fn main() {
         QmlFile::from("qml/components/DisplayArrangements.qml"),
         QmlFile::from("qml/components/DisplayRoles.qml"),
         QmlFile::from("qml/components/WorkspacePlanner.qml"),
+        QmlFile::from("qml/components/GestureList.qml"),
+        QmlFile::from("qml/components/GestureEditor.qml"),
         QmlFile::from("qml/components/KeyboardLayoutList.qml"),
         QmlFile::from("qml/components/ValueSlider.qml"),
         QmlFile::from("qml/components/ProfileKeyList.qml"),
