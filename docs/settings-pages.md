@@ -109,7 +109,10 @@ Runs the `[[command]]` with that `id`, with `args` (a list of strings) appended 
 What is enforced, whatever the page does:
 
 - Only declared commands run. `argv[0]` is an absolute path under `/usr/bin` or `/usr/lib`, and
-  the fixed `argv` is never changed.
+  the fixed `argv` is never changed. The check is on the path as written (no `.`, `..` or `//`),
+  not on where it leads: symlinks are not resolved, so a link under `/usr/lib` that points
+  elsewhere is accepted. Those directories are root's, so only a package (or root) can put one
+  there.
 - Arguments are appended as separate entries, exactly as many as `args` declares. Each must
   match its pattern in full (the pattern must start with `^` and end with `$`) and may never
   start with `-`, so it can't become an option.
@@ -118,6 +121,9 @@ What is enforced, whatever the page does:
   closed and the command runs in its own process group.
 - Over its timeout or an output cap, the whole process group gets `SIGTERM`, then `SIGKILL` two
   seconds later.
+- The run ends when the command exits. Output still arriving 200 ms after that is dropped, so a
+  process it started in the background (and left holding stdout or stderr) doesn't hold up the
+  result; that process is left running.
 - One run per command at a time: a second `run` of the same `id` while one runs gets
   `{error: "already running"}`.
 - Nothing runs as root. A command that needs it uses your app's own polkit action; uQ's polkit

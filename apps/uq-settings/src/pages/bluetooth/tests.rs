@@ -279,3 +279,35 @@ fn words() {
     assert_eq!(kind_text("input-mouse"), "Mouse");
     assert_eq!(kind_text(""), "Device");
 }
+
+/// The adapter comes from the same `GetManagedObjects` answer as the rest of the page (no second
+/// read that could find it gone): the first by path, with its properties.
+#[test]
+fn first_adapter_is_picked_from_one_snapshot() {
+    use std::collections::HashMap;
+    use zbus::names::OwnedInterfaceName;
+    use zbus::zvariant::{OwnedObjectPath, OwnedValue};
+    let entry = |iface: &str, name: &str| {
+        let mut props = HashMap::new();
+        props.insert(
+            "Alias".to_string(),
+            OwnedValue::try_from(zbus::zvariant::Value::from(name)).unwrap(),
+        );
+        let mut o = HashMap::new();
+        o.insert(OwnedInterfaceName::try_from(iface).unwrap(), props);
+        o
+    };
+    let mut objects: Objects = HashMap::new();
+    assert!(first_adapter(&objects).is_none());
+    let path = |p: &str| OwnedObjectPath::try_from(p).unwrap();
+    objects.insert(path("/org/bluez/hci0/dev_AA"), entry(DEVICE, "phone"));
+    assert!(
+        first_adapter(&objects).is_none(),
+        "a device isn't an adapter"
+    );
+    objects.insert(path("/org/bluez/hci1"), entry(ADAPTER, "second"));
+    objects.insert(path("/org/bluez/hci0"), entry(ADAPTER, "first"));
+    let (p, props) = first_adapter(&objects).unwrap();
+    assert_eq!(p.as_str(), "/org/bluez/hci0");
+    assert_eq!(get::<String>(props, "Alias").as_deref(), Some("first"));
+}

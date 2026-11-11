@@ -99,7 +99,8 @@ async fn pick_without_shell_is_no_shell_within_ack_timeout() {
     let t = std::time::Instant::now();
     let (v, tokens) = run(&b, comp(), None).await;
     assert_eq!(v, json!({"status": "no_shell"}));
-    assert!(t.elapsed() < Duration::from_millis(500));
+    // The 50 ms ack timeout, not the 20 s pick timeout.
+    assert!(t.elapsed() < Duration::from_secs(10), "{:?}", t.elapsed());
     assert_eq!(tokens.len(), 1);
 }
 

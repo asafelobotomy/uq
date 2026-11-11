@@ -39,6 +39,26 @@ impl Passwd for MockPasswd {
         }
         Ok(self.0.get(name).copied())
     }
+
+    fn shadow(&self, name: &str) -> io::Result<Option<crate::passwd::Shadow>> {
+        let fine = crate::passwd::Shadow {
+            locked: false,
+            last_change: 19_000,
+            max: -1,
+            inactive: -1,
+            expire: -1,
+        };
+        Ok(match name {
+            "locked" => Some(crate::passwd::Shadow {
+                locked: true,
+                ..fine
+            }),
+            "expired" => Some(crate::passwd::Shadow { expire: 1, ..fine }),
+            "brokenshadow" => return Err(io::Error::other("shadow unreadable")),
+            "alice" => Some(fine),
+            _ => None,
+        })
+    }
 }
 
 fn users() -> Arc<MockPasswd> {
@@ -50,6 +70,9 @@ fn users() -> Arc<MockPasswd> {
         ("nobody", 65534),
         ("highuid", 60001),
         ("svc", 999),
+        ("locked", 1001),
+        ("expired", 1002),
+        ("brokenshadow", 1003),
     ])))
 }
 
@@ -376,6 +399,23 @@ async fn clear_wallpaper_removes_it_and_is_idempotent() {
 }
 
 #[tokio::test]
+async fn clear_monitors_removes_the_file_and_is_idempotent() {
+    let f = Fixture::new(true);
+    f.helper
+        .set_greeter_monitors(":1.5", r#"{"outputs":{"DP-1":{"mode":"1920x1080@60"}}}"#)
+        .await
+        .unwrap();
+    assert!(f.path("etc/uq/greeter-monitors.toml").exists());
+    f.helper.clear_greeter_monitors(":1.5").await.unwrap();
+    assert!(!f.path("etc/uq/greeter-monitors.toml").exists());
+    f.helper.clear_greeter_monitors(":1.5").await.unwrap();
+    assert_eq!(
+        f.checks().iter().map(|c| c.1).collect::<Vec<_>>(),
+        [Action::Greeter; 3]
+    );
+}
+
+#[tokio::test]
 async fn monitors_go_through_uq_core_validation() {
     let f = Fixture::new(true);
     f.helper
@@ -483,6 +523,27 @@ async fn auto_login_refuses_system_missing_and_malformed_users() {
 }
 
 #[tokio::test]
+async fn auto_login_refuses_locked_and_expired_accounts() {
+    let f = Fixture::new(true);
+    for bad in ["locked", "expired"] {
+        let r = f.helper.set_auto_login(":1.5", bad).await;
+        assert!(is_invalid(r), "{bad}");
+    }
+    assert!(matches!(
+        f.helper.set_auto_login(":1.5", "brokenshadow").await,
+        Err(HelperError::Failed(_))
+    ));
+    assert!(f.checks().is_empty(), "refused before polkit is asked");
+    assert_eq!(
+        fs::read_to_string(f.path("etc/uq/greetd.toml")).unwrap(),
+        GREETD
+    );
+    // An account with a usable shadow entry, and one without any (bob), are fine.
+    f.helper.set_auto_login(":1.5", "alice").await.unwrap();
+    f.helper.set_auto_login(":1.5", "bob").await.unwrap();
+}
+
+#[tokio::test]
 async fn auto_login_needs_an_existing_valid_greetd_toml() {
     let f = Fixture::new(true);
     fs::remove_file(f.path("etc/uq/greetd.toml")).unwrap();
@@ -554,6 +615,7 @@ async fn an_unauthorised_caller_writes_nothing() {
         assert!(is_denied(
             h.set_greeter_monitors(":1.9", r#"{"outputs":{}}"#).await
         ));
+        assert!(is_denied(h.clear_greeter_monitors(":1.9").await));
         assert!(is_denied(h.set_auto_login(":1.9", "alice").await));
         assert!(is_denied(h.set_auto_login(":1.9", "").await));
         assert_eq!(f.written(), ["var/lib/uq-greeter/wallpaper"]);
@@ -570,6 +632,7 @@ async fn an_unauthorised_caller_writes_nothing() {
             actions,
             [
                 Action::Power,
+                Action::Greeter,
                 Action::Greeter,
                 Action::Greeter,
                 Action::Greeter,

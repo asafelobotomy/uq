@@ -35,7 +35,7 @@ pub use shell::{
 pub use wallpaper::{Fit, Wallpaper, WallpaperEntry};
 
 /// Every key `Settings::apply` accepts; anything else is rejected.
-pub const SETTING_KEYS: [&str; 17] = [
+pub const SETTING_KEYS: [&str; 18] = [
     "pinned",
     "weather_location",
     "idle.dim",
@@ -53,12 +53,13 @@ pub const SETTING_KEYS: [&str; 17] = [
     "mouse.natural_scroll",
     "mouse.left_handed",
     "mouse.scroll_factor",
+    "ui.reduce_motion",
 ];
 
 /// Keys that change Hyprland's config: uqd renders, verifies and reloads for these instead of
-/// taking the light commit path.
+/// taking the light commit path. `ui.reduce_motion` turns Hyprland's animations off.
 pub fn renders_config(key: &str) -> bool {
-    key.starts_with("mouse.")
+    key.starts_with("mouse.") || key == "ui.reduce_motion"
 }
 
 /// Whole-section domains handled by [`Settings::section`] / [`Settings::set_section`].
@@ -186,6 +187,15 @@ pub enum AccelProfile {
 }
 
 /// Pointer settings for mice, rendered into the `input` block of `generated.lua`.
+/// Person-wide interface preferences (`[ui]`), not tied to a theme.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UiSettings {
+    /// Reduce motion: the shell skips its fades and crossfades and Hyprland's animations are
+    /// off (generated.lua). Default false.
+    pub reduce_motion: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct MouseSettings {
@@ -246,6 +256,8 @@ pub struct Settings {
     /// `mouse` above, not stored here.
     #[serde(deserialize_with = "lenient")]
     pub input: InputSettings,
+    #[serde(deserialize_with = "lenient")]
+    pub ui: UiSettings,
 }
 
 pub(crate) fn invalid(key: &str, reason: impl Into<String>) -> SettingError {
@@ -440,6 +452,7 @@ impl Settings {
             "mouse.scroll_factor" => {
                 next.mouse.scroll_factor = as_ranged_f64(key, &value, 0.1, 10.0)?;
             }
+            "ui.reduce_motion" => next.ui.reduce_motion = as_bool(key, &value)?,
             _ => return Err(SettingError::UnknownKey(key.to_string())),
         }
         if key.starts_with("idle.") {

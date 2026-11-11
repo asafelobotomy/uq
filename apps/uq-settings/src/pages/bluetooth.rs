@@ -148,6 +148,14 @@ fn kind_text(icon: &str) -> &'static str {
 type Objects =
     HashMap<OwnedObjectPath, HashMap<zbus::names::OwnedInterfaceName, HashMap<String, OwnedValue>>>;
 
+/// The first adapter (by path) in one `GetManagedObjects` answer, with its properties.
+fn first_adapter(objects: &Objects) -> Option<(&OwnedObjectPath, &HashMap<String, OwnedValue>)> {
+    objects
+        .iter()
+        .filter_map(|(p, o)| props(o, ADAPTER).map(|a| (p, a)))
+        .min_by(|a, b| a.0.as_str().cmp(b.0.as_str()))
+}
+
 fn props<'a>(
     o: &'a HashMap<zbus::names::OwnedInterfaceName, HashMap<String, OwnedValue>>,
     iface: &str,
@@ -187,15 +195,8 @@ impl BluetoothState {
     /// The first adapter's path.
     async fn adapter(&self, conn: &zbus::Connection) -> zbus::Result<OwnedObjectPath> {
         let objects = self.objects(conn).await?;
-        let mut adapters: Vec<&OwnedObjectPath> = objects
-            .iter()
-            .filter(|(_, o)| props(o, ADAPTER).is_some())
-            .map(|(p, _)| p)
-            .collect();
-        adapters.sort_by(|a, b| a.as_str().cmp(b.as_str()));
-        adapters
-            .first()
-            .map(|p| (*p).clone())
+        first_adapter(&objects)
+            .map(|(p, _)| p.clone())
             .ok_or_else(|| failure("This computer has no Bluetooth adapter."))
     }
 
@@ -225,13 +226,11 @@ impl BluetoothState {
     async fn read(&self) -> zbus::Result<Value> {
         let conn = self.system.conn().await?;
         let objects = self.objects(&conn).await?;
-        let Ok(adapter) = self.adapter(&conn).await else {
+        // From the one snapshot: an adapter that went between two reads can't be missing here.
+        let Some((adapter, a)) = first_adapter(&objects) else {
             return Ok(json!({"available": true, "adapter": null, "devices": []}));
         };
-        let a = objects
-            .get(&adapter)
-            .and_then(|o| props(o, ADAPTER))
-            .expect("found above");
+        let adapter = adapter.clone();
         let working = self.shared.working.lock().unwrap().clone();
         let mut devices = Vec::new();
         for (path, o) in &objects {

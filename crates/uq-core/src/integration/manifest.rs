@@ -124,6 +124,9 @@ pub fn valid_bus_name(name: &str) -> bool {
 
 /// `path` is absolute, already normalized (no `.`, `..`, `//` or trailing `/`), and strictly
 /// inside one of `prefixes` (compared by whole components).
+///
+/// The check is lexical: symlinks are not resolved, so a link inside a prefix that points
+/// outside it passes. The prefixes are root-owned, so only root or a package can place one.
 pub fn path_under(path: &str, prefixes: &[PathBuf]) -> bool {
     let p = Path::new(path);
     if !p.is_absolute() || path.contains('\0') {

@@ -79,6 +79,10 @@ WlSessionLockSurface {
                 if (surface.auth.submit(field.text))
                     field.clear();
             }
+            // Esc stops a check that PAM has not answered yet (Auth.cancel); the field keeps focus.
+            Keys.onEscapePressed: event => {
+                event.accepted = surface.auth.cancel();
+            }
         }
 
         MessageView {

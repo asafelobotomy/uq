@@ -67,7 +67,8 @@ What uQ enforces:
   exactly as many as declared, each matching its anchored pattern and never starting with `-`.
   No shell, a scrubbed environment, stdin closed, its own process group, a time limit (10 s by
   default, at most 10 minutes), 4 MiB of output and 64 KiB of errors; then `SIGTERM`, and
-  `SIGKILL` 2 seconds later.
+  `SIGKILL` 2 seconds later. A run ends when the command exits (plus 200 ms for its output), even
+  if something it started in the background still holds its output open.
 - **D-Bus** goes to one name, path and interface per widget or page, listed members only.
   Argument types come from the service's introspection data, never from the QML. Only `b y n q i
   u x t d s o`, arrays of those, `a{sv}` and `a{ss}` cross, both ways. Arguments are at most

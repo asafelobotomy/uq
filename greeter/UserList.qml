@@ -10,6 +10,9 @@ ListView {
     // [{name, label, avatar}] from greeter.js visibleUsers.
     property var users: []
     property string selected: ""
+    // greeter.toml's reduce_motion: a flicked list stops at once instead of coasting, and
+    // moving to another user scrolls without animating.
+    property bool reduceMotion: false
 
     signal chosen(string name)
 
@@ -43,6 +46,15 @@ ListView {
     Accessible.name: "Users"
     Keys.onLeftPressed: step(-1)
     Keys.onRightPressed: step(1)
+
+    Binding on flickDeceleration {
+        when: list.reduceMotion
+        value: 100000
+    }
+    Binding on highlightMoveDuration {
+        when: list.reduceMotion
+        value: 0
+    }
 
     delegate: Item {
         id: tile

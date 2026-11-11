@@ -21,6 +21,8 @@ FocusScope {
     // greeter.js parseState: last user and each user's last session.
     property var stateData: G.parseState("")
     property date date: new Date()
+    // greeter.toml's reduce_motion. Hyprland's animations are always off in the greeter and it
+    // has no fades of its own; this stops the user list from coasting or animating its scroll.
     property bool reduceMotion: false
 
     property string selectedUser: ""
@@ -143,6 +145,7 @@ FocusScope {
             height: visible ? implicitHeight : 0
             users: greeter.users
             selected: greeter.selectedUser
+            reduceMotion: greeter.reduceMotion
             onChosen: name => {
                 greeter.selectUser(name, true);
                 greeter.focusField();

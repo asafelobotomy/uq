@@ -2,15 +2,23 @@
 //! what closing the lid or pressing the power key does (logind, written through
 //! `uq-settings-helper`'s `SetLogindPowerActions`). logind is never restarted, so a changed
 //! action applies at its next reload; the page says so while the running value differs.
+//!
+//! While the page is open it follows UPower's and power-profiles-daemon's signals, so the
+//! battery and the power mode update as they change. Only when the system bus can't be
+//! followed does it fall back to reading everything again every [`FALLBACK_POLL`].
 
 pub(crate) mod logind;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
+use std::time::Duration;
+
+use futures_util::StreamExt;
 
 use serde_json::{Value, json};
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, Notify};
 use zbus::proxy::CacheProperties;
 use zbus::zvariant::OwnedValue;
 
@@ -23,6 +31,12 @@ use super::sysbus::{self, HELPER, POWER_PROFILES, SystemBus, UPOWER, failure, se
 use logind::{Actions, CHOICES};
 
 pub const PENDING_NOTE: &str = "Saved. It takes effect the next time the computer starts.";
+/// How often the page reads everything again when it can't follow the services' signals.
+pub const FALLBACK_POLL: Duration = Duration::from_secs(60);
+/// UPower's bus name; its objects (and the current power-profiles-daemon's) live under
+/// `/org/freedesktop/UPower`.
+const UPOWER_NAME: &str = "org.freedesktop.UPower";
+const UPOWER_PATHS: &str = "/org/freedesktop/UPower";
 
 #[derive(Debug, Clone)]
 pub enum Op {
@@ -42,6 +56,7 @@ pub struct PowerState {
     root: PathBuf,
     write: Mutex<()>,
     notice: StdMutex<(u64, String)>,
+    poll: Duration,
 }
 
 /// "3 h 20 min" for a number of seconds; "" for none.
@@ -81,7 +96,63 @@ impl PowerState {
             root,
             write: Mutex::new(()),
             notice: StdMutex::new((0, String::new())),
+            poll: FALLBACK_POLL,
         }
+    }
+
+    /// The same page with another fallback poll interval (tests).
+    #[cfg(test)]
+    pub fn with_poll(mut self, poll: Duration) -> Self {
+        self.poll = poll;
+        self
+    }
+
+    /// Notify `changed` whenever UPower or power-profiles-daemon says something changed, or
+    /// one of them starts or stops. Returns only when the bus stops delivering signals.
+    async fn follow(&self, changed: &Notify) -> zbus::Result<()> {
+        let conn = self.system.conn().await?;
+        let mut rules = vec![
+            zbus::MatchRule::builder()
+                .msg_type(zbus::message::Type::Signal)
+                .path_namespace(UPOWER_PATHS)?
+                .build(),
+        ];
+        for (_, path, _) in POWER_PROFILES_NAMES {
+            if !path.starts_with(UPOWER_PATHS) {
+                rules.push(
+                    zbus::MatchRule::builder()
+                        .msg_type(zbus::message::Type::Signal)
+                        .path(path)?
+                        .build(),
+                );
+            }
+        }
+        let mut streams = Vec::new();
+        for rule in rules {
+            streams.push(
+                zbus::MessageStream::for_match_rule(rule, &conn, Some(64))
+                    .await?
+                    .map(|_| ())
+                    .boxed(),
+            );
+        }
+        let dbus = zbus::fdo::DBusProxy::new(&conn).await?;
+        let names = std::iter::once(UPOWER_NAME).chain(POWER_PROFILES_NAMES.map(|(n, _, _)| n));
+        for name in names {
+            streams.push(
+                dbus.receive_name_owner_changed_with_args(&[(0, name)])
+                    .await?
+                    .map(|_| ())
+                    .boxed(),
+            );
+        }
+        let mut all = futures_util::stream::select_all(streams);
+        // Anything that changed while subscribing.
+        changed.notify_one();
+        while all.next().await.is_some() {
+            changed.notify_one();
+        }
+        Ok(())
     }
 
     fn notice(&self, text: &str) {
@@ -286,6 +357,24 @@ impl PageLogic for PowerState {
             },
             "notice": {"seq": seq, "text": text},
         }))
+    }
+
+    async fn watch(&self, changed: Arc<Notify>) {
+        match self.follow(&changed).await {
+            Ok(()) => eprintln!("uq-settings: the system bus stopped sending power changes"),
+            Err(e) => eprintln!(
+                "uq-settings: can't follow power changes: {}",
+                sysbus::error_text(&e)
+            ),
+        }
+        // No signals: read the battery and power mode again now and then instead.
+        let mut every = tokio::time::interval(self.poll);
+        every.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        every.tick().await;
+        loop {
+            every.tick().await;
+            changed.notify_one();
+        }
     }
 }
 

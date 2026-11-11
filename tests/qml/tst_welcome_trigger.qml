@@ -79,6 +79,18 @@ TestCase {
         verify(!r.state.decided);
     }
 
+    // uqd was up at Hello but GetWelcome timed out in the bridge: no UqdUp will come, so the
+    // shell waits its grace period and asks WelcomeStatus.
+    function test_uqd_up_but_slow_at_hello_asks_again() {
+        var r = W.onEvent(W.initial(), "Hello",
+                          { v: 1, uqd_up: true, locked: false, welcome_pending: null,
+                            welcome_deferred: false });
+        compare(r.action, "wait");
+        r = W.onTimer(r.state);
+        compare(r.action, "ask");
+        compare(W.onStatus(r.state, { pending: true, deferred: false }).action, "start");
+    }
+
     function test_old_bridge_hello_without_welcome_fields() {
         var r = W.onEvent(W.initial(), "Hello", { v: 1, uqd_up: true, locked: false });
         compare(r.action, "none");

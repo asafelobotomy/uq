@@ -205,6 +205,13 @@ QQC2.ScrollView {
                 enabled: page.idle && App.uqdUp
                 onClicked: lm.useMyDisplays()
             }
+            QQC2.Button {
+                objectName: "automaticDisplays"
+                text: "Use automatic layout"
+                icon.name: "view-refresh"
+                enabled: page.idle && !!(page.snap.monitors && page.snap.monitors.set)
+                onClicked: lm.automaticDisplays()
+            }
         }
 
         SwitchRow {

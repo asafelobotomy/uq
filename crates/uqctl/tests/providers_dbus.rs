@@ -224,7 +224,10 @@ async fn unowned_provider_not_activated() {
         dbus.start_service_by_name("org.test.Ghost".try_into().unwrap(), 0),
     )
     .await;
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    let end = std::time::Instant::now() + Duration::from_secs(10);
+    while !marker.exists() && std::time::Instant::now() < end {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
     assert!(marker.exists(), "activation service file did not work");
 }
 

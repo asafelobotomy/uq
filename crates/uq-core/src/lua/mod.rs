@@ -2,7 +2,7 @@
 
 use crate::keybinds::Keybinds;
 use crate::rules::Rules;
-use crate::settings::Settings;
+use crate::settings::{Look, Settings};
 use crate::theme::Theme;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -18,7 +18,7 @@ mod startup;
 pub use input::emit_devices;
 pub use keybinds::{emit_bind, emit_binds};
 pub use look::{ANIMATION_LEAVES, CURVES};
-pub use monitors::{emit_monitor_line, emit_monitors};
+pub use monitors::{MAX_GREETER_MONITORS, emit_monitor_line, emit_monitors, greeter_monitors_lua};
 pub use rules::{emit_layer_rule, emit_window_rule, emit_workspace_rules};
 pub use startup::{StartupRender, emit_startup_env, emit_xwayland, startup_render};
 
@@ -123,7 +123,18 @@ pub fn emit_generated_with_apps(
     startup: &StartupRender,
 ) -> String {
     let (c, ui) = (&theme.colors, &theme.ui);
-    let (look, lo) = (&settings.look, &settings.layout_options);
+    // Reduce motion (`ui.reduce_motion`) turns Hyprland's animations off, whatever `look` says.
+    let reduced;
+    let look = if settings.ui.reduce_motion {
+        reduced = Look {
+            animations: Some(false),
+            ..settings.look.clone()
+        };
+        &reduced
+    } else {
+        &settings.look
+    };
+    let lo = &settings.layout_options;
     let mut out = String::new();
     let _ = writeln!(out, "{HEADER}");
     let _ = writeln!(

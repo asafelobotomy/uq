@@ -52,7 +52,9 @@ it says so; enable one with `run0 systemctl enable <name>.service`.
   monitors show the wallpaper and the clock. Tab goes user → password → session → power; Enter
   logs in; Esc cancels.
 - **What it reads.** The greeter never reads a home directory. It reads only:
-  - `/etc/uq/greeter.toml`: theme, variant, `hide_users` and `reduce_motion` (Settings writes it);
+  - `/etc/uq/greeter.toml`: theme, variant, `hide_users` and `reduce_motion` (Settings writes it).
+    The greeter has no fades and its Hyprland runs with animations off either way; `reduce_motion`
+    also stops the user list coasting when flicked or animating its scroll;
   - `/usr/share/uq/themes/rendered/<theme>-<variant>/tokens.json`: every theme pre-rendered by the
     package (the default theme, dark, if the chosen one is missing);
   - `/var/lib/uq-greeter/wallpaper`: the login wallpaper (the theme's background colour if it's
@@ -61,6 +63,11 @@ it says so; enable one with `run0 systemctl enable <name>.service`.
     `/var/lib/AccountsService/icons/`), read with `busctl` over the system bus;
   - the `Name` and `Exec` of each `/usr/share/wayland-sessions/*.desktop`;
   - its own `/var/cache/uq-greeter/state.toml`: the last user and each user's last session.
+  - `/etc/uq/greeter-monitors.toml`, read by `uq-greeter-session` before Hyprland starts: the
+    display layout copied with Settings → Login screen → **Use my display layout at login**. It
+    goes through the same checks as your own layout (`uqctl greeter monitors-lua`) and becomes
+    `hl.monitor` lines; if it is missing, doesn't pass, or turns every screen off, the login
+    screen arranges the screens automatically. **Use automatic layout** removes it.
 - **Passwords and messages.** PAM runs inside greetd with `/etc/pam.d/greetd` (from the greetd
   package; uQ doesn't ship or edit it). Password fields are cleared after every attempt and
   nothing the greeter logs contains a password or a PAM message. A wrong password, a locked

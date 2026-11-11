@@ -81,13 +81,8 @@ QQC2.ScrollView {
         id: pm
         onStateJsonChanged: page.showNews()
     }
-    // The battery changes on its own; read it again while the page is open.
-    Timer {
-        interval: 30000
-        repeat: true
-        running: page.visible
-        onTriggered: pm.refresh()
-    }
+    // The model follows UPower and power-profiles-daemon itself (power.rs), so the battery and
+    // the power mode update as they change.
 
     ColumnLayout {
         width: Math.min(page.availableWidth - Kirigami.Units.largeSpacing * 2, Kirigami.Units.gridUnit * 44)

@@ -132,7 +132,9 @@ Settings writes `greeter.toml`, the wallpaper and the monitor file through
   A logind refusal is shown as plain text.
 - **Keyboard.** Tab order user → password → session → power; Enter logs in; the keyboard layout
   comes from `localectl`'s X11 layout (read once at start) so passwords type as expected.
-- **Reduce motion** from `greeter.toml`, default off.
+- **Reduce motion** from `greeter.toml`, default off. The greeter's Hyprland always runs with
+  animations off and the greeter has no fades, so the flag only stops the user list coasting
+  when flicked or animating its scroll. It is separate from the user's own `ui.reduce_motion`.
 - **Crash recovery.** If Quickshell exits without a session starting, `uq-greeter-session` exits
   non-zero and greetd restarts the greeter. After 3 failures in 60 s it falls back to `agreety`
   (greetd's text greeter) on the same VT, so a broken greeter never locks the user out.
@@ -188,7 +190,8 @@ Each method is a closed operation with its own polkit action, as in Phase 3 §3.
 | `SetGreeterWallpaper(h fd)` | `/var/lib/uq-greeter/wallpaper`, copied from the fd (regular file only, ≤ 20 MiB, never decoded), atomic | `org.uq.settings.greeter` |
 | `ClearGreeterWallpaper()` | removes it | `org.uq.settings.greeter` |
 | `SetGreeterMonitors(s json)` | `/etc/uq/greeter-monitors.toml`, validated by `uq_core::settings::monitors` | `org.uq.settings.greeter` |
-| `SetAutoLogin(s user)` | `[initial_session]` in `/etc/uq/greetd.toml` (empty string removes it); the user must exist with uid ≥ 1000 | `org.uq.settings.autologin` (`auth_admin`) |
+| `ClearGreeterMonitors()` | removes it (Hyprland's automatic layout again) | `org.uq.settings.greeter` |
+| `SetAutoLogin(s user)` | `[initial_session]` in `/etc/uq/greetd.toml` (empty string removes it); the user must exist with uid ≥ 1000 and not be locked or expired (`/etc/shadow`); removing that user on the Users page clears it | `org.uq.settings.autologin` (`auth_admin`) |
 
 The helper unit's `ReadWritePaths` grows by `/etc/uq` and `/var/lib/uq-greeter`. All other
 hardening from Phase 3 §3 stays.

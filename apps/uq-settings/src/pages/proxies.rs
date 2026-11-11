@@ -208,6 +208,7 @@ pub trait Helper {
     fn set_greeter_wallpaper(&self, fd: zbus::zvariant::Fd<'_>) -> zbus::Result<()>;
     fn clear_greeter_wallpaper(&self) -> zbus::Result<()>;
     fn set_greeter_monitors(&self, json: &str) -> zbus::Result<()>;
+    fn clear_greeter_monitors(&self) -> zbus::Result<()>;
     fn set_auto_login(&self, user: &str) -> zbus::Result<()>;
 }
 

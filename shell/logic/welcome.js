@@ -3,7 +3,8 @@
 // When the shell starts Welcome (Phase 5 spec §5.1–5.2). Pure: shell/session/WelcomeTrigger.qml
 // feeds it bridge events and acts on the result.
 //
-// The bridge's Hello carries welcome_pending (null while uqd isn't up yet) and welcome_deferred
+// The bridge's Hello carries welcome_pending (null while uqd isn't up yet, or when uqd is up but
+// didn't answer within the bridge's 2 s; then the shell waits and asks again) and welcome_deferred
 // (bindle's $XDG_RUNTIME_DIR/uq/welcome.defer, fresher than 30 min). When Welcome is due, the
 // shell first waits GRACE_MS and asks again (WelcomeStatus): an installer's first-login wizard,
 // started from the session's autostart, gets that long to create the defer file, so the two
@@ -36,6 +37,9 @@ function onEvent(state, name, data) {
         if (d.welcome_pending === true && d.welcome_deferred === true)
             return result(true, false, "none");     // the installer opens it when it's done
         if (d.welcome_pending === true && !state.waiting)
+            return result(false, true, "wait");
+        // uqd is up but was slow to answer before Hello: no UqdUp will follow, so ask again.
+        if (d.welcome_pending === null && d.uqd_up === true && !state.waiting)
             return result(false, true, "wait");
         return { state: state, action: "none" };    // unknown: wait for uqd
     }

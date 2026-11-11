@@ -357,7 +357,8 @@ mod tests {
     async fn power_call_times_out() {
         let dir = tempfile::tempdir().unwrap();
         let fake = Arc::new(FakePower::new("balanced"));
-        *fake.delay.lock().unwrap() = Duration::from_secs(1);
+        // Far past the 50 ms timeout, so a loaded machine can't blur the two.
+        *fake.delay.lock().unwrap() = Duration::from_secs(30);
         let mut paths = Paths::under(dir.path());
         paths.themes_dir =
             std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../themes");
@@ -372,6 +373,6 @@ mod tests {
         let t = Instant::now();
         assert_eq!(d.power_active().await, Err(PowerError::Timeout));
         assert_eq!(d.power_set("performance").await, Err(PowerError::Timeout));
-        assert!(t.elapsed() < Duration::from_millis(500));
+        assert!(t.elapsed() < Duration::from_secs(10), "{:?}", t.elapsed());
     }
 }

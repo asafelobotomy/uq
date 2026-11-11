@@ -69,6 +69,20 @@ TestCase {
         field.accepted();
     }
 
+    // greeter.toml's reduce_motion reaches the user list: no coasting, no animated scroll.
+    function test_reduce_motion_reaches_the_user_list() {
+        var t = make({});
+        var list = find(t.g, "userList");
+        verify(list);
+        compare(list.reduceMotion, false);
+        verify(list.flickDeceleration < 100000);
+        var r = make({ reduceMotion: true });
+        list = find(r.g, "userList");
+        compare(list.reduceMotion, true);
+        compare(list.flickDeceleration, 100000);
+        compare(list.highlightMoveDuration, 0);
+    }
+
     function test_selects_last_user_and_their_session() {
         var t = make({ stateData: G.parseState('last_user = "bob"\n[sessions]\nbob = "sway.desktop"\n') });
         compare(t.g.selectedUser, "bob");

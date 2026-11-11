@@ -5,11 +5,20 @@
 use super::uqd::Link;
 use serde_json::{Value, json};
 use std::path::Path;
+use std::time::Duration;
 
-/// `{pending, deferred}`. `pending` is null when uqd can't say (not running yet); `deferred`
-/// is whether bindle's defer file holds Welcome back right now.
-pub async fn status(link: &Link, runtime_dir: Option<&Path>) -> Value {
-    let pending = match link.call("GetWelcome", &[]).await {
+/// `{pending, deferred}`. `pending` is null when uqd can't say (not running yet, or no answer
+/// within `wait`); `deferred` is whether bindle's defer file holds Welcome back right now.
+/// `wait` None uses the bridge's usual call timeout.
+pub async fn status(link: &Link, runtime_dir: Option<&Path>, wait: Option<Duration>) -> Value {
+    let ask = link.call("GetWelcome", &[]);
+    let answer = match wait {
+        Some(w) => tokio::time::timeout(w, ask)
+            .await
+            .unwrap_or_else(|_| Err("timed out".into())),
+        None => ask.await,
+    };
+    let pending = match answer {
         Ok(v) => v.get("pending").cloned().filter(Value::is_boolean),
         Err(_) => None,
     };
