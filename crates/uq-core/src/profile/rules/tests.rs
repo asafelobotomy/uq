@@ -81,10 +81,8 @@ fn rules_tree_validation() {
         assert!(!text.contains('\n'), "{text:?}");
         assert_eq!(text, format!("A rule: {reason}"), "{body:?}");
     }
-    assert_eq!(
-        Profile::parse(&with("[keybinds]\n\"uq.spotlight\" = false\n")),
-        Err(ProfileError::NeedsNewer("keybinds".into()))
-    );
+    // `[keybinds]` is shortcut switches now (`profile::keybinds`).
+    assert!(Profile::parse(&with("[keybinds]\n\"uq.spotlight\" = false\n")).is_ok());
 }
 
 #[test]

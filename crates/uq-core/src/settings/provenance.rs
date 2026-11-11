@@ -455,6 +455,104 @@ pub fn find_env_in_user_lua(text: &str, name: &str) -> Option<u32> {
     })
 }
 
+/// The first string literal of the call that starts at `args` (the text after `hl.bind(`), when
+/// the call's first argument is a plain `"…"` or `'…'`. `mainMod .. " + Q"` has none.
+fn first_string(args: &str) -> Option<&str> {
+    let rest = args.trim_start();
+    let q = rest.chars().next().filter(|c| matches!(c, '"' | '\''))?;
+    let body = &rest[1..];
+    body.find(q).map(|end| &body[..end])
+}
+
+/// The first `hl.bind(` or `hl.unbind(` call on `line` (comments already cut), as
+/// `(is_unbind, first string argument)`. `hl.bind` must not be the tail of a longer name.
+fn bind_call(line: &str) -> Option<(bool, &str)> {
+    for (name, unbind) in [("hl.bind", false), ("hl.unbind", true)] {
+        let mut from = 0;
+        while let Some(i) = line[from..].find(name) {
+            let start = from + i;
+            from = start + 1;
+            if line[..start].chars().next_back().is_some_and(is_ident) {
+                continue;
+            }
+            let Some(args) = line[start + name.len()..].trim_start().strip_prefix('(') else {
+                continue;
+            };
+            if let Some(s) = first_string(args) {
+                return Some((unbind, s));
+            }
+        }
+    }
+    None
+}
+
+/// The 1-based line of `user.lua` with an `hl.bind(` or `hl.unbind(` call whose first string
+/// literal is the same shortcut as `combo` (`WIN + q` is `SUPER + Q`), or an `hl.unbind("all")`
+/// line, which overrides every shortcut. Comments are ignored; a key built with `..` doesn't
+/// parse, so it never hits. A hint, not a parser.
+pub fn find_bind_in_user_lua(text: &str, combo: crate::keybinds::Combo) -> Option<u32> {
+    text.lines().enumerate().find_map(|(n, line)| {
+        let (unbind, keys) = bind_call(strip_lua_comment(line))?;
+        let hit = (unbind && keys == "all")
+            || crate::keybinds::combo::parse(keys).is_ok_and(|c| c == combo);
+        hit.then(|| u32::try_from(n + 1).unwrap_or(u32::MAX))
+    })
+}
+
+/// A `user.lua` bind the user marked `-- uq:bind` (or `-- uq:bind Label`), listed read-only.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MarkedBind {
+    pub line: u32,
+    /// The shortcut in canonical form, when the first argument is a plain string that parses.
+    pub combo: Option<String>,
+    /// The label after the marker, else the line itself cut to 120 characters.
+    pub text: String,
+}
+
+const MAX_MARKED: usize = 100;
+const MARKED_TEXT_CHARS: usize = 120;
+
+/// The text after a `-- uq:bind` marker on `line` (its trimmed label, possibly empty) and the
+/// code before it.
+fn marker(line: &str) -> Option<(&str, &str)> {
+    // The first `--` starts the comment, as `strip_lua_comment` has it.
+    let at = line.find("--")?;
+    let label = line[at + 2..].trim_start().strip_prefix("uq:bind")?;
+    (label.is_empty() || label.starts_with(char::is_whitespace))
+        .then(|| (&line[..at], label.trim()))
+}
+
+/// Every line with an `hl.bind(` call and a `-- uq:bind` comment, at most 100.
+pub fn marked_binds(text: &str) -> Vec<MarkedBind> {
+    let mut out = Vec::new();
+    for (n, line) in text.lines().enumerate() {
+        let Some((code, label)) = marker(line) else {
+            continue;
+        };
+        if !code.contains("hl.bind") {
+            continue;
+        }
+        let combo = bind_call(code)
+            .filter(|(unbind, _)| !unbind)
+            .and_then(|(_, keys)| crate::keybinds::combo::parse(keys).ok())
+            .map(crate::keybinds::combo::canonical);
+        let text = if label.is_empty() {
+            crate::settings::clean_text_spaced(line.trim(), MARKED_TEXT_CHARS)
+        } else {
+            crate::settings::clean_text_spaced(label, MARKED_TEXT_CHARS)
+        };
+        out.push(MarkedBind {
+            line: u32::try_from(n + 1).unwrap_or(u32::MAX),
+            combo,
+            text,
+        });
+        if out.len() == MAX_MARKED {
+            break;
+        }
+    }
+    out
+}
+
 /// The 1-based line of `user.lua` text that seems to set Hyprland option `hypr_path`
 /// (`general:gaps_in`, `decoration:blur:enabled`). A case-sensitive, plain-text heuristic, not
 /// a parser; the first hit wins. A line hits when it has the path in dotted form
@@ -756,5 +854,82 @@ mod tests {
             .unwrap();
         assert_eq!(expected(row, &st, &theme), Some(json!(true)));
         assert_eq!(label_for("compat", "sharp_x11"), Some("Sharp X11 apps"));
+    }
+
+    fn combo(s: &str) -> crate::keybinds::Combo {
+        crate::keybinds::combo::parse(s).unwrap()
+    }
+
+    #[test]
+    fn finds_bind_and_unbind_lines() {
+        let q = combo("SUPER + Q");
+        let text = "-- top\nhl.bind(\"SUPER + Q\", hl.dsp.window.close())\n";
+        assert_eq!(find_bind_in_user_lua(text, q), Some(2));
+        let text = "x = 1\n\nhl.unbind(\"WIN + q\")\n";
+        assert_eq!(find_bind_in_user_lua(text, q), Some(3));
+        let text = "hl.bind ( 'META+q', d )\n";
+        assert_eq!(find_bind_in_user_lua(text, q), Some(1));
+        // A commented-out call, another shortcut, and a key built with `..` never hit.
+        assert_eq!(
+            find_bind_in_user_lua("-- hl.unbind(\"SUPER + Q\")\n", q),
+            None
+        );
+        assert_eq!(
+            find_bind_in_user_lua("hl.bind(\"SUPER + W\", d)\n", q),
+            None
+        );
+        assert_eq!(
+            find_bind_in_user_lua("hl.bind(mainMod .. \" + Q\", d)\n", q),
+            None
+        );
+        assert_eq!(
+            find_bind_in_user_lua("my_hl.bind(\"SUPER + Q\")\n", q),
+            None
+        );
+        // `all` overrides every shortcut, but only as an unbind.
+        let text = "a\nhl.unbind(\"all\")\n";
+        assert_eq!(find_bind_in_user_lua(text, q), Some(2));
+        assert_eq!(find_bind_in_user_lua(text, combo("CTRL + F5")), Some(2));
+        assert_eq!(find_bind_in_user_lua("hl.bind(\"all\", d)\n", q), None);
+    }
+
+    #[test]
+    fn marked_binds_read_label_or_line() {
+        let text = "hl.bind(\"SUPER + T\", d) -- uq:bind Terminal two\n\
+                    hl.bind(\"SUPER + Y\", d)\n\
+                    hl.bind(\"WIN + U\", d)  --uq:bind\n\
+                    hl.bind(mainMod .. \" + I\", d) -- uq:bind  \n\
+                    -- hl.bind(\"SUPER + O\", d) -- uq:bind\n\
+                    x = 1 -- uq:bind\n\
+                    hl.bind(\"SUPER + P\", d) -- uq:bindery\n";
+        let m = marked_binds(text);
+        assert_eq!(m.len(), 3, "{m:?}");
+        assert_eq!(
+            m[0],
+            MarkedBind {
+                line: 1,
+                combo: Some("SUPER + T".into()),
+                text: "Terminal two".into()
+            }
+        );
+        assert_eq!(m[1].line, 3);
+        assert_eq!(m[1].combo.as_deref(), Some("SUPER + U"));
+        assert!(
+            m[1].text.starts_with("hl.bind(\"WIN + U\""),
+            "{}",
+            m[1].text
+        );
+        assert_eq!((m[2].line, m[2].combo.clone()), (4, None));
+        // Control characters are spaces, and a long line is cut.
+        let long = format!(
+            "hl.bind(\"SUPER + T\", \u{1b}[31m{}) -- uq:bind\n",
+            "x".repeat(300)
+        );
+        let m = marked_binds(&long);
+        assert_eq!(m[0].text.chars().count(), 120);
+        assert!(!m[0].text.contains('\u{1b}'));
+        // At most 100.
+        let many = "hl.bind(\"SUPER + T\", d) -- uq:bind\n".repeat(150);
+        assert_eq!(marked_binds(&many).len(), 100);
     }
 }

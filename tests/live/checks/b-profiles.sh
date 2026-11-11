@@ -106,7 +106,7 @@ profile = "performance"')" false); then
     fi
 }
 
-check SB5 "Export and import: round trip, duplicate, --replace, too big, [keybinds] refused" sb5
+check SB5 "Export and import: round trip, duplicate, --replace, too big, a [keybinds] command refused" sb5
 sb5() {
     local r f=$WORK/g.toml n0
     r=$(add_profile "$GAMING" "Live check") || { bad "SetProfile: $r"; return; }
@@ -126,9 +126,10 @@ sb5() {
     [[ $r == *"The file is too big to be a profile."* ]] || bad "expected 'The file is too big to be a profile.'; observed $r"
     profile_toml "${LIVE_PREFIX}-keys" Keys '[keybinds]
 "SUPER + T" = "exec foot"' >"$WORK/k.toml"
-    r=$("$UQCTL" profile import "$WORK/k.toml" 2>&1) && bad "a profile with [keybinds] was accepted"
+    # A profile may only turn uQ's own shortcuts on or off by id; it can never add a command.
+    r=$("$UQCTL" profile import "$WORK/k.toml" 2>&1) && bad "a profile adding a [keybinds] command was accepted"
     note "[keybinds]: $r"
-    [[ $r == *"can't do"* ]] || bad "expected a plain 'can't do that yet' message; observed $r"
+    [[ $r == *"isn't one of uQ's shortcuts"* ]] || bad "expected 'isn't one of uQ's shortcuts'; observed $r"
     expect_eq "profiles after the refusals" "$n0" "$(bus ListProfiles | jq length)"
 }
 

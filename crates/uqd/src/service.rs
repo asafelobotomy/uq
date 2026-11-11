@@ -175,6 +175,7 @@ fn domain_label(domain: &str) -> &'static str {
         "look" => "Look",
         "layouts" => "Layouts",
         "rules" => "Window rules",
+        "keybinds" => "Keyboard shortcuts",
         "env" => "The list of environment variables",
         "compat" => "Apps and scaling",
         "autostart" => "The list of startup apps",
@@ -494,6 +495,15 @@ impl Desktop {
 
     /// Ensure `user.lua` exists (never overwriting it), then render everything from state.
     pub async fn startup(&mut self) {
+        // A restart in the middle of a key capture would leave Hyprland in the empty
+        // `uq_capture` submap, with every shortcut off and no token to resume. Always leave it.
+        if let Err(e) = self
+            .comp
+            .eval("hl.dispatch(hl.dsp.submap(\"reset\"))")
+            .await
+        {
+            tracing::debug!("leaving the capture submap at start-up: {e}");
+        }
         if let Err(e) = self.ensure_user_lua() {
             tracing::warn!("{e}");
         }
@@ -704,6 +714,9 @@ impl Desktop {
         }
         if domain == "rules" {
             return Ok(self.explain_rules());
+        }
+        if domain == "keybinds" {
+            return Ok(self.explain_keybinds().await);
         }
         if domain == "integration_rules" {
             return Ok(self.explain_integration_rules());
@@ -1027,6 +1040,7 @@ impl Desktop {
             &next.layouts,
             &next.rules,
             &self.app_rules_for(next),
+            &next.keybinds,
             &next.settings,
             &startup_render(next, main_scale, self.dev_session),
         );
@@ -1641,6 +1655,17 @@ mod tests {
                 .unwrap()
                 .contains("Graphite (dark)")
         );
+    }
+
+    #[tokio::test]
+    async fn startup_always_leaves_the_capture_submap() {
+        let mut r = rig();
+        r.desktop.startup().await;
+        let calls = r.comp.calls();
+        let at = calls
+            .iter()
+            .position(|c| c == "eval hl.dispatch(hl.dsp.submap(\"reset\"))");
+        assert_eq!(at, Some(0), "{calls:?}");
     }
 
     #[tokio::test]

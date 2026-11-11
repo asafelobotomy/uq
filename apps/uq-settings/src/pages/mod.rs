@@ -13,6 +13,7 @@ pub mod fake_system;
 pub mod fake_uqd;
 pub mod history;
 pub mod input;
+pub mod keybinds;
 pub mod login_screen;
 pub mod look;
 pub mod network;

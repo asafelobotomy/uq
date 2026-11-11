@@ -15,9 +15,11 @@ use tokio::sync::Mutex;
 use uq_core::atomic::atomic_write;
 use uq_core::client::DesktopProxy;
 use uq_core::history::Entry;
+use uq_core::keybinds::Keybinds;
 use uq_core::profile::{
-    DomainKind, Key, PROFILE_DOMAINS, Profile, ProfileError, changed_since, from_journal,
-    id_for_name, key_label, leaves, power_label, read_file, rule_keys, rule_label, value_text,
+    DomainKind, Key, PROFILE_DOMAINS, Profile, ProfileError, bind_keys, bind_label, changed_since,
+    from_journal, id_for_name, key_label, leaves, power_label, read_file, rule_keys, rule_label,
+    value_text,
 };
 use uq_core::rules::Rules;
 
@@ -162,7 +164,7 @@ fn profile_error(e: ProfileError) -> zbus::Error {
 /// Whether a profile can hold keys of journal domain `domain`. For `rules`, only the switches;
 /// for startup apps, variables and app fixes, only what a profile can set (`startup.rs`).
 fn holds_journal_domain(domain: &str) -> bool {
-    matches!(domain, "theme" | "rules")
+    matches!(domain, "theme" | "rules" | "keybinds")
         || startup::DOMAINS.contains(&domain)
         || from_journal(domain, &[]).is_some()
 }
@@ -179,6 +181,7 @@ fn profile_journal_domains() -> Vec<&'static str> {
                     DomainKind::Section
                         | DomainKind::Appearance
                         | DomainKind::Rules
+                        | DomainKind::Keybinds
                         | DomainKind::Env
                         | DomainKind::Compat
                         | DomainKind::Autostart
@@ -194,6 +197,14 @@ async fn read_rules(proxy: &DesktopProxy<'_>) -> zbus::Result<Rules> {
         .map_err(|_| failure("uQ's settings service sent unreadable rules"))
 }
 
+async fn read_binds(proxy: &DesktopProxy<'_>) -> zbus::Result<Keybinds> {
+    Keybinds::from_section(
+        &parse_json(&proxy.get_section("keybinds").await?)?,
+        &Keybinds::default(),
+    )
+    .map_err(|_| failure("uQ's settings service sent unreadable shortcuts"))
+}
+
 /// The current value of every set key of `journal_domains`, as profile keys. A domain a profile
 /// can't hold adds nothing.
 async fn current(proxy: &DesktopProxy<'_>, journal_domains: &[&str]) -> zbus::Result<Vec<Key>> {
@@ -201,11 +212,15 @@ async fn current(proxy: &DesktopProxy<'_>, journal_domains: &[&str]) -> zbus::Re
         true => read_rules(proxy).await?,
         false => Rules::default(),
     };
+    let binds = match journal_domains.contains(&"keybinds") {
+        true => read_binds(proxy).await?,
+        false => Keybinds::default(),
+    };
     let startup = match journal_domains.iter().any(|d| startup::DOMAINS.contains(d)) {
         true => Startup::read(proxy, Vec::new()).await?,
         false => Startup::default(),
     };
-    current_with(proxy, journal_domains, &rules, &startup).await
+    current_with(proxy, journal_domains, &rules, &binds, &startup).await
 }
 
 /// [`current`] with the rules and the startup settings already read. Every window and panel
@@ -214,16 +229,18 @@ async fn current_with(
     proxy: &DesktopProxy<'_>,
     journal_domains: &[&str],
     rules: &Rules,
+    binds: &Keybinds,
     startup: &Startup,
 ) -> zbus::Result<Vec<Key>> {
     let mut out: Vec<Key> = Vec::new();
     for &domain in journal_domains {
         let special = match domain {
             "rules" => rule_keys(rules),
+            "keybinds" => bind_keys(binds),
             d if startup::DOMAINS.contains(&d) => startup.keys(d),
             _ => Vec::new(),
         };
-        if domain == "rules" || startup::DOMAINS.contains(&domain) {
+        if domain == "rules" || domain == "keybinds" || startup::DOMAINS.contains(&domain) {
             for k in special {
                 if !out.iter().any(|o| o.domain == k.domain && o.path == k.path) {
                     out.push(k);
@@ -296,10 +313,12 @@ fn key_json(
     path: &[String],
     value: &Value,
     rules: &Rules,
+    binds: &Keybinds,
     startup: &Startup,
 ) -> Value {
     let label = match (domain, path) {
         ("rules", [id]) => rule_label(rules, id),
+        ("keybinds", [id]) => bind_label(binds, id),
         (d, _) if startup::DOMAINS.contains(&d) => startup.label(domain, path),
         _ => key_label(domain, path),
     };
@@ -541,6 +560,7 @@ impl PageLogic for ProfilesState {
         // Read once: they name the rule switches, startup apps and fixes, and give their
         // current values.
         let rules = read_rules(&proxy).await?;
+        let binds = read_binds(&proxy).await?;
         let apps = Startup::installed(self.app_dirs.clone()).await;
         let startup = Startup::read(&proxy, apps).await?;
         let mut profiles = Vec::new();
@@ -560,7 +580,7 @@ impl PageLogic for ProfilesState {
             let keys: Vec<Value> = p
                 .keys()
                 .iter()
-                .map(|k| key_json(&k.domain, &k.path, &k.value, &rules, &startup))
+                .map(|k| key_json(&k.domain, &k.path, &k.value, &rules, &binds, &startup))
                 .collect();
             profiles.push(json!({
                 "id": p.id,
@@ -572,10 +592,10 @@ impl PageLogic for ProfilesState {
             }));
         }
         let available: Vec<Value> =
-            current_with(&proxy, &profile_journal_domains(), &rules, &startup)
+            current_with(&proxy, &profile_journal_domains(), &rules, &binds, &startup)
                 .await?
                 .iter()
-                .map(|k| key_json(&k.domain, &k.path, &k.value, &rules, &startup))
+                .map(|k| key_json(&k.domain, &k.path, &k.value, &rules, &binds, &startup))
                 .collect();
         let pages: Vec<Value> = registry::core_pages()
             .iter()

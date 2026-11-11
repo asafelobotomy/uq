@@ -8,6 +8,7 @@ pub mod desktop_entry;
 pub mod env;
 pub mod history;
 pub mod integration;
+pub mod keybinds;
 pub mod launcher_providers;
 pub mod lua;
 pub mod paths;

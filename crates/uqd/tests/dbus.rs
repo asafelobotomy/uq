@@ -827,6 +827,14 @@ async fn desktop_proxy_matches_the_interface() {
     proxy.reapply("look").await.unwrap();
     assert!(proxy.explain("bogus").await.is_err());
     assert_eq!(proxy.list_windows().await.unwrap(), "[]");
+    let binds: serde_json::Value =
+        serde_json::from_str(&proxy.list_binds().await.unwrap()).unwrap();
+    assert_eq!(binds["binds"].as_array().unwrap().len(), 56);
+    assert!(
+        serde_json::from_str::<serde_json::Value>(&proxy.explain("keybinds").await.unwrap())
+            .unwrap()
+            .is_object()
+    );
     assert!(
         serde_json::from_str::<serde_json::Value>(&proxy.explain("rules").await.unwrap())
             .unwrap()
@@ -995,6 +1003,110 @@ async fn rules_section_and_list_windows_over_dbus() {
     assert_eq!(windows[0]["class"], "firefox");
     assert_eq!(windows[0]["workspace_id"], 2);
     assert!(windows[0].get("address").is_none() && windows[0].get("pid").is_none());
+}
+
+#[tokio::test]
+async fn keybinds_section_and_list_binds_over_dbus() {
+    let s = served().await;
+    let kb = r#"{"overrides":[{"id":"uq.spotlight","combo":"SUPER + K"}],"custom":[
+        {"name":"Screenshot","combo":"SUPER + SHIFT + P",
+         "action":{"kind":"command","command":"grim shot.png"}}]}"#;
+    let () = s
+        .proxy
+        .call("SetSection", &("keybinds", kb, "settings"))
+        .await
+        .unwrap();
+    let got: String = s.proxy.call("GetSection", &("keybinds",)).await.unwrap();
+    let got: serde_json::Value = serde_json::from_str(&got).unwrap();
+    let id = got["custom"][0]["id"].as_str().unwrap().to_string();
+    assert!(
+        std::fs::read_to_string(&s.paths.generated_lua)
+            .unwrap()
+            .contains(&format!("uq:{id}"))
+    );
+    // A conflict is InvalidSetting, naming both.
+    let bad = r#"{"custom":[{"name":"Mine","combo":"SUPER + Return",
+        "action":{"kind":"uq","name":"settings"}}]}"#;
+    let err = s
+        .proxy
+        .call::<_, _, ()>("SetSection", &("keybinds", bad, "settings"))
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("InvalidSetting"), "{err}");
+    assert!(err.to_string().contains("Mine"), "{err}");
+    let list: String = s.proxy.call("ListBinds", &()).await.unwrap();
+    let list: serde_json::Value = serde_json::from_str(&list).unwrap();
+    assert_eq!(list["binds"].as_array().unwrap().len(), 57);
+    assert_eq!(list["binds"][4]["combo"], "SUPER + K");
+    assert_eq!(list["limits"]["custom"], 100);
+    let explained: String = s.proxy.call("Explain", &("keybinds",)).await.unwrap();
+    let explained: serde_json::Value = serde_json::from_str(&explained).unwrap();
+    assert_eq!(explained[format!("binds.{id}")]["source"], "uq");
+}
+
+#[tokio::test]
+async fn pause_and_resume_over_dbus() {
+    let dir = tempfile::tempdir().unwrap();
+    let bus = private_bus();
+    let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut paths = uq_core::paths::Paths::under(&dir.path().join("root"));
+    paths.themes_dir = repo.join("themes");
+    paths.templates_dir = repo.join("templates");
+    let comp = Arc::new(FakeCompositor::running());
+    let desktop = Desktop::new(paths, comp.clone(), Arc::new(FakeSystem::default())).unwrap();
+    let _server = serve(
+        zbus::connection::Builder::address(bus.address.as_str()).unwrap(),
+        desktop,
+    )
+    .await
+    .unwrap();
+    let client = zbus::connection::Builder::address(bus.address.as_str())
+        .unwrap()
+        .build()
+        .await
+        .unwrap();
+    let proxy = zbus::Proxy::new(&client, NAME, PATH, IFACE).await.unwrap();
+    let evals = || -> Vec<String> {
+        comp.calls()
+            .into_iter()
+            .filter(|c| c.starts_with("eval"))
+            .collect()
+    };
+
+    let token: String = proxy.call("PauseShortcuts", &()).await.unwrap();
+    assert_eq!(token.len(), 32);
+    // A forged token is refused, and the pause stays.
+    let err = proxy
+        .call::<_, _, ()>("ResumeShortcuts", &("nope",))
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("InvalidArgument"), "{err}");
+    assert_eq!(evals().len(), 1);
+    // The desktop isn't locked meanwhile.
+    let () = proxy
+        .call("SetSection", &("look", r#"{"gaps_in":7}"#, "settings"))
+        .await
+        .unwrap();
+    let () = proxy
+        .call("ResumeShortcuts", &(token.as_str(),))
+        .await
+        .unwrap();
+    let e = evals();
+    assert!(
+        e[0].contains("uq_capture") && e.last().unwrap().contains("\"reset\""),
+        "{e:?}"
+    );
+
+    // The typed proxy has both calls too; Hyprland down is a plain error.
+    let typed = uq_core::client::DesktopProxy::new(&client).await.unwrap();
+    let t = typed.pause_shortcuts().await.unwrap();
+    typed.resume_shortcuts(&t).await.unwrap();
+    *comp.running.lock().unwrap() = false;
+    let err = typed.pause_shortcuts().await.unwrap_err();
+    assert!(
+        err.to_string().contains("Hyprland isn't answering"),
+        "{err}"
+    );
 }
 
 async fn pick_server() -> (

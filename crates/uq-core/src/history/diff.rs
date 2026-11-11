@@ -116,6 +116,9 @@ pub fn summarize(domain: &str, before: &Value, after: &Value, labels: Labels) ->
     if domain == "rules" {
         return crate::rules::summary(before, after);
     }
+    if domain == "keybinds" {
+        return crate::keybinds::summary(before, after);
+    }
     if domain == "env" {
         return crate::env::summary(before, after);
     }

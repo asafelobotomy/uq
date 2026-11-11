@@ -1,5 +1,6 @@
 //! Emit `generated.lua`, the only Hyprland config file uqd writes (spec §2.1).
 
+use crate::keybinds::Keybinds;
 use crate::rules::Rules;
 use crate::settings::Settings;
 use crate::theme::Theme;
@@ -9,11 +10,13 @@ use std::fmt::Write as _;
 use std::str::FromStr;
 
 mod input;
+mod keybinds;
 mod look;
 mod monitors;
 mod rules;
 mod startup;
 pub use input::emit_devices;
+pub use keybinds::{emit_bind, emit_binds};
 pub use look::{ANIMATION_LEAVES, CURVES};
 pub use monitors::{emit_monitor_line, emit_monitors};
 pub use rules::{emit_layer_rule, emit_window_rule, emit_workspace_rules};
@@ -101,10 +104,11 @@ pub fn emit_generated(
     theme: &Theme,
     layouts: &BTreeMap<String, Layout>,
     rules: &Rules,
+    binds: &Keybinds,
     settings: &Settings,
     startup: &StartupRender,
 ) -> String {
-    emit_generated_with_apps(theme, layouts, rules, &[], settings, startup)
+    emit_generated_with_apps(theme, layouts, rules, &[], binds, settings, startup)
 }
 
 /// [`emit_generated`] with window rules from apps (Phase 4 §3.3), rendered after the workspace
@@ -114,6 +118,7 @@ pub fn emit_generated_with_apps(
     layouts: &BTreeMap<String, Layout>,
     rules: &Rules,
     app_rules: &[crate::rules::WindowRule],
+    binds: &Keybinds,
     settings: &Settings,
     startup: &StartupRender,
 ) -> String {
@@ -203,6 +208,7 @@ pub fn emit_generated_with_apps(
     out.push_str(&rules::emit_app_block(app_rules));
     out.push_str(&rules::emit_window_block(&rules.window));
     out.push_str(&rules::emit_layer_block(&rules.layer));
+    let _ = write!(out, "\n{}", emit_binds(binds));
     out
 }
 
@@ -223,6 +229,7 @@ mod tests {
             &theme(),
             &BTreeMap::new(),
             &Rules::default(),
+            &crate::keybinds::Keybinds::default(),
             &Settings::default(),
             &StartupRender::default(),
         );
@@ -240,6 +247,7 @@ mod tests {
             &t,
             &BTreeMap::new(),
             &Rules::default(),
+            &crate::keybinds::Keybinds::default(),
             &Settings::default(),
             &StartupRender::default(),
         );
@@ -256,6 +264,7 @@ mod tests {
             &theme(),
             &BTreeMap::new(),
             &Rules::default(),
+            &crate::keybinds::Keybinds::default(),
             &Settings::default(),
             &StartupRender::default(),
         );
@@ -277,6 +286,7 @@ mod tests {
             &theme(),
             &BTreeMap::new(),
             &Rules::default(),
+            &crate::keybinds::Keybinds::default(),
             &Settings::default(),
             &StartupRender::default(),
         );
@@ -295,6 +305,7 @@ mod tests {
             &theme().with_appearance(&a),
             &BTreeMap::new(),
             &Rules::default(),
+            &crate::keybinds::Keybinds::default(),
             &Settings::default(),
             &StartupRender::default(),
         );
@@ -316,6 +327,7 @@ mod tests {
             &theme(),
             &layouts,
             &Rules::default(),
+            &crate::keybinds::Keybinds::default(),
             &Settings::default(),
             &StartupRender::default(),
         );
@@ -334,6 +346,7 @@ mod tests {
             &theme(),
             &BTreeMap::new(),
             &Rules::default(),
+            &crate::keybinds::Keybinds::default(),
             &Settings::default(),
             &StartupRender::default(),
         );
@@ -362,6 +375,7 @@ mod tests {
             &theme(),
             &BTreeMap::new(),
             &Rules::default(),
+            &crate::keybinds::Keybinds::default(),
             &Settings {
                 mouse: m,
                 ..Settings::default()
@@ -385,6 +399,7 @@ mod tests {
             &theme(),
             &BTreeMap::new(),
             &Rules::default(),
+            &crate::keybinds::Keybinds::default(),
             &Settings {
                 mouse: m,
                 ..Settings::default()

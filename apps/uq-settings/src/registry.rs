@@ -401,6 +401,34 @@ static HISTORY_SETTINGS: [SearchEntry; 2] = [
     ),
 ];
 
+static KEYBINDS_SETTINGS: [SearchEntry; 5] = [
+    entry(
+        "shortcut-list",
+        "Keyboard shortcuts",
+        &["keys", "keybinds", "hotkeys", "bind"],
+    ),
+    entry(
+        "add-shortcut",
+        "Add a shortcut",
+        &["custom", "command", "launch"],
+    ),
+    entry(
+        "reset-shortcuts",
+        "Put shortcuts back",
+        &["reset", "default"],
+    ),
+    entry(
+        "next-profile-shortcut",
+        "Switch to the next profile",
+        &["profile", "switch"],
+    ),
+    entry(
+        "shortcut-capture",
+        "Press keys to set a shortcut",
+        &["record", "capture"],
+    ),
+];
+
 static DISPLAYS_SETTINGS: [SearchEntry; 8] = [
     entry(
         "display-arrangement",
@@ -901,7 +929,7 @@ static NETWORK_SETTINGS: [SearchEntry; 8] = [
     ),
 ];
 
-static CORE_PAGES: [PageInfo; 21] = [
+static CORE_PAGES: [PageInfo; 22] = [
     PageInfo {
         id: "appearance",
         name: "Appearance",
@@ -1018,6 +1046,15 @@ static CORE_PAGES: [PageInfo; 21] = [
         qml: "pages/HistoryPage.qml",
         settings: &HISTORY_SETTINGS,
         domains: &[],
+    },
+    PageInfo {
+        id: "keybinds",
+        name: "Keyboard shortcuts",
+        icon: "preferences-desktop-keyboard-shortcuts",
+        category: Category::Uq,
+        qml: "pages/KeybindsPage.qml",
+        settings: &KEYBINDS_SETTINGS,
+        domains: &["keybinds"],
     },
     PageInfo {
         id: "startup",
@@ -1387,6 +1424,58 @@ mod tests {
     }
 
     #[test]
+    fn keybinds_page_registered_with_search_entries() {
+        let page = find("keybinds").expect("the keyboard shortcuts page is registered");
+        assert_eq!(page.name, "Keyboard shortcuts");
+        assert_eq!(page.category, Category::Uq);
+        assert_eq!(page.icon, "preferences-desktop-keyboard-shortcuts");
+        assert_eq!(page.qml, "pages/KeybindsPage.qml");
+        assert_eq!(page.domains, ["keybinds"]);
+        let entries: Vec<_> = page
+            .settings
+            .iter()
+            .map(|s| (s.id, s.label, s.keywords))
+            .collect();
+        assert_eq!(
+            entries,
+            [
+                (
+                    "shortcut-list",
+                    "Keyboard shortcuts",
+                    &["keys", "keybinds", "hotkeys", "bind"][..]
+                ),
+                (
+                    "add-shortcut",
+                    "Add a shortcut",
+                    &["custom", "command", "launch"][..]
+                ),
+                (
+                    "reset-shortcuts",
+                    "Put shortcuts back",
+                    &["reset", "default"][..]
+                ),
+                (
+                    "next-profile-shortcut",
+                    "Switch to the next profile",
+                    &["profile", "switch"][..]
+                ),
+                (
+                    "shortcut-capture",
+                    "Press keys to set a shortcut",
+                    &["record", "capture"][..]
+                ),
+            ]
+        );
+        let ids: Vec<_> = core_pages().iter().map(|p| p.id).collect();
+        let at = ids.iter().position(|id| *id == "keybinds").unwrap();
+        assert_eq!(
+            (ids[at - 1], ids[at + 1]),
+            ("history", "startup"),
+            "after History, the last uQ page"
+        );
+    }
+
+    #[test]
     fn every_journal_domain_has_one_page() {
         let mut domains: Vec<&str> = uq_core::settings::SECTION_DOMAINS.to_vec();
         domains.extend(["theme", "schedule", "settings"]);
@@ -1430,6 +1519,7 @@ mod tests {
                 "profiles",
                 "rules",
                 "history",
+                "keybinds",
                 "startup",
                 "power",
                 "users",
@@ -1460,10 +1550,13 @@ mod tests {
         assert_eq!(v[8]["categoryName"], "Connections");
         assert_eq!(v[9]["qml"], "pages/ShellPage.qml");
         assert_eq!(v[9]["categoryName"], "uQ");
-        assert_eq!(v[13]["qml"], "pages/StartupPage.qml");
-        assert_eq!(v[13]["category"], "system");
-        assert_eq!(v[13]["categoryName"], "System");
-        assert_eq!(v[13]["domains"], serde_json::json!(["autostart", "env"]));
+        assert_eq!(v[13]["qml"], "pages/KeybindsPage.qml");
+        assert_eq!(v[13]["categoryName"], "uQ");
+        assert_eq!(v[13]["domains"], serde_json::json!(["keybinds"]));
+        assert_eq!(v[14]["qml"], "pages/StartupPage.qml");
+        assert_eq!(v[14]["category"], "system");
+        assert_eq!(v[14]["categoryName"], "System");
+        assert_eq!(v[14]["domains"], serde_json::json!(["autostart", "env"]));
     }
 
     #[test]
@@ -1510,7 +1603,7 @@ mod tests {
             .position(|p| p.category == Category::System)
             .unwrap();
         assert_eq!(pages[first_system].id, "startup", "the first System page");
-        assert_eq!(pages[first_system - 1].id, "history", "after the uQ pages");
+        assert_eq!(pages[first_system - 1].id, "keybinds", "after the uQ pages");
     }
 
     #[test]

@@ -5,6 +5,7 @@ use crate::autostart::Autostart;
 use crate::compat::Compat;
 use crate::env::Env;
 use crate::integration::rules::IntegrationRules;
+use crate::keybinds::Keybinds;
 use crate::lua::Layout;
 use crate::rules::Rules;
 use crate::schedule::Schedule;
@@ -28,6 +29,9 @@ pub struct State {
     /// Window, panel and workspace rules; each entry loads on its own.
     #[serde(default)]
     pub rules: Rules,
+    /// Keyboard shortcuts: changes to uQ's own, and your own; each entry loads on its own.
+    #[serde(default)]
+    pub keybinds: Keybinds,
     /// Environment variables for the session; each entry loads on its own.
     #[serde(default)]
     pub env: Env,
@@ -90,6 +94,7 @@ impl Default for State {
             schedule: Schedule::Off,
             layouts: BTreeMap::new(),
             rules: Rules::default(),
+            keybinds: Keybinds::default(),
             env: Env::default(),
             compat: Compat::default(),
             autostart: Autostart::default(),
@@ -152,6 +157,7 @@ impl State {
         state.settings = valid;
         state.layouts = crate::settings::repair_rules(std::mem::take(&mut state.layouts));
         state.rules = std::mem::take(&mut state.rules).repaired();
+        state.keybinds = std::mem::take(&mut state.keybinds).repaired();
         state.env = std::mem::take(&mut state.env).repaired();
         state.compat = std::mem::take(&mut state.compat).repaired();
         state.autostart = std::mem::take(&mut state.autostart).repaired();
@@ -187,6 +193,9 @@ impl State {
         if domain == "rules" {
             return Ok(serde_json::to_value(&self.rules).expect("rules serialise"));
         }
+        if domain == "keybinds" {
+            return Ok(serde_json::to_value(&self.keybinds).expect("keybinds serialise"));
+        }
         if domain == "env" {
             return Ok(self.env.section());
         }
@@ -218,6 +227,10 @@ impl State {
     ) -> Result<(), SettingError> {
         if domain == "rules" {
             self.rules = Rules::from_section(&value, &self.rules)?;
+            return Ok(());
+        }
+        if domain == "keybinds" {
+            self.keybinds = Keybinds::from_section(&value, &self.keybinds)?;
             return Ok(());
         }
         if domain == "env" {
@@ -365,6 +378,7 @@ mod tests {
                 ("special:magic".into(), Layout::Master),
             ]),
             rules: Rules::default(),
+            keybinds: Keybinds::default(),
             env: Env {
                 vars: vec![crate::env::Var {
                     name: "GDK_BACKEND".into(),
