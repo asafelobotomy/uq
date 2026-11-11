@@ -9,8 +9,10 @@
 //!   104-203 (`mouse` is read at line 140), registered at line 472. 0.56.2 never reads `mouse`.
 //! - `hl.unbind`, `hl.define_submap` and `hl.dsp.submap` exist at both tags
 //!   (`LuaBindingsToplevel.cpp`, `LuaBindingsDispatchers.cpp`).
-//! - `hyprctl binds -j` (`src/debug/HyprCtl.cpp`, `bindsRequest`, line 1026 at 0.56.2) prints
-//!   `modmask`, `description`, `dispatcher` and `arg` per bind.
+//! - `hyprctl binds -j` prints `modmask`, `key`, `description`, `dispatcher` and `arg` per bind:
+//!   `src/debug/HyprCtl.cpp`, `bindsRequest`, line 1026 at 0.56.2; at 0.57.0 the same function
+//!   is in `src/ipc/s1/Commands.cpp` (line 1199), and still prints `description` (the bind's
+//!   `METADATA.description`, `""` when unset). `key` is empty for a `code:<n>` bind.
 //! - Modifier bits are Hyprland's `eKeyboardModifiers`, read at both tags: 0.56.2
 //!   `src/devices/IKeyboard.hpp` lines 13-22, 0.57.0 `src/input/Keys.hpp` lines 8-18 (moved):
 //!   `SHIFT` 1<<0, `CAPS` 1<<1, `CTRL` 1<<2, `ALT` 1<<3, `MOD2` 1<<4, `MOD3` 1<<5,

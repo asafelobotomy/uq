@@ -37,6 +37,8 @@ pub trait Desktop {
     fn list_outputs(&self) -> zbus::Result<String>;
     /// JSON array of the open windows (see `rules::WindowInfo`); `[]` when Hyprland is down.
     fn list_windows(&self) -> zbus::Result<String>;
+    /// The Keyboard shortcuts page's view as JSON (see `keybinds::list`).
+    fn list_binds(&self) -> zbus::Result<String>;
     /// Ask the shell to let the user click a window. Returns JSON `{status, window?}` with
     /// status `picked`, `none`, `cancelled`, `timeout`, `no_shell` or `unavailable`; a second
     /// call while one is pending is `Conflict`. Takes up to 20 s.

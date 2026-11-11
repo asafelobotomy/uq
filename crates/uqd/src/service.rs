@@ -173,6 +173,7 @@ fn domain_label(domain: &str) -> &'static str {
         "look" => "Look",
         "layouts" => "Layouts",
         "rules" => "Window rules",
+        "keybinds" => "Keyboard shortcuts",
         "env" => "The list of environment variables",
         "compat" => "Apps and scaling",
         "autostart" => "The list of startup apps",
@@ -701,6 +702,9 @@ impl Desktop {
         }
         if domain == "rules" {
             return Ok(self.explain_rules());
+        }
+        if domain == "keybinds" {
+            return Ok(self.explain_keybinds().await);
         }
         if matches!(domain, "env" | "autostart") {
             return Ok(self.explain_startup(domain, Value::Null));

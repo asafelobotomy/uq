@@ -36,6 +36,8 @@ pub trait Compositor: Send + Sync {
     async fn clients(&self) -> Result<String, CompositorError>;
     /// The cursor position as JSON (`hyprctl cursorpos -j`).
     async fn cursor_pos(&self) -> Result<String, CompositorError>;
+    /// Every bind Hyprland has, as JSON (`hyprctl binds -j`).
+    async fn binds(&self) -> Result<String, CompositorError>;
     /// One option's live value (`hyprctl -j getoption <path>`, path like `general:gaps_in`):
     /// the reply's value field (`int`, `float`, `bool`, `str`, `custom`, `css`, …).
     async fn get_option(&self, path: &str) -> Result<serde_json::Value, CompositorError>;
@@ -173,6 +175,10 @@ impl Compositor for Hyprland {
         self.socket.request("j/cursorpos").await
     }
 
+    async fn binds(&self) -> Result<String, CompositorError> {
+        self.socket.request("j/binds").await
+    }
+
     async fn get_option(&self, path: &str) -> Result<serde_json::Value, CompositorError> {
         option_value(&self.socket.request(&format!("j/getoption {path}")).await?)
     }
@@ -200,6 +206,8 @@ pub mod fake {
         pub clients_json: Mutex<String>,
         /// What `cursor_pos` returns (`cursorpos -j`); empty means `{"x":0,"y":0}`.
         pub cursor_json: Mutex<String>,
+        /// What `binds` returns (`binds -j`); empty means `[]`.
+        pub binds_json: Mutex<String>,
         /// `Some(msg)` makes the next `eval` return `Rejected(msg)`, once.
         pub eval_error: Mutex<Option<String>>,
         /// `Some(msg)` makes the next `reload` return `Rejected(msg)`, once.
@@ -291,6 +299,11 @@ pub mod fake {
             } else {
                 j
             })
+        }
+        async fn binds(&self) -> Result<String, CompositorError> {
+            self.record("binds".into())?;
+            let j = self.binds_json.lock().unwrap().clone();
+            Ok(if j.is_empty() { "[]".into() } else { j })
         }
         async fn get_option(&self, path: &str) -> Result<serde_json::Value, CompositorError> {
             if !*self.running.lock().unwrap() {
@@ -527,7 +540,7 @@ mod tests {
         let listener = UnixListener::bind(sock_dir.join(".socket.sock")).unwrap();
         let server = tokio::spawn(async move {
             let mut seen = Vec::new();
-            for reply in ["[]", r#"{"x":5,"y":6}"#] {
+            for reply in ["[]", r#"{"x":5,"y":6}"#, "[]"] {
                 let (mut s, _) = listener.accept().await.unwrap();
                 let mut buf = vec![0u8; 1024];
                 let n = s.read(&mut buf).await.unwrap();
@@ -539,7 +552,11 @@ mod tests {
         let h = Hyprland::new(Some(dir.path().into()), Some("SIG".into()));
         assert_eq!(h.clients().await.unwrap(), "[]");
         assert_eq!(h.cursor_pos().await.unwrap(), r#"{"x":5,"y":6}"#);
-        assert_eq!(server.await.unwrap(), vec!["j/clients", "j/cursorpos"]);
+        assert_eq!(h.binds().await.unwrap(), "[]");
+        assert_eq!(
+            server.await.unwrap(),
+            vec!["j/clients", "j/cursorpos", "j/binds"]
+        );
     }
 
     #[tokio::test]

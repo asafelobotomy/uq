@@ -827,6 +827,14 @@ async fn desktop_proxy_matches_the_interface() {
     proxy.reapply("look").await.unwrap();
     assert!(proxy.explain("bogus").await.is_err());
     assert_eq!(proxy.list_windows().await.unwrap(), "[]");
+    let binds: serde_json::Value =
+        serde_json::from_str(&proxy.list_binds().await.unwrap()).unwrap();
+    assert_eq!(binds["binds"].as_array().unwrap().len(), 55);
+    assert!(
+        serde_json::from_str::<serde_json::Value>(&proxy.explain("keybinds").await.unwrap())
+            .unwrap()
+            .is_object()
+    );
     assert!(
         serde_json::from_str::<serde_json::Value>(&proxy.explain("rules").await.unwrap())
             .unwrap()
@@ -995,6 +1003,45 @@ async fn rules_section_and_list_windows_over_dbus() {
     assert_eq!(windows[0]["class"], "firefox");
     assert_eq!(windows[0]["workspace_id"], 2);
     assert!(windows[0].get("address").is_none() && windows[0].get("pid").is_none());
+}
+
+#[tokio::test]
+async fn keybinds_section_and_list_binds_over_dbus() {
+    let s = served().await;
+    let kb = r#"{"overrides":[{"id":"uq.spotlight","combo":"SUPER + K"}],"custom":[
+        {"name":"Screenshot","combo":"SUPER + SHIFT + P",
+         "action":{"kind":"command","command":"grim shot.png"}}]}"#;
+    let () = s
+        .proxy
+        .call("SetSection", &("keybinds", kb, "settings"))
+        .await
+        .unwrap();
+    let got: String = s.proxy.call("GetSection", &("keybinds",)).await.unwrap();
+    let got: serde_json::Value = serde_json::from_str(&got).unwrap();
+    let id = got["custom"][0]["id"].as_str().unwrap().to_string();
+    assert!(
+        std::fs::read_to_string(&s.paths.generated_lua)
+            .unwrap()
+            .contains(&format!("uq:{id}"))
+    );
+    // A conflict is InvalidSetting, naming both.
+    let bad = r#"{"custom":[{"name":"Mine","combo":"SUPER + Return",
+        "action":{"kind":"uq","name":"settings"}}]}"#;
+    let err = s
+        .proxy
+        .call::<_, _, ()>("SetSection", &("keybinds", bad, "settings"))
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("InvalidSetting"), "{err}");
+    assert!(err.to_string().contains("Mine"), "{err}");
+    let list: String = s.proxy.call("ListBinds", &()).await.unwrap();
+    let list: serde_json::Value = serde_json::from_str(&list).unwrap();
+    assert_eq!(list["binds"].as_array().unwrap().len(), 56);
+    assert_eq!(list["binds"][4]["combo"], "SUPER + K");
+    assert_eq!(list["limits"]["custom"], 100);
+    let explained: String = s.proxy.call("Explain", &("keybinds",)).await.unwrap();
+    let explained: serde_json::Value = serde_json::from_str(&explained).unwrap();
+    assert_eq!(explained[format!("binds.{id}")]["source"], "uq");
 }
 
 async fn pick_server() -> (

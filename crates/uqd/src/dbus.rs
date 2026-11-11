@@ -256,6 +256,13 @@ impl DesktopIface {
         serde_json::to_string(&windows).map_err(|e| UqError::Io(e.to_string()))
     }
 
+    /// The Keyboard shortcuts page's view, as JSON: `{binds, user_lua, groups, keys, actions,
+    /// limits}` (see `uq_core::keybinds::list`). Reads `user.lua` for the binds marked
+    /// `-- uq:bind`. Writes go through `SetSection("keybinds", …)`.
+    async fn list_binds(&self) -> Result<String, UqError> {
+        Ok(self.desktop.lock().await.list_binds()?)
+    }
+
     /// Let the user click a window (spec §5). Returns JSON `{status, window?}`: `picked` (with
     /// only that window's fields), `none`, `cancelled`, `timeout`, `no_shell` or `unavailable`.
     /// `Conflict` when a pick is already pending. Waits up to 20 s without the desktop lock.
