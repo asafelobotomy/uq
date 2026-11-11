@@ -520,7 +520,56 @@ static INPUT_SETTINGS: [SearchEntry; 14] = [
     ),
 ];
 
-static CORE_PAGES: [PageInfo; 9] = [
+static COMPAT_SETTINGS: [SearchEntry; 7] = [
+    entry(
+        "sharp-x11",
+        "Sharp X11 apps",
+        &["blurry", "xwayland", "scaling", "hidpi", "fractional"],
+    ),
+    entry(
+        "electron-wayland",
+        "Run Electron apps on Wayland",
+        &["electron", "blurry", "discord", "code"],
+    ),
+    entry(
+        "chromium-wayland",
+        "Run Chromium-based browsers on Wayland",
+        &["chrome", "brave", "browser", "blurry"],
+    ),
+    entry("qt-wayland", "Qt apps prefer Wayland", &["qt", "kde"]),
+    entry("steam-scale", "Steam UI scale", &["steam", "games", "size"]),
+    entry(
+        "blurry-now",
+        "Blurry right now",
+        &["fix", "app", "blurry", "x11"],
+    ),
+    entry(
+        "app-fixes",
+        "App fixes",
+        &["per-app", "wayland", "x11", "scale", "arguments"],
+    ),
+];
+
+static STARTUP_SETTINGS: [SearchEntry; 4] = [
+    entry(
+        "login-apps",
+        "Apps that start when you log in",
+        &["autostart", "login", "startup", "boot"],
+    ),
+    entry(
+        "add-startup",
+        "Add an app or command",
+        &["autostart", "add", "command"],
+    ),
+    entry("start-delay", "Start delay", &["delay", "wait", "later"]),
+    entry(
+        "env-vars",
+        "Environment variables",
+        &["env", "variable", "path", "export"],
+    ),
+];
+
+static CORE_PAGES: [PageInfo; 11] = [
     PageInfo {
         id: "appearance",
         name: "Appearance",
@@ -556,6 +605,15 @@ static CORE_PAGES: [PageInfo; 9] = [
         qml: "pages/DisplaysPage.qml",
         settings: &DISPLAYS_SETTINGS,
         domains: &["monitors"],
+    },
+    PageInfo {
+        id: "apps-scaling",
+        name: "Apps and scaling",
+        icon: "preferences-desktop-display-randr",
+        category: Category::Devices,
+        qml: "pages/AppsScalingPage.qml",
+        settings: &COMPAT_SETTINGS,
+        domains: &["compat"],
     },
     PageInfo {
         id: "input",
@@ -601,6 +659,15 @@ static CORE_PAGES: [PageInfo; 9] = [
         qml: "pages/HistoryPage.qml",
         settings: &HISTORY_SETTINGS,
         domains: &[],
+    },
+    PageInfo {
+        id: "startup",
+        name: "Startup",
+        icon: "system-run",
+        category: Category::System,
+        qml: "pages/StartupPage.qml",
+        settings: &STARTUP_SETTINGS,
+        domains: &["autostart", "env"],
     },
 ];
 
@@ -749,10 +816,6 @@ mod tests {
             .flat_map(|p| p.settings.iter().map(|s| s.id))
             .collect();
         for row in uq_core::settings::provenance::OPTIONS {
-            // The Apps and scaling page (Task 12) lists sharp-x11; until then no page does.
-            if row.key == "compat.sharp_x11" {
-                continue;
-            }
             assert!(
                 ids.contains(row.setting_id),
                 "{} names setting {:?}, which no page lists",
@@ -893,12 +956,9 @@ mod tests {
         let mut domains: Vec<&str> = uq_core::settings::SECTION_DOMAINS.to_vec();
         domains.extend(["theme", "schedule", "settings"]);
         assert!(domains.contains(&"rules"));
+        assert!(domains.contains(&"env") && domains.contains(&"compat"));
+        assert!(domains.contains(&"autostart"));
         for domain in domains {
-            // The Startup and Apps and scaling pages (Task 12) own env, compat and
-            // autostart; until then they have no page.
-            if domain == "env" || domain == "compat" || domain == "autostart" {
-                continue;
-            }
             let pages: Vec<_> = core_pages()
                 .iter()
                 .filter(|p| p.domains.contains(&domain))
@@ -926,11 +986,13 @@ mod tests {
                 "look",
                 "wallpaper",
                 "displays",
+                "apps-scaling",
                 "input",
                 "shell",
                 "profiles",
                 "rules",
-                "history"
+                "history",
+                "startup"
             ]
         );
         assert_eq!(v[0]["category"], "personal");
@@ -940,10 +1002,122 @@ mod tests {
         assert_eq!(v[2]["plugin"], false);
         assert_eq!(v[3]["qml"], "pages/DisplaysPage.qml");
         assert_eq!(v[3]["categoryName"], "Devices");
-        assert_eq!(v[4]["qml"], "pages/InputPage.qml");
+        assert_eq!(v[4]["qml"], "pages/AppsScalingPage.qml");
         assert_eq!(v[4]["categoryName"], "Devices");
-        assert_eq!(v[5]["qml"], "pages/ShellPage.qml");
-        assert_eq!(v[5]["categoryName"], "uQ");
+        assert_eq!(v[4]["domains"], serde_json::json!(["compat"]));
+        assert_eq!(v[5]["qml"], "pages/InputPage.qml");
+        assert_eq!(v[5]["categoryName"], "Devices");
+        assert_eq!(v[6]["qml"], "pages/ShellPage.qml");
+        assert_eq!(v[6]["categoryName"], "uQ");
+        assert_eq!(v[10]["qml"], "pages/StartupPage.qml");
+        assert_eq!(v[10]["category"], "system");
+        assert_eq!(v[10]["categoryName"], "System");
+        assert_eq!(v[10]["domains"], serde_json::json!(["autostart", "env"]));
+    }
+
+    #[test]
+    fn startup_page_registered_with_search_entries() {
+        let page = find("startup").expect("the startup page is registered");
+        assert_eq!(page.name, "Startup");
+        assert_eq!(page.category, Category::System);
+        assert_eq!(page.icon, "system-run");
+        assert_eq!(page.qml, "pages/StartupPage.qml");
+        assert_eq!(page.domains, ["autostart", "env"]);
+        let entries: Vec<_> = page
+            .settings
+            .iter()
+            .map(|s| (s.id, s.label, s.keywords))
+            .collect();
+        assert_eq!(
+            entries,
+            [
+                (
+                    "login-apps",
+                    "Apps that start when you log in",
+                    &["autostart", "login", "startup", "boot"][..]
+                ),
+                (
+                    "add-startup",
+                    "Add an app or command",
+                    &["autostart", "add", "command"][..]
+                ),
+                (
+                    "start-delay",
+                    "Start delay",
+                    &["delay", "wait", "later"][..]
+                ),
+                (
+                    "env-vars",
+                    "Environment variables",
+                    &["env", "variable", "path", "export"][..]
+                ),
+            ]
+        );
+        let pages = core_pages();
+        let first_system = pages
+            .iter()
+            .position(|p| p.category == Category::System)
+            .unwrap();
+        assert_eq!(pages[first_system].id, "startup", "the first System page");
+        assert_eq!(pages[first_system - 1].id, "history", "after the uQ pages");
+    }
+
+    #[test]
+    fn apps_scaling_page_after_displays() {
+        let page = find("apps-scaling").expect("the apps and scaling page is registered");
+        assert_eq!(page.name, "Apps and scaling");
+        assert_eq!(page.category, Category::Devices);
+        assert_eq!(page.icon, "preferences-desktop-display-randr");
+        assert_eq!(page.qml, "pages/AppsScalingPage.qml");
+        assert_eq!(page.domains, ["compat"]);
+        let entries: Vec<_> = page
+            .settings
+            .iter()
+            .map(|s| (s.id, s.label, s.keywords))
+            .collect();
+        assert_eq!(
+            entries,
+            [
+                (
+                    "sharp-x11",
+                    "Sharp X11 apps",
+                    &["blurry", "xwayland", "scaling", "hidpi", "fractional"][..]
+                ),
+                (
+                    "electron-wayland",
+                    "Run Electron apps on Wayland",
+                    &["electron", "blurry", "discord", "code"][..]
+                ),
+                (
+                    "chromium-wayland",
+                    "Run Chromium-based browsers on Wayland",
+                    &["chrome", "brave", "browser", "blurry"][..]
+                ),
+                ("qt-wayland", "Qt apps prefer Wayland", &["qt", "kde"][..]),
+                (
+                    "steam-scale",
+                    "Steam UI scale",
+                    &["steam", "games", "size"][..]
+                ),
+                (
+                    "blurry-now",
+                    "Blurry right now",
+                    &["fix", "app", "blurry", "x11"][..]
+                ),
+                (
+                    "app-fixes",
+                    "App fixes",
+                    &["per-app", "wayland", "x11", "scale", "arguments"][..]
+                ),
+            ]
+        );
+        let ids: Vec<_> = core_pages().iter().map(|p| p.id).collect();
+        let at = ids.iter().position(|id| *id == "apps-scaling").unwrap();
+        assert_eq!(
+            (ids[at - 1], ids[at + 1]),
+            ("displays", "input"),
+            "between Displays and Input"
+        );
     }
 
     #[test]

@@ -1,4 +1,3 @@
-#![cfg_attr(not(test), allow(dead_code, reason = "wired by its model in Task 12"))]
 //! The Apps and scaling page's logic (spec §6): the five switches, the "Blurry right now" list
 //! of windows that run under XWayland, and each app's "Fix this app" fix. [`CompatState`] talks
 //! to uqd (`org.uq.Desktop1`) and is plain Rust, tested against the fake uqd.

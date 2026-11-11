@@ -32,6 +32,8 @@ pub struct Follow {
     pub monitors: bool,
     /// `ProfileChanged`: the active profile or the list of profiles changed.
     pub profiles: bool,
+    /// `AutostartChanged`: a startup app started, finished or failed.
+    pub autostart: bool,
 }
 
 /// Whether a `SectionChanged(domain, …)` concerns the page.
@@ -135,6 +137,9 @@ async fn follow_uqd<M: PageModel>(
         if follow.profiles {
             all.push(proxy.receive_profile_changed().await?.map(|_| ()).boxed());
         }
+        if follow.autostart {
+            all.push(proxy.receive_autostart_changed().await?.map(|_| ()).boxed());
+        }
         zbus::Result::Ok(futures_util::stream::select_all(all))
     };
     let mut changes = match streams.await {
@@ -230,6 +235,7 @@ mod tests {
             history: false,
             monitors: false,
             profiles: false,
+            autostart: false,
         };
         assert!(wants(&wallpaper, "wallpaper"));
         assert!(!wants(&wallpaper, "appearance"));
@@ -241,6 +247,7 @@ mod tests {
             history: false,
             monitors: false,
             profiles: false,
+            autostart: false,
         };
         assert!(wants(&two, "look") && wants(&two, "layouts"));
         assert!(!wants(&two, "shell"));

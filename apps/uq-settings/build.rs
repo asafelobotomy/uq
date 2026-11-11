@@ -34,7 +34,13 @@ fn main() {
         QmlFile::from("qml/components/RuleMatchList.qml"),
         QmlFile::from("qml/components/RuleEditor.qml"),
         QmlFile::from("qml/components/AdvancedDetails.qml"),
+        QmlFile::from("qml/components/SourceLine.qml"),
+        QmlFile::from("qml/components/AutostartRow.qml"),
+        QmlFile::from("qml/components/EnvVarRow.qml"),
+        QmlFile::from("qml/components/AppFixDialog.qml"),
+        QmlFile::from("qml/components/AddStartupDialog.qml"),
         QmlFile::from("qml/pages/AppearancePage.qml"),
+        QmlFile::from("qml/pages/AppsScalingPage.qml"),
         QmlFile::from("qml/pages/DisplaysPage.qml"),
         QmlFile::from("qml/pages/HistoryPage.qml"),
         QmlFile::from("qml/pages/InputPage.qml"),
@@ -42,6 +48,7 @@ fn main() {
         QmlFile::from("qml/pages/ProfilesPage.qml"),
         QmlFile::from("qml/pages/RulesPage.qml"),
         QmlFile::from("qml/pages/ShellPage.qml"),
+        QmlFile::from("qml/pages/StartupPage.qml"),
         QmlFile::from("qml/pages/WallpaperPage.qml"),
     ]))
     .qt_module("Gui")
@@ -52,6 +59,7 @@ fn main() {
         "src/app.rs",
         "src/window.rs",
         "src/appearance_model.rs",
+        "src/compat_model.rs",
         "src/displays_model.rs",
         "src/history_model.rs",
         "src/input_model.rs",
@@ -59,6 +67,7 @@ fn main() {
         "src/profiles_model.rs",
         "src/rules_model.rs",
         "src/shell_model.rs",
+        "src/startup_model.rs",
         "src/wallpaper_model.rs",
     ])
     .cpp_file("cpp/window.cpp");

@@ -91,6 +91,7 @@ impl PageModel for InputModel {
         history: false,
         monitors: false,
         profiles: false,
+        autostart: false,
     };
 
     fn core(&self) -> &ModelCore<InputState> {

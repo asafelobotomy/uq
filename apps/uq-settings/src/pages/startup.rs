@@ -1,4 +1,3 @@
-#![cfg_attr(not(test), allow(dead_code, reason = "wired by its model in Task 12"))]
 //! The Startup page's logic (spec §7.3): the apps that start when you log in, and the
 //! session's environment variables. [`StartupState`] talks to uqd (`org.uq.Desktop1`) and is
 //! plain Rust, tested against the fake uqd.

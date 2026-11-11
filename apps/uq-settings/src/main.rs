@@ -15,6 +15,7 @@ use cxx_qt_lib::{QQuickStyle, QString};
 
 mod app;
 mod appearance_model;
+mod compat_model;
 mod desktop_entries;
 mod displays_model;
 mod history_model;
@@ -30,6 +31,7 @@ mod rules_model;
 mod search;
 mod session;
 mod shell_model;
+mod startup_model;
 mod system_lists;
 mod wallpaper_model;
 mod window;

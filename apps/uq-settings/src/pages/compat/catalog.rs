@@ -80,3 +80,22 @@ pub fn preview(fix: &Value) -> Value {
     let args = &rest[(assignments + 1).min(rest.len())..];
     json!({"env": names, "args": args, "problem": null})
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fixture_matches_the_fields_catalogue() {
+        let file = include_str!("../../../../../tests/settings-qml/fixtures/compat_fields.js");
+        let lead = "var fields = ";
+        let start = file.find(lead).expect("the fixture sets `fields`") + lead.len();
+        let body = file[start..].trim_end().trim_end_matches(';');
+        let fixture: Value = serde_json::from_str(body).expect("the fixture is JSON");
+        assert_eq!(
+            fixture,
+            fields(),
+            "update tests/settings-qml/fixtures/compat_fields.js"
+        );
+    }
+}
