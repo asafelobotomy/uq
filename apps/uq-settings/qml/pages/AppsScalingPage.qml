@@ -108,6 +108,7 @@ QQC2.ScrollView {
         id: fixDialog
         fields: page.snap.fields || ({})
         apps: page.snap.installed || []
+        existingFix: id => page.fixFor(id)
         preview: json => cm.preview(json)
         canSave: page.idle
         busy: cm.busy

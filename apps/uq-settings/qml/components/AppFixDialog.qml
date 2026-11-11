@@ -18,6 +18,9 @@ Kirigami.Dialog {
     property var fields: ({})
     /// The installed apps `[{id, name, icon}]`, for the chooser.
     property var apps: []
+    /// `id => fix` (a `fixes` row) or null: the fix an app already has, so choosing that app
+    /// edits it rather than replacing it.
+    property var existingFix: id => null
     /// `fixJson => {env, args, problem}` as JSON (CompatModel.preview), or null.
     property var preview: null
     /// Whether Save can be pressed (the page isn't busy).
@@ -40,12 +43,31 @@ Kirigami.Dialog {
     property var previewResult: ({ env: [], args: [], problem: null })
     property bool saving: false
     property string saveError
-    readonly property var platforms: dialog.fields.platforms || []
-    readonly property var scales: dialog.fields.scales || []
-    readonly property var limits: dialog.fields.limits || ({})
+    /// The draft's "Run on" key and size (null for Automatic). The combo boxes show these; a
+    /// new snapshot never changes them.
+    property string platformKey: "auto"
+    property var scaleValue: null
+    /// The catalogue and the app list as they were when the dialog opened: a new snapshot
+    /// mustn't rebuild the combo boxes' models, which would put them back to their first entry.
+    property var catalogue: ({})
+    property var appList: []
+    /// The person has changed something since the dialog opened: only then is a problem shown.
+    property bool touched: false
+    /// The chosen app already had a fix, which the dialog now edits.
+    property bool editingExisting: false
+    readonly property var platforms: dialog.catalogue.platforms || []
+    readonly property var scales: dialog.catalogue.scales || []
+    readonly property var limits: dialog.catalogue.limits || ({})
     readonly property var scaleLabels: ["Automatic"].concat(dialog.scales.map(s => Math.round(s * 100) + " %"))
     readonly property string problem: dialog.previewResult && dialog.previewResult.problem ? String(dialog.previewResult.problem) : ""
     readonly property bool saveEnabled: canSave && appId !== "" && !saving && problem === ""
+    readonly property int platformIndex: Math.max(0, dialog.platforms.findIndex(p => p.key === dialog.platformKey))
+    readonly property int scaleIndex: {
+        if (dialog.scaleValue === null || dialog.scaleValue === undefined)
+            return 0;
+        const i = dialog.scales.findIndex(x => Math.abs(x - Number(dialog.scaleValue)) < 0.001);
+        return i < 0 ? 0 : i + 1;
+    }
     readonly property alias body: body
     readonly property alias platformBox: platformBox
     readonly property alias scaleBox: scaleBox
@@ -56,21 +78,35 @@ Kirigami.Dialog {
     /// until the page calls finishSave(). (Not `accepted`: a Dialog has that signal already.)
     signal fixAccepted(string fixJson)
 
+    /// Fill the draft from `fix` (a `fixes` row, or null for a new one).
+    function load(fix) {
+        const f = fix || {};
+        dialog.platformKey = String(f.platform || "auto");
+        const s = dialog.scales.findIndex(x => Math.abs(x - Number(f.scale)) < 0.001);
+        dialog.scaleValue = f.scale === null || f.scale === undefined || s < 0 ? null : dialog.scales[s];
+        dialog.envList = (f.env || []).map(v => ({ name: String(v.name), value: String(v.value) }));
+        argsBox.text = (f.args || []).map(a => String(a)).join("\n");
+        elsewhereBox.checked = f.elsewhere === true;
+        dialog.syncCombos();
+    }
+    /// Show the draft's "Run on" and size in the combo boxes.
+    function syncCombos() {
+        platformBox.currentIndex = dialog.platformIndex;
+        scaleBox.currentIndex = dialog.scaleIndex;
+    }
     /// Open on `fix` (a `fixes` row, or null for a new one) for app `id` named `name`.
     function start(id, name, fix) {
-        const f = fix || {};
+        dialog.catalogue = dialog.fields;
+        dialog.appList = dialog.apps;
         dialog.appId = String(id || "");
         dialog.appName = String(name || "");
         dialog.choosing = false;
         dialog.windowText = "";
-        platformBox.currentIndex = Math.max(0, dialog.platforms.findIndex(p => p.key === (f.platform || "auto")));
-        const s = dialog.scales.findIndex(x => Math.abs(x - Number(f.scale)) < 0.001);
-        scaleBox.currentIndex = f.scale === null || f.scale === undefined || s < 0 ? 0 : s + 1;
-        dialog.envList = (f.env || []).map(v => ({ name: String(v.name), value: String(v.value) }));
-        argsBox.text = (f.args || []).map(a => String(a)).join("\n");
-        elsewhereBox.checked = f.elsewhere === true;
+        dialog.editingExisting = false;
+        dialog.load(fix);
         dialog.saving = false;
         dialog.saveError = "";
+        dialog.touched = false;
         dialog.runPreview();
         dialog.open();
     }
@@ -81,14 +117,31 @@ Kirigami.Dialog {
         dialog.windowText = String(windowText || "");
         chooser.currentIndex = -1;
     }
+    /// The app at `index` of the chooser was chosen; an app that has a fix already loads it.
+    function chooseApp(index) {
+        const a = dialog.appList[index];
+        dialog.appId = a ? String(a.id) : "";
+        dialog.appName = a ? String(a.name) : "";
+        const fix = a && typeof dialog.existingFix === "function" ? dialog.existingFix(dialog.appId) : null;
+        // Another app's saved fix isn't carried over to this one: start blank instead.
+        if (fix || dialog.editingExisting)
+            dialog.load(fix);
+        dialog.editingExisting = !!fix;
+        dialog.markChanged();
+    }
+    /// The person changed something: check the draft again shortly.
+    function markChanged() {
+        dialog.touched = true;
+        dialog.refreshPreview();
+    }
     /// The fix as the `compat` section holds it.
     function draft() {
-        const p = dialog.platforms[platformBox.currentIndex];
         const args = argsBox.text.split("\n").map(a => a.trim()).filter(a => a !== "");
         return {
             id: dialog.appId,
-            platform: p ? p.key : "auto",
-            scale: scaleBox.currentIndex > 0 ? dialog.scales[scaleBox.currentIndex - 1] : null,
+            // A catalogue key: set from the catalogue, or kept from the saved fix (F29).
+            platform: dialog.platformKey,
+            scale: dialog.scaleValue === undefined ? null : dialog.scaleValue,
             env: dialog.envList.filter(v => v.name.trim() !== "" || v.value !== "").map(v => ({ name: v.name.trim(), value: v.value })),
             args: args,
             elsewhere: elsewhereBox.checked
@@ -101,8 +154,11 @@ Kirigami.Dialog {
         previewTimer.restart();
     }
     function runPreview() {
-        if (typeof dialog.preview !== "function")
+        // No app yet: nothing to check, and the core's message would name file names.
+        if (typeof dialog.preview !== "function" || dialog.appId === "") {
+            dialog.previewResult = { env: [], args: [], problem: null };
             return;
+        }
         try {
             dialog.previewResult = JSON.parse(dialog.preview(dialog.fixJson()));
         } catch (e) {
@@ -114,9 +170,13 @@ Kirigami.Dialog {
     }
     function removeVar(index) {
         dialog.envList = dialog.envList.filter((v, i) => i !== index);
-        dialog.refreshPreview();
+        dialog.markChanged();
     }
     function save() {
+        // Check the draft as it is now: the preview may lag the last edit (slice C's F17).
+        previewTimer.stop();
+        dialog.runPreview();
+        dialog.touched = true;
         if (!dialog.saveEnabled)
             return;
         dialog.saveError = "";
@@ -191,15 +251,18 @@ Kirigami.Dialog {
             id: chooser
             objectName: "appChooser"
             visible: dialog.choosing
-            model: dialog.apps.map(a => String(a.name))
+            model: dialog.appList.map(a => String(a.name))
             Accessible.name: "App"
             Layout.fillWidth: true
-            onActivated: index => {
-                const a = dialog.apps[index];
-                dialog.appId = a ? String(a.id) : "";
-                dialog.appName = a ? String(a.name) : "";
-                dialog.refreshPreview();
-            }
+            onActivated: index => dialog.chooseApp(index)
+        }
+        UqLabel {
+            objectName: "existingFix"
+            visible: dialog.choosing && dialog.editingExisting
+            text: "This app already has a fix. Saving changes it."
+            wrapMode: Text.Wrap
+            opacity: 0.7
+            Layout.fillWidth: true
         }
 
         UqLabel {
@@ -212,7 +275,13 @@ Kirigami.Dialog {
             objectName: "platform"
             model: dialog.platforms.map(p => String(p.label))
             Accessible.name: "Run on"
-            onActivated: dialog.refreshPreview()
+            onActivated: index => {
+                const p = dialog.platforms[index];
+                dialog.platformKey = p ? String(p.key) : "auto";
+                dialog.markChanged();
+            }
+            // A new model puts a combo box back on its first entry: show the draft again.
+            onModelChanged: Qt.callLater(dialog.syncCombos)
         }
         UqLabel {
             text: "Most blurry apps are sharp with Wayland."
@@ -231,7 +300,11 @@ Kirigami.Dialog {
             objectName: "scale"
             model: dialog.scaleLabels
             Accessible.name: "Size"
-            onActivated: dialog.refreshPreview()
+            onActivated: index => {
+                dialog.scaleValue = index > 0 ? dialog.scales[index - 1] : null;
+                dialog.markChanged();
+            }
+            onModelChanged: Qt.callLater(dialog.syncCombos)
         }
 
         UqLabel {
@@ -249,7 +322,7 @@ Kirigami.Dialog {
                 showSave: false
                 onEdited: (n, v) => {
                     dialog.envList[index] = { name: n, value: v };
-                    dialog.refreshPreview();
+                    dialog.markChanged();
                 }
                 onRemoveRequested: dialog.removeVar(index)
             }
@@ -281,7 +354,8 @@ Kirigami.Dialog {
             Accessible.name: "Extra options"
             Layout.fillWidth: true
             Layout.preferredHeight: Kirigami.Units.gridUnit * 4
-            onTextChanged: dialog.refreshPreview()
+            // Also on load(); start() clears `touched` after it.
+            onTextChanged: dialog.markChanged()
         }
 
         QQC2.CheckBox {
@@ -289,7 +363,7 @@ Kirigami.Dialog {
             objectName: "elsewhere"
             text: "Also when started from other launchers"
             Layout.topMargin: Kirigami.Units.largeSpacing
-            onToggled: dialog.refreshPreview()
+            onToggled: dialog.markChanged()
         }
         UqLabel {
             objectName: "elsewhereSentence"
@@ -302,7 +376,7 @@ Kirigami.Dialog {
 
         UqLabel {
             objectName: "fixProblem"
-            visible: dialog.problem !== ""
+            visible: dialog.touched && dialog.problem !== ""
             text: "This fix can't be saved yet: " + dialog.problem
             color: Kirigami.Theme.negativeTextColor
             wrapMode: Text.Wrap
@@ -321,7 +395,7 @@ Kirigami.Dialog {
             kind: "fix"
             envNames: dialog.previewResult.env || []
             extraArgs: dialog.previewResult.args || []
-            problem: dialog.problem
+            problem: dialog.touched ? dialog.problem : ""
             Layout.fillWidth: true
             Layout.topMargin: Kirigami.Units.largeSpacing
         }

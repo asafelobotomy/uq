@@ -100,6 +100,73 @@ Item {
             compare(control(d, "elsewhere").text, "Also when started from other launchers");
         }
 
+        function test_new_snapshot_keeps_the_draft() {
+            const d = make();
+            d.start("code.desktop", "Code", null);
+            choose(d.platformBox, 1);
+            choose(d.scaleBox, 3);
+            // The page's state was read again: a new catalogue object with the same content.
+            d.fields = JSON.parse(JSON.stringify(Fixture.fields));
+            d.apps = d.apps.slice();
+            wait(0);
+            compare(d.platformBox.currentIndex, 1);
+            compare(d.scaleBox.currentIndex, 3);
+            const fix = JSON.parse(d.fixJson());
+            compare(fix.platform, Fixture.fields.platforms[1].key);
+            compare(fix.scale, Fixture.fields.scales[2]);
+        }
+
+        function test_choosing_an_app_with_a_fix_edits_it() {
+            const d = make();
+            const steam = { id: "steam.desktop", platform: "x11", scale: null, env: [], args: ["-x"], elsewhere: false };
+            d.existingFix = id => id === "steam.desktop" ? steam : null;
+            d.startChoosing("");
+            verify(!control(d, "existingFix").visible);
+            choose(control(d, "appChooser"), 1);
+            verify(control(d, "existingFix").visible);
+            compare(JSON.parse(d.fixJson()), steam, "the saved fix is loaded, not replaced");
+            compare(d.platformBox.currentIndex, 2);
+            choose(control(d, "appChooser"), 0);
+            compare(d.appId, "code.desktop");
+            verify(!control(d, "existingFix").visible);
+            compare(JSON.parse(d.fixJson()).args, [], "Steam's fix isn't carried over");
+        }
+
+        function test_problem_shown_only_after_a_change() {
+            const d = make();
+            d.preview = json => JSON.stringify({ env: [], args: [], problem: "This fix doesn't change anything." });
+            d.start("code.desktop", "Code", null);
+            verify(!control(d, "fixProblem").visible, "no red line before anything is typed");
+            verify(!d.saveEnabled);
+            choose(d.scaleBox, 0);
+            verify(control(d, "fixProblem").visible);
+            // Choosing an app: nothing is checked before one is chosen.
+            let asked = 0;
+            d.preview = json => {
+                asked++;
+                return JSON.stringify({ env: [], args: [], problem: "named by its file name" });
+            };
+            d.startChoosing("");
+            compare(asked, 0);
+            compare(d.problem, "");
+        }
+
+        function test_save_checks_the_draft_now() {
+            const d = make();
+            let problem = null;
+            d.preview = json => JSON.stringify({ env: [], args: [], problem: problem });
+            d.start("code.desktop", "Code", null);
+            choose(d.platformBox, 1);
+            d.runPreview();
+            verify(d.saveEnabled);
+            // An edit the 150 ms preview hasn't seen yet.
+            problem = "An option can't hold a tab.";
+            const spy = createTemporaryObject(spyComp, root, { target: d, signalName: "fixAccepted" });
+            d.save();
+            compare(spy.count, 0);
+            verify(control(d, "fixProblem").visible);
+        }
+
         function test_save_waits_for_the_answer() {
             const d = make();
             d.preview = json => JSON.stringify({ env: ["GDK_BACKEND"], args: [], problem: null });
