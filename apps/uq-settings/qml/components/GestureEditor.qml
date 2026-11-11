@@ -108,7 +108,11 @@ QQC2.Dialog {
     }
     /// After the action changed: a direction it doesn't allow becomes the first one it does.
     function keepDirection() {
-        const ok = editor.directions;
+        // Read the action's list here: `directions` may not have re-evaluated yet when
+        // `actionChanged` fires.
+        const act = editor.actionChoices.find(a => a.id === editor.action);
+        const allowed = act ? act.directions : [];
+        const ok = editor.directionChoices.filter(d => allowed.indexOf(d.id) >= 0);
         if (ok.length > 0 && !ok.some(d => d.id === editor.direction))
             editor.direction = ok[0].id;
     }

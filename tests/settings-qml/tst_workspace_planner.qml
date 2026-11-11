@@ -83,16 +83,16 @@ Item {
             const manual = spy(c, "manualChosen");
             c.strategyBox.activated(1);
             compare(plan.count, 1);
-            compare(plan.signalArguments[0], ["sequential", 3, true]);
+            compare(Array.from(plan.signalArguments[0]), ["sequential", 3, true]);
             c.countBox.value = 6;
             c.countBox.valueModified();
-            compare(plan.signalArguments[1], ["manual", 6, true]);
+            compare(Array.from(plan.signalArguments[1]), ["manual", 6, true]);
             c.backSwitch.chosen(false);
-            compare(plan.signalArguments[2], ["manual", 3, false]);
+            compare(Array.from(plan.signalArguments[2]), ["manual", 3, false]);
             findChild(c.manualRepeater.itemAt(2), "manualBox").activated(1);
-            compare(manual.signalArguments[0], [3, "eDP-1"]);
+            compare(Array.from(manual.signalArguments[0]), [3, "eDP-1"]);
             findChild(c.manualRepeater.itemAt(2), "manualBox").activated(0);
-            compare(manual.signalArguments[1], [3, ""]);
+            compare(Array.from(manual.signalArguments[1]), [3, ""]);
         }
 
         function test_manual_choice_survives_a_new_screen_list() {
