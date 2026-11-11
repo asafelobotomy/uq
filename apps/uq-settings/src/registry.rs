@@ -776,6 +776,36 @@ static ABOUT_SETTINGS: [SearchEntry; 2] = [
     ),
 ];
 
+static BLUETOOTH_SETTINGS: [SearchEntry; 4] = [
+    entry(
+        "bluetooth-power",
+        "Bluetooth",
+        &["bluetooth", "wireless", "turn on", "turn off"],
+    ),
+    entry(
+        "bluetooth-visible",
+        "Let other devices find this computer",
+        &["discoverable", "visible", "find", "bluetooth name"],
+    ),
+    entry(
+        "bluetooth-devices",
+        "Your Bluetooth devices",
+        &[
+            "paired",
+            "headphones",
+            "connect",
+            "battery",
+            "forget",
+            "trust",
+        ],
+    ),
+    entry(
+        "bluetooth-pair",
+        "Pair a new device",
+        &["pair", "add device", "scan", "keyboard", "mouse", "speaker"],
+    ),
+];
+
 static NETWORK_SETTINGS: [SearchEntry; 8] = [
     entry(
         "wifi",
@@ -821,7 +851,7 @@ static NETWORK_SETTINGS: [SearchEntry; 8] = [
     ),
 ];
 
-static CORE_PAGES: [PageInfo; 19] = [
+static CORE_PAGES: [PageInfo; 20] = [
     PageInfo {
         id: "appearance",
         name: "Appearance",
@@ -875,6 +905,15 @@ static CORE_PAGES: [PageInfo; 19] = [
         qml: "pages/InputPage.qml",
         settings: &INPUT_SETTINGS,
         domains: &["input"],
+    },
+    PageInfo {
+        id: "bluetooth",
+        name: "Bluetooth",
+        icon: "preferences-system-bluetooth",
+        category: Category::Devices,
+        qml: "pages/BluetoothPage.qml",
+        settings: &BLUETOOTH_SETTINGS,
+        domains: &[],
     },
     PageInfo {
         id: "network",
@@ -1320,6 +1359,7 @@ mod tests {
                 "displays",
                 "apps-scaling",
                 "input",
+                "bluetooth",
                 "network",
                 "shell",
                 "profiles",
@@ -1347,14 +1387,16 @@ mod tests {
         assert_eq!(v[4]["domains"], serde_json::json!(["compat"]));
         assert_eq!(v[5]["qml"], "pages/InputPage.qml");
         assert_eq!(v[5]["categoryName"], "Devices");
-        assert_eq!(v[6]["qml"], "pages/NetworkPage.qml");
-        assert_eq!(v[6]["categoryName"], "Connections");
-        assert_eq!(v[7]["qml"], "pages/ShellPage.qml");
-        assert_eq!(v[7]["categoryName"], "uQ");
-        assert_eq!(v[11]["qml"], "pages/StartupPage.qml");
-        assert_eq!(v[11]["category"], "system");
-        assert_eq!(v[11]["categoryName"], "System");
-        assert_eq!(v[11]["domains"], serde_json::json!(["autostart", "env"]));
+        assert_eq!(v[6]["qml"], "pages/BluetoothPage.qml");
+        assert_eq!(v[6]["categoryName"], "Devices");
+        assert_eq!(v[7]["qml"], "pages/NetworkPage.qml");
+        assert_eq!(v[7]["categoryName"], "Connections");
+        assert_eq!(v[8]["qml"], "pages/ShellPage.qml");
+        assert_eq!(v[8]["categoryName"], "uQ");
+        assert_eq!(v[12]["qml"], "pages/StartupPage.qml");
+        assert_eq!(v[12]["category"], "system");
+        assert_eq!(v[12]["categoryName"], "System");
+        assert_eq!(v[12]["domains"], serde_json::json!(["autostart", "env"]));
     }
 
     #[test]
@@ -1538,6 +1580,17 @@ mod tests {
         }
         let login = find("login-screen").unwrap();
         assert!(login.settings.iter().any(|s| s.id == "auto-login"));
+    }
+
+    #[test]
+    fn bluetooth_ends_the_devices_pages() {
+        let page = find("bluetooth").expect("the bluetooth page is registered");
+        assert_eq!(page.category, Category::Devices);
+        assert_eq!(page.qml, "pages/BluetoothPage.qml");
+        assert!(page.domains.is_empty(), "it changes no uQ setting");
+        let ids: Vec<_> = core_pages().iter().map(|p| p.id).collect();
+        let at = ids.iter().position(|id| *id == "bluetooth").unwrap();
+        assert_eq!(ids[at + 1], "network");
     }
 
     #[test]

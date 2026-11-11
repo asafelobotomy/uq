@@ -16,6 +16,7 @@ use cxx_qt_lib::{QQuickStyle, QString};
 mod about_model;
 mod app;
 mod appearance_model;
+mod bluetooth_model;
 mod compat_model;
 mod datetime_model;
 mod defaultapps_model;

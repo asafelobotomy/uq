@@ -2,6 +2,7 @@
 
 pub mod about;
 pub mod appearance;
+pub mod bluetooth;
 pub mod compat;
 pub mod datetime;
 pub mod defaultapps;
