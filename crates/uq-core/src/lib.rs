@@ -15,6 +15,7 @@ pub mod render;
 pub mod rules;
 pub mod schedule;
 pub mod settings;
+pub mod startup_explain;
 pub mod state;
 pub mod stub;
 #[cfg(feature = "test-bus")]

@@ -422,6 +422,39 @@ pub fn find_workspace_rule_in_user_lua(text: &str, selector: &str) -> Option<u32
     })
 }
 
+/// The 1-based line of `user.lua` with an `hl.env(` call that names variable `name` in quotes.
+/// Comments are ignored.
+pub fn find_env_in_user_lua(text: &str, name: &str) -> Option<u32> {
+    text.lines().enumerate().find_map(|(n, line)| {
+        let line = strip_lua_comment(line);
+        let mut from = 0;
+        while let Some(i) = line[from..].find("hl.env") {
+            let start = from + i;
+            from = start + 1;
+            if line[..start].chars().next_back().is_some_and(is_ident) {
+                continue;
+            }
+            let Some(rest) = line[start + "hl.env".len()..]
+                .trim_start()
+                .strip_prefix('(')
+            else {
+                continue;
+            };
+            let rest = rest.trim_start();
+            let Some(q) = rest.chars().next().filter(|c| matches!(c, '"' | '\'')) else {
+                continue;
+            };
+            if rest[1..]
+                .strip_prefix(name)
+                .is_some_and(|r| r.starts_with(q))
+            {
+                return Some(u32::try_from(n + 1).unwrap_or(u32::MAX));
+            }
+        }
+        None
+    })
+}
+
 /// The 1-based line of `user.lua` text that seems to set Hyprland option `hypr_path`
 /// (`general:gaps_in`, `decoration:blur:enabled`). A case-sensitive, plain-text heuristic, not
 /// a parser; the first hit wins. A line hits when it has the path in dotted form
