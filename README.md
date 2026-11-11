@@ -448,6 +448,13 @@ delete are not available. `uqctl theme list --long`, `uqctl theme import <file> 
 a terminal. Manual checks are in
 [docs/notes/settings-slice-g-live-check.md](docs/notes/settings-slice-g-live-check.md).
 
+#### Pages from other apps
+
+Five apps bring their own pages to Settings: **Scheduling** (scdr), **Storage and cleanup**
+(crumBS), **Notifications** (noti-fi), **Memory and swap** (XZram) and **Tailscale** (scale_tail).
+Each appears under **Apps** when the app is installed, with no restart, and goes when it's removed.
+See [`docs/companion-pages.md`](docs/companion-pages.md).
+
 ### Launchers
 
 - `SUPER+Space` opens or closes Spotlight: apps, a calculator (`=2+2`), a command runner
