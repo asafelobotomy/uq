@@ -83,11 +83,11 @@ Item {
         function test_hex_field_updates_preview() {
             const e = make();
             type(e, "dark-bg", "#112233");
-            compare(e.result.dark.tokens.bg, "#112233");
+            compare(e.previewResult.dark.tokens.bg, "#112233");
             compare(String(control(e, "previewCard").color), "#112233");
             compare(String(control(e, "previewPanel").color), String(Fixture.preview.dark.tokens.surface));
             // The light version has its own colours; the card follows the open tab.
-            compare(e.result.light.tokens.bg, Fixture.editor.colors.light.bg);
+            compare(e.previewResult.light.tokens.bg, Fixture.editor.colors.light.bg);
         }
 
         function test_save_disabled_on_problems() {
