@@ -11,4 +11,5 @@ pub mod profiles;
 pub mod rules;
 pub mod runner;
 pub mod shell;
+pub mod startup;
 pub mod wallpaper;

@@ -29,6 +29,15 @@ pub fn message(e: &zbus::Error) -> String {
     }
 }
 
+/// uqd's refusal of a setting without the key it names: a leading
+/// `invalid value for <key>: ` is dropped (F21). Any other text is left as it is.
+pub fn plain_refusal(text: &str) -> String {
+    text.strip_prefix("invalid value for ")
+        .and_then(|rest| rest.split_once(": "))
+        .map_or(text, |(_, reason)| reason)
+        .to_string()
+}
+
 /// Parse JSON uqd sent.
 pub fn parse_json(text: &str) -> zbus::Result<Value> {
     serde_json::from_str(text).map_err(|e| {
@@ -287,6 +296,21 @@ mod tests {
         assert_eq!(a.ui_font.as_deref(), Some("Inter"));
         assert_eq!(a.mono_font.as_deref(), Some("Fira Code"));
         assert_eq!(a.cursor_size, Some(32));
+    }
+
+    #[test]
+    fn plain_refusal_drops_the_key() {
+        assert_eq!(
+            plain_refusal(
+                "invalid value for autostart.files[0].delay: a delay is 0 to 600 seconds"
+            ),
+            "a delay is 0 to 600 seconds"
+        );
+        assert_eq!(
+            plain_refusal("Hyprland rejected the new config: bad"),
+            "Hyprland rejected the new config: bad"
+        );
+        assert_eq!(plain_refusal("invalid value for x"), "invalid value for x");
     }
 
     #[test]

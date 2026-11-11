@@ -15,13 +15,16 @@ use uq_core::profile::holds;
 use uq_core::schedule::Schedule;
 use uq_core::settings::provenance;
 use uq_core::settings::renders_section;
+use uq_core::startup_explain::FileReport;
 use uq_core::state::State;
 use uq_core::test_bus::{Bus, connect, private_bus};
 use zbus::object_server::SignalEmitter;
 
+mod autostart;
 mod devices;
 mod profiles;
 mod windows;
+pub use autostart::FakeAutostart;
 pub use devices::Displays;
 pub use profiles::FakeProfiles;
 pub use windows::FakeWindows;
@@ -53,6 +56,9 @@ pub struct FakeUqd {
     pub displays: Displays,
     pub profiles: FakeProfiles,
     pub windows: FakeWindows,
+    pub autostart: FakeAutostart,
+    /// What uqd's file sync found, for `Explain("env")` and `Explain("autostart")`.
+    pub files: Arc<Mutex<FileReport>>,
 }
 
 /// The fake's journal and restore points.
@@ -142,6 +148,9 @@ pub struct Explain {
     /// The message of the last `rules` write refused with `ConfigInvalid`; a good `rules`
     /// write clears it. `Explain("rules")` reports it as uqd does.
     pub rules_rejected: Arc<Mutex<Option<String>>>,
+    /// `(domain, message)` of the last `env`, `compat` or `autostart` write refused with
+    /// `ConfigInvalid`, as uqd's `last_rejected`; a good write of that domain clears it.
+    pub startup_rejected: Arc<Mutex<Option<(String, String)>>>,
 }
 
 impl Explain {
@@ -240,6 +249,14 @@ impl FakeUqd {
                     *self.explain.rules_rejected.lock().unwrap() = Some(m.clone());
                 }
                 Err(_) => {}
+            }
+        }
+        if matches!(domain, "env" | "compat" | "autostart") {
+            let mut rejected = self.explain.startup_rejected.lock().unwrap();
+            match &done {
+                Ok(_) if rejected.as_ref().is_some_and(|(d, _)| d == domain) => *rejected = None,
+                Err(FakeError::ConfigInvalid(m)) => *rejected = Some((domain.into(), m.clone())),
+                _ => {}
             }
         }
         done?;
@@ -408,6 +425,14 @@ impl FakeUqd {
             .section(domain)
             .map_err(invalid)?;
         let overrides = self.explain.overrides.lock().unwrap();
+        if matches!(domain, "env" | "autostart") {
+            let rejected = self.explain.startup_rejected.lock().unwrap().clone();
+            let rejected = rejected.filter(|(d, _)| d == domain).map(|(_, m)| m);
+            let state = self.state.lock().unwrap();
+            let files = self.files.lock().unwrap();
+            let out = autostart::explain(domain, &state, &files, rejected.as_deref(), &overrides);
+            return Ok(out.to_string());
+        }
         if domain == "rules" {
             // uqd's pure function; overrides are keyed `rules.<row key>`.
             let rules = self.state.lock().unwrap().rules.clone();
@@ -469,6 +494,15 @@ impl FakeUqd {
             .unwrap()
             .push(domain.to_string());
         Ok(())
+    }
+
+    fn list_autostart(&self) -> Result<String, FakeError> {
+        let state = self.state.lock().unwrap().autostart.clone();
+        self.autostart.list(&state)
+    }
+
+    fn shell_ready(&self) {
+        self.autostart.shell_ready.fetch_add(1, Ordering::SeqCst);
     }
 
     fn list_profiles(&self) -> String {
@@ -556,6 +590,10 @@ pub struct Rig {
     pub profiles: FakeProfiles,
     /// The open windows and the scripted picks.
     pub windows: FakeWindows,
+    /// The found startup entries and the `ShellReady` count.
+    pub autostart: FakeAutostart,
+    /// What the file sync found, for `Explain`.
+    pub files: Arc<Mutex<FileReport>>,
 }
 
 /// uqd's revert timer firing: the pending display change is dropped and `MonitorsChanged` sent.
@@ -582,6 +620,8 @@ pub async fn rig(state: State) -> Rig {
     let displays = Displays::default();
     let profiles = FakeProfiles::default();
     let windows = FakeWindows::default();
+    let autostart = FakeAutostart::default();
+    let files = Arc::new(Mutex::new(FileReport::default()));
     let uqd = connect(&bus).await;
     uqd.object_server()
         .at(
@@ -594,6 +634,8 @@ pub async fn rig(state: State) -> Rig {
                 displays: displays.clone(),
                 profiles: profiles.clone(),
                 windows: windows.clone(),
+                autostart: autostart.clone(),
+                files: files.clone(),
             },
         )
         .await
@@ -611,5 +653,7 @@ pub async fn rig(state: State) -> Rig {
         displays,
         profiles,
         windows,
+        autostart,
+        files,
     }
 }
