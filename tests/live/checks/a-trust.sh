@@ -82,7 +82,7 @@ sa4() {
     e=$(newest)
     note "newest entry: $(jq -c '{origin, domain, summary}' <<<"$e")"
     expect_eq "origin" uqctl "$(jq -r .origin <<<"$e")"
-    "$UQCTL" history --limit 3 | grep -q uqctl || bad "uqctl history doesn't show the uqctl change"
+    grep -q uqctl <<<"$("$UQCTL" history --limit 3)" || bad "uqctl history doesn't show the uqctl change"
     out=$("$UQCTL" undo 2>&1) || bad "uqctl undo: $out"
     note "uqctl undo: $out"
     expect_eq "theme after uqctl undo" "$t0" "$(bus GetTheme)"
@@ -92,7 +92,7 @@ check SA5 "Restore points: restore brings every page back, and the automatic poi
 sa5() {
     local p g0 t0 l0 auto newest_p r
     p=$(bus SaveRestorePoint s "${LIVE_PREFIX} mine") || { bad "save: $p"; return; }
-    "$UQCTL" restore list | grep -q "$LIVE_PREFIX mine" || bad "uqctl restore list doesn't list the new point"
+    grep -q "$LIVE_PREFIX mine" <<<"$("$UQCTL" restore list)" || bad "uqctl restore list doesn't list the new point"
     g0=$(look_val gaps_in) t0=$(bus GetTheme) l0=$(section layouts | jq -c .)
     merge look '.gaps_in = 9' >/dev/null
     bus SetTheme sss forest dark settings >/dev/null
