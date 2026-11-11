@@ -569,6 +569,40 @@ static STARTUP_SETTINGS: [SearchEntry; 4] = [
     ),
 ];
 
+static POWER_SETTINGS: [SearchEntry; 5] = [
+    entry(
+        "power-mode",
+        "Power mode",
+        &[
+            "performance",
+            "power saver",
+            "balanced",
+            "profile",
+            "energy",
+        ],
+    ),
+    entry(
+        "battery",
+        "Battery",
+        &["charge", "health", "time left", "charging"],
+    ),
+    entry(
+        "lid-action",
+        "When the lid is closed",
+        &["laptop", "lid", "sleep", "suspend", "hibernate"],
+    ),
+    entry(
+        "lid-action-ac",
+        "When the lid is closed while plugged in",
+        &["laptop", "lid", "docked", "charger", "mains"],
+    ),
+    entry(
+        "power-key-action",
+        "When the power button is pressed",
+        &["power button", "shut down", "sleep", "key"],
+    ),
+];
+
 static USERS_SETTINGS: [SearchEntry; 2] = [
     entry(
         "user-accounts",
@@ -630,7 +664,7 @@ static LOGIN_SCREEN_SETTINGS: [SearchEntry; 6] = [
     ),
 ];
 
-static CORE_PAGES: [PageInfo; 13] = [
+static CORE_PAGES: [PageInfo; 14] = [
     PageInfo {
         id: "appearance",
         name: "Appearance",
@@ -729,6 +763,15 @@ static CORE_PAGES: [PageInfo; 13] = [
         qml: "pages/StartupPage.qml",
         settings: &STARTUP_SETTINGS,
         domains: &["autostart", "env"],
+    },
+    PageInfo {
+        id: "power",
+        name: "Power",
+        icon: "preferences-system-power-management",
+        category: Category::System,
+        qml: "pages/PowerPage.qml",
+        settings: &POWER_SETTINGS,
+        domains: &[],
     },
     PageInfo {
         id: "users",
@@ -1080,6 +1123,7 @@ mod tests {
                 "rules",
                 "history",
                 "startup",
+                "power",
                 "users",
                 "login-screen"
             ]
@@ -1269,8 +1313,8 @@ mod tests {
     fn system_pages_registered_after_startup() {
         let ids: Vec<_> = core_pages().iter().map(|p| p.id).collect();
         let at = ids.iter().position(|id| *id == "startup").unwrap();
-        assert_eq!(ids[at + 1..at + 3], ["users", "login-screen"]);
-        for id in ["users", "login-screen"] {
+        assert_eq!(ids[at + 1..at + 4], ["power", "users", "login-screen"]);
+        for id in ["power", "users", "login-screen"] {
             let page = find(id).unwrap();
             assert_eq!(page.category, Category::System, "{id}");
             assert!(page.domains.is_empty(), "{id} changes no uQ setting");

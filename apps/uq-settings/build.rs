@@ -51,6 +51,7 @@ fn main() {
         QmlFile::from("qml/pages/ShellPage.qml"),
         QmlFile::from("qml/pages/StartupPage.qml"),
         QmlFile::from("qml/pages/WallpaperPage.qml"),
+        QmlFile::from("qml/pages/PowerPage.qml"),
         QmlFile::from("qml/pages/UsersPage.qml"),
         QmlFile::from("qml/pages/LoginScreenPage.qml"),
     ]))
@@ -72,6 +73,7 @@ fn main() {
         "src/shell_model.rs",
         "src/startup_model.rs",
         "src/wallpaper_model.rs",
+        "src/power_model.rs",
         "src/users_model.rs",
         "src/login_screen_model.rs",
     ])
