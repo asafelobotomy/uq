@@ -272,6 +272,10 @@ All notable changes to uQ are listed here. The format follows
   stay open and say why when an app can't be opened (they close once it has been), Spotlight
   says when search isn't working, and quick settings says why a theme, schedule or layout switch
   failed. Each failure is also logged.
+- **The Power page updates as the battery and power mode change.** It follows UPower and
+  power-profiles-daemon instead of reading everything again every 30 seconds, so the charge and
+  a mode changed elsewhere show at once. Only when the system bus can't be followed does it
+  fall back to reading again every minute.
 
 ## [0.2.1] - 2026-11-10
 

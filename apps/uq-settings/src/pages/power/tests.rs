@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use super::*;
 use crate::pages::fake_system::{FakeHelper, FakePower, SysRig};
 use crate::pages::runner::run;
@@ -173,4 +175,70 @@ async fn charging_and_actions_already_running() {
     assert_eq!(out.state["power"]["battery"]["time"], "Full in 45 min");
     assert_eq!(out.state["actions"]["pending"], false);
     assert!(h.read("etc/systemd/logind.conf.d/50-uq.conf").is_some());
+}
+
+/// Follow the page's changes as the model does; the first notice comes once it is subscribed.
+async fn watching(page: &Arc<PowerState>) -> (Arc<Notify>, tokio::task::JoinHandle<()>) {
+    let changed = Arc::new(Notify::new());
+    let watcher = {
+        let page = page.clone();
+        let changed = changed.clone();
+        tokio::spawn(async move { page.watch(changed).await })
+    };
+    tokio::time::timeout(Duration::from_secs(10), changed.notified())
+        .await
+        .expect("the page subscribes");
+    (changed, watcher)
+}
+
+#[tokio::test]
+async fn battery_and_mode_changes_are_followed_without_polling() {
+    let (_rig, p, _h, page) = setup(true, true, true).await;
+    // A poll this quick would show up below if the page polled while it has signals.
+    let page = Arc::new(page.with_poll(Duration::from_millis(50)));
+    let (changed, watcher) = watching(&page).await;
+    assert!(
+        tokio::time::timeout(Duration::from_millis(400), changed.notified())
+            .await
+            .is_err(),
+        "nothing changed, so nothing is read again"
+    );
+
+    p.set_percentage(42.0).await;
+    tokio::time::timeout(Duration::from_secs(10), changed.notified())
+        .await
+        .expect("UPower's change is noticed");
+    let out = run(&*page, Op::Refresh).await;
+    assert_eq!(out.state["power"]["battery"]["percentage"], 42.0);
+
+    p.set_profile("power-saver").await;
+    tokio::time::timeout(Duration::from_secs(10), changed.notified())
+        .await
+        .expect("power-profiles-daemon's change is noticed");
+    let out = run(&*page, Op::Refresh).await;
+    assert_eq!(out.state["profiles"]["active"], "power-saver");
+    watcher.abort();
+}
+
+#[tokio::test]
+async fn without_the_system_bus_the_page_polls() {
+    let page = Arc::new(
+        PowerState::with(
+            SystemBus::at("unix:path=/nonexistent/uq-settings-test-bus"),
+            PathBuf::from("/nonexistent"),
+        )
+        .with_poll(Duration::from_millis(50)),
+    );
+    let changed = Arc::new(Notify::new());
+    let watcher = {
+        let page = page.clone();
+        let changed = changed.clone();
+        tokio::spawn(async move { page.watch(changed).await })
+    };
+    for _ in 0..2 {
+        tokio::time::timeout(Duration::from_secs(10), changed.notified())
+            .await
+            .expect("the fallback poll reads again");
+    }
+    watcher.abort();
 }

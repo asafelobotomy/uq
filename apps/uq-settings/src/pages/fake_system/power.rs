@@ -188,6 +188,8 @@ pub struct FakePower {
     pub state: Shared<PowerState>,
     pub battery: Shared<FakeBattery>,
     pub deny: Deny,
+    upower: zbus::Connection,
+    ppd: Option<zbus::Connection>,
 }
 
 impl FakePower {
@@ -214,8 +216,10 @@ impl FakePower {
             capacity: 92.5,
         }));
         let deny = Deny::default();
+        let mut ppd = None;
         if with_ppd {
             let c = rig.own("org.freedesktop.UPower.PowerProfiles").await;
+            ppd = Some(c.clone());
             c.object_server()
                 .at(
                     "/org/freedesktop/UPower/PowerProfiles",
@@ -227,8 +231,8 @@ impl FakePower {
                 .await
                 .unwrap();
         }
-        let c = rig.own("org.freedesktop.UPower").await;
-        let os = c.object_server();
+        let upower = rig.own("org.freedesktop.UPower").await;
+        let os = upower.object_server();
         os.at(
             "/org/freedesktop/UPower",
             UPowerIface {
@@ -263,6 +267,39 @@ impl FakePower {
             state,
             battery: bat,
             deny,
+            upower,
+            ppd,
         }
+    }
+
+    /// The battery's charge changes, and UPower says so.
+    pub async fn set_percentage(&self, percentage: f64) {
+        self.battery.lock().unwrap().percentage = percentage;
+        let iface = self
+            .upower
+            .object_server()
+            .interface::<_, DeviceIface>("/org/freedesktop/UPower/devices/battery_BAT0")
+            .await
+            .unwrap();
+        let emitter = iface.signal_emitter();
+        iface.get().await.percentage_changed(emitter).await.unwrap();
+    }
+
+    /// The power mode changes behind the page (a key, another app), and the daemon says so.
+    pub async fn set_profile(&self, profile: &str) {
+        self.state.lock().unwrap().profile = profile.into();
+        let conn = self.ppd.as_ref().expect("power-profiles-daemon is running");
+        let iface = conn
+            .object_server()
+            .interface::<_, PpdIface>("/org/freedesktop/UPower/PowerProfiles")
+            .await
+            .unwrap();
+        let emitter = iface.signal_emitter();
+        iface
+            .get()
+            .await
+            .active_profile_changed(emitter)
+            .await
+            .unwrap();
     }
 }
