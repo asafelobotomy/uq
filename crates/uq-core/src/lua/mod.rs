@@ -104,6 +104,19 @@ pub fn emit_generated(
     settings: &Settings,
     startup: &StartupRender,
 ) -> String {
+    emit_generated_with_apps(theme, layouts, rules, &[], settings, startup)
+}
+
+/// [`emit_generated`] with window rules from apps (Phase 4 §3.3), rendered after the workspace
+/// rules and before the person's own window rules, so a rule of their own wins a conflict.
+pub fn emit_generated_with_apps(
+    theme: &Theme,
+    layouts: &BTreeMap<String, Layout>,
+    rules: &Rules,
+    app_rules: &[crate::rules::WindowRule],
+    settings: &Settings,
+    startup: &StartupRender,
+) -> String {
     let (c, ui) = (&theme.colors, &theme.ui);
     let (look, lo) = (&settings.look, &settings.layout_options);
     let mut out = String::new();
@@ -187,6 +200,7 @@ pub fn emit_generated(
     );
     emit_startup_env(&mut out, startup);
     out.push_str(&emit_workspace_rules(layouts, &rules.workspace));
+    out.push_str(&rules::emit_app_block(app_rules));
     out.push_str(&rules::emit_window_block(&rules.window));
     out.push_str(&rules::emit_layer_block(&rules.layer));
     out

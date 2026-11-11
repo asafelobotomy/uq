@@ -241,7 +241,8 @@ fn section_round_trip() {
             "rules",
             "env",
             "compat",
-            "autostart"
+            "autostart",
+            "integration_rules"
         ]
     );
     assert!(!renders_section("monitors") && renders_section("input"));

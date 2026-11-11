@@ -125,6 +125,9 @@ pub fn summarize(domain: &str, before: &Value, after: &Value, labels: Labels) ->
     if domain == "autostart" {
         return crate::autostart::summary(before, after);
     }
+    if domain == crate::integration::rules::DOMAIN {
+        return crate::integration::rules::summary(before, after);
+    }
     let (b, a) = (leaf_map(domain, before), leaf_map(domain, after));
     let keys: BTreeSet<&String> = b.keys().chain(a.keys()).collect();
     let changed: Vec<String> = keys
