@@ -98,7 +98,7 @@ sc5() {
     r1=$(cat "$WORK/pick1")
     note "first pick (${took} ms): $r1"
     note "second pick while the first was on: $r2"
-    [[ $r2 == *Conflict* || $r2 == *already* || $r2 == *"pick is"* ]] || bad "expected the second pick refused; observed $r2"
+    [[ $r2 == *"Already choosing a window"* ]] || bad "expected the second pick refused with 'Already choosing a window.'; observed $r2"
     if [ "$shell" = 0 ]; then
         expect_eq "pick status with no shell" no_shell "$(jq -r .status <<<"$r1" 2>/dev/null)"
         [ "$took" -le 3000 ] || bad "expected the no-shell answer within about 2 s; observed ${took} ms"
@@ -146,7 +146,11 @@ sc8() {
         wr=$(hc workspacerules -j | jq -c '[.[] | select(.workspaceString == "3")]')
         note "hyprctl workspacerules for 3: $wr"
         expect_eq "Hyprland's rules for workspace 3" 1 "$(jq length <<<"$wr")"
-        [[ $wr == *master* ]] || bad "expected the layout in the merged rule; observed $wr"
+        # hyprctl's JSON has no layout field, so the merge is read from the rule uQ rendered.
+        r=$(grep -F 'hl.workspace_rule({ workspace = "3"' "$CFG/hypr/uq/generated.lua")
+        note "rendered: $r"
+        [ "$(grep -cF 'hl.workspace_rule({ workspace = "3"' "$CFG/hypr/uq/generated.lua")" = 1 ] || bad "expected one rendered rule for workspace 3"
+        [[ $r == *'layout = "master"'* && $r == *'persistent = true'* ]] || bad "expected the layout merged into the rendered rule; observed $r"
         [[ $wr == *"\"persistent\":true"* ]] || bad "expected persistent in the merged rule; observed $wr"
         hc workspaces -j | jq -e 'any(.[]; .id == 3)' >/dev/null || bad "workspace 3 isn't kept while empty"
     fi
@@ -223,8 +227,8 @@ sc11() {
 
 check SC12 "Profiles turn rules on and off; a missing rule is left out with a notice" sc12
 sc12() {
-    local r id=${LIVE_PREFIX}-rules e
-    r=$(add_rule window "$(wrule r-ee60 "uqlive float" "{\"class\":\"^$CLS\$\"}" '{"float":true}')") || { bad "$r"; return; }
+    local r id=${LIVE_PREFIX}-rules e cls=uqlive-p
+    r=$(add_rule window "$(wrule r-ee60 "uqlive float" "{\"class\":\"^$cls\$\"}" '{"float":true}')") || { bad "$r"; return; }
     r=$(add_rule layer '{"id":"r-ee61","name":"uqlive panel","enabled":true,"match":{"namespace":"^uqlive$"},"effects":{"blur":true}}') || { bad "$r"; return; }
     r=$(bus SetProfile sb "$(printf 'format = 1\nid = "%s"\nname = "Rules"\n\n[rules]\n"r-ee60" = false\n"r-ee61" = true\n' "$id")" false) || { bad "SetProfile: $r"; return; }
     r=$(bus ApplyProfile s "$id") || { bad "ApplyProfile: $r"; return; }
@@ -232,9 +236,9 @@ sc12() {
     e=$(history_json 3 | jq -r '.[].summary' | grep -c 'Window rule “uqlive float” turned off')
     [ "$e" -ge 1 ] || bad "expected 'Window rule “uqlive float” turned off' in History; observed $(history_json 3 | jq -c '[.[].summary]')"
     if [ -n "${HAVE[hypr]:-}" ] && [ -n "${HAVE[foot]:-}" ]; then
-        open_win "$CLS" && sleep 0.5
-        tiled "$CLS" || bad "the window floats while the profile turns the rule off"
-        close_win "$CLS"
+        open_win "$cls" && sleep 0.5
+        tiled "$cls" || bad "the window floats while the profile turns the rule off"
+        close_win "$cls"
     fi
     merge rules '(.layer[] | select(.id == "r-ee61") | .enabled) = false' >/dev/null
     r=$(bus ProfileOff) || { bad "ProfileOff: $r"; return; }

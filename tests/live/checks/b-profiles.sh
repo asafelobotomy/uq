@@ -143,9 +143,10 @@ sb6() {
     if [ -n "${HAVE[hypr]:-}" ]; then
         user_lua_add 'hl.bind("SUPER + ALT + P", hl.dsp.exec_cmd("uqctl profile next"))' >/dev/null
         hc reload >/dev/null; sleep 1
-        r=$(hc binds -j 2>/dev/null | jq -c '[.[] | select((.arg // "") | test("uqctl profile next"))] | length')
-        note "binds running 'uqctl profile next': $r"
-        [ "${r:-0}" -ge 1 ] || bad "the SUPER+ALT+P bind from user.lua isn't loaded"
+        # SUPER is modmask 64 and ALT 8; a Lua dispatcher's arg isn't always printed, so match the key.
+        r=$(hc binds -j 2>/dev/null | jq -c '[.[] | select((.key | ascii_upcase) == "P" and .modmask == 72)]')
+        note "SUPER+ALT+P binds: $r"
+        [ "$(jq length <<<"${r:-[]}")" -ge 1 ] || bad "the SUPER+ALT+P bind from user.lua isn't loaded"
         user_lua_reset
     fi
 }
