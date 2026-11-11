@@ -39,4 +39,6 @@ CI. Tick each item. Before you start, note `user.lua`'s modification time:
 
 ## Results
 
-Not run yet.
+Not run yet. Tests that ran in the build container (no Qt, no VM): `uqtheme_corpus` (7 good fixtures, 29
+hostile files, a 65 537-byte file and a FIFO), `theme_cli` (two homes, the corpus through `uqctl`), and the
+page logic through the scratch crate. Items 1 to 12 above still need the real desktop or the VM.

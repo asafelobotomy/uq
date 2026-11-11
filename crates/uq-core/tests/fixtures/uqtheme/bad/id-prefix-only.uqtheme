@@ -1,0 +1,72 @@
+# an id that is only the prefix
+# A uQ theme. Import it on the Appearance page of uQ Settings, or with
+# `uqctl theme import <file>`.
+format = 1
+id = "user-"
+name = "Graphite"
+
+[dark.colors]
+bg = "#1f1f22"
+surface = "#2b2b2e"
+surface_alt = "#353538"
+overlay = "#464649"
+text = "#e4e4e7"
+text_muted = "#a9a9ac"
+accent = "#8ab4f8"
+accent_text = "#1f1f22"
+border = "#5a5a5d"
+success = "#81c995"
+warning = "#fdd663"
+error = "#f28b82"
+
+[dark.ui]
+radius = 10
+gap_in = 5
+gap_out = 12
+border_width = 2
+
+[dark.fonts]
+ui = "Inter"
+mono = "JetBrains Mono"
+size = 11
+
+[dark.icons]
+theme = "Papirus-Dark"
+cursor_theme = "Bibata-Modern-Classic"
+cursor_size = 24
+
+[dark.terminal]
+ansi = ["#1f1f22", "#f28b82", "#81c995", "#fdd663", "#8ab4f8", "#d7aefb", "#78d9ec", "#a9a9ac", "#464649", "#f5a8a1", "#a0d6b0", "#fee08a", "#a7c7fa", "#e1c2fc", "#9ae2f1", "#e4e4e7"]
+
+[light.colors]
+bg = "#f4f4f5"
+surface = "#e7e7e8"
+surface_alt = "#dcdcdd"
+overlay = "#c8c8c9"
+text = "#18181b"
+text_muted = "#5a5a5c"
+accent = "#2b5bb8"
+accent_text = "#f4f4f5"
+border = "#b2b2b4"
+success = "#1e7a3a"
+warning = "#8a6100"
+error = "#b3261e"
+
+[light.ui]
+radius = 10
+gap_in = 5
+gap_out = 12
+border_width = 2
+
+[light.fonts]
+ui = "Inter"
+mono = "JetBrains Mono"
+size = 11
+
+[light.icons]
+theme = "Papirus-Light"
+cursor_theme = "Bibata-Modern-Ice"
+cursor_size = 24
+
+[light.terminal]
+ansi = ["#18181b", "#b3261e", "#1e7a3a", "#8a6100", "#2b5bb8", "#7b3fb0", "#0b6f80", "#f4f4f5", "#c8c8c9", "#861c16", "#165c2c", "#684900", "#20448a", "#5c2f84", "#085360", "#18181b"]

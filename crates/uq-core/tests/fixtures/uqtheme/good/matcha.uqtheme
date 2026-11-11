@@ -1,0 +1,71 @@
+# A uQ theme. Import it on the Appearance page of uQ Settings, or with
+# `uqctl theme import <file>`.
+format = 1
+id = "matcha"
+name = "Matcha"
+
+[dark.colors]
+bg = "#1b2224"
+surface = "#262d2f"
+surface_alt = "#303738"
+overlay = "#414849"
+text = "#d8e0dc"
+text_muted = "#9fa7a5"
+accent = "#2eb398"
+accent_text = "#1b2224"
+border = "#545b5b"
+success = "#2eb398"
+warning = "#d9b866"
+error = "#e06c75"
+
+[dark.ui]
+radius = 10
+gap_in = 5
+gap_out = 12
+border_width = 2
+
+[dark.fonts]
+ui = "Inter"
+mono = "JetBrains Mono"
+size = 11
+
+[dark.icons]
+theme = "Papirus-Dark"
+cursor_theme = "Bibata-Modern-Classic"
+cursor_size = 24
+
+[dark.terminal]
+ansi = ["#1b2224", "#e06c75", "#2eb398", "#d9b866", "#5aa5c9", "#b48ead", "#56c2b6", "#9fa7a5", "#414849", "#e89198", "#62c6b2", "#e2ca8c", "#83bcd6", "#c7aac2", "#80d1c8", "#d8e0dc"]
+
+[light.colors]
+bg = "#f2f5f3"
+surface = "#e5e9e7"
+surface_alt = "#dbdfdd"
+overlay = "#c8ccca"
+text = "#1f2a27"
+text_muted = "#5e6764"
+accent = "#197c69"
+accent_text = "#f2f5f3"
+border = "#b3b8b6"
+success = "#1a7f6b"
+warning = "#8a6d12"
+error = "#b03a48"
+
+[light.ui]
+radius = 10
+gap_in = 5
+gap_out = 12
+border_width = 2
+
+[light.fonts]
+ui = "Inter"
+mono = "JetBrains Mono"
+size = 11
+
+[light.icons]
+theme = "Papirus-Light"
+cursor_theme = "Bibata-Modern-Ice"
+cursor_size = 24
+
+[light.terminal]
+ansi = ["#1f2a27", "#b03a48", "#1a7f6b", "#8a6d12", "#2b6c8f", "#7a4f8f", "#167a74", "#f2f5f3", "#c8ccca", "#842c36", "#145f50", "#68520e", "#20516b", "#5c3b6b", "#105c57", "#1f2a27"]
