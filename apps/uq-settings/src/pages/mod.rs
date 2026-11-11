@@ -1,5 +1,6 @@
 //! Page models: the Rust side of pages that need one.
 
+pub mod about;
 pub mod appearance;
 pub mod compat;
 pub mod displays;

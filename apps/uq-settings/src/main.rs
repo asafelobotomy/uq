@@ -13,6 +13,7 @@ use std::process::ExitCode;
 use clap::Parser;
 use cxx_qt_lib::{QQuickStyle, QString};
 
+mod about_model;
 mod app;
 mod appearance_model;
 mod compat_model;

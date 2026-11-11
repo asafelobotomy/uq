@@ -664,7 +664,31 @@ static LOGIN_SCREEN_SETTINGS: [SearchEntry; 6] = [
     ),
 ];
 
-static CORE_PAGES: [PageInfo; 14] = [
+static ABOUT_SETTINGS: [SearchEntry; 2] = [
+    entry(
+        "hostname",
+        "Computer name",
+        &["hostname", "device name", "network name", "rename"],
+    ),
+    entry(
+        "versions",
+        "System details and versions",
+        &[
+            "version",
+            "about",
+            "kernel",
+            "processor",
+            "cpu",
+            "memory",
+            "ram",
+            "graphics",
+            "gpu",
+            "hardware",
+        ],
+    ),
+];
+
+static CORE_PAGES: [PageInfo; 15] = [
     PageInfo {
         id: "appearance",
         name: "Appearance",
@@ -789,6 +813,15 @@ static CORE_PAGES: [PageInfo; 14] = [
         category: Category::System,
         qml: "pages/LoginScreenPage.qml",
         settings: &LOGIN_SCREEN_SETTINGS,
+        domains: &[],
+    },
+    PageInfo {
+        id: "about",
+        name: "About",
+        icon: "help-about",
+        category: Category::System,
+        qml: "pages/AboutPage.qml",
+        settings: &ABOUT_SETTINGS,
         domains: &[],
     },
 ];
@@ -1125,7 +1158,8 @@ mod tests {
                 "startup",
                 "power",
                 "users",
-                "login-screen"
+                "login-screen",
+                "about"
             ]
         );
         assert_eq!(v[0]["category"], "personal");
@@ -1314,7 +1348,8 @@ mod tests {
         let ids: Vec<_> = core_pages().iter().map(|p| p.id).collect();
         let at = ids.iter().position(|id| *id == "startup").unwrap();
         assert_eq!(ids[at + 1..at + 4], ["power", "users", "login-screen"]);
-        for id in ["power", "users", "login-screen"] {
+        assert_eq!(ids.last(), Some(&"about"), "About ends the System pages");
+        for id in ["power", "users", "login-screen", "about"] {
             let page = find(id).unwrap();
             assert_eq!(page.category, Category::System, "{id}");
             assert!(page.domains.is_empty(), "{id} changes no uQ setting");
