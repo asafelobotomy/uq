@@ -25,6 +25,7 @@ pkgbase = uq
 	depends = qqc2-desktop-style
 	depends = qt6-declarative
 	depends = kvantum
+	depends = polkit
 	optdepends = kitty: default terminal (SUPER+Return)
 	optdepends = papirus-icon-theme: icon theme used by every uQ theme
 	optdepends = bibata-cursor-theme: cursor theme used by every uQ theme
