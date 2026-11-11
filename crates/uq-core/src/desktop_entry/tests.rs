@@ -65,6 +65,7 @@ fn exec_argv_matches_parse_exec_cases() {
 #[test]
 fn split_command_keeps_percent() {
     assert_eq!(split_command("echo 100%").unwrap(), v(&["echo", "100%"]));
+    assert!(split_command("sh -c 'a b'").is_err());
 }
 
 const HOSTILE: [&str; 11] = [
@@ -110,6 +111,10 @@ fn clean_display_strips_controls_and_bidi() {
         "a b c d e"
     );
     assert_eq!(clean_display("abcdef", 3), "abc");
+    assert_eq!(
+        clean_display("a\u{2028}b\u{2029}c\u{200e}d\u{200f}e\u{61c}f", 50),
+        "a b c d e f"
+    );
 }
 
 #[test]
@@ -141,6 +146,8 @@ fn show(text: &str) -> bool {
 #[test]
 fn shows_in_rules() {
     assert!(show("Name=x\n"));
+    assert!(show("OnlyShowIn=\n"));
+    assert!(show("NotShowIn=\n"));
     assert!(!show("OnlyShowIn=GNOME;\n"));
     assert!(show("OnlyShowIn=Hyprland;\n"));
     assert!(!show("NotShowIn=uQ;\n"));
@@ -204,4 +211,17 @@ fn unit_id_matches_old_scope_names() {
     assert_eq!(unit_id("org.mozilla.firefox"), "org_mozilla_firefox");
     let long = "x".repeat(100);
     assert_eq!(unit_id(&format!("{long}/../a b")), "x".repeat(64));
+}
+
+#[test]
+fn written_exec_survives_set_key_and_read_entry() {
+    let argv = ["my app", "a\"b", "100%", "x\ty", "$HOME", "--x=%U"];
+    let mut tokens: Vec<Token> = argv.iter().map(|a| arg(a)).collect();
+    tokens.push(Token::Field('F'));
+    let text = "[Desktop Entry]\nName=A\nExec=old\n";
+    let out = set_key(text, "Desktop Entry", "Exec", &write_exec(&tokens));
+    let exec = read_entry(&out).exec.unwrap();
+    let t = exec_tokens(&exec).unwrap();
+    assert!(!t.lossy);
+    assert_eq!(t.tokens, tokens);
 }

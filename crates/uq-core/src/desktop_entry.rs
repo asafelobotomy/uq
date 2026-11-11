@@ -16,6 +16,8 @@ pub enum ExecError {
     Unknown(char),
     #[error("dangling % at end of Exec")]
     DanglingPercent,
+    #[error("single quotes are not supported; use double quotes")]
+    SingleQuote,
 }
 
 /// One argument of an `Exec` line: literal text, or a field code kept as such.
@@ -38,6 +40,7 @@ pub struct Tokens {
 pub struct FieldCtx<'a> {
     pub icon: Option<&'a str>,
     pub name: Option<&'a str>,
+    /// `%k`: the `.desktop` file's own location, not the entry's `Path=` working directory.
     pub path: Option<&'a str>,
 }
 
@@ -159,9 +162,14 @@ pub fn parse_exec(exec: &str) -> Result<Vec<String>, ExecError> {
     exec_argv(exec, &FieldCtx::default())
 }
 
-/// Split a user-typed command with the `Exec` quoting rules and `%` literal.
+/// Split a user-typed command with the `Exec` quoting rules and `%` literal. An unquoted `'` is
+/// an error: the format has no single quotes, so it would silently split the wrong way.
 pub fn split_command(cmd: &str) -> Result<Vec<String>, ExecError> {
-    Ok(lex(cmd, false)?
+    let lexed = lex(cmd, false)?;
+    if lexed.lossy {
+        return Err(ExecError::SingleQuote);
+    }
+    Ok(lexed
         .tokens
         .into_iter()
         .filter_map(|t| match t {
@@ -214,14 +222,17 @@ fn quote_arg(a: &str, percent: bool) -> String {
     out
 }
 
-/// The `Exec` value for these tokens, as it goes after `Exec=`: quoted, `%` doubled and the
+/// The `Exec` value for these tokens (a `Field` must be one of `fFuUick`), as it goes after `Exec=`: quoted, `%` doubled and the
 /// key-value escapes applied so it is always one line.
 pub fn write_exec(tokens: &[Token]) -> String {
     let line: Vec<String> = tokens
         .iter()
         .map(|t| match t {
             Token::Arg(a) => quote_arg(a, true),
-            Token::Field(c) => format!("%{c}"),
+            Token::Field(c) => {
+                debug_assert!("fFuUick".contains(*c), "not a field code: %{c}");
+                format!("%{c}")
+            }
         })
         .collect();
     escape_value(&line.join(" "))
@@ -240,7 +251,16 @@ pub fn quote_command(argv: &[String]) -> String {
 pub fn clean_display(s: &str, max: usize) -> String {
     s.chars()
         .map(|c| {
-            if c.is_control() || matches!(c, '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}') {
+            if c.is_control()
+                || matches!(c, '\u{202A}'..='\u{202E}'
+                        | '\u{2066}'..='\u{2069}'
+                        | '\u{2028}'
+                        | '\u{2029}'
+                        | '\u{200E}'
+                        | '\u{200F}'
+                        | '\u{061C}'
+                )
+            {
                 ' '
             } else {
                 c
@@ -371,8 +391,8 @@ pub fn read_entry(text: &str) -> Entry {
             "Terminal" => e.terminal = b,
             "X-TerminalArgExec" => e.terminal_arg = s(),
             "Hidden" => e.hidden = b,
-            "OnlyShowIn" => e.only_show_in = Some(split_list(v)),
-            "NotShowIn" => e.not_show_in = Some(split_list(v)),
+            "OnlyShowIn" => e.only_show_in = Some(split_list(v)).filter(|l| !l.is_empty()),
+            "NotShowIn" => e.not_show_in = Some(split_list(v)).filter(|l| !l.is_empty()),
             "DBusActivatable" => e.dbus_activatable = b,
             "Path" => e.path = s(),
             "StartupWMClass" => e.wm_class = s(),
