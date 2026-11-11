@@ -151,7 +151,7 @@ static WALLPAPER_SETTINGS: [SearchEntry; 5] = [
     entry(
         "wallpaper-fit",
         "Wallpaper fit",
-        &["fill", "stretch", "center", "tile", "scale"],
+        &["fill", "stretch", "center", "tile", "scale", "span"],
     ),
     entry(
         "wallpaper-slideshow",

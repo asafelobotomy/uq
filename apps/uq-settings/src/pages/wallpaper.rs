@@ -34,6 +34,13 @@ pub enum Op {
     ClearEntry { output: String },
 }
 
+/// What is wrong with putting `fit` on `output`, in plain words, or `None`. Only the All
+/// displays entry can span: the other screens each draw their own picture.
+pub fn span_refusal(output: &str, fit: Option<&Value>) -> Option<&'static str> {
+    (output != "*" && fit.and_then(Value::as_str) == Some("span"))
+        .then_some("Span works only for All displays")
+}
+
 pub struct WallpaperState {
     conn: zbus::Connection,
     /// Writes read-modify-write the section, so one at a time.
@@ -147,6 +154,12 @@ impl PageLogic for WallpaperState {
             Op::ClearEntry { output } => (output, None),
         };
         let bad = |what: &str| zbus::Error::Failure(what.to_string());
+        // Refuse before uqd does, in plain words.
+        if let Some((entry, _)) = &change
+            && let Some(why) = span_refusal(&output, entry.get("fit"))
+        {
+            return Err(bad(why));
+        }
         patch_section(&proxy, "wallpaper", |section| {
             let outputs = section
                 .entry("outputs")
@@ -168,6 +181,14 @@ impl PageLogic for WallpaperState {
                         return Err(bad("a wallpaper entry must be an object"));
                     };
                     fields.extend(changes.iter().map(|(k, v)| (k.clone(), v.clone())));
+                    // A display that had no entry copies "*", and a spanning "*" can't be
+                    // copied: its own picture is filled instead, unless the patch chose a fit.
+                    if output != "*"
+                        && !changes.contains_key("fit")
+                        && fields.get("fit").and_then(Value::as_str) == Some("span")
+                    {
+                        fields.insert("fit".into(), json!("fill"));
+                    }
                     outputs.insert(output, merged);
                 }
                 None => {
@@ -249,6 +270,51 @@ mod tests {
             output: output.into(),
             entry,
         }
+    }
+
+    #[test]
+    fn span_offered_only_for_all_displays() {
+        assert_eq!(span_refusal("*", Some(&json!("span"))), None);
+        assert_eq!(
+            span_refusal("DP-1", Some(&json!("span"))),
+            Some("Span works only for All displays")
+        );
+        assert_eq!(span_refusal("DP-1", Some(&json!("fill"))), None);
+        assert_eq!(span_refusal("DP-1", None), None);
+    }
+
+    #[tokio::test]
+    async fn span_is_refused_for_one_display_and_accepted_for_all() {
+        let r = rig(two_outputs()).await;
+        let patch = |output: &str, patch: Value| Op::PatchEntry {
+            output: output.into(),
+            patch,
+        };
+        let out = run(&r.state, patch("DP-1", json!({"fit": "span"}))).await;
+        assert_eq!(
+            out.error.as_deref(),
+            Some("Span works only for All displays")
+        );
+        assert_eq!(r.section()["outputs"]["DP-1"]["fit"], "tile");
+        let entry = json!({"fit": "span", "interval": 300});
+        let out = run(&r.state, set("DP-1", entry)).await;
+        assert_eq!(
+            out.error.as_deref(),
+            Some("Span works only for All displays")
+        );
+
+        let out = run(&r.state, patch("*", json!({"fit": "span"}))).await;
+        assert_eq!(out.error, None);
+        assert_eq!(r.section()["outputs"]["*"]["fit"], "span");
+        // A display that starts from a spanning "*" gets its own picture filled, not spanned.
+        let out = run(
+            &r.state,
+            patch("DP-9", json!({"image": "/usr/share/c.png"})),
+        )
+        .await;
+        assert_eq!(out.error, None);
+        assert_eq!(out.state["outputs"]["DP-9"]["fit"], "fill");
+        assert_eq!(out.state["outputs"]["DP-9"]["image"], "/usr/share/c.png");
     }
 
     #[test]

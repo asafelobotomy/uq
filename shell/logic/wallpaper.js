@@ -65,7 +65,7 @@ function nextReadable(i, n, errored) {
 }
 
 // Image.fillMode values: PreserveAspectCrop 2, PreserveAspectFit 1, Pad 6, Tile 3. (A pragma
-// library can't see the Image enum.)
+// library can't see the Image enum.) "span" crops too: the image is sized to the span box.
 function fillMode(fit) {
     switch (fit) {
     case "fit": return 1;
@@ -73,6 +73,71 @@ function fillMode(fit) {
     case "tile": return 3;
     default: return 2;
     }
+}
+
+// --- one wallpaper across every screen ("span", spec R24) ---
+
+// The names of the screens that draw one picture together: when the "*" entry's fit is "span",
+// every screen without an entry of its own; otherwise none.
+function spanNames(wallpaper, screens) {
+    var o = wallpaper && wallpaper.outputs;
+    var star = o && typeof o === "object" && Object.prototype.hasOwnProperty.call(o, "*") ? o["*"] : null;
+    var names = [];
+    if (!star || star.fit !== "span" || !screens)
+        return names;
+    for (var i = 0; i < screens.length; i++) {
+        var n = screens[i].name;
+        if (!(Object.prototype.hasOwnProperty.call(o, n) && o[n]))
+            names.push(n);
+    }
+    return names;
+}
+
+// The box the picture covers, in this screen's own coordinates: the bounding box of the spanning
+// screens (their logical x, y, width and height), moved by minus this screen's position. null
+// when this screen isn't one of them.
+function spanGeometry(screens, name, spanNames) {
+    if (!screens || !spanNames || spanNames.indexOf(name) < 0)
+        return null;
+    var mine = null, left = 0, top = 0, right = 0, bottom = 0, any = false;
+    for (var i = 0; i < screens.length; i++) {
+        var s = screens[i];
+        if (spanNames.indexOf(s.name) < 0)
+            continue;
+        if (s.name === name)
+            mine = s;
+        if (!any) {
+            left = s.x; top = s.y; right = s.x + s.width; bottom = s.y + s.height;
+            any = true;
+        } else {
+            left = Math.min(left, s.x);
+            top = Math.min(top, s.y);
+            right = Math.max(right, s.x + s.width);
+            bottom = Math.max(bottom, s.y + s.height);
+        }
+    }
+    if (!mine)
+        return null;
+    return { x: left - mine.x, y: top - mine.y, width: right - left, height: bottom - top };
+}
+
+// The slide every spanning screen shows at `nowMs`: floor(now / interval) mod n, moved forward
+// past slides that failed to load (`errored` is keyed by index). -1 when there are no slides or
+// none is readable.
+function clockIndex(nowMs, intervalS, n, errored) {
+    if (!(n > 0) || !(intervalS > 0))
+        return -1;
+    var i = Math.floor(nowMs / (intervalS * 1000)) % n;
+    if (!(errored && errored[i]))
+        return i;
+    var j = nextReadable(i, n, errored);
+    return j === i && errored && errored[j] ? -1 : j;
+}
+
+// Milliseconds from `nowMs` to the next interval boundary (at least 1).
+function msToBoundary(nowMs, intervalS) {
+    var step = intervalS * 1000;
+    return Math.max(1, step - (nowMs % step));
 }
 
 function fallbackColor(entry, themeBg) {

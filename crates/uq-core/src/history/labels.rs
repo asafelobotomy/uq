@@ -220,6 +220,7 @@ mod tests {
             e.folder = Some(PathBuf::from("/walls"));
             e.color = Some("#112233".into());
         }
+        s.wallpaper.outputs.get_mut("*").unwrap().fit = crate::settings::Fit::Span;
         let lo = &mut s.layout_options;
         lo.default = Some(Layout::Master);
         lo.dwindle.preserve_split = Some(true);

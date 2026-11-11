@@ -320,3 +320,62 @@ fn unknown_look_field_rejected() {
     assert_eq!(errors.len(), 1, "{errors:?}");
     assert_eq!((fixed.look, fixed.pinned), (Look::default(), bad.pinned));
 }
+
+#[test]
+fn span_only_on_all_displays() {
+    let mut s = Settings::default();
+    s.set_section(
+        "wallpaper",
+        json!({"outputs": {"*": {"image": "/a.png", "fit": "span"}}}),
+    )
+    .unwrap();
+    let e = s
+        .set_section(
+            "wallpaper",
+            json!({"outputs": {"*": {"fit": "span"}, "DP-1": {"fit": "span"}}}),
+        )
+        .unwrap_err()
+        .to_string();
+    assert!(e.contains("Span works only for All displays"), "{e}");
+    assert!(e.contains("wallpaper.outputs.DP-1.fit"), "{e}");
+    // The refused write left the stored section alone.
+    assert_eq!(s.wallpaper.outputs.len(), 1);
+    // A made-up fit is still refused, and the message names span.
+    let e = s
+        .set_section("wallpaper", json!({"outputs": {"*": {"fit": "wide"}}}))
+        .unwrap_err()
+        .to_string();
+    assert!(e.contains("span"), "{e}");
+}
+
+#[test]
+fn span_round_trips() {
+    let mut s = Settings::default();
+    s.set_section(
+        "wallpaper",
+        json!({"outputs": {"*": {"image": "/a.png", "fit": "span"}}}),
+    )
+    .unwrap();
+    assert_eq!(s.wallpaper.outputs["*"].fit, crate::settings::Fit::Span);
+    let w = s.section("wallpaper").unwrap();
+    assert_eq!(w["outputs"]["*"]["fit"], "span");
+    let mut t = Settings::default();
+    t.set_section("wallpaper", w).unwrap();
+    assert_eq!(t, s);
+}
+
+#[test]
+fn older_values_still_load() {
+    use crate::settings::Fit;
+    for (text, want) in [
+        ("span", Fit::Span),
+        ("tile", Fit::Tile),
+        ("fit", Fit::Fit),
+        ("center", Fit::Center),
+        ("fill", Fit::Fill),
+        ("from-a-newer-uqd", Fit::Fill),
+    ] {
+        let fit: Fit = serde_json::from_value(json!(text)).unwrap();
+        assert_eq!(fit, want, "{text}");
+    }
+}

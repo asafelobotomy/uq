@@ -32,12 +32,32 @@ Item {
             cf.target = "";
             cf.clearOnFail = true;
             cf.reduceMotion = false;
+            cf.span = null;
         }
 
         function test_space_and_non_ascii_path_shows() {
             var url = u("odd name #1 é.png");
             cf.target = url;
             tryVerify(function () { return showsNow(url); });
+        }
+
+        function test_span_image_offset() {
+            // This screen is the right one of two: the image covers the whole box, which starts
+            // 1920 px to the left of this item, and the item clips it.
+            cf.span = { x: -1920, y: 0, width: 4480, height: 1440 };
+            var url = u("red.png");
+            cf.target = url;
+            tryVerify(function () { return showsNow(url); });
+            compare(cf.shown.x, -1920);
+            compare(cf.shown.y, 0);
+            compare(cf.shown.width, 4480);
+            compare(cf.shown.height, 1440);
+            verify(cf.clip);
+            // Without a span the image fills the item again.
+            cf.span = null;
+            compare(cf.shown.x, 0);
+            compare(cf.shown.width, cf.width);
+            compare(cf.shown.height, cf.height);
         }
 
         function test_a_b_a_shows_a_again() {

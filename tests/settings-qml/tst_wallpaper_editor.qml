@@ -61,4 +61,20 @@ TestCase {
         ed.applyColor();
         compare(got[1].color, null);
     }
+
+    function test_span_choice_only_for_all_displays() {
+        const all = createTemporaryObject(comp, tc, { output: "*", entry: { image: "/a.png", fit: "span" } });
+        compare(all.fitField.model.length, 5);
+        compare(all.fitField.model[4], "Span across displays");
+        tryCompare(all.fitField, "currentIndex", 4);
+        const one = createTemporaryObject(comp, tc, { output: "DP-1", entry: { image: "/a.png", fit: "tile" } });
+        compare(one.fitField.model.length, 4);
+        compare(one.fitField.model.indexOf("Span across displays"), -1);
+        // A display copying a spanning All displays entry shows a plain fit, never span.
+        one.entry = { image: "/a.png", fit: "span" };
+        tryCompare(one.fitField, "currentIndex", 0);
+        // Switching the editor between displays changes the choices.
+        one.output = "*";
+        compare(one.fitField.model.length, 5);
+    }
 }
