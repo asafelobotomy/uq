@@ -230,8 +230,9 @@ d11() {
     tok=$(apply "{\"outputs\":{\"$D1_OUT\":{\"scale\":2}}}")
     is_token "$tok" || { bad "apply: $tok"; return; }
     sleep 3
-    r=$(uqbus SetSetting sss look.gaps_out 17 settings)
+    r=$(uqbus SetSection sss look "$(jq -c '.gaps_out = 17' <<<"$look")" settings)
     note "gaps_out 17 during the window: ${r:-ok}"
+    [ -z "$r" ] || bad "the Look change was refused: $r"
     sleep 2
     scale_is "$D1_OUT" 2 ||
         bad "expected the displays to stay on the candidate (scale 2) after the Look change; observed $(live)"

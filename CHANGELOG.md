@@ -111,6 +111,11 @@ All notable changes to uQ are listed here. The format follows
   `generated.lua` (restart `uqd` or change any setting). `hl.animation` calls in `user.lua`
   still win.
 
+### Fixed
+
+- **Restore points saved in the same second list newest first.** They used to sort by a
+  random suffix, so "the newest point" could be an older one.
+
 ## [0.2.1] - 2026-11-10
 
 ### Fixed
