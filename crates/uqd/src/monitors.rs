@@ -97,8 +97,10 @@ impl Desktop {
     ) -> Result<(String, Instant), DesktopError> {
         let value: serde_json::Value = serde_json::from_str(json)
             .map_err(|e| DesktopError::InvalidSetting(format!("value is not JSON: {e}")))?;
-        let mut candidate = Monitors::from_section(&value)
+        // Only the layout comes from `json`; every other stored key stays (R7).
+        let parsed = Monitors::from_section(&value)
             .map_err(|e| DesktopError::InvalidSetting(e.to_string()))?;
+        let mut candidate = self.state.settings.monitors.with_layout(parsed.outputs);
         let live = match self.comp.monitors().await {
             Ok(j) => parse_live(&j),
             Err(CompositorError::NotRunning) => {
@@ -184,6 +186,7 @@ impl Desktop {
         self.pending = None;
         let _ = std::fs::remove_file(self.marker_path());
         let _ = self.events.send(Event::MonitorsChanged);
+        self.after_window().await;
         Ok(())
     }
 
@@ -222,7 +225,12 @@ impl Desktop {
         }
         let _ = std::fs::remove_file(self.marker_path());
         let _ = self.events.send(Event::MonitorsChanged);
+        self.after_window().await;
     }
+
+    /// The change window just closed (kept, reverted or expired). Runs a screen change that
+    /// was held meanwhile (R9); Task 8 gives this its body.
+    pub(crate) async fn after_window(&mut self) {}
 
     /// After anything reloads Hyprland during a window, apply the candidate again, or the
     /// reload would quietly revert it early.
@@ -256,8 +264,8 @@ impl Desktop {
         Ok(())
     }
 
-    /// `{live, stored, pending}` for the Displays page. `pending` is `null` or
-    /// `{token, seconds_left}`; `live` is empty when Hyprland is down.
+    /// `{live, stored, pending, roles, arrangement}` for the Displays page and the shell.
+    /// `pending` is `null` or `{token, seconds_left}`; `live` is empty when Hyprland is down.
     pub async fn list_outputs(&self, now: Instant) -> String {
         let live = self
             .comp
@@ -265,18 +273,14 @@ impl Desktop {
             .await
             .map(|j| parse_live(&j))
             .unwrap_or_default();
-        let pending = self.pending.as_ref().map(|p| {
+        let mut out = crate::outputs::outputs_json(&self.state, &live, None);
+        out["pending"] = self.pending.as_ref().map_or(serde_json::Value::Null, |p| {
             serde_json::json!({
                 "token": p.token,
                 "seconds_left": p.deadline.saturating_duration_since(now).as_secs(),
             })
         });
-        serde_json::json!({
-            "live": live,
-            "stored": self.state.settings.monitors,
-            "pending": pending,
-        })
-        .to_string()
+        out.to_string()
     }
 }
 

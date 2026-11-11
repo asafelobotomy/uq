@@ -945,7 +945,14 @@ async fn input_section_round_trip_over_dbus() {
     assert_eq!(devices["keyboards"][0]["name"], "kb");
 
     let err = proxy
-        .call::<_, _, ()>("SetSection", &("monitors", r#"{"outputs":{}}"#, "settings"))
+        .call::<_, _, ()>(
+            "SetSection",
+            &(
+                "monitors",
+                r#"{"outputs":{"DP-1":{"scale":1.5}}}"#,
+                "settings",
+            ),
+        )
         .await
         .unwrap_err();
     assert!(err.to_string().contains("InvalidSetting"), "{err}");

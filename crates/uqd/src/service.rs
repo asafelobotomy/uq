@@ -177,6 +177,8 @@ fn domain_label(domain: &str) -> &'static str {
         "layouts" => "Layouts",
         "rules" => "Window rules",
         "keybinds" => "Keyboard shortcuts",
+        "monitors" => "Displays",
+        "input" => "Input",
         "env" => "The list of environment variables",
         "compat" => "Apps and scaling",
         "autostart" => "The list of startup apps",
@@ -795,11 +797,40 @@ impl Desktop {
                 json!({ "source": source, "live": live, "stored": stored, "detail": detail }),
             );
         }
+        if domain == "input" {
+            let text = user_lua.get_or_insert_with(|| self.read_user_lua());
+            out.insert(
+                "gestures".into(),
+                self.explain_gestures(&section, text.as_deref()),
+            );
+        }
         let out = Value::Object(out);
         Ok(match domain {
             "compat" => self.explain_startup(domain, out),
             _ => out,
         })
+    }
+
+    /// The `gestures` row of `explain("input")` (R22): a gesture in `user.lua` is the one that
+    /// can make Hyprland refuse uQ's own, so it comes first. Hyprland can't list its gestures,
+    /// so there is no `runtime` source.
+    fn explain_gestures(
+        &self,
+        section: &serde_json::Value,
+        user_lua: Option<&str>,
+    ) -> serde_json::Value {
+        use serde_json::json;
+        let stored = section.get("gestures").cloned().unwrap_or_default();
+        let line = user_lua.and_then(provenance::find_gesture_in_user_lua);
+        let (source, detail) = match line {
+            Some(line) => (
+                "user_lua",
+                json!({ "line": line, "path": self.paths.user_lua.to_string_lossy() }),
+            ),
+            None if stored.is_null() => ("default", serde_json::Value::Null),
+            None => ("uq", serde_json::Value::Null),
+        };
+        json!({ "source": source, "live": null, "stored": stored, "detail": detail })
     }
 
     /// The first [`USER_LUA_SCAN_LIMIT`] bytes of `user.lua`, decoded lossily; `None` if unreadable.
@@ -2156,6 +2187,57 @@ mod tests {
             row["detail"]["path"],
             r.desktop.paths().user_lua.to_string_lossy().as_ref()
         );
+    }
+
+    #[tokio::test]
+    async fn explain_input_gestures_row() {
+        let mut r = rig();
+        let line7 = "-- a\n-- b\n-- c\n-- d\n-- e\n-- f\nhl.gesture({ fingers = 3 })\n";
+        user_lua(&r, line7);
+        let v = r.desktop.explain("input").await.unwrap();
+        let row = &v["gestures"];
+        assert_eq!(row["source"], "user_lua", "{v}");
+        assert_eq!(row["detail"]["line"], 7);
+        assert_eq!(
+            row["detail"]["path"],
+            r.desktop.paths().user_lua.to_string_lossy().as_ref()
+        );
+        // In a comment it doesn't count: uQ's own default.
+        user_lua(&r, "-- hl.gesture({ fingers = 3 })\n");
+        let v = r.desktop.explain("input").await.unwrap();
+        assert_eq!(v["gestures"]["source"], "default", "{v}");
+        assert!(v["gestures"]["stored"].is_null());
+        // A stored list is uQ's.
+        r.desktop
+            .set_section(
+                "input",
+                r#"{"gestures":[{"fingers":3,"direction":"horizontal","action":"workspace","enabled":true}]}"#,
+                Origin::Settings,
+            )
+            .await
+            .unwrap();
+        let v = r.desktop.explain("input").await.unwrap();
+        assert_eq!(v["gestures"]["source"], "uq", "{v}");
+        assert_eq!(v["gestures"]["stored"].as_array().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn explain_input_swipe_rows() {
+        let mut r = rig();
+        r.desktop
+            .set_section("input", r#"{"swipe":{"distance":400}}"#, Origin::Settings)
+            .await
+            .unwrap();
+        r.comp
+            .set_option("gestures:workspace_swipe_distance", serde_json::json!(400));
+        let v = r.desktop.explain("input").await.unwrap();
+        assert_eq!(v["swipe.distance"]["source"], "uq", "{v}");
+        // Something else changed it at runtime.
+        r.comp
+            .set_option("gestures:workspace_swipe_distance", serde_json::json!(250));
+        let v = r.desktop.explain("input").await.unwrap();
+        assert_eq!(v["swipe.distance"]["source"], "runtime", "{v}");
+        assert_eq!(v["swipe.distance"]["live"], 250);
     }
 
     #[tokio::test]

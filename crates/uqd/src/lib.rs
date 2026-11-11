@@ -8,6 +8,7 @@ pub mod hypr;
 pub mod hypr_events;
 mod keybinds;
 mod monitors;
+mod outputs;
 pub mod pick;
 pub mod power;
 mod profiles;

@@ -19,8 +19,11 @@ impl Desktop {
         serde_json::to_string(&v).map_err(|e| DesktopError::Io(e.to_string()))
     }
 
-    /// Replace a whole section: parse and validate, then `commit_section`. `monitors` is
-    /// refused; displays change only through the apply/confirm path.
+    /// Replace a whole section: parse and validate, then `commit_section`. `monitors` takes
+    /// everything but the layout (R7): a changed `outputs` is refused, because displays change
+    /// only through the apply/confirm path; the main display and the planner re-render and
+    /// reload through `write_monitors`, and every `monitors` write waits for a pending display
+    /// change (F6).
     pub async fn set_section(
         &mut self,
         domain: &str,
@@ -29,12 +32,30 @@ impl Desktop {
     ) -> Result<(), DesktopError> {
         let value: serde_json::Value = serde_json::from_str(json)
             .map_err(|e| DesktopError::InvalidSetting(format!("value is not JSON: {e}")))?;
-        if domain == "monitors" {
-            return Err(DesktopError::InvalidSetting(
-                "displays change through ApplyMonitors".into(),
-            ));
-        }
         let mut next = self.state.clone();
+        if domain == "monitors" {
+            if self.pending.is_some() {
+                return Err(DesktopError::InvalidSetting(
+                    "keep or revert the display change first".into(),
+                ));
+            }
+            next.set_section(domain, value)
+                .map_err(|e| DesktopError::InvalidSetting(e.to_string()))?;
+            let (old, new) = (&self.state.settings.monitors, &next.settings.monitors);
+            if !new.layout_eq(old) {
+                return Err(DesktopError::InvalidSetting(
+                    "displays change through ApplyMonitors".into(),
+                ));
+            }
+            if new.primary != old.primary || new.workspaces != old.workspaces {
+                // These change the rendered config, and `commit_section` never reloads.
+                self.write_monitors(next, origin).await?;
+            } else {
+                self.commit_section(domain, next, origin).await?;
+            }
+            let _ = self.events.send(Event::MonitorsChanged);
+            return Ok(());
+        }
         next.set_section(domain, value)
             .map_err(|e| DesktopError::InvalidSetting(e.to_string()))?;
         if domain == "compat" {
@@ -571,7 +592,11 @@ mod tests {
         drain(&mut r.events);
         let res = r
             .desktop
-            .set_section("monitors", r#"{"outputs":{}}"#, Origin::Settings)
+            .set_section(
+                "monitors",
+                r#"{"outputs":{"DP-1":{"scale":1.5}}}"#,
+                Origin::Settings,
+            )
             .await;
         assert_eq!(
             res,
@@ -619,7 +644,11 @@ mod tests {
         );
         assert!(
             r.desktop
-                .set_section("monitors", "{}", Origin::Settings)
+                .set_section(
+                    "monitors",
+                    r#"{"outputs":{"DP-1":{"scale":1.5}}}"#,
+                    Origin::Settings,
+                )
                 .await
                 .is_err()
         );
