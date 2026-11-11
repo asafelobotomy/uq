@@ -225,3 +225,18 @@ fn written_exec_survives_set_key_and_read_entry() {
     assert!(!t.lossy);
     assert_eq!(t.tokens, tokens);
 }
+
+#[test]
+fn get_key_reads_one_group() {
+    let text = "[Desktop Entry]\nExec=a\n# Exec=c\nExec=b\\sx\n\n[Desktop Action x]\nExec=d\n";
+    assert_eq!(
+        get_key(text, "Desktop Entry", "Exec").as_deref(),
+        Some("b x")
+    );
+    assert_eq!(
+        get_key(text, "Desktop Action x", "Exec").as_deref(),
+        Some("d")
+    );
+    assert_eq!(get_key(text, "Desktop Action y", "Exec"), None);
+    assert_eq!(get_key(text, "Desktop Entry", "Name"), None);
+}

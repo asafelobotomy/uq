@@ -1,6 +1,7 @@
 //! uqd's persisted desktop state (`~/.local/state/uq/state.toml`).
 
 use crate::atomic::atomic_write;
+use crate::compat::Compat;
 use crate::env::Env;
 use crate::lua::Layout;
 use crate::rules::Rules;
@@ -27,6 +28,9 @@ pub struct State {
     /// Environment variables for the session; each entry loads on its own.
     #[serde(default)]
     pub env: Env,
+    /// Apps and scaling: the switches and the per-app fixes; each fix loads on its own.
+    #[serde(default)]
+    pub compat: Compat,
     /// The scheduled transition uqd last applied; a manual change holds until a newer one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub schedule_mark: Option<chrono::DateTime<chrono::Utc>>,
@@ -70,6 +74,7 @@ impl Default for State {
             layouts: BTreeMap::new(),
             rules: Rules::default(),
             env: Env::default(),
+            compat: Compat::default(),
             schedule_mark: None,
             settings: Settings::default(),
             launch_counts: BTreeMap::new(),
@@ -128,6 +133,7 @@ impl State {
         state.layouts = crate::settings::repair_rules(std::mem::take(&mut state.layouts));
         state.rules = std::mem::take(&mut state.rules).repaired();
         state.env = std::mem::take(&mut state.env).repaired();
+        state.compat = std::mem::take(&mut state.compat).repaired();
         Ok(state)
     }
 
@@ -162,6 +168,9 @@ impl State {
         if domain == "env" {
             return Ok(self.env.section());
         }
+        if domain == "compat" {
+            return Ok(self.compat.section());
+        }
         if domain != "layouts" {
             return self.settings.section(domain);
         }
@@ -185,6 +194,10 @@ impl State {
         }
         if domain == "env" {
             self.env = Env::from_section(&value)?;
+            return Ok(());
+        }
+        if domain == "compat" {
+            self.compat = Compat::from_section(&value)?;
             return Ok(());
         }
         if domain != "layouts" {
@@ -321,6 +334,14 @@ mod tests {
                     name: "GDK_BACKEND".into(),
                     value: "x11".into(),
                 }],
+            },
+            compat: Compat {
+                sharp_x11: true,
+                apps: vec![crate::compat::AppFix {
+                    scale: Some(1.5),
+                    ..crate::compat::AppFix::new("code.desktop")
+                }],
+                ..Compat::default()
             },
             schedule_mark: None,
             settings: Settings::default(),

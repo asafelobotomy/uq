@@ -271,6 +271,15 @@ pub static OPTIONS: &[OptionRow] = &[
         "Icon theme",
         "icon-theme",
     ),
+    // `xwayland:force_zero_scaling`: ConfigValues.cpp line 549 at v0.56.2, line 653 at v0.57.0
+    // (see `crate::compat::hypr`).
+    hypr(
+        "compat.sharp_x11",
+        "sharp-x11",
+        "Sharp X11 apps",
+        crate::compat::hypr::XWAYLAND_ZERO_SCALING,
+        Dflt,
+    ),
 ];
 
 /// The rows of one section, in [`OPTIONS`] order.
@@ -322,6 +331,8 @@ pub fn expected(row: &OptionRow, state: &State, theme: &Theme) -> Option<Value> 
         "appearance.cursor_theme" => Some(Value::from(t.icons.cursor_theme.clone())),
         "appearance.cursor_size" => num(t.icons.cursor_size),
         "appearance.icon_theme" => Some(Value::from(t.icons.theme.clone())),
+        // Off renders nothing, so Hyprland's own default is all there is to read back (F6).
+        "compat.sharp_x11" => state.compat.sharp_x11.then_some(Value::Bool(true)),
         _ => None,
     }
 }
@@ -597,6 +608,8 @@ mod tests {
                 "cursor_size": 24, "icon_theme": "D"}),
         )
         .unwrap();
+        st.set_section("compat", json!({"sharp_x11": true}))
+            .unwrap();
         let mut keys = std::collections::HashSet::new();
         for row in OPTIONS {
             assert!(keys.insert(row.key), "duplicate {}", row.key);
@@ -685,5 +698,30 @@ mod tests {
             expected(row("layouts.dwindle.force_split"), &st, &theme),
             Some(json!(2))
         );
+    }
+
+    #[test]
+    fn compat_sharp_x11_row_expected() {
+        let theme = Theme::from_toml(
+            crate::theme::tests::FIXTURE,
+            "fixture",
+            crate::theme::Variant::Dark,
+        )
+        .unwrap();
+        let row = OPTIONS
+            .iter()
+            .find(|r| r.key == "compat.sharp_x11")
+            .expect("the compat.sharp_x11 row");
+        assert_eq!(row.setting_id, "sharp-x11");
+        assert_eq!(row.label, "Sharp X11 apps");
+        assert_eq!(row.hypr, Some(crate::compat::hypr::XWAYLAND_ZERO_SCALING));
+        assert_eq!(row.null_source, NullSource::Default);
+        let mut st = State::default();
+        // Off renders nothing, so there is nothing to read back (F6).
+        assert_eq!(expected(row, &st, &theme), None);
+        st.set_section("compat", json!({"sharp_x11": true}))
+            .unwrap();
+        assert_eq!(expected(row, &st, &theme), Some(json!(true)));
+        assert_eq!(label_for("compat", "sharp_x11"), Some("Sharp X11 apps"));
     }
 }

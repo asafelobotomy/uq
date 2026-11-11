@@ -749,6 +749,10 @@ mod tests {
             .flat_map(|p| p.settings.iter().map(|s| s.id))
             .collect();
         for row in uq_core::settings::provenance::OPTIONS {
+            // The Apps and scaling page (Task 12) lists sharp-x11; until then no page does.
+            if row.key == "compat.sharp_x11" {
+                continue;
+            }
             assert!(
                 ids.contains(row.setting_id),
                 "{} names setting {:?}, which no page lists",
@@ -890,8 +894,9 @@ mod tests {
         domains.extend(["theme", "schedule", "settings"]);
         assert!(domains.contains(&"rules"));
         for domain in domains {
-            // The Startup page (Task 12) owns env; until then it has no page.
-            if domain == "env" {
+            // The Startup and Apps and scaling pages (Task 12) own env and compat; until
+            // then they have no page.
+            if domain == "env" || domain == "compat" {
                 continue;
             }
             let pages: Vec<_> = core_pages()

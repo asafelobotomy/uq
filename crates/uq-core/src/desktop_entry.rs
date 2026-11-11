@@ -271,7 +271,7 @@ pub fn clean_display(s: &str, max: usize) -> String {
 }
 
 /// Apply the key-value escapes of the desktop-entry format so a value is one line.
-fn escape_value(v: &str) -> String {
+pub fn escape_value(v: &str) -> String {
     let mut out = String::with_capacity(v.len());
     for c in v.chars() {
         match c {
@@ -531,6 +531,28 @@ pub fn set_key(text: &str, group: &str, key: &str, value: &str) -> String {
     }
     out.push_str(&format!("[{group}]\n{new_line}\n"));
     out
+}
+
+/// One key's value in a group, unescaped; the last occurrence wins, as in [`read_entry`].
+pub fn get_key(text: &str, group: &str, key: &str) -> Option<String> {
+    let mut in_group = false;
+    let mut found = None;
+    for line in text.lines() {
+        if let Some(g) = group_of(line) {
+            in_group = g == group;
+            continue;
+        }
+        let line = line.trim();
+        if !in_group || line.starts_with('#') {
+            continue;
+        }
+        if let Some((k, v)) = line.split_once('=')
+            && k.trim() == key
+        {
+            found = Some(v.trim());
+        }
+    }
+    found.map(unescape_value)
 }
 
 /// `Desktop Entry` and each `Desktop Action *` group that has an `Exec` key, in file order.

@@ -279,7 +279,7 @@ fn vars_of(v: &Value) -> Vec<(&str, &str)> {
         .collect()
 }
 
-fn shown(name: &str) -> String {
+pub(crate) fn shown(name: &str) -> String {
     if name.chars().count() > MAX_SHOWN_NAME {
         let head: String = name.chars().take(MAX_SHOWN_NAME).collect();
         format!("{head}…")

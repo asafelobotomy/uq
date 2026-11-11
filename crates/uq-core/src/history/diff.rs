@@ -118,6 +118,9 @@ pub fn summarize(domain: &str, before: &Value, after: &Value, labels: Labels) ->
     if domain == "env" {
         return crate::env::summary(before, after);
     }
+    if domain == "compat" {
+        return crate::compat::summary(before, after);
+    }
     let (b, a) = (leaf_map(domain, before), leaf_map(domain, after));
     let keys: BTreeSet<&String> = b.keys().chain(a.keys()).collect();
     let changed: Vec<String> = keys
@@ -403,6 +406,83 @@ mod tests {
         for (x, y) in [(&a, &b), (&b, &a), (&a, &c), (&env_json(&[]), &a)] {
             let s = summarize("env", x, y, &|_, _| None);
             assert!(!s.contains(['{', '[']) && !s.contains("env."), "{s}");
+        }
+    }
+
+    fn compat_json(sharp: bool, apps: Value) -> Value {
+        json!({"sharp_x11": sharp, "electron_wayland": false, "chromium_wayland": false,
+            "qt_wayland": false, "steam_scale": false, "apps": apps})
+    }
+
+    fn app(id: &str, platform: &str) -> Value {
+        json!({"id": id, "platform": platform, "scale": null, "env": [], "args": [],
+            "elsewhere": false})
+    }
+
+    #[test]
+    fn compat_summary() {
+        let off = compat_json(false, json!([]));
+        let on = compat_json(true, json!([]));
+        let s = |b: &Value, a: &Value| summarize("compat", b, a, &|_, _| None);
+        assert_eq!(s(&off, &on), "Sharp X11 apps turned on");
+        assert_eq!(s(&on, &off), "Sharp X11 apps turned off");
+        let mut both = on.clone();
+        both["steam_scale"] = json!(true);
+        assert_eq!(
+            s(&off, &both),
+            "Sharp X11 apps turned on, Steam UI scale turned on"
+        );
+        let code = compat_json(false, json!([app("code.desktop", "x11")]));
+        assert_eq!(s(&off, &code), "Fix for code added");
+        let changed = compat_json(false, json!([app("code.desktop", "wayland")]));
+        assert_eq!(s(&code, &changed), "Fix for code changed");
+        assert_eq!(s(&changed, &off), "Fix for code removed");
+        let many = compat_json(
+            true,
+            json!([
+                app("a.desktop", "x11"),
+                app("b.desktop", "x11"),
+                app("c.desktop", "x11")
+            ]),
+        );
+        assert_eq!(
+            s(&off, &many),
+            "Sharp X11 apps turned on, Fix for a added, Fix for b added, and 1 more"
+        );
+        let reordered = compat_json(
+            true,
+            json!([
+                app("c.desktop", "x11"),
+                app("b.desktop", "x11"),
+                app("a.desktop", "x11")
+            ]),
+        );
+        assert_eq!(s(&many, &reordered), "App fixes reordered");
+    }
+
+    #[test]
+    fn compat_summaries_are_plain() {
+        let a = compat_json(
+            true,
+            json!([app("code.desktop", "x11"), app("x.y.desktop", "auto")]),
+        );
+        let b = compat_json(false, json!([app("code.desktop", "wayland")]));
+        let c = compat_json(false, json!([]));
+        let hostile = compat_json(false, json!([app("[x]{y}.desktop", "x11")]));
+        for (x, y) in [
+            (&a, &b),
+            (&b, &a),
+            (&c, &a),
+            (&a, &c),
+            (&c, &c),
+            (&c, &hostile),
+        ] {
+            let s = summarize("compat", x, y, &|_, _| None);
+            assert!(!s.is_empty());
+            assert!(
+                !s.contains(['{', '[']) && !s.contains(".desktop") && !s.contains("compat."),
+                "{s}"
+            );
         }
     }
 }
