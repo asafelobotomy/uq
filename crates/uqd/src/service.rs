@@ -15,15 +15,16 @@ use uq_core::history::{
     revert_changed,
 };
 use uq_core::lua::{
-    Layout, emit_generated_with_apps, emit_workspace_rule, lua_string, startup_render,
+    Layout, StartupRender, emit_generated_with_apps, emit_workspace_rule, lua_string,
+    monitor_render, startup_render,
 };
 use uq_core::paths::Paths;
 use uq_core::profile::{ActiveProfile, ProfileStore, holds, load_active};
 use uq_core::render::{RenderedFiles, kvantum_base, render};
 use uq_core::schedule::{Schedule, last_event, variant_at};
 use uq_core::settings::{
-    SECTION_DOMAINS, Settings, provenance, renders_config, renders_section, set_rule,
-    valid_pinned_id,
+    SECTION_DOMAINS, Settings, Strategy, plan, provenance, renders_config, renders_section,
+    set_rule, valid_pinned_id,
 };
 use uq_core::startup_explain::FileReport;
 use uq_core::state::State;
@@ -1030,10 +1031,29 @@ impl Desktop {
         };
         let files = render(&theme, &self.paths.templates_dir, base)
             .map_err(|e| DesktopError::Io(e.to_string()))?;
-        let main_scale = if next.compat.sharp_x11 || next.compat.steam_scale {
-            self.main_scale_for(next).await
+        // One read of the screens serves the main scale, the plan and the default monitor,
+        // and only when one of them is in use (no read otherwise, as before).
+        let monitors = &next.settings.monitors;
+        let scaled = next.compat.sharp_x11 || next.compat.steam_scale;
+        let live = if scaled
+            || monitors.primary.is_some()
+            || monitors.workspaces.strategy != Strategy::Off
+        {
+            self.live_outputs_for(next).await
         } else {
             None
+        };
+        let main_scale = live
+            .as_deref()
+            .filter(|_| scaled)
+            .and_then(|l| plan::main_output(monitors, l))
+            .map(|o| o.scale);
+        let startup = StartupRender {
+            monitors: live
+                .as_deref()
+                .map(|l| monitor_render(monitors, l))
+                .unwrap_or_default(),
+            ..startup_render(next, main_scale, self.dev_session)
         };
         let generated = emit_generated_with_apps(
             &theme,
@@ -1042,7 +1062,7 @@ impl Desktop {
             &self.app_rules_for(next),
             &next.keybinds,
             &next.settings,
-            &startup_render(next, main_scale, self.dev_session),
+            &startup,
         );
 
         self.ensure_user_lua()?;

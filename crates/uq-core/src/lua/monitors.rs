@@ -2,7 +2,9 @@
 //! names and mirror targets pass `valid_output_name` and still go through `lua_string`.
 
 use super::lua_string;
-use crate::settings::{Monitors, OutputConfig};
+use crate::rules::WorkspaceRule;
+use crate::settings::plan::{Planned, plan, roles, screens};
+use crate::settings::{LiveOutput, Monitors, OutputConfig, valid_output_name};
 
 /// One `hl.monitor({ ... })` line. A disabled output carries nothing else. Otherwise an unset
 /// mode, position or scale is written out as `preferred`, `auto`, `auto`: Hyprland would reuse
@@ -45,10 +47,85 @@ pub fn emit_monitors(m: &Monitors) -> String {
         .collect()
 }
 
+/// What the monitors section adds to `generated.lua` beyond `hl.monitor` lines: the workspace
+/// plan (merged into the workspace rules) and the default monitor for the cursor.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct MonitorRender {
+    pub planned: Vec<Planned>,
+    /// The chosen main display's connector, when it is connected.
+    pub default_monitor: Option<String>,
+}
+
+/// The plan and the default monitor for `m` on the screens `live` (Hyprland's, with the stored
+/// layout laid over them). The default monitor is set only when a main display is chosen and
+/// found.
+pub fn monitor_render(m: &Monitors, live: &[LiveOutput]) -> MonitorRender {
+    let primary = roles(m, live).primary;
+    MonitorRender {
+        planned: plan(&m.workspaces, &screens(m, live)),
+        default_monitor: (!primary.is_empty()).then_some(primary),
+    }
+}
+
+/// Inside `hl.config({ … })`: `cursor = { default_monitor = "DP-1" },` so the session starts on
+/// the main display (Hyprland reads it at startup). Nothing without one.
+pub fn emit_cursor(out: &mut String, r: &MonitorRender) {
+    if let Some(name) = r
+        .default_monitor
+        .as_deref()
+        .filter(|n| valid_output_name(n))
+    {
+        out.push_str(&format!(
+            "    cursor = {{ default_monitor = {} }},\n",
+            lua_string(name)
+        ));
+    }
+}
+
+/// The user's workspace rules with the plan filled in (R14): for each planned workspace, the
+/// user's rule for that selector gets `monitor` (and `default`) only where it has none; a
+/// workspace with no rule gets one with just those. Added rules follow the user's, in
+/// workspace order, so there is still one call per selector.
+pub fn merge_planned(rules: &[WorkspaceRule], planned: &[Planned]) -> Vec<WorkspaceRule> {
+    let mut out = rules.to_vec();
+    for p in planned {
+        let sel = p.workspace.to_string();
+        let default = p.default.then_some(true);
+        match out.iter_mut().find(|r| r.workspace == sel) {
+            Some(r) => {
+                r.monitor.get_or_insert_with(|| p.output.clone());
+                if r.default.is_none() {
+                    r.default = default;
+                }
+            }
+            None => out.push(WorkspaceRule {
+                workspace: sel,
+                monitor: Some(p.output.clone()),
+                default,
+                persistent: None,
+                gaps_in: None,
+                gaps_out: None,
+                border_size: None,
+            }),
+        }
+    }
+    out
+}
+
+/// `hl.dsp.workspace.move({ workspace = "3", monitor = "DP-1" })`: the dispatcher uqd runs
+/// (through `hl.dispatch`) to put a planned workspace back on its screen.
+pub fn workspace_move_line(ws: u8, output: &str) -> String {
+    format!(
+        "hl.dsp.workspace.move({{ workspace = {}, monitor = {} }})",
+        lua_string(&ws.to_string()),
+        lua_string(output)
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::settings::Position;
+    use crate::settings::{MonitorId, Position, Strategy, WorkspacePlan};
 
     #[test]
     fn line_shapes() {
@@ -96,5 +173,97 @@ mod tests {
         assert!(out.find("DP-1").unwrap() < out.find("HDMI-A-1").unwrap());
         assert_eq!(out.lines().count(), 2);
         assert_eq!(emit_monitors(&Monitors::default()), "");
+    }
+
+    fn live(name: &str, serial: &str, x: i32) -> LiveOutput {
+        LiveOutput {
+            name: name.into(),
+            make: "Dell".into(),
+            model: "U".into(),
+            serial: serial.into(),
+            width: 1920,
+            height: 1080,
+            x,
+            scale: 1.0,
+            ..LiveOutput::default()
+        }
+    }
+
+    #[test]
+    fn default_render_is_empty() {
+        let r = MonitorRender::default();
+        let mut out = String::new();
+        emit_cursor(&mut out, &r);
+        assert_eq!(out, "");
+        let m = Monitors::default();
+        let two = [live("DP-1", "A", 0), live("DP-2", "B", 1920)];
+        assert_eq!(monitor_render(&m, &two), r, "nothing set, nothing planned");
+    }
+
+    #[test]
+    fn cursor_table_shape() {
+        let r = MonitorRender {
+            default_monitor: Some("DP-1".into()),
+            ..MonitorRender::default()
+        };
+        let mut out = String::new();
+        emit_cursor(&mut out, &r);
+        assert_eq!(out, "    cursor = { default_monitor = \"DP-1\" },\n");
+        // A name that isn't a valid output name never reaches the file.
+        let bad = MonitorRender {
+            default_monitor: Some("DP-1\"x".into()),
+            ..MonitorRender::default()
+        };
+        let mut out = String::new();
+        emit_cursor(&mut out, &bad);
+        assert_eq!(out, "");
+    }
+
+    #[test]
+    fn monitor_render_follows_primary_and_plan() {
+        let m = Monitors {
+            primary: Some(MonitorId {
+                make: "Dell".into(),
+                model: "U".into(),
+                serial: "B".into(),
+            }),
+            workspaces: WorkspacePlan {
+                strategy: Strategy::Sequential,
+                count: 4,
+                ..WorkspacePlan::default()
+            },
+            ..Monitors::default()
+        };
+        let two = [live("DP-1", "A", 0), live("DP-2", "B", 1920)];
+        let r = monitor_render(&m, &two);
+        assert_eq!(r.default_monitor.as_deref(), Some("DP-2"));
+        let got: Vec<(u8, &str, bool)> = r
+            .planned
+            .iter()
+            .map(|p| (p.workspace, p.output.as_str(), p.default))
+            .collect();
+        assert_eq!(
+            got,
+            [
+                (1, "DP-1", true),
+                (2, "DP-1", false),
+                (3, "DP-2", true),
+                (4, "DP-2", false)
+            ]
+        );
+        // Not connected: no default monitor.
+        assert_eq!(monitor_render(&m, &two[..1]).default_monitor, None);
+    }
+
+    #[test]
+    fn move_line_escapes_names() {
+        assert_eq!(
+            workspace_move_line(3, "DP-1"),
+            r#"hl.dsp.workspace.move({ workspace = "3", monitor = "DP-1" })"#
+        );
+        assert_eq!(
+            workspace_move_line(3, "a\"b"),
+            r#"hl.dsp.workspace.move({ workspace = "3", monitor = "a\"b" })"#
+        );
     }
 }

@@ -8,7 +8,7 @@ use std::sync::Arc;
 use tokio::sync::broadcast;
 use uq_core::history::Origin;
 use uq_core::paths::Paths;
-use uq_core::settings::OutputConfig;
+use uq_core::settings::{MonitorId, OutputConfig, Strategy, WorkspacePlan};
 
 const CODE: &str = "code.desktop";
 const SOURCE: &str = "[Desktop Entry]\nType=Application\nName=Code\nExec=/usr/bin/code %F\n";
@@ -80,6 +80,103 @@ fn put_source(r: &Rig) {
 fn dp1(r: &Rig, scale: f64) {
     *r.comp.monitors_json.lock().unwrap() =
         format!(r#"[{{"name":"DP-1","x":0,"y":0,"scale":{scale}}}]"#);
+}
+
+/// Two screens: DP-1 (1.25, at 0,0, serial A) and DP-2 (1.5, at 2560,0, serial B).
+fn two_screens(r: &Rig) {
+    let one = |name: &str, serial: &str, x: i32, scale: f64| {
+        format!(
+            r#"{{"name":"{name}","make":"Dell","model":"U2720Q","serial":"{serial}","x":{x},"y":0,"scale":{scale},"width":2560,"height":1440}}"#
+        )
+    };
+    *r.comp.monitors_json.lock().unwrap() = format!(
+        "[{},{}]",
+        one("DP-1", "A", 0, 1.25),
+        one("DP-2", "B", 2560, 1.5)
+    );
+}
+
+fn id(serial: &str) -> MonitorId {
+    MonitorId {
+        make: "Dell".into(),
+        model: "U2720Q".into(),
+        serial: serial.into(),
+    }
+}
+
+fn monitor_reads(r: &Rig) -> usize {
+    r.comp.calls().iter().filter(|c| *c == "monitors").count()
+}
+
+#[tokio::test]
+async fn main_scale_follows_primary() {
+    let mut r = rig();
+    two_screens(&r);
+    write(&mut r, "compat", r#"{"sharp_x11":true}"#)
+        .await
+        .unwrap();
+    assert_eq!(r.desktop.main_scale, Some(1.25), "unset: the screen at 0,0");
+    r.desktop.state.settings.monitors.primary = Some(id("B"));
+    write(&mut r, "compat", r#"{"sharp_x11":true,"steam_scale":true}"#)
+        .await
+        .unwrap();
+    assert_eq!(r.desktop.main_scale, Some(1.5));
+    let g = generated(&r);
+    assert!(
+        g.contains(r#"hl.env("STEAM_FORCE_DESKTOPUI_SCALING", "1.5", true)"#),
+        "{g}"
+    );
+    assert!(
+        g.contains(r#"cursor = { default_monitor = "DP-2" },"#),
+        "{g}"
+    );
+}
+
+#[tokio::test]
+async fn render_reads_monitors_once() {
+    let mut r = rig();
+    two_screens(&r);
+    let m = &mut r.desktop.state.settings.monitors;
+    m.primary = Some(id("B"));
+    m.workspaces = WorkspacePlan {
+        strategy: Strategy::Sequential,
+        count: 4,
+        ..WorkspacePlan::default()
+    };
+    write(&mut r, "compat", r#"{"sharp_x11":true,"steam_scale":true}"#)
+        .await
+        .unwrap();
+    assert_eq!(monitor_reads(&r), 1, "{:?}", r.comp.calls());
+    let g = generated(&r);
+    assert!(
+        g.contains(r#"hl.workspace_rule({ workspace = "1", monitor = "DP-1", default = true })"#),
+        "{g}"
+    );
+    assert!(
+        g.contains(r#"hl.workspace_rule({ workspace = "3", monitor = "DP-2", default = true })"#),
+        "{g}"
+    );
+}
+
+#[tokio::test]
+async fn render_skips_monitors_when_unused() {
+    let mut r = rig();
+    two_screens(&r);
+    write(&mut r, "env", r#"{"vars":[{"name":"FOO","value":"bar"}]}"#)
+        .await
+        .unwrap();
+    assert_eq!(monitor_reads(&r), 0, "{:?}", r.comp.calls());
+    let g = generated(&r);
+    assert!(
+        !g.contains("cursor =") && !g.contains("workspace_rule"),
+        "{g}"
+    );
+    // The planner alone is enough to read the screens, once.
+    r.desktop.state.settings.monitors.workspaces.strategy = Strategy::Interleave;
+    write(&mut r, "env", r#"{"vars":[{"name":"FOO","value":"baz"}]}"#)
+        .await
+        .unwrap();
+    assert_eq!(monitor_reads(&r), 1);
 }
 
 async fn explain(r: &Rig, domain: &str) -> Value {

@@ -148,6 +148,7 @@ fn golden_default_and_all_set() {
             ("QUOTED".into(), "say \"hi\") hl.exec_cmd(\"x".into()),
         ],
         export: true,
+        ..StartupRender::default()
     };
     for (name, settings, rules, binds, startup) in [
         (

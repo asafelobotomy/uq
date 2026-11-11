@@ -11,8 +11,9 @@ use std::process::Command;
 use uq_core::keybinds::Keybinds;
 use uq_core::keybinds::hypr::{self, SHELL_NAMES};
 use uq_core::keybinds::keys::{Group, KEYS, KeyKind};
-use uq_core::lua::{Layout, StartupRender, emit_generated, emit_generated_with_apps};
-use uq_core::paths::Paths;
+use uq_core::lua::{
+    Layout, MonitorRender, StartupRender, emit_generated, emit_generated_with_apps,
+};
 use uq_core::rules::{
     LayerEffects, LayerMatch, LayerRule, Rules, WindowEffects, WindowMatch, WindowRule,
     WorkspaceRule,
@@ -21,12 +22,10 @@ use uq_core::settings::{
     AccelProfile, DeviceOverride, ForceSplit, KbLayout, MouseSettings, NewStatus, Orientation,
     OutputConfig, Position, Settings,
 };
-use uq_core::stub::stub_contents;
 use uq_core::theme::ThemeRegistry;
 
-fn repo() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
-}
+mod common;
+use common::verify::{repo, tree, which};
 
 /// Every mouse key away from its default, so the emitted `input` block is fully exercised.
 fn mouse() -> MouseSettings {
@@ -416,19 +415,6 @@ fn fixtures() -> Vec<Keybinds> {
     let mut v = vec![keybinds()];
     v.extend(keybinds_keys());
     v
-}
-
-/// Lay out a uQ config tree for one theme variant; returns (paths, main config file).
-fn tree(root: &Path, generated: &str) -> (Paths, PathBuf) {
-    let p = Paths::under(root);
-    std::fs::create_dir_all(p.base_lua.parent().unwrap()).unwrap();
-    std::fs::copy(repo().join("config/hypr/base.lua"), &p.base_lua).unwrap();
-    std::fs::create_dir_all(p.generated_lua.parent().unwrap()).unwrap();
-    std::fs::write(&p.generated_lua, generated).unwrap();
-    std::fs::write(&p.user_lua, "").unwrap();
-    std::fs::write(&p.main_lua, stub_contents(&p)).unwrap();
-    let main = p.main_lua.clone();
-    (p, main)
 }
 
 /// Every `hl.bind` option Hyprland reads (`hypr::ALL_BIND_OPTIONS`) is injected at
@@ -1201,6 +1187,7 @@ fn startup_all() -> StartupRender {
             ("QUOTED".into(), "\") hl.exec_cmd(\"x".into()),
         ],
         export: true,
+        ..StartupRender::default()
     }
 }
 
@@ -1297,14 +1284,111 @@ fn startup_switches_pass_hyprland_verify() {
     assert!(out.status.success(), "{text}");
 }
 
-fn which(bin: &str) -> Result<PathBuf, ()> {
-    std::env::var_os("PATH")
-        .and_then(|paths| {
-            std::env::split_paths(&paths)
-                .map(|d| d.join(bin))
-                .find(|p| p.is_file())
-        })
-        .ok_or(())
+/// The workspace plan and the default monitor on top of the rules' own workspace rules: a
+/// user rule for workspace 3 with its own fields, two screens, a sequential plan.
+fn monitor_plan() -> StartupRender {
+    use uq_core::settings::plan::Planned;
+    let planned = |workspace: u8, output: &str, default: bool| Planned {
+        workspace,
+        output: output.into(),
+        default,
+    };
+    StartupRender {
+        monitors: MonitorRender {
+            planned: vec![
+                planned(1, "DP-1", true),
+                planned(2, "DP-1", false),
+                planned(3, "DP-2", true),
+                planned(4, "DP-2", false),
+            ],
+            default_monitor: Some("DP-1".into()),
+        },
+        ..StartupRender::default()
+    }
+}
+
+/// The plan renders one `hl.workspace_rule` per selector and the cursor table runs. Runs
+/// under the Lua mock (CI, or locally with a `lua` on PATH).
+#[test]
+fn monitor_plan_runs_under_the_lua_mock() {
+    let Ok(lua) = which("lua") else {
+        eprintln!("skipping: no `lua` on PATH");
+        return;
+    };
+    let reg = ThemeRegistry::load_dir(&repo().join("themes")).unwrap();
+    let t = reg.iter().next().unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let mock = dir.path().join("mock.lua");
+    std::fs::write(&mock, self::mock()).unwrap();
+    let gen_ = emit_generated(
+        t,
+        &layouts(),
+        &rules(),
+        &keybinds(),
+        &settings(),
+        &monitor_plan(),
+    );
+    assert!(
+        gen_.contains(r#"cursor = { default_monitor = "DP-1" },"#),
+        "{gen_}"
+    );
+    let selectors: Vec<&str> = gen_
+        .lines()
+        .filter(|l| l.starts_with("hl.workspace_rule("))
+        .filter_map(|l| l.split("workspace = \"").nth(1)?.split('"').next())
+        .collect();
+    let unique: std::collections::BTreeSet<_> = selectors.iter().collect();
+    assert_eq!(
+        selectors.len(),
+        unique.len(),
+        "one call per selector: {gen_}"
+    );
+    for ws in ["1", "2", "3", "4"] {
+        assert!(selectors.contains(&ws), "{ws} in {selectors:?}");
+    }
+    let (p, _) = tree(&dir.path().join("monitor-plan"), &gen_);
+    let out = Command::new(&lua)
+        .arg(&mock)
+        .args([&p.base_lua, &p.generated_lua, &p.user_lua])
+        .output()
+        .unwrap();
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        out.status.success() && text.starts_with("ok "),
+        "{text}{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let calls = text.lines().filter(|l| *l == "hl.workspace_rule").count();
+    assert_eq!(calls, selectors.len(), "{text}");
+}
+
+#[test]
+#[ignore = "needs Hyprland; CI runs it with --ignored"]
+fn monitor_plan_passes_hyprland_verify() {
+    let reg = ThemeRegistry::load_dir(&repo().join("themes")).unwrap();
+    let t = reg.iter().next().unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let gen_ = emit_generated(
+        t,
+        &layouts(),
+        &rules(),
+        &keybinds(),
+        &settings(),
+        &monitor_plan(),
+    );
+    let (_, main) = tree(&dir.path().join("monitor-plan"), &gen_);
+    let out = Command::new("Hyprland")
+        .arg("--verify-config")
+        .arg("-c")
+        .arg(&main)
+        .output()
+        .unwrap();
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(out.status.success(), "{text}");
 }
 
 /// uq-greeter's fixed Hyprland config (greeter/hyprland.lua), behind the wrapper that
