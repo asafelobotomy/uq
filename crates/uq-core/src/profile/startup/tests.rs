@@ -194,7 +194,8 @@ fn read_and_write_startup_leaves() {
     );
     write(&mut st, "compat", &[(p.clone(), None)]).unwrap();
     assert!(st.compat.fix_for("gimp.desktop").is_none());
-    assert_eq!(read_leaf(&st, "compat", &p), None);
+    // No fix runs automatically.
+    assert_eq!(read_leaf(&st, "compat", &p), Some(json!("auto")));
     assert_eq!(
         read_leaf(&st, "compat", &s(&["apps", "code.desktop", "scale"])),
         Some(json!(1.5))
@@ -282,6 +283,7 @@ fn labels_and_values_are_plain() {
     let v = |d: &str, p: &[&str], v: Value| value_text(d, &s(p), &v);
     assert_eq!(v("env", &["FOO"], json!(false)), "Removed");
     assert_eq!(v("env", &["FOO"], json!("bar")), "bar");
+    assert_eq!(v("env", &["FOO"], json!("a\u{202E}b\u{2066}c")), "a b c");
     assert_eq!(
         v("compat", &["apps", "c.desktop", "platform"], json!("auto")),
         "Automatic"

@@ -179,7 +179,8 @@ pub fn check_autostart_tree(tree: &Value) -> Result<(), ProfileError> {
 }
 
 /// One leaf as the state holds it. A variable that isn't set reads `false` (what a profile
-/// writes to remove it); a fix's fields are `None` without the fix, and `scale` without a size;
+/// writes to remove it); a fix's platform reads `auto` without the fix, its scale `None` without
+/// a size;
 /// an entry's are its own (added) or the choice's (found), `None` when unset.
 pub fn read_leaf(state: &State, domain: &str, path: &[String]) -> Option<Value> {
     match (domain, path) {
@@ -193,10 +194,11 @@ pub fn read_leaf(state: &State, domain: &str, path: &[String]) -> Option<Value> 
         ),
         ("compat", [k]) => SwitchKey::from_key(k).map(|s| Value::Bool(state.compat.switch(s))),
         ("compat", [apps, id, f]) if apps == "apps" => {
-            let fix = state.compat.apps.iter().find(|x| x.id == *id)?;
+            let fix = state.compat.apps.iter().find(|x| x.id == *id);
             match f.as_str() {
-                "platform" => Some(json!(fix.platform.as_str())),
-                "scale" => fix.scale.map(Value::from),
+                // An app without a fix runs automatically: what removing the fix writes back.
+                "platform" => Some(json!(fix.map_or("auto", |x| x.platform.as_str()))),
+                "scale" => fix?.scale.map(Value::from),
                 _ => None,
             }
         }
@@ -360,6 +362,45 @@ fn write_autostart(
     }
     a.prune_empty_choices();
     state.set_section("autostart", a.section())
+}
+
+/// The fixes the profile would empty (and so remove) that also apply in other launchers: their
+/// keys are left out, since putting the fix back can't turn "elsewhere" on again.
+pub fn emptied_elsewhere(current: &State, profile: &super::Profile) -> Vec<String> {
+    let mut out = Vec::new();
+    let Some(apps) = profile.values.get("compat").and_then(|c| c.get("apps")) else {
+        return out;
+    };
+    for (id, fields) in apps.as_object().into_iter().flatten() {
+        let Some(fix) = current.compat.apps.iter().find(|f| f.id == *id) else {
+            continue;
+        };
+        let mut after = fix.clone();
+        if let Some(p) = fields.get("platform") {
+            after.platform = platform_of("", p).unwrap_or(after.platform);
+        }
+        if let Some(s) = fields.get("scale").and_then(Value::as_f64) {
+            after.scale = Some(s);
+        }
+        if fix.elsewhere && after.is_empty() {
+            out.push(id.clone());
+        }
+    }
+    out
+}
+
+/// The apply notice for `n` fixes left alone by [`emptied_elsewhere`].
+pub fn kept_fix_notice(n: usize) -> String {
+    if n == 1 {
+        "This profile would remove an app fix that also works in other launchers, so that part \
+         was left out."
+            .into()
+    } else {
+        format!(
+            "This profile would remove {n} app fixes that also work in other launchers, so those \
+             parts were left out."
+        )
+    }
 }
 
 #[cfg(test)]

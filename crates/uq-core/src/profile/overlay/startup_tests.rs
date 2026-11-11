@@ -123,7 +123,7 @@ fn turn_off_compat_created_fix() {
     let (on, active) = apply(&cur, &p, &known(&[]), 0).unwrap();
     assert_eq!(on.compat.apps.len(), 1);
     assert_eq!(active.keys.len(), 1);
-    assert_eq!(active.keys[0].before, None);
+    assert_eq!(active.keys[0].before, Some(json!("auto")));
     let (off, kept) = turn_off(&on, &active).unwrap();
     assert!(kept.is_empty(), "{kept:?}");
     assert!(off.compat.apps.is_empty());
@@ -241,4 +241,82 @@ fn changed_since_offers_startup_keys() {
     );
     // The fix's options and the added entry.
     assert_eq!(skipped, 2);
+}
+
+#[test]
+fn auto_platform_removes_a_fix_and_back_puts_it_back() {
+    let mut cur = State::default();
+    cur.set_section(
+        "compat",
+        json!({"apps": [{"id": "code.desktop", "platform": "x11"}]}),
+    )
+    .unwrap();
+    let p = profile("[compat.apps.\"code.desktop\"]\nplatform = \"auto\"\n");
+    let (on, active) = apply(&cur, &p, &known(&[]), 0).unwrap();
+    assert!(on.compat.apps.is_empty());
+    let (off, kept) = turn_off(&on, &active).unwrap();
+    assert!(kept.is_empty(), "not changed by hand: {kept:?}");
+    assert_eq!(off, cur);
+}
+
+#[test]
+fn a_fix_working_elsewhere_is_never_removed() {
+    let mut cur = State::default();
+    cur.set_section(
+        "compat",
+        json!({"apps": [{"id": "code.desktop", "platform": "x11", "elsewhere": true}]}),
+    )
+    .unwrap();
+    let p = profile(
+        "[compat]\nqt_wayland = true\n[compat.apps.\"code.desktop\"]\nplatform = \"auto\"\n",
+    );
+    assert_eq!(super::super::emptied_elsewhere(&cur, &p), ["code.desktop"]);
+    let (on, active) = apply(&cur, &p, &known(&[]), 0).unwrap();
+    assert_eq!(on.compat.apps, cur.compat.apps);
+    assert!(on.compat.qt_wayland);
+    assert_eq!(active.keys.len(), 1);
+    let (off, kept) = turn_off(&on, &active).unwrap();
+    assert!(kept.is_empty());
+    assert_eq!(off, cur);
+    // Setting a size keeps the fix, so that applies.
+    let p = profile("[compat.apps.\"code.desktop\"]\nplatform = \"auto\"\nscale = 2.0\n");
+    assert!(super::super::emptied_elsewhere(&cur, &p).is_empty());
+}
+
+#[test]
+fn back_to_normal_over_the_limits_says_what_to_do() {
+    let cur = env_state(&[("BAR", "y")]);
+    let p = profile("[env]\nBAR = false\n");
+    let (mut on, active) = apply(&cur, &p, &known(&[]), 0).unwrap();
+    let vars: Vec<Value> = (0..100)
+        .map(|i| json!({"name": format!("V{i}"), "value": "x"}))
+        .collect();
+    on.set_section("env", json!({ "vars": vars })).unwrap();
+    let e = turn_off(&on, &active).unwrap_err();
+    assert_eq!(e, ProfileError::OffTooManyVars);
+    assert!(
+        e.to_string()
+            .ends_with("Remove one on the Startup page first."),
+        "{e}"
+    );
+
+    let mut cur = State::default();
+    cur.set_section(
+        "compat",
+        json!({"apps": [{"id": "code.desktop", "platform": "x11"}]}),
+    )
+    .unwrap();
+    let p = profile("[compat.apps.\"code.desktop\"]\nplatform = \"auto\"\n");
+    let (mut on, active) = apply(&cur, &p, &known(&[]), 0).unwrap();
+    let apps: Vec<Value> = (0..100)
+        .map(|i| json!({"id": format!("a{i}.desktop"), "platform": "x11"}))
+        .collect();
+    on.set_section("compat", json!({ "apps": apps })).unwrap();
+    let e = turn_off(&on, &active).unwrap_err();
+    assert_eq!(e, ProfileError::OffTooManyFixes);
+    assert!(
+        e.to_string()
+            .ends_with("Remove one on the Apps and scaling page first."),
+        "{e}"
+    );
 }

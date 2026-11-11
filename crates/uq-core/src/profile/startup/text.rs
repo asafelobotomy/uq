@@ -4,12 +4,15 @@
 
 use super::read_leaf;
 use crate::compat::hypr::SwitchKey;
+use crate::desktop_entry::clean_display;
 use crate::history;
 use crate::profile::{ActiveProfile, Key, Profile, holds};
 use crate::state::State;
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
 
+/// The most of a variable's value a page shows.
+const MAX_SHOWN: usize = 4096;
 const UNKNOWN_STARTUP: &str = "A startup app that isn't on this computer";
 const APPS_NOTICE: &str =
     "Apps you start from now on use this profile's settings; apps already open keep theirs.";
@@ -109,6 +112,8 @@ pub(in crate::profile) fn startup_value_text(
     let field = path.last().map(String::as_str);
     match (domain, field, v) {
         ("env", _, Value::Bool(false)) => Some(s("Removed")),
+        // A value is data from a file: no control or direction characters reach the page.
+        ("env", _, Value::String(text)) => Some(clean_display(text, MAX_SHOWN)),
         ("compat", Some("platform"), Value::String(p)) if path.len() == 3 => {
             Some(s(match p.as_str() {
                 "wayland" => "Wayland",

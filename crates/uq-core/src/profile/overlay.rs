@@ -5,8 +5,9 @@
 //! "Back to normal" only puts back keys that still hold what the profile set.
 
 use super::{
-    DomainKind, Profile, ProfileError, TOO_MANY_VARS, enabled_of, key_label, kind_of, leaves,
-    read_leaf, rule_label, rule_toggles, startup_keys, startup_label, write_leaves,
+    DomainKind, Profile, ProfileError, TOO_MANY_VARS, emptied_elsewhere, enabled_of, key_label,
+    kind_of, leaves, read_leaf, rule_label, rule_toggles, startup_keys, startup_label,
+    write_leaves,
 };
 use crate::history::{self, Entry};
 use crate::settings::SettingError;
@@ -87,7 +88,8 @@ pub fn apply(
     now: i64,
 ) -> Result<(State, ActiveProfile), ProfileError> {
     // A rule switch whose rule isn't here, or a startup app that isn't, is left out: no write
-    // and no memo.
+    // and no memo. So is a fix's key that would remove a fix working in other launchers.
+    let kept_fixes = emptied_elsewhere(current, profile);
     let keys: Vec<_> = profile
         .keys()
         .into_iter()
@@ -97,6 +99,9 @@ pub fn apply(
                 matches!(k.path.as_slice(), [id] if enabled_of(current, id).is_some())
             }
             Some(DomainKind::Autostart) => k.path.first().is_some_and(|id| known.contains(id)),
+            Some(DomainKind::Compat) => {
+                !matches!(k.path.as_slice(), [apps, id, _] if apps == "apps" && kept_fixes.contains(id))
+            }
             _ => true,
         })
         .collect();
@@ -208,7 +213,12 @@ pub fn turn_off(
         }
     }
     let mut next = current.clone();
-    write_by_domain(&mut next, writes)?;
+    write_by_domain(&mut next, writes).map_err(|e| match e {
+        // Putting back what the profile removed would pass a limit: say what to do.
+        ProfileError::TooManyVars => ProfileError::OffTooManyVars,
+        ProfileError::Invalid { key, .. } if key == "compat.apps" => ProfileError::OffTooManyFixes,
+        e => e,
+    })?;
     Ok((next, kept))
 }
 

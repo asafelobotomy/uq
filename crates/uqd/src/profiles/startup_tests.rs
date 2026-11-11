@@ -9,7 +9,7 @@ use crate::system::FakeSystem;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use uq_core::history::Origin;
+use uq_core::history::{AutoReason, Origin, PointKind};
 use uq_core::paths::Paths;
 
 const CODE: &str = "code.desktop";
@@ -92,7 +92,13 @@ async fn profile_sets_env_and_back() {
     assert!(generated(&r).contains(r#"hl.env("FOO", "bar", true)"#));
     assert!(env_file(&r).unwrap().contains("FOO='bar'"));
     // The restore point was saved before the change.
-    let point = r.desktop.restore_points().into_iter().next().unwrap();
+    // Found by kind: the daily point can be saved in the same second.
+    let point = r
+        .desktop
+        .restore_points()
+        .into_iter()
+        .find(|p| p.kind == PointKind::Auto(AutoReason::BeforeProfile))
+        .unwrap();
     assert!(point.name.contains("dev"), "{point:?}");
     assert!(
         r.desktop
@@ -179,6 +185,8 @@ async fn profile_autostart_never_starts_or_stops() {
         )
         .await
         .unwrap();
+    // `Desktop` holds no runner (only the D-Bus `ShellReady` call reaches one), so an apply
+    // can't start or stop anything; this checks what the page then reads.
     let fake = Arc::new(FakeSpawner::default());
     let record = r.dir.path().join("run/uq/autostart-run.json");
     let runner = Runner::shared(AutostartConfig::new(
@@ -293,4 +301,56 @@ async fn too_many_variables_are_refused() {
     assert_eq!(r.desktop.restore_points().len(), points);
     assert_eq!(r.desktop.state().env.vars.len(), 100);
     assert!(r.desktop.active_profile().is_none());
+}
+
+#[tokio::test]
+async fn auto_platform_on_a_fix_working_elsewhere_is_left_out() {
+    let mut r = rig().await;
+    put(
+        &r.dir.path().join("share-dirs/applications").join(CODE),
+        SOURCE,
+    );
+    let fix = r#"{"apps":[{"id":"code.desktop","platform":"x11","elsewhere":true}]}"#;
+    r.desktop
+        .set_section("compat", fix, Origin::Settings)
+        .await
+        .unwrap();
+    let target = files::override_target(&r.desktop.paths().startup, CODE).unwrap();
+    let before = std::fs::read_to_string(&target).unwrap();
+    add(
+        &mut r,
+        "auto",
+        "[compat.apps.\"code.desktop\"]\nplatform = \"auto\"\n",
+    )
+    .await;
+    let report = r.desktop.apply_profile("auto").await.unwrap();
+    assert_eq!(report.notices[0], uq_core::profile::kept_fix_notice(1));
+    assert_eq!(std::fs::read_to_string(&target).unwrap(), before);
+    let report = r.desktop.profile_off().await.unwrap();
+    assert!(report.kept.is_empty(), "{report:?}");
+    assert!(r.desktop.state().compat.apps[0].elsewhere);
+    assert_eq!(std::fs::read_to_string(&target).unwrap(), before);
+}
+
+#[tokio::test]
+async fn saving_a_profile_at_the_limits_works() {
+    let mut r = rig().await;
+    let vars: Vec<serde_json::Value> = (0..100)
+        .map(|i| serde_json::json!({"name": format!("V{i}"), "value": "x"}))
+        .collect();
+    r.desktop
+        .set_section(
+            "env",
+            &serde_json::json!({ "vars": vars }).to_string(),
+            Origin::Settings,
+        )
+        .await
+        .unwrap();
+    let theme = r.desktop.state().theme.clone();
+    let body = format!("[appearance]\ntheme = \"{theme}\"\n[env]\nNEW = \"1\"\n");
+    r.desktop
+        .set_profile(&profile("both", &body), false)
+        .unwrap();
+    // Applying it is what's refused.
+    assert!(r.desktop.apply_profile("both").await.is_err());
 }
