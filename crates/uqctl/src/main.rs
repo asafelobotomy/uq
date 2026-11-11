@@ -114,7 +114,12 @@ enum Cmd {
     /// fix from Apps and scaling, in its own scope.
     Launch { id: String },
     /// Run the shell's JSON-lines bridge on stdin/stdout (started by the shell, not by hand).
-    Bridge,
+    Bridge {
+        /// Read widgets, app actions and providers from this directory instead of /usr/share/uq
+        /// (laid out the same way).
+        #[arg(long, hide = true, value_name = "DIR")]
+        root: Option<std::path::PathBuf>,
+    },
     /// Widgets, settings pages, launcher providers and app actions from other apps.
     Integrations {
         #[command(subcommand)]
@@ -262,7 +267,7 @@ fn describe(err: zbus::Error) -> String {
 }
 
 async fn run(cmd: Cmd) -> Result<(), String> {
-    if matches!(cmd, Cmd::Bridge | Cmd::Settings { .. }) {
+    if matches!(cmd, Cmd::Bridge { .. } | Cmd::Settings { .. }) {
         unreachable!("handled in main");
     }
     if let Cmd::Profile { cmd } = cmd {
@@ -405,7 +410,7 @@ async fn run(cmd: Cmd) -> Result<(), String> {
         | Cmd::RenderThemes(_)
         | Cmd::Greeter { .. }
         | Cmd::Integrations { .. }
-        | Cmd::Bridge
+        | Cmd::Bridge { .. }
         | Cmd::Settings { .. }
         | Cmd::Profile { .. }
         | Cmd::Launch { .. } => {
@@ -513,9 +518,14 @@ async fn main() -> ExitCode {
         // Bounded inside: uqd gets 500 ms, Hyprland its own request timeout.
         return launch_cmd::run(id).await;
     }
-    if matches!(cli.cmd, Cmd::Bridge) {
+    if let Cmd::Bridge { root } = &cli.cmd {
+        let roots = root
+            .as_deref()
+            .map_or_else(bridge::IntegrationRoots::system, |r| {
+                integrations::roots_under(r).into()
+            });
         // Long-lived: no timeout; ends on stdin EOF.
-        return bridge::run(tokio::io::stdin(), tokio::io::stdout()).await;
+        return bridge::run(tokio::io::stdin(), tokio::io::stdout(), roots).await;
     }
     // uqd waits at most ~12 s on Hyprland (verify + reload); never hang a keybind forever.
     let res = tokio::time::timeout(std::time::Duration::from_secs(15), run(cli.cmd))
