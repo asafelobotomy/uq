@@ -15,6 +15,7 @@ mod extras;
 mod identity;
 mod live;
 mod parse;
+pub mod plan;
 pub(crate) mod summary;
 pub use extras::{
     BarChoice, BarShow, ManualSlot, MonitorProfile, SavedOutput, Strategy, WorkspacePlan,

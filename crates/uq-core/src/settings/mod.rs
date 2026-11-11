@@ -24,6 +24,7 @@ pub use layouts::{
     ScrollingOptions, repair_rules, rule_selector, set_rule,
 };
 pub use look::Look;
+pub use monitors::plan;
 pub(crate) use monitors::summary::summary as monitors_summary;
 pub use monitors::{
     BarChoice, BarShow, LiveOutput, ManualSlot, MonitorId, MonitorProfile, Monitors, OutputConfig,

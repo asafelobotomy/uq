@@ -15,6 +15,7 @@ pub const MAX_PROFILE_SCREENS: usize = 16;
 pub const MAX_BAR_SCREENS: usize = 16;
 pub const MAX_NAME_CHARS: usize = 60;
 pub const MAX_WORKSPACES: u8 = 20;
+pub const MAX_DESCRIPTION: usize = super::MAX_TEXT_CHARS;
 
 /// Whether `v` is the type's default; a default key is left out of `state.toml`.
 pub(super) fn is_default<T: Default + PartialEq>(v: &T) -> bool {

@@ -10,6 +10,7 @@ use crate::desktop_entry::{
     write_exec,
 };
 use crate::settings::LiveOutput;
+use crate::settings::plan::fallback_main;
 
 /// The first line of a launcher-file override.
 pub const OVERRIDE_HEADER: &str = "# Written by uQ Settings (Apps and scaling). Remove the fix \
@@ -36,11 +37,7 @@ pub enum CompatError {
 /// The main screen's scale (R13): the enabled output at 0,0 (the first by name if several sit
 /// there), else the first enabled output by name. `None` with no enabled output.
 pub fn main_scale(live: &[LiveOutput]) -> Option<f64> {
-    let on = || live.iter().filter(|o| !o.disabled);
-    let first_by_name = |it: &mut dyn Iterator<Item = &LiveOutput>| {
-        it.min_by(|a, b| a.name.cmp(&b.name)).map(|o| o.scale)
-    };
-    first_by_name(&mut on().filter(|o| o.x == 0 && o.y == 0)).or_else(|| first_by_name(&mut on()))
+    fallback_main(live).map(|o| o.scale)
 }
 
 /// GTK's whole-number scale (R14): nearest, with .5 rounding down, at least 1.
