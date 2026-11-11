@@ -569,3 +569,30 @@ async fn shell_ready_is_counted() {
     proxy.shell_ready().await.unwrap();
     assert_eq!(r.autostart.shell_ready_calls(), 1);
 }
+
+#[tokio::test]
+async fn row_says_from_the_profile() {
+    let (r, page, _d) = rig().await;
+    run(&page, set_var(None, "FOO", "1")).await;
+    let gaming = "format = 1\nid = \"gaming\"\nname = \"Gaming\"\n[env]\nFOO = \"2\"\n\
+                  [autostart.\"nm-applet.desktop\"]\nenabled = false\n";
+    let proxy = client::DesktopProxy::new(&r.client).await.unwrap();
+    proxy.set_profile(gaming, false).await.unwrap();
+    proxy.apply_profile("gaming").await.unwrap();
+    let out = run(&page, Op::Refresh).await;
+    let from_gaming = json!({"source": "profile", "detail": {"name": "Gaming"}});
+    let foo = &out.state["vars"][0];
+    assert_eq!(foo["origin"]["source"], from_gaming["source"]);
+    assert_eq!(foo["origin"]["detail"], from_gaming["detail"]);
+    let row = app(&out.state, "nm-applet.desktop");
+    assert_eq!(row["origin"]["source"], "profile");
+    assert_eq!(row["origin"]["detail"], json!({"name": "Gaming"}));
+    // The name is carried once, in the origin.
+    for r in [foo, row] {
+        let text = r.to_string();
+        assert_eq!(text.matches("Gaming").count(), 1, "{text}");
+    }
+    proxy.profile_off().await.unwrap();
+    let out = run(&page, Op::Refresh).await;
+    assert_eq!(out.state["vars"][0]["origin"]["source"], "uq");
+}

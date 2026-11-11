@@ -433,3 +433,50 @@ async fn tests_never_touch_the_real_home() {
         .map(|p| std::fs::metadata(p).ok().map(|m| m.modified().ok()));
     assert_eq!(real_before, real_after);
 }
+
+#[tokio::test]
+async fn explain_says_from_the_profile() {
+    let mut r = rig();
+    put(
+        &root(&r).join("xdg/autostart/nm-applet.desktop"),
+        "[Desktop Entry]\nType=Application\nName=Applet\nExec=nm-applet\n",
+    );
+    put(&r.desktop.paths().user_lua, "hl.env(\"MINE\", \"x\")\n");
+    let body = "format = 1\nid = \"game\"\nname = \"Gaming\"\n\
+                [env]\nFOO = \"a\"\nMINE = \"y\"\n[compat]\nqt_wayland = true\n\
+                [compat.apps.\"code.desktop\"]\nscale = 2.0\n\
+                [autostart.\"nm-applet.desktop\"]\nenabled = false\n";
+    r.desktop.set_profile(body, false).unwrap();
+    r.desktop.apply_profile("game").await.unwrap();
+    let from_profile =
+        |row: &Value| row["source"] == "profile" && row["detail"] == json!({"name": "Gaming"});
+    let env = explain(&r, "env").await;
+    assert!(from_profile(&env["vars.FOO"]), "{env}");
+    assert_eq!(env["vars.MINE"]["source"], "user_lua");
+    let compat = explain(&r, "compat").await;
+    assert!(from_profile(&compat["qt_wayland"]), "{compat}");
+    assert!(from_profile(&compat["apps.code.desktop"]), "{compat}");
+    assert_eq!(compat["electron_wayland"]["source"], "uq");
+    let auto = explain(&r, "autostart").await;
+    assert!(from_profile(&auto["nm-applet.desktop"]), "{auto}");
+    // Changed by hand: uQ's again.
+    write(
+        &mut r,
+        "env",
+        r#"{"vars":[{"name":"FOO","value":"b"},{"name":"MINE","value":"y"}]}"#,
+    )
+    .await
+    .unwrap();
+    write(
+        &mut r,
+        "compat",
+        r#"{"qt_wayland":false,"apps":[{"id":"code.desktop","scale":2.0}]}"#,
+    )
+    .await
+    .unwrap();
+    let env = explain(&r, "env").await;
+    assert_eq!(env["vars.FOO"]["source"], "uq");
+    let compat = explain(&r, "compat").await;
+    assert_eq!(compat["qt_wayland"]["source"], "uq");
+    assert!(from_profile(&compat["apps.code.desktop"]), "{compat}");
+}

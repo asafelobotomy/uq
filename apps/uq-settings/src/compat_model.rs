@@ -96,7 +96,7 @@ impl PageModel for CompatModel {
         settings: false,
         history: true,
         monitors: false,
-        profiles: false,
+        profiles: true,
         autostart: false,
     };
 

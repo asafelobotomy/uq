@@ -6,13 +6,14 @@
 use crate::files::{self, MarkerKind};
 use crate::service::{Desktop, DesktopError};
 use serde_json::Value;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use uq_core::autostart::Added;
-use uq_core::autostart::scan::{Plan, Resolved, read_capped, read_folders, resolve};
+use uq_core::autostart::scan::{Plan, Resolved, known_ids, read_capped, read_folders, resolve};
 use uq_core::compat::launch::main_scale;
 use uq_core::desktop_entry::{normalise_id, valid_desktop_id};
 use uq_core::env::{environment_d_lines, session_env};
+use uq_core::profile;
 use uq_core::settings::{LiveOutput, parse_live};
 use uq_core::startup_explain::{
     BrowserFile, OverrideState, default_when_off, explain_autostart, explain_compat_extra,
@@ -83,6 +84,14 @@ impl Desktop {
             }
         }
         (plan, self.child_env())
+    }
+
+    /// Every startup id on this computer for `state`: found in the folders (F14's bounded
+    /// read, under the lock) or added. A profile's other ids are left out.
+    pub(crate) fn startup_known(&self, state: &State) -> BTreeSet<String> {
+        let paths = &self.paths.startup;
+        let found = read_folders(&paths.user_autostart(), &paths.system_autostart());
+        known_ids(&found, &state.autostart)
     }
 
     /// The argv of each added command, by id, for `ListAutostart`.
@@ -266,7 +275,7 @@ impl Desktop {
             .filter(|(d, _)| d == domain)
             .map(|(_, m)| m.as_str());
         let st = &self.state;
-        match domain {
+        let mut rows = match domain {
             "env" => explain_env(st, text.as_deref(), rejected, &self.files, &path),
             "compat" => {
                 let mut rows = generic;
@@ -278,7 +287,11 @@ impl Desktop {
                 rows
             }
             _ => explain_autostart(st, &self.files),
+        };
+        if let Some(a) = &self.active {
+            profile::mark_startup(&mut rows, domain, st, a);
         }
+        rows
     }
 }
 

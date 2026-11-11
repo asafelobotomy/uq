@@ -11,7 +11,8 @@ use std::io::ErrorKind;
 use uq_core::history::{AutoReason, Origin, PointKind};
 use uq_core::profile::{
     self, ActiveProfile, Kept, MAX_PROFILES, PowerMemo, Profile, ProfileError, clear_active,
-    key_label, missing_rules, missing_rules_notice, power_notice, save_active, turn_off,
+    key_label, missing_rules, missing_rules_notice, missing_startup, missing_startup_notice,
+    power_notice, save_active, startup_notice, turn_off,
 };
 use uq_core::state::State;
 
@@ -88,7 +89,9 @@ impl Desktop {
             .get("appearance")
             .is_some_and(|a| a.get("theme").is_some())
         {
-            let (next, _) = profile::apply(&self.state, &p, 0).map_err(refused)?;
+            // Only the theme is looked at, so no startup app needs to be known.
+            let none = Default::default();
+            let (next, _) = profile::apply(&self.state, &p, &none, 0).map_err(refused)?;
             if self.themes.get(&next.theme, next.variant).is_none() {
                 return Err(DesktopError::UnknownTheme(next.theme));
             }
@@ -150,8 +153,15 @@ impl Desktop {
         if missing > 0 {
             notices.push(missing_rules_notice(missing));
         }
+        // Startup apps by id, found in the folders now (F14's bounded read) or added.
+        let known = self.startup_known(&base);
+        let missing = missing_startup(&known, &p);
+        if missing > 0 {
+            notices.push(missing_startup_notice(missing));
+        }
+        notices.extend(startup_notice(&p));
         let now = Utc::now().timestamp();
-        let (next, mut memo) = profile::apply(&base, &p, now).map_err(refused)?;
+        let (next, mut memo) = profile::apply(&base, &p, &known, now).map_err(refused)?;
         if self.themes.get(&next.theme, next.variant).is_none() {
             return Err(DesktopError::UnknownTheme(next.theme));
         }
@@ -360,3 +370,6 @@ impl Desktop {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod startup_tests;

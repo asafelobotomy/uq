@@ -437,7 +437,15 @@ impl FakeUqd {
             let rejected = rejected.filter(|(d, _)| d == domain).map(|(_, m)| m);
             let state = self.state.lock().unwrap();
             let files = self.files.lock().unwrap();
-            let out = autostart::explain(domain, &state, &files, rejected.as_deref(), &overrides);
+            let active = self.profiles.active.lock().unwrap().clone();
+            let out = autostart::explain(
+                domain,
+                &state,
+                &files,
+                rejected.as_deref(),
+                active.as_ref(),
+                &overrides,
+            );
             return Ok(out.to_string());
         }
         if domain == "rules" {
@@ -488,6 +496,9 @@ impl FakeUqd {
             let state = self.state.lock().unwrap();
             let files = self.files.lock().unwrap();
             compat::explain(&mut out, &state, &files, rejected.as_deref());
+            if let Some(a) = &*self.profiles.active.lock().unwrap() {
+                uq_core::profile::mark_startup(&mut out, domain, &state, a);
+            }
         }
         for (key, entry) in out.as_object_mut().into_iter().flatten() {
             if let Some(Value::Object(o)) = overrides.get(&format!("{domain}.{key}")) {

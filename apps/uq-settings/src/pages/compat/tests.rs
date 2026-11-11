@@ -534,3 +534,29 @@ async fn uqd_down_gives_empty_state_without_an_error() {
     assert_eq!(run(&page, Op::RefreshWindows).await.error, None);
     assert_eq!(run(&page, save(code_fix())).await.error, None);
 }
+
+#[tokio::test]
+async fn row_says_from_the_profile() {
+    let (r, page, _d) = rig().await;
+    let gaming = "format = 1\nid = \"gaming\"\nname = \"Gaming\"\n[compat]\nqt_wayland = true\n\
+                  [compat.apps.\"code.desktop\"]\nplatform = \"x11\"\n";
+    let proxy = uq_core::client::DesktopProxy::new(&r.client).await.unwrap();
+    proxy.set_profile(gaming, false).await.unwrap();
+    proxy.apply_profile("gaming").await.unwrap();
+    let out = run(&page, Op::Refresh).await;
+    let qt = switch(&out.state, "qt_wayland");
+    assert_eq!(qt["origin"]["source"], "profile");
+    assert_eq!(qt["origin"]["detail"], json!({"name": "Gaming"}));
+    let fix = &out.state["fixes"][0];
+    assert_eq!(fix["origin"]["source"], "profile");
+    assert_eq!(fix["origin"]["detail"], json!({"name": "Gaming"}));
+    // The name is carried once, in the origin.
+    for row in [qt, fix] {
+        let text = row.to_string();
+        assert_eq!(text.matches("Gaming").count(), 1, "{text}");
+    }
+    assert_eq!(
+        switch(&out.state, "electron_wayland")["origin"]["source"],
+        "uq"
+    );
+}

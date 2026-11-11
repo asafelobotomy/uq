@@ -7,6 +7,7 @@ use std::sync::{Arc, Mutex};
 
 use serde_json::{Map, Value, json};
 use uq_core::autostart::{Added, Autostart};
+use uq_core::profile::{ActiveProfile, mark_startup};
 use uq_core::startup_explain::{FileReport, explain_autostart, explain_env};
 use uq_core::state::State;
 
@@ -106,19 +107,24 @@ fn added_row(a: &Added) -> Value {
     row
 }
 
-/// `Explain` for `env` and `autostart`, as uqd's: the core rows (no `user.lua` here), then the
-/// test's overrides, keyed `"<domain>.<row key>"`.
+/// `Explain` for `env` and `autostart`, as uqd's: the core rows (no `user.lua` here), the rows
+/// the active profile still holds marked as its own, then the test's overrides, keyed
+/// `"<domain>.<row key>"`.
 pub fn explain(
     domain: &str,
     state: &State,
     files: &FileReport,
     rejected: Option<&str>,
+    active: Option<&ActiveProfile>,
     overrides: &Map<String, Value>,
 ) -> Value {
     let mut out = match domain {
         "env" => explain_env(state, None, rejected, files, "user.lua"),
         _ => explain_autostart(state, files),
     };
+    if let Some(a) = active {
+        mark_startup(&mut out, domain, state, a);
+    }
     for (key, row) in out.as_object_mut().into_iter().flatten() {
         if let Some(Value::Object(o)) = overrides.get(&format!("{domain}.{key}")) {
             for (k, v) in o {

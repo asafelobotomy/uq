@@ -252,7 +252,7 @@ async fn active_file_written_but_state_not_still_turns_off_cleanly() {
     let r = rig().await;
     // uqd stopped after writing the active file and before the commit.
     let p = Profile::parse(GAMING).unwrap();
-    let (_, memo) = uq_core::profile::apply(r.desktop.state(), &p, 1).unwrap();
+    let (_, memo) = uq_core::profile::apply(r.desktop.state(), &p, &Default::default(), 1).unwrap();
     save_active(&r.desktop.paths().profile_active, &memo).unwrap();
     let mut again = desktop_on(r.dir.path(), r.comp.clone(), r.power.clone());
     let state_file = read(&again.paths().state_file);

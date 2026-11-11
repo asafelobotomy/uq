@@ -103,7 +103,7 @@ impl PageModel for StartupModel {
         settings: false,
         history: true,
         monitors: false,
-        profiles: false,
+        profiles: true,
         autostart: true,
     };
 
