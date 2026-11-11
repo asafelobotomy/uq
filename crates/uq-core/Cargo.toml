@@ -17,6 +17,12 @@ chrono = { version = "0.4", features = ["serde"] }
 sunrise = "3.0.0"
 zbus = { version = "5", default-features = false, features = ["tokio"] }
 tempfile = { workspace = true, optional = true }
+# Integrations (`integration`): the command runner, D-Bus calls with deadlines and the watcher.
+tokio = { version = "1", features = ["process", "time", "io-util", "sync", "rt", "macros", "net"] }
+libc = "0.2"
+quick-xml = "0.41"
+inotify = { version = "0.11", default-features = false, features = ["stream"] }
+futures-util = "0.3.34"
 
 [features]
 # A private dbus-daemon for tests in this and other crates (`uq_core::test_bus`).
@@ -26,3 +32,7 @@ test-bus = ["dep:tempfile"]
 chrono-tz = "0.10.4"
 tempfile.workspace = true
 tokio.workspace = true
+
+[[test]]
+name = "integration_dbus"
+required-features = ["test-bus"]
