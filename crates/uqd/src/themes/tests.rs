@@ -203,6 +203,29 @@ async fn import_conflict_then_replace() {
 }
 
 #[tokio::test]
+async fn replace_refuses_folder_with_extra_files() {
+    let mut r = rig().await;
+    let text = file(&r.desktop, "ocean", "Ocean");
+    r.import(&text, false, false).await.unwrap();
+    let notes = r.root().join("user-ocean/notes.txt");
+    std::fs::write(&notes, "mine").unwrap();
+    match r.import(&text, true, false).await {
+        Err(DesktopError::InvalidArgument(m)) => assert!(m.contains("other files"), "{m}"),
+        other => panic!("{other:?}"),
+    }
+    assert_eq!(std::fs::read_to_string(&notes).unwrap(), "mine");
+}
+
+#[tokio::test]
+async fn import_sees_folder_removed_by_hand() {
+    let mut r = rig().await;
+    let text = file(&r.desktop, "ocean", "Ocean");
+    r.import(&text, false, false).await.unwrap();
+    std::fs::remove_dir_all(r.root().join("user-ocean")).unwrap();
+    r.import(&text, false, false).await.unwrap();
+}
+
+#[tokio::test]
 async fn replacing_active_theme_rerenders_without_history() {
     let mut r = rig().await;
     let text = file(&r.desktop, "ocean", "Ocean");

@@ -8,7 +8,7 @@
 use crate::service::{Change, Desktop, DesktopError, Event};
 use chrono::Utc;
 use serde_json::{Map, Value, json};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use uq_core::atomic::atomic_replace_dir;
 use uq_core::history::{AutoReason, Origin, PointKind};
 use uq_core::state::DEFAULT_THEME;
@@ -145,6 +145,7 @@ impl Desktop {
             return Err(DesktopError::InvalidArgument(NOT_IN_DEV.into()));
         }
         let theme = uqtheme::parse(text).map_err(import_err)?;
+        self.refresh_themes();
         let id = theme.dark.id.clone();
         let folder: PathBuf = self.paths.user_themes_dir.join(&id);
         let known = self.themes.is_user(&id);
@@ -166,6 +167,12 @@ impl Desktop {
             ));
         }
         self.user_root_ok()?;
+        // Replacing swaps the whole folder, so anything else in it would be deleted.
+        if on_disk.as_ref().is_ok_and(|m| m.is_dir()) && has_other_files(&folder) {
+            return Err(DesktopError::InvalidArgument(
+                "This theme's folder holds other files. Move them out first.".into(),
+            ));
+        }
         if let Err(e) = self.restore.save(
             &self.state,
             &format!("Before adding the {} theme", theme.name),
@@ -231,6 +238,7 @@ impl Desktop {
         if self.dev_session {
             return Err(DesktopError::InvalidArgument(NOT_IN_DEV.into()));
         }
+        self.refresh_themes();
         match self.themes.info(id) {
             None => return Err(DesktopError::UnknownTheme(id.to_string())),
             Some(i) if !i.user => {
@@ -272,23 +280,41 @@ impl Desktop {
         let folder = self.paths.user_themes_dir.join(id);
         // Checked again right before removing, so a folder swapped for a link is left alone.
         let is_real_dir = std::fs::symlink_metadata(&folder).is_ok_and(|m| m.is_dir());
+        let mut failed = None;
         if is_real_dir {
             for v in Variant::ALL {
                 match std::fs::remove_file(folder.join(format!("{v}.toml"))) {
                     Ok(()) => {}
                     Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
                     Err(e) => {
-                        return Err(DesktopError::Io(format!("Couldn't remove the theme: {e}")));
+                        failed = Some(DesktopError::Io(format!("Couldn't remove the theme: {e}")));
+                        break;
                     }
                 }
             }
-            // Not recursive: a folder that holds anything else stays.
-            let _ = std::fs::remove_dir(&folder);
+            if failed.is_none() {
+                // Not recursive: a folder that holds anything else stays.
+                let _ = std::fs::remove_dir(&folder);
+            }
         }
         self.load_user_themes();
         let _ = self.events.send(Event::ThemesChanged);
+        if let Some(e) = failed {
+            return Err(e);
+        }
         Ok(json!({ "switched": switched, "profiles": profiles }))
     }
+}
+
+/// Whether `folder` holds anything besides the two variant files.
+fn has_other_files(folder: &Path) -> bool {
+    let Ok(rd) = std::fs::read_dir(folder) else {
+        return false;
+    };
+    rd.flatten().any(|e| {
+        let name = e.file_name();
+        name != "dark.toml" && name != "light.toml"
+    })
 }
 
 #[cfg(test)]
