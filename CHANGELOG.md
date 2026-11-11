@@ -101,6 +101,11 @@ All notable changes to uQ are listed here. The format follows
   `uqd` gains `ListAutostart`, `ShellReady` and an `AutostartChanged` signal, and the `env`,
   `compat` and `autostart` sections use `GetSection` / `SetSection`. `uqctl launch <desktop-id>`
   launches an app the way uQ's launcher does.
+- **`uq-tokens` for web apps.** A small JavaScript module and CSS file (`web/uq-tokens/`) that
+  Tauri, Electron and browser apps copy in to follow the uQ theme: colours, rounding, gaps and
+  fonts become `--uq-*` CSS properties and update live when the theme changes. Bad values are
+  ignored, and without uQ the app's own theme applies. The README has the Tauri and Electron
+  recipes and a version check for vendored copies.
 
 ### Changed
 

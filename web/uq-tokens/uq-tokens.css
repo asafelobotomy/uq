@@ -1,0 +1,47 @@
+/* uq-tokens 1.0.0: fallback custom properties.
+ * Neutral defaults used when uQ's tokens are missing or broken (a plain browser, another
+ * desktop, a bad file). uq-tokens.js sets the same properties inline on <html>, which wins over
+ * these. Edit the values to your app's own theme; keep the property names. */
+:root {
+    --uq-bg: #ffffff;
+    --uq-surface: #f4f4f5;
+    --uq-surface-alt: #e9e9eb;
+    --uq-overlay: #dcdcdf;
+    --uq-text: #1f1f22;
+    --uq-text-muted: #5f5f66;
+    --uq-accent: #2f6fdb;
+    --uq-accent-text: #ffffff;
+    --uq-border: #c8c8cc;
+    --uq-success: #2e7d4f;
+    --uq-warning: #a86b00;
+    --uq-error: #c0392b;
+    --uq-radius: 8px;
+    --uq-gap: 6px;
+    --uq-gap-in: 6px;
+    --uq-gap-out: 12px;
+    --uq-border-width: 1px;
+    --uq-font-size: 14px;
+    --uq-font-ui: system-ui;
+    --uq-font-mono: ui-monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-uq-variant="light"]) {
+        --uq-bg: #1f1f22;
+        --uq-surface: #2b2b2e;
+        --uq-surface-alt: #353538;
+        --uq-overlay: #464649;
+        --uq-text: #e4e4e7;
+        --uq-text-muted: #a9a9ac;
+        --uq-accent: #8ab4f8;
+        --uq-accent-text: #1f1f22;
+        --uq-border: #5a5a5d;
+        --uq-success: #81c995;
+        --uq-warning: #fdd663;
+        --uq-error: #f28b82;
+    }
+}
+
+/* Use them with a fallback stack, e.g.:
+ *   body { background: var(--uq-bg); color: var(--uq-text);
+ *          font-family: var(--uq-font-ui), system-ui, sans-serif; } */
