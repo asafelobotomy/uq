@@ -141,6 +141,24 @@ All notable changes to uQ are listed here. The format follows
   fonts become `--uq-*` CSS properties and update live when the theme changes. Bad values are
   ignored, and without uQ the app's own theme applies. The README has the Tauri and Electron
   recipes and a version check for vendored copies.
+- **Sound, Bluetooth and Network in Settings.** Sound and Bluetooth join the Devices pages and
+  Network gets its own Connections group. A missing service shows "Not available" with the
+  package to install.
+  - **Sound:** pick the speakers or headphones to play through and the microphone to record
+    from, with volume and mute for each; set each app's volume and which device it plays through
+    or records from; choose a sound card's mode; and play a test sound (needs
+    `sound-theme-freedesktop`). The page updates by itself when devices or apps come and go.
+  - **Bluetooth:** turn Bluetooth on or off, let other devices find this computer, look for new
+    devices, pair, connect, disconnect, trust and forget them, and see their battery. When a
+    device shows a code, the page shows the same code and waits for you to press Confirm;
+    nothing is accepted on its own. The page answers pairing requests only while it is open.
+  - **Network:** turn Wi-Fi on or off, see nearby networks, join one (also hidden networks and
+    work or school networks that need a user name or certificate), and forget saved ones;
+    wired connections; WireGuard VPNs (import a `.conf` file and edit it) and OpenVPN
+    connections if NetworkManager's OpenVPN plugin is installed; a hotspot; addresses and DNS
+    for IPv4 and IPv6; and marking a connection as metered. Passwords go straight to
+    NetworkManager and are saved for you only, unless you tick "Everyone who uses this computer
+    can join it too". uQ never writes them down or logs them.
 - **System pages in Settings.** Power, Users, Date and time, Region, Default apps and About join
   Startup under System, and a Login screen page appears when uQ is your login screen. They talk
   to the system's own services, so they work even when uQ's settings service isn't running.
