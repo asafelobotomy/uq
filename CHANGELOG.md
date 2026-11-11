@@ -16,6 +16,9 @@ All notable changes to uQ are listed here. The format follows
 - **`uqctl integrations check --no-programs`.** Skips only the check that each command's and
   app action's program is installed, so an app's CI can check its `uq/` folder without
   installing the app. Paths are still checked.
+- **Settings pages may ship sibling files.** A page folder may hold a `logic.js` imported from
+  its QML (`import "logic.js" as Logic`) and further component files; tested and documented in
+  docs/settings-pages.md.
 - **Keyboard shortcuts.** A Keyboard shortcuts page lists every uQ shortcut by what it does:
   change its keys (press them to capture, or pick them), turn it off, reset it, or put all back.
   Add your own shortcuts: open a uQ panel, a window or workspace action, a layout, start an app

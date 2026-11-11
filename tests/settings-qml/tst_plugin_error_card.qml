@@ -73,6 +73,17 @@ TestCase {
         compare(page.context.pageId, "ctx");
     }
 
+    function test_page_may_use_sibling_files() {
+        // logic.js imported as `import "logic.js" as Logic`, and a component file beside it.
+        const page = createTemporaryObject(pageComp, tc, {
+            source: Qt.resolvedUrl("fixtures/logic/Page.qml")
+        });
+        verify(!page.failed, page.errorText);
+        const loaded = page.children[0].item;
+        compare(loaded.marker, "Running");
+        compare(loaded.row.summary, "Checking…");
+    }
+
     function test_missing_file_shows_error_card() {
         const page = createTemporaryObject(pageComp, tc, {
             source: Qt.resolvedUrl("fixtures/nope/Page.qml")

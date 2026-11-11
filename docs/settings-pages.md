@@ -1,7 +1,8 @@
 # Settings pages from other apps
 
 An app can add its own page to uQ Settings, under **Apps** in the sidebar. The page is a folder
-with a `page.toml` and one QML file, installed by the app's own package. This is the reference
+with a `page.toml` and a QML file (plus, if you like, a `logic.js` and other component files),
+installed by the app's own package. This is the reference
 for writing one; `templates/settings-page/` is a working starting point.
 
 Design: Phase 3 spec §2.5 (plugin pages) and Phase 4 spec §2.3 (`[[command]]`, `[requires]`,
@@ -19,6 +20,25 @@ live discovery), in `docs/superpowers/specs/`.
   it and goes away when it is removed; nobody has to restart Settings or log out.
 - A page that fails to load is skipped with one line in the journal and listed with the reason
   by `uqctl integrations list`. A page whose QML fails shows a "This page couldn't load" card.
+
+### Files in the page folder
+
+The folder holds `page.toml`, the QML file it names, and any other files the page uses. The QML
+file is loaded from its place in the folder, so relative imports work as in any QML:
+
+```
+uq/pages/<id>/page.toml
+uq/pages/<id>/Page.qml        import "logic.js" as Logic
+uq/pages/<id>/logic.js        .pragma library: parsing, argument building, messages
+uq/pages/<id>/StatusRow.qml   a component, used from Page.qml as StatusRow { }
+```
+
+- Keep pure logic (parsing command output, building arguments, checking input) in a `logic.js`
+  that starts `.pragma library` and makes no `Qt.*` calls; then it can be tested with Node
+  without Qt.
+- `uqctl integrations check` reads every `.qml` and `.js` file in the folder, so the text rule
+  covers them all.
+- Install the whole folder (`install -Dm644 -t …/pages/<id>/ uq/pages/<id>/*`).
 
 ## `page.toml`
 

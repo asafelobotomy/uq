@@ -349,3 +349,41 @@ fn no_programs_skips_only_the_installed_check() {
     );
     assert!(out.contains("must be an absolute path under"), "{out}");
 }
+
+/// A page may ship sibling files: `logic.js` (imported from its QML) and further component
+/// files. They pass the check, and the text rule covers them too.
+#[test]
+fn pages_may_ship_logic_js_and_components() {
+    let d = tempfile::tempdir().unwrap();
+    let uq = d.path().join("uq");
+    good_folder(&uq);
+    put(
+        &uq.join("pages/demo/Page.qml"),
+        "import QtQuick\nimport \"logic.js\" as Logic\nItem {\n    property var ctx\n    \
+         StatusRow {}\n}\n",
+    );
+    put(
+        &uq.join("pages/demo/logic.js"),
+        ".pragma library\nfunction describe(s) { return s ? \"Running\" : \"Stopped\"; }\n",
+    );
+    put(
+        &uq.join("pages/demo/StatusRow.qml"),
+        "import QtQuick\nItem {}\n",
+    );
+    let dir = uq.to_str().unwrap();
+    let (ok, out) = uqctl(&["integrations", "check", dir]);
+    assert!(ok, "{out}");
+
+    put(
+        &uq.join("pages/demo/StatusRow.qml"),
+        "import QtQuick\nItem {\n    Text { text: \"x\" }\n}\n",
+    );
+    put(
+        &uq.join("pages/demo/logic.js"),
+        ".pragma library\nfunction make(p) { return Qt.createQmlObject(\"\", p); }\n",
+    );
+    let (ok, out) = uqctl(&["integrations", "check", dir]);
+    assert!(!ok, "{out}");
+    assert!(out.contains("StatusRow.qml:3: Text"), "{out}");
+    assert!(out.contains("logic.js:2: Text"), "{out}");
+}
