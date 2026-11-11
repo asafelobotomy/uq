@@ -250,6 +250,9 @@ All notable changes to uQ are listed here. The format follows
 - **The lock screen no longer waits for ever on a password check.** If PAM has not answered
   after 60 seconds, the check is stopped and the lock screen says "That took too long. Try
   again." Esc stops a check that is still waiting.
+- **A slow session bus or uqd no longer holds up the shell's start.** The bridge gives up on
+  connecting, subscribing and asking for uqd after 2 seconds and tries again later, and sends
+  `Hello` after at most 2 seconds of waiting for Welcome's status (the shell asks again).
 
 ## [0.2.1] - 2026-11-10
 

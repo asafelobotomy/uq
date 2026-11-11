@@ -20,8 +20,13 @@ pub const DOWN: &str = "uqd is not running";
 /// `Reload` can take about 12 s inside uqd (verify + reload); never wait forever.
 const CALL_TIMEOUT: Duration = Duration::from_secs(20);
 const POLL: Duration = Duration::from_secs(5);
-/// `ShellReady` returns at once in uqd; a watch loop never waits longer than this on it.
-const READY_WAIT: Duration = Duration::from_secs(2);
+/// `ShellReady` returns at once in uqd; a watch loop never waits longer than this on it. The
+/// `GetWelcome` asked before `Hello` is bounded by it too, so a stuck uqd can't hold up `Hello`.
+pub const READY_WAIT: Duration = Duration::from_secs(2);
+/// Connecting to the bus, subscribing and asking who owns the name: a bus that accepts the
+/// connection but never answers must not stall `open` (and so `Hello`) or the watch loop, which
+/// retries on its next poll.
+const BUS_WAIT: Duration = Duration::from_secs(2);
 
 /// The bridge's view of uqd: a (lazily established) bus connection plus whether the name is owned.
 pub struct Link {
@@ -43,8 +48,15 @@ struct Subs {
 
 type OwnerStream = zbus::fdo::NameOwnerChangedStream;
 
-/// Connect and subscribe to owner changes and uqd's signals.
+/// Connect and subscribe to owner changes and uqd's signals, giving up after `BUS_WAIT`.
 async fn subscribe(addr: Option<&str>) -> Option<(Connection, Subs)> {
+    tokio::time::timeout(BUS_WAIT, subscribe_unbounded(addr))
+        .await
+        .ok()
+        .flatten()
+}
+
+async fn subscribe_unbounded(addr: Option<&str>) -> Option<(Connection, Subs)> {
     let conn = connect(addr).await.ok()?;
     let owner = DBusProxy::new(&conn)
         .await
@@ -72,14 +84,19 @@ async fn connect(addr: Option<&str>) -> zbus::Result<Connection> {
     }
 }
 
+/// Whether uqd owns its name; false when the bus doesn't answer within `BUS_WAIT` (the watch
+/// loop's poll asks again while uqd looks down).
 async fn has_owner(conn: &Connection) -> bool {
-    match DBusProxy::new(conn).await {
-        Ok(p) => p
-            .name_has_owner(NAME.try_into().expect("valid bus name"))
-            .await
-            .unwrap_or(false),
-        Err(_) => false,
-    }
+    let ask = async {
+        match DBusProxy::new(conn).await {
+            Ok(p) => p
+                .name_has_owner(NAME.try_into().expect("valid bus name"))
+                .await
+                .unwrap_or(false),
+            Err(_) => false,
+        }
+    };
+    tokio::time::timeout(BUS_WAIT, ask).await.unwrap_or(false)
 }
 
 impl Link {
@@ -599,5 +616,29 @@ mod tests {
         assert!(Request::parse("PickDone", &[json!("t")]).is_err());
         assert!(Request::parse("PickDone", &[json!("t"), json!(1)]).is_err());
         assert!(Request::parse("PickDone", &[json!("t"), json!("x"), json!("y")]).is_err());
+    }
+
+    /// A "bus" that accepts the connection and never speaks: `open` gives up within BUS_WAIT
+    /// and reports uqd down instead of hanging (so `Hello` still goes out).
+    #[tokio::test]
+    async fn open_gives_up_on_a_silent_bus() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("bus");
+        let listener = tokio::net::UnixListener::bind(&path).unwrap();
+        let held = tokio::spawn(async move {
+            let mut conns = Vec::new();
+            while let Ok((c, _)) = listener.accept().await {
+                conns.push(c);
+            }
+        });
+        let addr = format!("unix:path={}", path.display());
+        let started = std::time::Instant::now();
+        let link = tokio::time::timeout(Duration::from_secs(10), Link::open(Some(&addr)))
+            .await
+            .expect("open returns");
+        assert!(!link.is_up());
+        assert!(link.connection().await.is_none());
+        assert!(started.elapsed() < Duration::from_secs(8));
+        held.abort();
     }
 }

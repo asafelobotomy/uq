@@ -108,7 +108,7 @@ async fn handle(s: &Services, call: &str, args: &[Value]) -> Result<Value, Strin
             }
         }
         "WelcomeStatus" if args.is_empty() => {
-            Ok(welcome::status(link, welcome::runtime_dir().as_deref()).await)
+            Ok(welcome::status(link, welcome::runtime_dir().as_deref(), None).await)
         }
         "WelcomeStatus" => Err("WelcomeStatus takes no arguments".into()),
         "Launch" => launch::launch(link, args, runs).await,
@@ -256,8 +256,15 @@ where
     while let Ok(locked) = locks.try_recv() {
         known_lock = Some(locked);
     }
-    // Whether Welcome is due (null when uqd isn't up yet) and held back by bindle (§5.1).
-    let welcome = welcome::status(&link, welcome::runtime_dir().as_deref()).await;
+    // Whether Welcome is due (null when uqd isn't up yet or doesn't answer within READY_WAIT)
+    // and held back by bindle (§5.1). A null with uqd_up true makes the shell ask again
+    // (WelcomeStatus) after its grace period; a null with uqd down waits for UqdUp.
+    let welcome = welcome::status(
+        &link,
+        welcome::runtime_dir().as_deref(),
+        Some(uqd::READY_WAIT),
+    )
+    .await;
     let hello = Outbound::Event {
         event: "Hello".into(),
         data: json!({"v": 1, "uqd_up": link.is_up(), "locked": known_lock.unwrap_or(false),
