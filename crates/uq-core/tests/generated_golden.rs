@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
-use uq_core::lua::{Layout, emit_generated};
+use uq_core::lua::{Layout, StartupRender, emit_generated};
 use uq_core::rules::{Rules, WorkspaceRule};
 use uq_core::settings::{
     AccelProfile, DeviceOverride, ForceSplit, KbLayout, NewStatus, Orientation, OutputConfig,
@@ -102,11 +102,32 @@ fn golden_default_and_all_set() {
         }],
         ..Rules::default()
     };
-    for (name, settings, rules) in [
-        ("default", Settings::default(), Rules::default()),
-        ("all-set", all_set(), ws_rules),
+    // Sharp X11 apps on, and three session variables (one hostile) through `hl.env`.
+    let startup = StartupRender {
+        zero_scaling: true,
+        env: vec![
+            ("GDK_SCALE".into(), "2".into()),
+            ("MOZ_ENABLE_WAYLAND".into(), "1".into()),
+            ("QUOTED".into(), "say \"hi\") hl.exec_cmd(\"x".into()),
+        ],
+        export: true,
+    };
+    for (name, settings, rules, startup) in [
+        (
+            "default",
+            Settings::default(),
+            Rules::default(),
+            StartupRender::default(),
+        ),
+        ("all-set", all_set(), ws_rules, StartupRender::default()),
+        (
+            "startup-all",
+            Settings::default(),
+            Rules::default(),
+            startup,
+        ),
     ] {
-        let out = emit_generated(theme, &layouts, &rules, &settings);
+        let out = emit_generated(theme, &layouts, &rules, &settings, &startup);
         let path = root.join(format!("tests/golden/generated/{name}.lua"));
         if bless {
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();

@@ -3,6 +3,8 @@
 //! The domain model (`Env`), its strict write-time validation, its lenient load-time repair,
 //! the `environment.d` text and the History summary. Every refusal is a plain sentence.
 
+use crate::compat::Compat;
+use crate::compat::launch::switch_env;
 use crate::settings::{SettingError, check_known, invalid};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
@@ -236,6 +238,30 @@ impl Env {
             .find(|v| v.name == name)
             .map(|v| v.value.as_str())
     }
+}
+
+fn merged(env: &Env, switches: Vec<(String, String)>) -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = env
+        .vars
+        .iter()
+        .filter(|v| !switches.iter().any(|(n, _)| *n == v.name))
+        .map(|v| (v.name.clone(), v.value.clone()))
+        .collect();
+    out.extend(switches);
+    out
+}
+
+/// The session's variables, one list for `generated.lua`, `environment.d` and autostart
+/// children (F19): the env domain in order, then the switch lines, a switch's name replacing an
+/// env one (R11). No cursor lines.
+pub fn session_env(env: &Env, compat: &Compat, main: Option<f64>) -> Vec<(String, String)> {
+    merged(env, switch_env(compat, main))
+}
+
+/// [`session_env`] without the scale-derived switch lines (F18): `environment.d` can't know
+/// the main screen's scale. A line that needs a scale is left out when none is given.
+pub fn environment_d_lines(env: &Env, compat: &Compat) -> Vec<(String, String)> {
+    merged(env, switch_env(compat, None))
 }
 
 /// The text of `environment.d/60-uq.conf`: the header, then `NAME='value'` per line. A value

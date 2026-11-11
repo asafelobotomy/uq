@@ -370,3 +370,60 @@ fn refusals_are_plain() {
         }
     }
 }
+
+fn pairs(v: &[(String, String)]) -> Vec<(&str, &str)> {
+    v.iter().map(|(n, v)| (n.as_str(), v.as_str())).collect()
+}
+
+fn env_of(vars: &[(&str, &str)]) -> Env {
+    Env {
+        vars: vars
+            .iter()
+            .map(|(n, v)| Var {
+                name: n.to_string(),
+                value: v.to_string(),
+            })
+            .collect(),
+    }
+}
+
+#[test]
+fn session_env_compat_replaces_env() {
+    use crate::compat::{Compat, hypr::SwitchKey};
+    let env = env_of(&[("A", "1"), ("QT_QPA_PLATFORM", "xcb"), ("Z", "2")]);
+    let mut compat = Compat::default();
+    compat.set_switch(SwitchKey::QtWayland, true);
+    let got = session_env(&env, &compat, None);
+    assert_eq!(
+        pairs(&got),
+        [("A", "1"), ("Z", "2"), ("QT_QPA_PLATFORM", "wayland;xcb")]
+    );
+    let d = environment_d_lines(&env, &compat);
+    assert_eq!(pairs(&d), pairs(&got));
+}
+
+#[test]
+fn session_env_has_no_cursor() {
+    use crate::compat::Compat;
+    let got = session_env(&env_of(&[("A", "1")]), &Compat::default(), Some(1.5));
+    assert_eq!(pairs(&got), [("A", "1")]);
+    assert!(got.iter().all(|(n, _)| !n.contains("CURSOR")));
+}
+
+#[test]
+fn environment_d_lines_leave_out_scale_lines() {
+    use crate::compat::{Compat, hypr::SwitchKey};
+    let mut compat = Compat::default();
+    compat.set_switch(SwitchKey::SharpX11, true);
+    compat.set_switch(SwitchKey::SteamScale, true);
+    compat.set_switch(SwitchKey::ElectronWayland, true);
+    let env = env_of(&[("A", "1")]);
+    let d = environment_d_lines(&env, &compat);
+    assert_eq!(
+        pairs(&d),
+        [("A", "1"), ("ELECTRON_OZONE_PLATFORM_HINT", "auto")]
+    );
+    let s = session_env(&env, &compat, Some(1.5));
+    assert!(s.iter().any(|(n, _)| n == "GDK_SCALE"));
+    assert!(s.iter().any(|(n, _)| n == "STEAM_FORCE_DESKTOPUI_SCALING"));
+}

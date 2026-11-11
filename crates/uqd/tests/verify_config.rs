@@ -8,7 +8,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use uq_core::lua::{Layout, emit_generated};
+use uq_core::lua::{Layout, StartupRender, emit_generated};
 use uq_core::paths::Paths;
 use uq_core::rules::{
     LayerEffects, LayerMatch, LayerRule, Rules, WindowEffects, WindowMatch, WindowRule,
@@ -529,7 +529,16 @@ fn lua_mock_runs_every_variant() {
     std::fs::write(&mock, MOCK).unwrap();
     for t in reg.iter() {
         let root = dir.path().join(format!("{}-{}", t.id, t.variant));
-        let (p, _) = tree(&root, &emit_generated(t, &layouts(), &rules(), &settings()));
+        let (p, _) = tree(
+            &root,
+            &emit_generated(
+                t,
+                &layouts(),
+                &rules(),
+                &settings(),
+                &StartupRender::default(),
+            ),
+        );
         let out = Command::new(&lua)
             .arg(&mock)
             .args([&p.base_lua, &p.generated_lua, &p.user_lua])
@@ -559,7 +568,13 @@ fn hostile_rules_run_as_one_call_each() {
     let mock = dir.path().join("mock.lua");
     std::fs::write(&mock, MOCK).unwrap();
     let hostile = hostile_rules();
-    let gen_ = emit_generated(t, &layouts(), &hostile, &settings());
+    let gen_ = emit_generated(
+        t,
+        &layouts(),
+        &hostile,
+        &settings(),
+        &StartupRender::default(),
+    );
     let (p, _) = tree(&dir.path().join("hostile"), &gen_);
     let out = Command::new(&lua)
         .arg(&mock)
@@ -587,7 +602,16 @@ fn all_variants_pass_hyprland_verify() {
     let dir = tempfile::tempdir().unwrap();
     for t in reg.iter() {
         let root = dir.path().join(format!("{}-{}", t.id, t.variant));
-        let (_, main) = tree(&root, &emit_generated(t, &layouts(), &rules(), &settings()));
+        let (_, main) = tree(
+            &root,
+            &emit_generated(
+                t,
+                &layouts(),
+                &rules(),
+                &settings(),
+                &StartupRender::default(),
+            ),
+        );
         let out = Command::new("Hyprland")
             .arg("--verify-config")
             .arg("-c")
@@ -601,6 +625,75 @@ fn all_variants_pass_hyprland_verify() {
         );
         assert!(out.status.success(), "{} {}: {text}", t.id, t.variant);
     }
+}
+
+fn startup_all() -> StartupRender {
+    StartupRender {
+        zero_scaling: true,
+        env: vec![
+            ("GDK_SCALE".into(), "2".into()),
+            ("MOZ_ENABLE_WAYLAND".into(), "1".into()),
+            ("QUOTED".into(), "\") hl.exec_cmd(\"x".into()),
+        ],
+        export: true,
+    }
+}
+
+/// Review Focus 1: a hostile variable value is one `hl.env` call with the literal value, and
+/// the payload never runs as code. Runs in CI only (K4).
+#[test]
+fn hostile_env_runs_as_one_call_each() {
+    let Ok(lua) = which("lua") else {
+        eprintln!("skipping: no `lua` on PATH");
+        return;
+    };
+    let reg = ThemeRegistry::load_dir(&repo().join("themes")).unwrap();
+    let t = reg.iter().next().unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let mock = dir.path().join("mock.lua");
+    std::fs::write(&mock, MOCK).unwrap();
+    let gen_ = emit_generated(t, &layouts(), &rules(), &settings(), &startup_all());
+    let (p, _) = tree(&dir.path().join("env"), &gen_);
+    let out = Command::new(&lua)
+        .arg(&mock)
+        .args([&p.base_lua, &p.generated_lua, &p.user_lua])
+        .output()
+        .unwrap();
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        out.status.success(),
+        "{text}{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    // The mock's own checks (the payload would show up as an exec_cmd) pass and it loads.
+    assert!(text.starts_with("ok "), "{text}");
+    // Locally: exactly one `hl.env` per variable in the file (3 here, 3 cursor lines).
+    let file = std::fs::read_to_string(&p.generated_lua).unwrap();
+    assert_eq!(file.matches("hl.env(").count(), 6, "{file}");
+    assert!(!text.contains("hl.exec_cmd:x"), "{text}");
+    assert!(!text.contains("hl.exec_cmd:\"x"), "{text}");
+}
+
+#[test]
+#[ignore = "needs Hyprland; CI runs it with --ignored"]
+fn startup_switches_pass_hyprland_verify() {
+    let reg = ThemeRegistry::load_dir(&repo().join("themes")).unwrap();
+    let t = reg.iter().next().unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let gen_ = emit_generated(t, &layouts(), &rules(), &settings(), &startup_all());
+    let (_, main) = tree(&dir.path().join("startup"), &gen_);
+    let out = Command::new("Hyprland")
+        .arg("--verify-config")
+        .arg("-c")
+        .arg(&main)
+        .output()
+        .unwrap();
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(out.status.success(), "{text}");
 }
 
 fn which(bin: &str) -> Result<PathBuf, ()> {

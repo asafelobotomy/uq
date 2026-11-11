@@ -14,7 +14,7 @@ use uq_core::history::{
     AutoReason, Entry, Journal, MAX_ENTRIES, Origin, PointKind, RestorePoint, RestoreStore, diff,
     revert_changed,
 };
-use uq_core::lua::{Layout, emit_generated, emit_workspace_rule, lua_string};
+use uq_core::lua::{Layout, StartupRender, emit_generated, emit_workspace_rule, lua_string};
 use uq_core::paths::Paths;
 use uq_core::profile::{ActiveProfile, ProfileStore, holds, load_active};
 use uq_core::render::{RenderedFiles, kvantum_base, render};
@@ -968,7 +968,13 @@ impl Desktop {
         };
         let files = render(&theme, &self.paths.templates_dir, base)
             .map_err(|e| DesktopError::Io(e.to_string()))?;
-        let generated = emit_generated(&theme, &next.layouts, &next.rules, &next.settings);
+        let generated = emit_generated(
+            &theme,
+            &next.layouts,
+            &next.rules,
+            &next.settings,
+            &StartupRender::default(),
+        );
 
         self.ensure_user_lua()?;
         let path = self
