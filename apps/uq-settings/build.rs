@@ -71,6 +71,9 @@ fn main() {
         QmlFile::from("qml/welcome/AppsStep.qml"),
         QmlFile::from("qml/welcome/FingerprintStep.qml"),
         QmlFile::from("qml/welcome/DoneStep.qml"),
+        QmlFile::from("qml/pages/NetworkPage.qml"),
+        QmlFile::from("qml/pages/BluetoothPage.qml"),
+        QmlFile::from("qml/pages/SoundPage.qml"),
     ]))
     .qt_module("Gui")
     .qt_module("Quick")
@@ -100,6 +103,9 @@ fn main() {
         "src/defaultapps_model.rs",
         "src/about_model.rs",
         "src/welcome_model.rs",
+        "src/network_model.rs",
+        "src/bluetooth_model.rs",
+        "src/sound_model.rs",
     ])
     .cpp_file("cpp/window.cpp");
     // SAFETY: only adds a warning flag; GCC 16 warns about Qt's own headers.

@@ -21,18 +21,20 @@ optdepends=(
   'bibata-cursor-theme: cursor theme used by every uQ theme'
   'ttf-jetbrains-mono: monospace font'
   'inter-font: interface font'
-  'wireplumber: volume keys'
+  'wireplumber: volume keys and the Sound settings page'
   'playerctl: media keys'
-  'networkmanager: network status in the shell'
+  'networkmanager: network status in the shell and the Network settings page'
   'scdr: CPU priorities for the focused app and builds (enable scdr-session; uQ starts it)'
   'tailscale: exit-node and VPN status in the shell'
-  'bluez: Bluetooth status in the shell'
+  'bluez: Bluetooth status in the shell and the Bluetooth settings page'
   'power-profiles-daemon: power profile switching'
   'hyprlock: fallback lock for the SUPER+CTRL+L recovery bind'
   'noti-fi: notification backend'
   'fprintd: fingerprint unlock'
   'crum-bs: uninstall apps with their leftovers and clean up storage'
   'greetd: the uQ login screen (run0 uqctl greeter enable)'
+  'networkmanager-openvpn: OpenVPN connections on the Network settings page'
+  'sound-theme-freedesktop: the test sound on the Sound settings page'
 )
 # Keep !lto: rustc links with lld, and makepkg's LTO flags make the cxx-qt C++ objects unreadable to it.
 options=(!lto)

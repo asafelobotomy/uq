@@ -791,7 +791,112 @@ static ABOUT_SETTINGS: [SearchEntry; 2] = [
     ),
 ];
 
-static CORE_PAGES: [PageInfo; 18] = [
+static SOUND_SETTINGS: [SearchEntry; 4] = [
+    entry(
+        "sound-output",
+        "Play sound through",
+        &[
+            "speakers",
+            "headphones",
+            "volume",
+            "mute",
+            "output",
+            "test sound",
+        ],
+    ),
+    entry(
+        "sound-input",
+        "Record sound from",
+        &["microphone", "mic", "input", "recording", "volume"],
+    ),
+    entry(
+        "sound-apps",
+        "App volume",
+        &["app volume", "mixer", "per app", "playing"],
+    ),
+    entry(
+        "sound-profiles",
+        "Sound card modes",
+        &["profile", "sound card", "hdmi", "duplex"],
+    ),
+];
+
+static BLUETOOTH_SETTINGS: [SearchEntry; 4] = [
+    entry(
+        "bluetooth-power",
+        "Bluetooth",
+        &["bluetooth", "wireless", "turn on", "turn off"],
+    ),
+    entry(
+        "bluetooth-visible",
+        "Let other devices find this computer",
+        &["discoverable", "visible", "find", "bluetooth name"],
+    ),
+    entry(
+        "bluetooth-devices",
+        "Your Bluetooth devices",
+        &[
+            "paired",
+            "headphones",
+            "connect",
+            "battery",
+            "forget",
+            "trust",
+        ],
+    ),
+    entry(
+        "bluetooth-pair",
+        "Pair a new device",
+        &["pair", "add device", "scan", "keyboard", "mouse", "speaker"],
+    ),
+];
+
+static NETWORK_SETTINGS: [SearchEntry; 8] = [
+    entry(
+        "wifi",
+        "Wi-Fi",
+        &["wireless", "wlan", "internet", "join", "password"],
+    ),
+    entry(
+        "hidden-network",
+        "Join a hidden network",
+        &["hidden", "ssid", "not listed"],
+    ),
+    entry(
+        "saved-connections",
+        "Saved connections",
+        &["forget", "known networks", "connect automatically"],
+    ),
+    entry("wired", "Wired network", &["ethernet", "cable", "lan"]),
+    entry(
+        "vpn",
+        "VPN",
+        &[
+            "wireguard",
+            "openvpn",
+            "tunnel",
+            "import",
+            "private network",
+        ],
+    ),
+    entry(
+        "hotspot",
+        "Hotspot",
+        &["share connection", "tethering", "access point"],
+    ),
+    entry(
+        "ip-settings",
+        "Addresses and DNS",
+        &["ip", "dns", "static", "manual address", "gateway", "ipv6"],
+    ),
+    entry(
+        "metered",
+        "Metered connection",
+        &["data limit", "mobile data", "data plan"],
+    ),
+];
+
+static CORE_PAGES: [PageInfo; 21] = [
     PageInfo {
         id: "appearance",
         name: "Appearance",
@@ -845,6 +950,33 @@ static CORE_PAGES: [PageInfo; 18] = [
         qml: "pages/InputPage.qml",
         settings: &INPUT_SETTINGS,
         domains: &["input"],
+    },
+    PageInfo {
+        id: "sound",
+        name: "Sound",
+        icon: "preferences-desktop-sound",
+        category: Category::Devices,
+        qml: "pages/SoundPage.qml",
+        settings: &SOUND_SETTINGS,
+        domains: &[],
+    },
+    PageInfo {
+        id: "bluetooth",
+        name: "Bluetooth",
+        icon: "preferences-system-bluetooth",
+        category: Category::Devices,
+        qml: "pages/BluetoothPage.qml",
+        settings: &BLUETOOTH_SETTINGS,
+        domains: &[],
+    },
+    PageInfo {
+        id: "network",
+        name: "Network",
+        icon: "preferences-system-network",
+        category: Category::Connections,
+        qml: "pages/NetworkPage.qml",
+        settings: &NETWORK_SETTINGS,
+        domains: &[],
     },
     PageInfo {
         id: "shell",
@@ -1281,6 +1413,9 @@ mod tests {
                 "displays",
                 "apps-scaling",
                 "input",
+                "sound",
+                "bluetooth",
+                "network",
                 "shell",
                 "profiles",
                 "rules",
@@ -1307,12 +1442,18 @@ mod tests {
         assert_eq!(v[4]["domains"], serde_json::json!(["compat"]));
         assert_eq!(v[5]["qml"], "pages/InputPage.qml");
         assert_eq!(v[5]["categoryName"], "Devices");
-        assert_eq!(v[6]["qml"], "pages/ShellPage.qml");
-        assert_eq!(v[6]["categoryName"], "uQ");
-        assert_eq!(v[10]["qml"], "pages/StartupPage.qml");
-        assert_eq!(v[10]["category"], "system");
-        assert_eq!(v[10]["categoryName"], "System");
-        assert_eq!(v[10]["domains"], serde_json::json!(["autostart", "env"]));
+        assert_eq!(v[6]["qml"], "pages/SoundPage.qml");
+        assert_eq!(v[6]["categoryName"], "Devices");
+        assert_eq!(v[7]["qml"], "pages/BluetoothPage.qml");
+        assert_eq!(v[7]["categoryName"], "Devices");
+        assert_eq!(v[8]["qml"], "pages/NetworkPage.qml");
+        assert_eq!(v[8]["categoryName"], "Connections");
+        assert_eq!(v[9]["qml"], "pages/ShellPage.qml");
+        assert_eq!(v[9]["categoryName"], "uQ");
+        assert_eq!(v[13]["qml"], "pages/StartupPage.qml");
+        assert_eq!(v[13]["category"], "system");
+        assert_eq!(v[13]["categoryName"], "System");
+        assert_eq!(v[13]["domains"], serde_json::json!(["autostart", "env"]));
     }
 
     #[test]
@@ -1519,6 +1660,41 @@ mod tests {
         }
         let login = find("login-screen").unwrap();
         assert!(login.settings.iter().any(|s| s.id == "auto-login"));
+    }
+
+    #[test]
+    fn sound_follows_input() {
+        let page = find("sound").expect("the sound page is registered");
+        assert_eq!(page.category, Category::Devices);
+        assert_eq!(page.qml, "pages/SoundPage.qml");
+        assert!(page.domains.is_empty(), "it changes no uQ setting");
+        let ids: Vec<_> = core_pages().iter().map(|p| p.id).collect();
+        let at = ids.iter().position(|id| *id == "sound").unwrap();
+        assert_eq!(ids[at - 1], "input");
+        assert_eq!(ids[at + 1], "bluetooth");
+        assert!(page.settings.iter().any(|s| s.id == "sound-output"));
+    }
+
+    #[test]
+    fn bluetooth_ends_the_devices_pages() {
+        let page = find("bluetooth").expect("the bluetooth page is registered");
+        assert_eq!(page.category, Category::Devices);
+        assert_eq!(page.qml, "pages/BluetoothPage.qml");
+        assert!(page.domains.is_empty(), "it changes no uQ setting");
+        let ids: Vec<_> = core_pages().iter().map(|p| p.id).collect();
+        let at = ids.iter().position(|id| *id == "bluetooth").unwrap();
+        assert_eq!(ids[at + 1], "network");
+    }
+
+    #[test]
+    fn network_is_the_connections_page() {
+        let page = find("network").expect("the network page is registered");
+        assert_eq!(page.category, Category::Connections);
+        assert_eq!(page.qml, "pages/NetworkPage.qml");
+        assert!(page.domains.is_empty(), "it changes no uQ setting");
+        let ids: Vec<_> = core_pages().iter().map(|p| p.id).collect();
+        let at = ids.iter().position(|id| *id == "network").unwrap();
+        assert_eq!(ids[at + 1], "shell", "the last page before the uQ pages");
     }
 
     #[test]

@@ -72,7 +72,7 @@ pub enum Failure {
 }
 
 /// D-Bus error names that mean "not allowed" or "cancelled" at a polkit prompt.
-const QUIET: [&str; 7] = [
+const QUIET: [&str; 9] = [
     "org.freedesktop.DBus.Error.AccessDenied",
     "org.freedesktop.DBus.Error.InteractiveAuthorizationRequired",
     "org.freedesktop.Accounts.Error.PermissionDenied",
@@ -80,6 +80,8 @@ const QUIET: [&str; 7] = [
     "org.freedesktop.PolicyKit1.Error.NotAuthorized",
     "org.uq.SettingsHelper1.Error.NotAuthorized",
     "net.hadess.PowerProfiles.Error.AccessDenied",
+    "org.freedesktop.NetworkManager.PermissionDenied",
+    "org.freedesktop.NetworkManager.Settings.PermissionDenied",
 ];
 
 /// D-Bus error names that mean the service isn't there.
