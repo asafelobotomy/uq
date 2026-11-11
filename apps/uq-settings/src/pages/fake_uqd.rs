@@ -353,6 +353,11 @@ impl FakeUqd {
         self.windows.list()
     }
 
+    fn list_integration_rules(&self) -> String {
+        let on = self.state.lock().unwrap().integration_rules.enabled.clone();
+        self.windows.list_app_rules(&on)
+    }
+
     fn pick_window(&self) -> Result<String, FakeError> {
         self.windows.pick()
     }

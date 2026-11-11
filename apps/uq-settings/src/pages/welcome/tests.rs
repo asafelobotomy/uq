@@ -52,6 +52,7 @@ async fn setup(reader: Option<&[&str]>) -> (T, Places, SystemBus) {
             pages: root.join("uq/settings/pages"),
             providers: vec![root.join("uq/launcher")],
             actions: root.join("uq/launcher/actions"),
+            integrations: root.join("uq/integrations"),
             bin_dir: root.join("bin"),
         },
         bin_dir: root.join("bin"),

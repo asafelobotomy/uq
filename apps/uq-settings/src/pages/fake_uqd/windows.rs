@@ -18,6 +18,9 @@ pub struct FakeWindows {
     pub picks: Arc<Mutex<VecDeque<Value>>>,
     /// When set, `PickWindow` fails with `Conflict`.
     pub conflict: Arc<AtomicBool>,
+    /// What `ListIntegrationRules` lists: `{rules, problems}` (each rule as
+    /// `AppRule::to_json`); `enabled` and `missing` come from the state.
+    pub app_rules: Arc<Mutex<Value>>,
 }
 
 impl FakeWindows {
@@ -43,6 +46,37 @@ impl FakeWindows {
     /// `ListWindows`.
     pub fn list(&self) -> String {
         serde_json::to_string(&*self.windows.lock().unwrap()).unwrap()
+    }
+
+    /// Install packaged rules (`rules.toml` text per integration) for `ListIntegrationRules`,
+    /// checked as uqd checks them: a refused file is listed under `problems`.
+    pub fn install_rules(&self, files: &[(&str, &str)]) {
+        let (mut rules, mut problems) = (Vec::new(), Vec::new());
+        for (name, text) in files {
+            match uq_core::integration::rules::parse_rules(text, name) {
+                Ok(list) => rules.extend(list.iter().map(|r| r.to_json())),
+                Err(e) => problems.push(json!({"integration": name,
+                    "path": format!("/usr/share/uq/integrations/{name}/rules.toml"),
+                    "error": e.to_string()})),
+            }
+        }
+        *self.app_rules.lock().unwrap() = json!({"rules": rules, "problems": problems});
+    }
+
+    /// `ListIntegrationRules` for the ids that are on.
+    pub fn list_app_rules(&self, on: &[String]) -> String {
+        let v = self.app_rules.lock().unwrap().clone();
+        let mut rules: Vec<Value> = v["rules"].as_array().cloned().unwrap_or_default();
+        for r in &mut rules {
+            r["enabled"] = json!(on.iter().any(|id| r["id"] == json!(id)));
+        }
+        let missing: Vec<&String> = on
+            .iter()
+            .filter(|id| !rules.iter().any(|r| r["id"] == json!(id)))
+            .collect();
+        json!({"rules": rules, "problems": v.get("problems").cloned().unwrap_or(json!([])),
+            "missing": missing})
+        .to_string()
     }
 
     /// `PickWindow`.

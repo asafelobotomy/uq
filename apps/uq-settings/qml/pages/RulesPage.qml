@@ -2,7 +2,8 @@
 // notifications and launchers, and workspace rules. Each rule can be turned on and off, edited,
 // moved and deleted; a new one starts blank or from a template. "Pick a window" hides this
 // window while the person clicks the window to match, and "Why does this window…?" lists the
-// rules a clicked window gets. Everything goes through RulesModel. Window titles, app IDs, rule
+// rules a clicked window gets. "Rules from apps" lists the window rules installed apps offer,
+// each with a switch (AppRuleList). Everything goes through RulesModel. Window titles, app IDs, rule
 // names, patterns and Hyprland's messages are shown through UqLabel (plain text) only.
 import QtQuick
 import QtQuick.Controls as QQC2
@@ -660,6 +661,16 @@ QQC2.ScrollView {
                 kind: "workspace"
                 count: (page.snap.workspace || []).length
             }
+        }
+        // Window rules installed apps offer (Phase 4 §3.3), each off until turned on here.
+        AppRuleList {
+            objectName: "appRules"
+            apps: page.ready ? (page.snap.apps || ({})) : ({})
+            canChange: page.idle
+            highlight: App.highlight
+            Layout.fillWidth: true
+            Layout.topMargin: Kirigami.Units.largeSpacing * 2
+            onTurned: (id, on) => rm.setAppRule(id, on)
         }
         Item {
             implicitHeight: Kirigami.Units.largeSpacing
