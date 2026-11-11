@@ -57,8 +57,7 @@ fn program_of(argv: Vec<String>) -> Option<String> {
     if first.rsplit('/').next() != Some("env") {
         return Some(first);
     }
-    it.skip_while(|a| a == "--" || a.split_once('=').is_some_and(|(n, _)| !n.is_empty()))
-        .next()
+    it.find(|a| a != "--" && !a.split_once('=').is_some_and(|(n, _)| !n.is_empty()))
         .or(Some(first))
 }
 
