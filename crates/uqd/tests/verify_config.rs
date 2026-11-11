@@ -8,7 +8,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use uq_core::lua::{Layout, StartupRender, emit_generated};
+use uq_core::lua::{Layout, StartupRender, emit_generated, emit_generated_with_apps};
 use uq_core::paths::Paths;
 use uq_core::rules::{
     LayerEffects, LayerMatch, LayerRule, Rules, WindowEffects, WindowMatch, WindowRule,
@@ -391,6 +391,11 @@ end
 local function opt(b, k) return type(b.opts) == "table" and b.opts[k] or nil end
 local spotlight = bind_for("hl.dsp.global(uq:spotlight)")
 if spotlight.key ~= "SUPER + Space" then error("uq:spotlight is bound to " .. tostring(spotlight.key)) end
+local emoji = bind_for("hl.dsp.global(uq:emoji)")
+if emoji.key ~= "SUPER + period" then error("uq:emoji is bound to " .. tostring(emoji.key)) end
+for _, b in ipairs(binds) do
+  if b.key == "SUPER + period" and b ~= emoji then error("SUPER + period is also bound to " .. b.dsp) end
+end
 local appmenu = bind_for("hl.dsp.global(uq:appmenu)")
 if appmenu.key ~= "SUPER + SUPER_L" then error("uq:appmenu is bound to " .. tostring(appmenu.key)) end
 if opt(appmenu, "release") ~= true then error("the uq:appmenu bind needs release = true (tap SUPER)") end
@@ -408,7 +413,7 @@ if power.key ~= "SUPER + Escape" then error("uq:power-menu is bound to " .. tost
 for _, b in ipairs(binds) do
   if b.key == "SUPER + Escape" and b ~= power then error("SUPER + Escape is also bound to " .. b.dsp) end
 end
-for _, b in ipairs({spotlight, appmenu, quick, notif, lock, power}) do
+for _, b in ipairs({spotlight, emoji, appmenu, quick, notif, lock, power}) do
   if opt(b, "locked") then error(b.dsp .. " must not be locked") end
 end
 local osd_keys = {
@@ -441,6 +446,7 @@ fn base_lua_launcher_binds_are_not_locked() {
     let base = std::fs::read_to_string(repo().join("config/hypr/base.lua")).unwrap();
     for name in [
         "uq:spotlight",
+        "uq:emoji",
         "uq:appmenu",
         "uq:quick-settings",
         "uq:notif-centre",
@@ -625,6 +631,98 @@ fn all_variants_pass_hyprland_verify() {
         );
         assert!(out.status.success(), "{} {}: {text}", t.id, t.variant);
     }
+}
+
+/// Window rules from apps (Phase 4 §3.3): romforge's packaged rule, plus one with several
+/// patterns and a hostile title, as uqd renders them.
+fn app_rules() -> Vec<WindowRule> {
+    let text = r#"
+[[window_rule]]
+id = "romforge.emulators"
+class = ["^(retroarch|duckstation-qt|PPSSPPSDL|dolphin-emu|pcsx2-qt|rpcs3|azahar)$"]
+workspace = "name:game"
+fullscreen = true
+
+[[window_rule]]
+id = "romforge.tools"
+class = ["^romforge$", "^romforge-cli$"]
+title = "\"]] hl.exec_cmd(\"x\") --"
+workspace = 7
+float = true
+"#;
+    uq_core::integration::rules::parse_rules(text, "romforge")
+        .unwrap()
+        .iter()
+        .flat_map(|r| r.window_rules())
+        .collect()
+}
+
+/// The app rules are one `hl.window_rule` call each, and the title never runs as code.
+#[test]
+fn app_rules_run_as_one_call_each() {
+    let Ok(lua) = which("lua") else {
+        eprintln!("skipping: no `lua` on PATH");
+        return;
+    };
+    let reg = ThemeRegistry::load_dir(&repo().join("themes")).unwrap();
+    let t = reg.iter().next().unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let mock = dir.path().join("mock.lua");
+    std::fs::write(&mock, MOCK).unwrap();
+    let apps = app_rules();
+    assert_eq!(apps.len(), 3);
+    let gen_ = emit_generated_with_apps(
+        t,
+        &layouts(),
+        &rules(),
+        &apps,
+        &settings(),
+        &StartupRender::default(),
+    );
+    let (p, _) = tree(&dir.path().join("apps"), &gen_);
+    let out = Command::new(&lua)
+        .arg(&mock)
+        .args([&p.base_lua, &p.generated_lua, &p.user_lua])
+        .output()
+        .unwrap();
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        out.status.success(),
+        "{text}{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let count = |name: &str| text.lines().filter(|l| *l == name).count();
+    assert_eq!(count("hl.window_rule"), rules().window.len() + 3, "{text}");
+    assert!(!text.contains("hl.exec_cmd:x"), "{text}");
+}
+
+#[test]
+#[ignore = "needs Hyprland; CI runs it with --ignored"]
+fn app_rules_pass_hyprland_verify() {
+    let reg = ThemeRegistry::load_dir(&repo().join("themes")).unwrap();
+    let t = reg.iter().next().unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let gen_ = emit_generated_with_apps(
+        t,
+        &layouts(),
+        &rules(),
+        &app_rules(),
+        &settings(),
+        &StartupRender::default(),
+    );
+    let (_, main) = tree(&dir.path().join("apps"), &gen_);
+    let out = Command::new("Hyprland")
+        .arg("--verify-config")
+        .arg("-c")
+        .arg(&main)
+        .output()
+        .unwrap();
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(out.status.success(), "{text}");
 }
 
 fn startup_all() -> StartupRender {

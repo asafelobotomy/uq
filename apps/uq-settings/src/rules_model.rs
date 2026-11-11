@@ -24,7 +24,7 @@ pub mod qobject {
         #[qobject]
         #[qml_element]
         /// `{window, layer, workspace, section, windows, why, pick, reopen, templates, fields,
-        /// limits, notice}` (see `pages::rules`); `{}` until uqd has been read.
+        /// limits, notice, apps}` (see `pages::rules`); `{}` until uqd has been read.
         #[qproperty(QString, state_json)]
         /// The message of the last refused request, "" when there is none.
         #[qproperty(QString, error)]
@@ -97,6 +97,10 @@ pub mod qobject {
         /// Let the person click a window: `purpose` is "match" (fill a rule) or "why".
         #[qinvokable]
         fn pick(self: Pin<&mut RulesModel>, purpose: &QString);
+
+        /// Turn a rule from an app on or off; `id` is its `<integration>.<rule>` id.
+        #[qinvokable]
+        fn set_app_rule(self: Pin<&mut RulesModel>, id: &QString, on: bool);
     }
 
     impl cxx_qt::Threading for RulesModel {}
@@ -128,7 +132,7 @@ impl PageModel for RulesModel {
     // A workspace rule row shows the layout from `layouts`; history covers undo and restore.
     // Coming back to the window (after a pick, too) re-reads through the page's `refresh()`.
     const FOLLOW: Follow = Follow {
-        sections: &["rules", "layouts"],
+        sections: &["rules", "layouts", "integration_rules"],
         theme: false,
         settings: false,
         history: true,
@@ -277,6 +281,16 @@ impl RulesModel {
             self,
             Op::Pick {
                 purpose: purpose.to_string(),
+            },
+        );
+    }
+
+    fn set_app_rule(self: Pin<&mut Self>, id: &QString, on: bool) {
+        model_core::start(
+            self,
+            Op::SetAppRule {
+                id: id.to_string(),
+                on,
             },
         );
     }

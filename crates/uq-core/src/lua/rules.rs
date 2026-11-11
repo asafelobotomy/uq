@@ -205,6 +205,13 @@ pub(super) fn emit_window_block(rules: &[WindowRule]) -> String {
     block("Window rules", &lines)
 }
 
+/// The `-- Rules from apps` block: packaged rules the person turned on, already turned into
+/// window rules (`integration::rules::AppRule::window_rules`). Same calls as the person's own.
+pub(super) fn emit_app_block(rules: &[WindowRule]) -> String {
+    let lines: Vec<String> = rules.iter().map(emit_window_rule).collect();
+    block("Rules from apps", &lines)
+}
+
 pub(super) fn emit_layer_block(rules: &[LayerRule]) -> String {
     let lines: Vec<String> = rules.iter().map(emit_layer_rule).collect();
     block("Panel rules", &lines)

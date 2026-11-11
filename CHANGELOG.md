@@ -9,6 +9,17 @@ All notable changes to uQ are listed here. The format follows
 
 ### Added
 
+- **Rules from apps.** Installed apps can offer window rules in
+  `/usr/share/uq/integrations/<name>/rules.toml` (app ID patterns, a window title pattern, a
+  workspace, full screen, float). The Window rules page lists them under **Rules from apps**,
+  each off until you turn it on; turning one on is checked, rendered and verified like your own
+  rules, and shows in History, where it can be undone. A rule whose app is removed stops applying
+  and comes back with the app. `uqctl integrations check` checks `integrations/<name>/rules.toml`
+  and `uqctl integrations list` shows the files. New `uqd` call `ListIntegrationRules` and the
+  `integration_rules` section. See docs/integrating.md.
+- **Emoji key.** `Super + .` opens Spotlight with `:` already typed, the emoji search an emoji
+  provider such as emobie answers. Pressed while Spotlight is open, it starts the search over at
+  `:`. The bind is `uq:emoji` in `base.lua`.
 - **Your own themes: make, import, export and delete.** The Appearance page has **New theme from
   this one…** (seven colours per version, live contrast check, a version that is hard to read
   can't be saved), **Import…**, **Export…** and **Delete…**, and shows the theme names. Themes

@@ -34,6 +34,7 @@ fn main() {
         QmlFile::from("qml/components/ProfileMessage.qml"),
         QmlFile::from("qml/components/RuleMessage.qml"),
         QmlFile::from("qml/components/RuleMatchList.qml"),
+        QmlFile::from("qml/components/AppRuleList.qml"),
         QmlFile::from("qml/components/RuleEditor.qml"),
         QmlFile::from("qml/components/AdvancedDetails.qml"),
         QmlFile::from("qml/components/SourceLine.qml"),

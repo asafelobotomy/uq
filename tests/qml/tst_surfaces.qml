@@ -6,11 +6,13 @@ TestCase {
     name: "surfaces"
 
     SignalSpy { id: wipeSpy; target: Surfaces; signalName: "wipe" }
+    SignalSpy { id: prefillSpy; target: Surfaces; signalName: "prefill" }
 
     function init() {
         Bridge.locked = false;
         Surfaces.close();
         wipeSpy.clear();
+        prefillSpy.clear();
     }
 
     function cleanup() {
@@ -237,5 +239,32 @@ TestCase {
         compare(Surfaces.ipc("toggle", "appmenu"), "ignored");
         compare(Surfaces.ipc("close", "spotlight"), "ignored");
         compare(Surfaces.open, "closed");
+    }
+    // The emoji bind (`uq:emoji`, SUPER+.): Spotlight opens on the focused monitor and is told
+    // its query is ":"; already open, it only gets the new query. Other surfaces and anything
+    // while locked are ignored.
+    function test_open_with_prefills_spotlight() {
+        Surfaces.toggle("appmenu", { name: "DP-2" }, { id: "button" });
+        compare(Surfaces.openWith("spotlight", ":"), "ok");
+        compare(Surfaces.open, "spotlight");
+        compare(Surfaces.screen, null);
+        compare(Surfaces.anchor, null);
+        compare(wipeSpy.count, 1);
+        compare(wipeSpy.signalArguments[0][0], "appmenu");
+        compare(prefillSpy.count, 1);
+        compare(prefillSpy.signalArguments[0][0], "spotlight");
+        compare(prefillSpy.signalArguments[0][1], ":");
+        // Pressed again while open: stays open, the query is set again.
+        compare(Surfaces.openWith("spotlight", ":"), "ok");
+        compare(Surfaces.open, "spotlight");
+        compare(prefillSpy.count, 2);
+        compare(Surfaces.openWith("appmenu", ":"), "ignored");
+        compare(Surfaces.open, "spotlight");
+        compare(prefillSpy.count, 2);
+        Bridge.locked = true;
+        compare(Surfaces.open, "closed");
+        compare(Surfaces.openWith("spotlight", ":"), "ignored");
+        compare(Surfaces.open, "closed");
+        compare(prefillSpy.count, 2);
     }
 }

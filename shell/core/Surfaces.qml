@@ -22,6 +22,8 @@ QtObject {
 
     // Emitted for each surface that a transition closed: it must clear its query and results.
     signal wipe(string surface)
+    // Emitted after openWith() opened (or found open) `surface`: it must set its query to `text`.
+    signal prefill(string surface, string text)
 
     function nextGeneration() {
         root.generation = L.nextGeneration(root.generation);
@@ -106,6 +108,20 @@ QtObject {
             return "ignored";
         }
         root.toggle(name, null, null);
+        return "ok";
+    }
+
+    // Open Spotlight with `text` as its query (the emoji bind, `uq:emoji`, opens it at ":").
+    // Already open, the query is replaced. Only "spotlight"; ignored while locked. Always the
+    // focused monitor, no anchor. Returns "ok" or "ignored".
+    function openWith(name, text) {
+        if (Bridge.locked || name !== "spotlight")
+            return "ignored";
+        if (root.open !== name)
+            root.toggle(name, null, null);
+        if (root.open !== name)
+            return "ignored";
+        root.prefill(name, String(text));
         return "ok";
     }
 
