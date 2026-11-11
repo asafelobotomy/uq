@@ -93,6 +93,21 @@ pub const SHELL_NAMES: [&str; 12] = [
     "bright-down",
 ];
 
+/// The dispatchers uQ renders (`hl.dsp.<name>`), from `LuaBindingsDispatchers.cpp`.
+pub const DISPATCHERS: [&str; 11] = [
+    "exec_cmd",
+    "global",
+    "focus",
+    "submap",
+    "window.close",
+    "window.float",
+    "window.move",
+    "window.pin",
+    "window.drag",
+    "window.resize",
+    "workspace.toggle_special",
+];
+
 pub const DESCRIPTION_PREFIX: &str = "uq:";
 pub const CAPTURE_SUBMAP: &str = "uq_capture";
 pub const UNBIND_ALL: &str = "hl.unbind(\"all\")";
