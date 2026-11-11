@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=uQ
+Comment=The uQ desktop on Hyprland
+Exec=/usr/bin/uq-session
+Type=Application
+DesktopNames=Hyprland

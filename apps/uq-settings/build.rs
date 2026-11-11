@@ -7,6 +7,8 @@ fn main() {
         QmlFile::from("qml/Search.qml"),
         QmlFile::from("qml/PluginPage.qml"),
         QmlFile::from("qml/components/ErrorCard.qml"),
+        QmlFile::from("qml/components/PluginContext.qml"),
+        QmlFile::from("qml/components/CommandConfirmDialog.qml"),
         QmlFile::from("qml/components/UqLabel.qml"),
         QmlFile::from("qml/components/ScrollReveal.qml"),
         QmlFile::from("qml/components/SettingRow.qml"),
@@ -57,6 +59,7 @@ fn main() {
     .qt_module("Widgets")
     .files([
         "src/app.rs",
+        "src/plugin_host.rs",
         "src/window.rs",
         "src/appearance_model.rs",
         "src/compat_model.rs",

@@ -3,10 +3,12 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import "core"
+import "auth"
 import "logic/lock.js" as L
 
 // One lock surface per screen: clock, date, avatar, user name, password field, the PAM message and
-// a fingerprint hint. All text is plain (UqText / UqInput).
+// a fingerprint hint. All text is plain (UqText / UqInput). The clock, avatar, field and messages
+// are the shared auth/ components (auth/ is a symlink to ../shell/auth, like core/ and logic/).
 WlSessionLockSurface {
     id: surface
 
@@ -46,55 +48,18 @@ WlSessionLockSurface {
         width: Math.min(360, parent.width - Theme.gapOut * 2)
         spacing: Theme.gapOut
 
-        UqText {
+        Clock {
             anchors.horizontalCenter: parent.horizontalCenter
-            text: Qt.formatDateTime(clock.date, "HH:mm")
-            font.pixelSize: Theme.fontSize * 6
-            Accessible.role: Accessible.StaticText
-            Accessible.name: "Time " + text
-        }
-        UqText {
-            anchors.horizontalCenter: parent.horizontalCenter
-            text: Qt.formatDateTime(clock.date, "dddd d MMMM")
-            font.pixelSize: Theme.fontSize * 1.5
-            color: Theme.textMuted
-            Accessible.role: Accessible.StaticText
-            Accessible.name: "Date " + text
+            date: clock.date
         }
 
         Item { width: 1; height: Theme.gapOut }
 
-        Rectangle {
+        Avatar {
             id: avatarBox
             anchors.horizontalCenter: parent.horizontalCenter
-            width: 96
-            height: 96
-            radius: width / 2
-            color: Theme.surfaceAlt
-            border.color: Theme.border
-            border.width: Theme.borderWidth
-            clip: true
-            Accessible.role: Accessible.Graphic
-            Accessible.name: "Avatar for " + surface.userName
-
-            Image {
-                anchors.fill: parent
-                anchors.margins: Theme.borderWidth
-                visible: surface.avatar.path !== undefined && status === Image.Ready
-                source: surface.avatar.path !== undefined ? surface.avatar.path : ""
-                sourceSize.width: 192
-                sourceSize.height: 192
-                fillMode: Image.PreserveAspectCrop
-                asynchronous: true
-                cache: false
-            }
-            UqText {
-                anchors.centerIn: parent
-                visible: surface.avatar.initial !== undefined
-                text: surface.avatar.initial !== undefined ? surface.avatar.initial : ""
-                font.pixelSize: 40
-                Accessible.ignored: true
-            }
+            avatar: surface.avatar
+            userName: surface.userName
         }
 
         UqText {
@@ -105,13 +70,10 @@ WlSessionLockSurface {
             Accessible.name: "User " + text
         }
 
-        UqInput {
+        PasswordField {
             id: field
             width: parent.width
-            implicitHeight: 36
-            secret: true
-            placeholder: surface.auth.busy ? "Checking…" : "Password"
-            Accessible.name: "Password"
+            busy: surface.auth.busy
             // Cleared after each attempt; kept while an earlier attempt is still being checked.
             onAccepted: {
                 if (surface.auth.submit(field.text))
@@ -119,29 +81,17 @@ WlSessionLockSurface {
             }
         }
 
-        UqText {
+        MessageView {
             width: parent.width
-            horizontalAlignment: Text.AlignHCenter
-            wrapMode: Text.Wrap
-            elide: Text.ElideNone
-            visible: text !== ""
-            text: surface.auth.message.text
-            color: surface.auth.message.error ? Theme.error : Theme.textMuted
-            Accessible.role: Accessible.StaticText
-            Accessible.name: "Message " + text
+            message: surface.auth.message
         }
 
-        UqText {
+        MessageView {
             width: parent.width
-            horizontalAlignment: Text.AlignHCenter
-            wrapMode: Text.Wrap
-            elide: Text.ElideNone
             visible: surface.auth.fprintRunning
-            text: surface.auth.fprintMessage.text !== "" ? surface.auth.fprintMessage.text
-                                                         : "Or touch the fingerprint sensor"
-            color: surface.auth.fprintMessage.error ? Theme.error : Theme.textMuted
-            Accessible.role: Accessible.StaticText
-            Accessible.name: "Fingerprint " + text
+            label: "Fingerprint"
+            message: surface.auth.fprintMessage
+            fallback: "Or touch the fingerprint sensor"
         }
     }
 

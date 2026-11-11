@@ -222,6 +222,10 @@ impl Theme {
     }
 }
 
+/// The directory under the shipped themes directory that holds every variant's pre-rendered
+/// `tokens.json` for the greeter (`/usr/share/uq/themes/rendered/<id>-<variant>/`). Not a theme.
+pub const RENDERED_DIR: &str = "rendered";
+
 /// All themes found under a directory, each guaranteed to have both variants.
 #[derive(Debug, Clone, Default)]
 pub struct ThemeRegistry {
@@ -238,7 +242,7 @@ impl ThemeRegistry {
             .map_err(io)?;
         entries.sort_by_key(|e| e.file_name());
         for entry in entries {
-            if !entry.file_type().map_err(io)?.is_dir() {
+            if !entry.file_type().map_err(io)?.is_dir() || entry.file_name() == RENDERED_DIR {
                 continue;
             }
             let id = entry.file_name().to_string_lossy().into_owned();
@@ -411,5 +415,17 @@ ansi = ["#282828","#cc241d","#98971a","#d79921","#458588","#b16286","#689d6a","#
             Variant::Light
         );
         assert!(reg.get("nope", Variant::Dark).is_none());
+    }
+
+    #[test]
+    fn registry_skips_the_rendered_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir(dir.path().join("solo")).unwrap();
+        fs::write(dir.path().join("solo/dark.toml"), FIXTURE).unwrap();
+        fs::write(dir.path().join("solo/light.toml"), FIXTURE).unwrap();
+        fs::create_dir_all(dir.path().join("rendered/solo-dark")).unwrap();
+        fs::write(dir.path().join("rendered/solo-dark/tokens.json"), "{}").unwrap();
+        let reg = ThemeRegistry::load_dir(dir.path()).unwrap();
+        assert_eq!(reg.ids(), vec!["solo"]);
     }
 }

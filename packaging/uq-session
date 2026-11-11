@@ -1,0 +1,42 @@
+#!/bin/bash
+# /usr/bin/uq-session: the uQ entry in /usr/share/wayland-sessions/uq.desktop.
+#
+# 1. If ~/.config/hypr/hyprland.lua doesn't load uQ's generated config yet (no stub line), run
+#    `uqctl setup --quiet`. Setup is idempotent and never overwrites the user's own files. Any
+#    problem it reports goes to ~/.local/state/uq/session.log, and the session starts anyway: a
+#    failed setup must never keep the user out of their desktop.
+# 2. exec Hyprland, through start-hyprland (Hyprland's watchdog launcher) when it's installed.
+#
+# Runs as the logged-in user, never as root.
+set -u
+
+config_home=${XDG_CONFIG_HOME:-$HOME/.config}
+state_home=${XDG_STATE_HOME:-$HOME/.local/state}
+main_lua="$config_home/hypr/hyprland.lua"
+log="$state_home/uq/session.log"
+# The line uQ's stub (uq_core::stub::stub_contents) and every config set up by hand share: it is
+# what makes a Hyprland session load uQ's generated config.
+marker='require("./uq/generated.lua")'
+
+log_line() {
+    mkdir -p "${log%/*}" 2>/dev/null || return 0
+    # Keep the log short: the last 200 lines are plenty to see what went wrong.
+    if [ -f "$log" ] && [ "$(wc -l <"$log" 2>/dev/null || echo 0)" -gt 200 ]; then
+        tail -n 150 "$log" >"$log.tmp" 2>/dev/null && mv -f "$log.tmp" "$log"
+    fi
+    printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >>"$log" 2>/dev/null
+}
+
+if ! grep -qF "$marker" "$main_lua" 2>/dev/null; then
+    err=$(uqctl setup --quiet 2>&1 >/dev/null)
+    rc=$?
+    if [ "$rc" -ne 0 ]; then
+        log_line "uqctl setup exited $rc; starting the session anyway"
+        [ -n "$err" ] && printf '%s\n' "$err" | head -n 20 | while IFS= read -r line; do log_line "  $line"; done
+    fi
+fi
+
+if command -v start-hyprland >/dev/null 2>&1; then
+    exec start-hyprland
+fi
+exec Hyprland

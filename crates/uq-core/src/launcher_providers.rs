@@ -13,6 +13,10 @@ pub struct ProviderDef {
     pub name: String,
     pub prefix: Option<String>,
     pub source_dir: PathBuf,
+    /// `Activatable=true` (Phase 4 spec §2.4.1): the bus name has a session service file, so the
+    /// launcher may start it when it opens. The bridge checks `ListActivatableNames` and ignores
+    /// the key otherwise.
+    pub activatable: bool,
 }
 
 /// The default definition directories: system, then the user's.
@@ -31,6 +35,7 @@ pub fn default_dirs() -> Vec<PathBuf> {
 
 pub fn parse_def(text: &str, dir: &Path) -> Result<ProviderDef, String> {
     let (mut in_group, mut bus, mut name, mut prefix) = (false, None, None, None);
+    let mut activatable = false;
     for line in text.lines() {
         let line = line.trim();
         if line.is_empty() || line.starts_with('#') {
@@ -51,6 +56,13 @@ pub fn parse_def(text: &str, dir: &Path) -> Result<ProviderDef, String> {
             "BusName" => bus = Some(v),
             "Name" => name = Some(v),
             "Prefix" => prefix = Some(v),
+            "Activatable" => {
+                activatable = match v.as_str() {
+                    "true" => true,
+                    "false" => false,
+                    _ => return Err(format!("Activatable must be true or false, not {v:?}")),
+                }
+            }
             _ => {}
         }
     }
@@ -76,13 +88,14 @@ pub fn parse_def(text: &str, dir: &Path) -> Result<ProviderDef, String> {
         name,
         prefix,
         source_dir: dir.to_path_buf(),
+        activatable,
     })
 }
 
-/// Read every `*.provider` file in `dirs`. Invalid files are skipped with one warning each; a
-/// bus name already defined by an earlier directory is not redefined by a later one.
-pub fn load_defs(dirs: &[PathBuf]) -> Vec<ProviderDef> {
-    let mut defs: Vec<ProviderDef> = Vec::new();
+/// Every `*.provider` file in `dirs` with its parse result, in directory then file-name order.
+/// A bus name already defined by an earlier file is an error for the later one.
+pub fn scan_defs(dirs: &[PathBuf]) -> Vec<(PathBuf, Result<ProviderDef, String>)> {
+    let mut out: Vec<(PathBuf, Result<ProviderDef, String>)> = Vec::new();
     for dir in dirs {
         let Ok(rd) = std::fs::read_dir(dir) else {
             continue;
@@ -96,17 +109,36 @@ pub fn load_defs(dirs: &[PathBuf]) -> Vec<ProviderDef> {
         for path in files {
             let parsed = std::fs::read_to_string(&path)
                 .map_err(|e| e.to_string())
-                .and_then(|t| parse_def(&t, dir));
-            match parsed {
-                Ok(d) if defs.iter().any(|x| x.bus_name == d.bus_name) => {
-                    eprintln!("{}: duplicate BusName, skipped", path.display());
-                }
-                Ok(d) => defs.push(d),
-                Err(e) => eprintln!("{}: {e}, skipped", path.display()),
-            }
+                .and_then(|t| parse_def(&t, dir))
+                .and_then(|d| {
+                    let dup = out
+                        .iter()
+                        .any(|(_, r)| r.as_ref().is_ok_and(|x| x.bus_name == d.bus_name));
+                    if dup {
+                        Err("duplicate BusName".to_string())
+                    } else {
+                        Ok(d)
+                    }
+                });
+            out.push((path, parsed));
         }
     }
-    defs
+    out
+}
+
+/// Read every `*.provider` file in `dirs`. Invalid files are skipped with one warning each; a
+/// bus name already defined by an earlier directory is not redefined by a later one.
+pub fn load_defs(dirs: &[PathBuf]) -> Vec<ProviderDef> {
+    scan_defs(dirs)
+        .into_iter()
+        .filter_map(|(path, parsed)| match parsed {
+            Ok(d) => Some(d),
+            Err(e) => {
+                eprintln!("{}: {e}, skipped", path.display());
+                None
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -144,7 +176,15 @@ mod tests {
         w("g.txt", "[Launcher Provider]\nBusName=org.g.H\nName=G\n");
         w(
             "h.provider",
-            "[Launcher Provider]\nBusName=org.h.I\nName=Hotel\n",
+            "[Launcher Provider]\nBusName=org.h.I\nName=Hotel\nActivatable=true\n",
+        );
+        w(
+            "i.provider",
+            "[Launcher Provider]\nBusName=org.i.J\nName=I\nActivatable=yes\n",
+        );
+        w(
+            "j.provider",
+            "[Launcher Provider]\nBusName=org.h.I\nName=Hotel again\n",
         );
         let mut defs = load_defs(&[d.path().to_path_buf(), "/nonexistent".into()]);
         defs.sort_by(|a, b| a.bus_name.cmp(&b.bus_name));
@@ -152,7 +192,21 @@ mod tests {
         assert_eq!(defs[0].bus_name, "org.a.B");
         assert_eq!(defs[0].prefix.as_deref(), Some(":"));
         assert_eq!(defs[0].source_dir, d.path());
+        assert!(!defs[0].activatable);
         assert_eq!(defs[1].name, "Hotel");
         assert_eq!(defs[1].prefix, None);
+        assert!(defs[1].activatable);
+
+        let scanned = scan_defs(&[d.path().to_path_buf()]);
+        let err = |f: &str| {
+            scanned
+                .iter()
+                .find(|(p, _)| p.ends_with(f))
+                .and_then(|(_, r)| r.as_ref().err().cloned())
+        };
+        assert_eq!(err("j.provider").as_deref(), Some("duplicate BusName"));
+        assert!(err("i.provider").unwrap().contains("Activatable"));
+        assert_eq!(err("a.provider"), None);
+        assert_eq!(scanned.len(), 9, "g.txt is not a provider");
     }
 }

@@ -1,0 +1,5 @@
+[D-BUS Service]
+Name=org.uq.SettingsHelper1
+Exec=/usr/lib/uq/uq-settings-helper
+User=root
+SystemdService=uq-settings-helper.service

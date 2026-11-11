@@ -58,6 +58,21 @@ TestCase {
         verify(!page.children[1].visible);
     }
 
+    function test_page_gets_a_context() {
+        const page = createTemporaryObject(pageComp, tc, {
+            source: Qt.resolvedUrl("fixtures/ctx/Page.qml"),
+            pageId: "ctx",
+            theme: { accent: "#00ff00" }
+        });
+        verify(!page.failed);
+        const loaded = page.children[0].item;
+        compare(loaded.ctx.theme.accent, "#00ff00");
+        // No host here: the request fails with an error instead of throwing.
+        tryVerify(() => loaded.result !== null);
+        verify(loaded.result.error.length > 0);
+        compare(page.context.pageId, "ctx");
+    }
+
     function test_missing_file_shows_error_card() {
         const page = createTemporaryObject(pageComp, tc, {
             source: Qt.resolvedUrl("fixtures/nope/Page.qml")
