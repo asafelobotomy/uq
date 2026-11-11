@@ -410,10 +410,12 @@ mod tests {
     fn welcome_round_trips() {
         let dir = tempfile::tempdir().unwrap();
         let p = dir.path().join("state.toml");
-        let mut s = State::default();
-        s.welcome = Welcome {
-            done: true,
-            version: crate::welcome::CURRENT_WELCOME_VERSION,
+        let s = State {
+            welcome: Welcome {
+                done: true,
+                version: crate::welcome::CURRENT_WELCOME_VERSION,
+            },
+            ..State::default()
         };
         s.save(&p).unwrap();
         let text = std::fs::read_to_string(&p).unwrap();

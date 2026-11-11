@@ -11,15 +11,31 @@ TestCase {
                  welcome_pending: pending, welcome_deferred: deferred };
     }
 
-    function test_due_and_not_deferred_starts_once() {
+    // Hello says due, the grace period passes, WelcomeStatus answers `status`.
+    function run(status) {
         var r = W.onEvent(W.initial(), "Hello", hello(true, false));
+        compare(r.action, "wait");
+        r = W.onTimer(r.state);
+        compare(r.action, "ask");
+        return W.onStatus(r.state, status);
+    }
+
+    function test_due_starts_once_after_the_grace_period() {
+        verify(W.GRACE_MS >= 10000, "long enough for an autostarted installer");
+        var r = run({ pending: true, deferred: false });
         compare(r.action, "start");
         verify(r.state.decided);
         // A bridge restart sends Hello again: never a second Welcome from this shell.
-        r = W.onEvent(r.state, "Hello", hello(true, false));
+        compare(W.onEvent(r.state, "Hello", hello(true, false)).action, "none");
+        compare(W.onEvent(r.state, "UqdUp", null).action, "none");
+        compare(W.onTimer(r.state).action, "none");
+        compare(W.onStatus(r.state, { pending: true, deferred: false }).action, "none");
+    }
+
+    function test_installer_defers_during_the_grace_period() {
+        var r = run({ pending: true, deferred: true });
         compare(r.action, "none");
-        r = W.onEvent(r.state, "UqdUp", null);
-        compare(r.action, "none");
+        verify(r.state.decided, "the installer runs `uqctl welcome` when its wizard ends");
     }
 
     function test_done_never_starts() {
@@ -27,42 +43,39 @@ TestCase {
         compare(r.action, "none");
         verify(r.state.decided);
         compare(W.onEvent(r.state, "UqdUp", null).action, "none");
+        // Finished during the grace period (uqctl welcome by hand): nothing more.
+        compare(run({ pending: false, deferred: false }).action, "none");
     }
 
-    function test_deferred_is_left_to_bindle() {
+    function test_deferred_at_hello_is_left_to_the_installer() {
         var r = W.onEvent(W.initial(), "Hello", hello(true, true));
         compare(r.action, "none");
-        verify(r.state.decided, "bindle runs `uqctl welcome` when its wizard ends");
+        verify(r.state.decided);
         compare(W.onEvent(r.state, "UqdUp", null).action, "none");
     }
 
-    function test_uqd_late_asks_once_then_decides() {
+    function test_uqd_late_waits_then_asks() {
         var r = W.onEvent(W.initial(), "Hello", hello(null, false));
         compare(r.action, "none");
-        verify(!r.state.decided);
+        verify(!r.state.decided && !r.state.waiting);
+        compare(W.onTimer(r.state).action, "none", "no timer runs yet");
         r = W.onEvent(r.state, "UqdUp", null);
-        compare(r.action, "ask");
-        // A second UqdUp while the first question is out doesn't ask again.
+        compare(r.action, "wait");
+        // A second UqdUp while waiting doesn't start another wait.
         compare(W.onEvent(r.state, "UqdUp", null).action, "none");
-        var s = W.onStatus(r.state, { pending: true, deferred: false });
-        compare(s.action, "start");
-        compare(W.onStatus(s.state, { pending: true, deferred: false }).action, "none");
+        r = W.onTimer(r.state);
+        compare(r.action, "ask");
+        compare(W.onStatus(r.state, { pending: true, deferred: false }).action, "start");
     }
 
-    function test_late_status_deferred_or_done() {
-        var asked = W.onEvent(W.onEvent(W.initial(), "Hello", hello(null, false)).state, "UqdUp", null).state;
-        compare(W.onStatus(asked, { pending: true, deferred: true }).action, "none");
-        compare(W.onStatus(asked, { pending: false, deferred: false }).action, "none");
-    }
-
-    function test_failed_status_asks_again_on_next_uqd_up() {
-        var asked = W.onEvent(W.onEvent(W.initial(), "Hello", hello(null, false)).state, "UqdUp", null).state;
-        var r = W.onStatus(asked, null);
+    function test_failed_status_waits_again_on_next_uqd_up() {
+        var r = W.onEvent(W.initial(), "UqdUp", null);
+        r = W.onStatus(W.onTimer(r.state).state, null);
         compare(r.action, "none");
-        verify(!r.state.decided && !r.state.asked);
-        compare(W.onEvent(r.state, "UqdUp", null).action, "ask");
+        verify(!r.state.decided && !r.state.waiting);
+        compare(W.onEvent(r.state, "UqdUp", null).action, "wait");
         // An answer without a boolean `pending` is unknown too.
-        r = W.onStatus(asked, { pending: null, deferred: false });
+        r = W.onStatus({ decided: false, waiting: true }, { pending: null, deferred: false });
         verify(!r.state.decided);
     }
 
@@ -70,8 +83,7 @@ TestCase {
         var r = W.onEvent(W.initial(), "Hello", { v: 1, uqd_up: true, locked: false });
         compare(r.action, "none");
         verify(!r.state.decided);
-        r = W.onEvent(W.initial(), "Hello", null);
-        compare(r.action, "none");
+        compare(W.onEvent(W.initial(), "Hello", null).action, "none");
         compare(W.onEvent(W.initial(), "ThemeChanged", {}).action, "none");
     }
 }
