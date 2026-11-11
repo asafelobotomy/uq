@@ -727,3 +727,110 @@ fn which(bin: &str) -> Result<PathBuf, ()> {
         })
         .ok_or(())
 }
+
+/// uq-greeter's fixed Hyprland config (greeter/hyprland.lua), behind the wrapper that
+/// packaging/uq-greeter-session writes (the fixed file, then the localectl keyboard layout).
+fn greeter_tree(dir: &Path) -> PathBuf {
+    let wrapper = dir.join("hyprland.lua");
+    let fixed = repo().join("greeter/hyprland.lua").canonicalize().unwrap();
+    std::fs::write(
+        &wrapper,
+        format!(
+            "require(\"{}\")\nhl.config({{ input = {{ kb_layout = \"de,us\", kb_variant = \"nodeadkeys,\" }} }})\n",
+            fixed.display()
+        ),
+    )
+    .unwrap();
+    wrapper
+}
+
+const GREETER_MOCK: &str = r#"
+local calls, hook, in_hook, configs = {}, nil, {}, {}
+local function proxy(name)
+  return setmetatable({}, {
+    __index = function(_, k) return proxy(name .. "." .. k) end,
+    __call = function(_, ...)
+      calls[#calls + 1] = name
+      for _, a in ipairs({...}) do
+        if type(a) == "string" and hook and name == "hl.exec_cmd" then
+          in_hook[hook] = (in_hook[hook] or "") .. a .. "\n"
+        end
+        if name == "hl.config" and type(a) == "table" then configs[#configs + 1] = a end
+        if type(a) == "function" then
+          local outer = hook
+          if name == "hl.on" then hook = ({...})[1] end
+          a()
+          hook = outer
+        end
+      end
+      return proxy(name .. "()")
+    end,
+  })
+end
+hl = proxy("hl")
+dofile(arg[1])
+for _, c in ipairs(calls) do
+  if c == "hl.bind" or c:sub(1, 7) == "hl.dsp." then error("the greeter config must have no binds: " .. c) end
+end
+local start = in_hook["hyprland.start"] or ""
+if not start:find("/usr/lib/uq/uq-greeter-session --shell", 1, true) then
+  error("hyprland.start must run uq-greeter-session --shell, got: " .. start)
+end
+local anim, watchdog = nil, nil
+for _, c in ipairs(configs) do
+  if c.animations then anim = c.animations.enabled end
+  if c.misc then watchdog = c.misc.disable_watchdog_warning end
+end
+if anim ~= false then error("animations must be off") end
+if watchdog ~= true then error("disable_watchdog_warning must be set") end
+print("ok")
+"#;
+
+#[test]
+fn greeter_config_runs_under_the_lua_mock() {
+    let Ok(lua) = which("lua") else {
+        eprintln!("skipping: no `lua` on PATH");
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let mock = dir.path().join("mock.lua");
+    std::fs::write(&mock, GREETER_MOCK).unwrap();
+    let out = Command::new(&lua)
+        .arg(&mock)
+        .arg(repo().join("greeter/hyprland.lua"))
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success() && String::from_utf8_lossy(&out.stdout).starts_with("ok"),
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+#[test]
+fn greeter_config_has_no_binds() {
+    let text = std::fs::read_to_string(repo().join("greeter/hyprland.lua")).unwrap();
+    for needle in ["hl.bind", "hl.dsp", "hl.animation(", "hl.curve("] {
+        assert!(!text.contains(needle), "greeter/hyprland.lua has {needle}");
+    }
+}
+
+#[test]
+#[ignore = "needs Hyprland; CI runs it with --ignored"]
+fn greeter_config_passes_hyprland_verify() {
+    let dir = tempfile::tempdir().unwrap();
+    let main = greeter_tree(dir.path());
+    let out = Command::new("Hyprland")
+        .arg("--verify-config")
+        .arg("-c")
+        .arg(&main)
+        .output()
+        .unwrap();
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(out.status.success(), "{text}");
+}

@@ -70,5 +70,14 @@ printf 'TextInput {\n}\n' > "$tmp/lock/UqInput.qml"
 if run >/dev/null; then echo "FAIL (accepted): TextInput in lock/UqInput.qml"; fail=1; fi
 rm -rf "$tmp/lock"
 
+# greeter/ is scanned too, with no exemptions of its own.
+mkdir -p "$tmp/greeter"
+printf 'Item {\n    Text {\n    }\n}\n' > "$tmp/greeter/Case.qml"
+if out=$(run); then echo "FAIL (accepted): Text in greeter/Case.qml"; fail=1
+else case "$out" in *"greeter/Case.qml:2"*) ;; *) echo "FAIL (greeter): no file:line in: $out"; fail=1;; esac; fi
+printf 'Item {\n    UqText { text: "x" }\n}\n' > "$tmp/greeter/Case.qml"
+if ! out=$(run); then echo "FAIL (rejected): UqText in greeter/: $out"; fail=1; fi
+rm -rf "$tmp/greeter"
+
 [ $fail = 0 ] && echo "lint_test ok"
 exit $fail
