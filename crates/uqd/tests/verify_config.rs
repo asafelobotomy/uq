@@ -8,6 +8,9 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use uq_core::keybinds::Keybinds;
+use uq_core::keybinds::hypr::{self, SHELL_NAMES};
+use uq_core::keybinds::keys::{Group, KEYS, KeyKind};
 use uq_core::lua::{Layout, StartupRender, emit_generated};
 use uq_core::paths::Paths;
 use uq_core::rules::{
@@ -288,6 +291,133 @@ fn hostile_rules() -> Rules {
     }
 }
 
+/// A combo no default uses: three modifiers and the `i`th key of letters, digits and F1-F24.
+fn free_combo(i: usize) -> String {
+    let keys: Vec<&str> = KEYS
+        .iter()
+        .filter(|k| matches!(k.group, Group::Letter | Group::Digit | Group::Function))
+        .map(|k| k.spelling)
+        .collect();
+    format!("SUPER + CTRL + ALT + {}", keys[i])
+}
+
+fn custom_bind(i: usize, name: &str, action: serde_json::Value) -> serde_json::Value {
+    serde_json::json!({"id": format!("k-{:04x}", i + 1), "name": name,
+                       "combo": free_combo(i), "action": action})
+}
+
+/// Every default overridden or kept (the launcher and sound keys stay, as the checks below
+/// look for them), `uq.profile.next` bound, and one shortcut of your own per action kind and
+/// per value of each closed list.
+fn keybinds() -> Keybinds {
+    let mut custom = Vec::new();
+    let mut add = |name: &str, action: serde_json::Value| {
+        custom.push(custom_bind(custom.len(), name, action));
+    };
+    for n in SHELL_NAMES {
+        add(n, serde_json::json!({"kind": "shell", "name": n}));
+    }
+    for n in ["close", "float", "pin"] {
+        add(n, serde_json::json!({"kind": "window", "name": n}));
+    }
+    for d in ["left", "right", "up", "down"] {
+        add(
+            d,
+            serde_json::json!({"kind": "window", "name": "focus", "direction": d}),
+        );
+    }
+    for (n, w) in [("focus", 1), ("focus", 10), ("move", 1), ("move", 10)] {
+        add(
+            n,
+            serde_json::json!({"kind": "workspace", "name": n, "workspace": w}),
+        );
+    }
+    for n in ["toggle_special", "move_special", "next", "prev"] {
+        add(n, serde_json::json!({"kind": "workspace", "name": n}));
+    }
+    for n in ["terminal", "exit", "profile-next", "settings"] {
+        add(n, serde_json::json!({"kind": "uq", "name": n}));
+    }
+    for l in ["dwindle", "master", "scrolling"] {
+        add(
+            l,
+            serde_json::json!({"kind": "uq", "name": "layout", "layout": l}),
+        );
+    }
+    for m in ["next", "play-pause", "previous"] {
+        add(
+            m,
+            serde_json::json!({"kind": "uq", "name": "media", "media": m}),
+        );
+    }
+    add(
+        "app",
+        serde_json::json!({"kind": "launch", "app": "org.mozilla.firefox"}),
+    );
+    add(
+        "cmd",
+        serde_json::json!({"kind": "command", "command": "grim -g \"$(slurp)\" ~/it's.png"}),
+    );
+    // Your own volume key: locked and repeating, like the default.
+    let mut vol = custom_bind(
+        custom.len(),
+        "Louder",
+        serde_json::json!({"kind": "shell", "name": "vol-up"}),
+    );
+    vol["combo"] = "SUPER + F7".into();
+    vol["locked"] = true.into();
+    vol["repeating"] = true.into();
+    custom.push(vol);
+    let v = serde_json::json!({
+        "overrides": [
+            {"id": "uq.terminal", "combo": "SUPER + T"},
+            {"id": "uq.close", "enabled": false},
+            {"id": "uq.float", "combo": "SUPER + SHIFT + V"},
+            {"id": "uq.ws.next", "combo": "SUPER + SHIFT + mouse_down"},
+            {"id": "uq.window.drag", "combo": "ALT + mouse:272"},
+            {"id": "uq.window.resize", "combo": "ALT + mouse:273"},
+            {"id": "uq.profile.next", "combo": "SUPER + ALT + P"},
+        ],
+        "custom": custom,
+    });
+    Keybinds::from_section(&v, &Keybinds::default()).expect("the fixture shortcuts are valid")
+}
+
+/// One shortcut of your own per `KEYS` row a shortcut may use, each on its own free combo with
+/// all four modifiers. The table is longer than the limit of 100, so it comes in chunks.
+fn keybinds_keys() -> Vec<Keybinds> {
+    let rows: Vec<_> = KEYS
+        .iter()
+        .filter(|k| matches!(k.kind, KeyKind::Key | KeyKind::Wheel))
+        .collect();
+    rows.chunks(60)
+        .map(|chunk| {
+            let custom: Vec<serde_json::Value> = chunk
+                .iter()
+                .enumerate()
+                .map(|(i, k)| {
+                    serde_json::json!({"id": format!("k-{:04x}", i + 1), "name": k.label,
+                        "combo": format!("SUPER + SHIFT + CTRL + ALT + {}", k.spelling),
+                        "action": {"kind": "window", "name": "close"}})
+                })
+                .collect();
+            Keybinds::from_section(
+                &serde_json::json!({ "custom": custom }),
+                &Keybinds::default(),
+            )
+            .expect("every key is valid")
+        })
+        .collect()
+}
+
+/// The fixtures every variant is rendered with. The mouse buttons and Super keys only exist as
+/// defaults; `keybinds()` moves them.
+fn fixtures() -> Vec<Keybinds> {
+    let mut v = vec![keybinds()];
+    v.extend(keybinds_keys());
+    v
+}
+
 /// Lay out a uQ config tree for one theme variant; returns (paths, main config file).
 fn tree(root: &Path, generated: &str) -> (Paths, PathBuf) {
     let p = Paths::under(root);
@@ -301,7 +431,10 @@ fn tree(root: &Path, generated: &str) -> (Paths, PathBuf) {
     (p, main)
 }
 
-const MOCK: &str = r#"
+/// Every `hl.bind` option Hyprland reads (`hypr::ALL_BIND_OPTIONS`) is injected at
+/// `__KNOWN_OPTS__`: any other key is silently ignored by Hyprland, so the mock fails on it.
+const MOCK_TEMPLATE: &str = r#"
+local KNOWN_OPTS = __KNOWN_OPTS__
 local calls = {}
 -- exec_cmd strings seen while a given hl.on("<event>", fn) callback runs.
 local hook, in_hook = nil, {}
@@ -317,10 +450,38 @@ local function proxy(name)
       local args = {...}
       local first = args[1]
       local strs = {}
+      -- Table arguments count too (`{ workspace = 3 }`), as sorted k=v pairs, so two binds that
+      -- differ only in a table compare unequal.
+      local function show(t)
+        local kv = {}
+        for k, v in pairs(t) do
+          if type(v) == "string" or type(v) == "number" or type(v) == "boolean" then
+            kv[#kv + 1] = tostring(k) .. "=" .. tostring(v)
+          end
+        end
+        table.sort(kv)
+        return "{" .. table.concat(kv, ",") .. "}"
+      end
+      local tbls = ""
+      if name ~= "hl.bind" and name ~= "hl.config" then
+        for _, a in ipairs(args) do
+          if type(a) == "table" and not desc[a] and getmetatable(a) == nil then tbls = tbls .. show(a) end
+        end
+      end
       -- generated.lua starts its shortcuts with hl.unbind("all"): base.lua's fallback copies go.
       if name == "hl.unbind" and args[1] == "all" then binds = {} end
       if name == "hl.bind" then
-        binds[#binds + 1] = { key = args[1], dsp = desc[args[2]] or tostring(args[2]), opts = args[3] }
+        local opts = args[3]
+        if type(opts) == "table" then
+          for k in pairs(opts) do
+            local known = false
+            for _, n in ipairs(KNOWN_OPTS) do if n == k then known = true end end
+            if not known or tostring(k):find("-", 1, true) then
+              error("unknown hl.bind option " .. tostring(k))
+            end
+          end
+        end
+        binds[#binds + 1] = { key = args[1], dsp = desc[args[2]] or tostring(args[2]), opts = opts }
       end
       for _, a in ipairs(args) do
         if type(a) == "string" then
@@ -336,13 +497,36 @@ local function proxy(name)
         end
       end
       local ret = proxy(name .. "()")
-      desc[ret] = name .. "(" .. table.concat(strs, ",") .. ")"
+      if #strs == 0 and tbls ~= "" then
+        desc[ret] = name .. tbls
+      else
+        desc[ret] = name .. "(" .. table.concat(strs, ",") .. ")" .. tbls
+      end
       return ret
     end,
   })
 end
 hl = proxy("hl")
-for i = 1, #arg do dofile(arg[i]) end
+local only = arg[1] == "--binds-only"
+for i = only and 2 or 1, #arg do dofile(arg[i]) end
+-- `bind <key> | <dispatcher> | <sorted options, without the description>`, in order.
+local function print_binds()
+  for _, b in ipairs(binds) do
+    local kv = {}
+    if type(b.opts) == "table" then
+      for k, v in pairs(b.opts) do
+        if k ~= "description" and k ~= "desc" then kv[#kv + 1] = tostring(k) .. "=" .. tostring(v) end
+      end
+    end
+    table.sort(kv)
+    print("bind " .. tostring(b.key) .. " | " .. b.dsp .. " | " .. table.concat(kv, ","))
+  end
+end
+if only then
+  print("ok binds")
+  print_binds()
+  return
+end
 local seen = {}
 for _, c in ipairs(calls) do seen[c] = true end
 for _, want in ipairs({"hl.config", "hl.bind", "hl.on", "hl.workspace_rule", "hl.monitor", "hl.device"}) do
@@ -413,6 +597,14 @@ end
 for _, b in ipairs({spotlight, appmenu, quick, notif, lock, power}) do
   if opt(b, "locked") then error(b.dsp .. " must not be locked") end
 end
+-- Nor may any other launcher bind, such as one of your own.
+for _, b in ipairs(binds) do
+  for _, n in ipairs({"spotlight", "appmenu", "quick-settings", "notif-centre", "lock", "power-menu"}) do
+    if b.dsp == "hl.dsp.global(uq:" .. n .. ")" and opt(b, "locked") then
+      error(b.key .. " opens " .. n .. " over the lock screen")
+    end
+  end
+end
 local osd_keys = {
   XF86AudioRaiseVolume = "vol-up", XF86AudioLowerVolume = "vol-down",
   XF86AudioMute = "mute", XF86AudioMicMute = "mic-mute",
@@ -435,7 +627,17 @@ for _, b in ipairs(binds) do
 end
 print("ok " .. #calls)
 for _, c in ipairs(calls) do print(c) end
+print_binds()
 "#;
+
+/// The mock with the option whitelist filled in.
+fn mock() -> String {
+    let list: Vec<String> = hypr::ALL_BIND_OPTIONS
+        .iter()
+        .map(|o| format!("{o:?}"))
+        .collect();
+    MOCK_TEMPLATE.replace("__KNOWN_OPTS__", &format!("{{{}}}", list.join(", ")))
+}
 
 /// Spec §2.12: the launcher binds never work over the lock screen.
 #[test]
@@ -519,6 +721,254 @@ fn base_lua_enables_session_lock_restore() {
     }
 }
 
+/// Runs the mock over `files` and returns (success, stdout, stderr).
+fn run_mock(lua: &Path, dir: &Path, binds_only: bool, files: &[&Path]) -> (bool, String, String) {
+    let m = dir.join("mock.lua");
+    std::fs::write(&m, mock()).unwrap();
+    let mut cmd = Command::new(lua);
+    cmd.arg(&m);
+    if binds_only {
+        cmd.arg("--binds-only");
+    }
+    let out = cmd.args(files).output().unwrap();
+    (
+        out.status.success(),
+        String::from_utf8_lossy(&out.stdout).into_owned(),
+        String::from_utf8_lossy(&out.stderr).into_owned(),
+    )
+}
+
+fn bind_lines(text: &str) -> Vec<&str> {
+    text.lines().filter(|l| l.starts_with("bind ")).collect()
+}
+
+/// R1, the spec's migration test, permanent: `base.lua`'s fallback copies are exactly what
+/// uQ's default table renders. Both are run through the mock; the `(key, dispatcher, options)`
+/// lists must be equal, in order.
+#[test]
+fn base_lua_binds_equal_the_default_table() {
+    let Ok(lua) = which("lua") else {
+        eprintln!("skipping: no `lua` on PATH");
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let rendered = dir.path().join("rendered.lua");
+    std::fs::write(&rendered, uq_core::lua::emit_binds(&Keybinds::default())).unwrap();
+    let base = repo().join("config/hypr/base.lua");
+    let (ok, from_base, err) = run_mock(&lua, dir.path(), true, &[&base]);
+    assert!(ok, "{from_base}{err}");
+    let (ok, from_table, err) = run_mock(&lua, dir.path(), true, &[&rendered]);
+    assert!(ok, "{from_table}{err}");
+    let (a, b) = (bind_lines(&from_base), bind_lines(&from_table));
+    assert_eq!(a.len(), 54, "{from_base}");
+    assert_eq!(a, b, "base.lua and the default table have drifted apart");
+}
+
+/// Review Focus 2: Hyprland ignores an unknown `hl.bind` option, so the mock must not.
+#[test]
+fn mock_rejects_a_dashed_option() {
+    let Ok(lua) = which("lua") else {
+        eprintln!("skipping: no `lua` on PATH");
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let f = dir.path().join("dashed.lua");
+    std::fs::write(
+        &f,
+        "hl.bind(\"SUPER + Q\", hl.dsp.window.close(), { [\"non-consuming\"] = true })\n",
+    )
+    .unwrap();
+    let (ok, out, err) = run_mock(&lua, dir.path(), true, &[&f]);
+    assert!(!ok && err.contains("unknown hl.bind option"), "{out}{err}");
+    // A misspelling with `_` is just as unknown.
+    std::fs::write(
+        &f,
+        "hl.bind(\"SUPER + Q\", hl.dsp.window.close(), { repeting = true })\n",
+    )
+    .unwrap();
+    let (ok, out, err) = run_mock(&lua, dir.path(), true, &[&f]);
+    assert!(!ok && err.contains("unknown hl.bind option"), "{out}{err}");
+}
+
+/// The mock tells two binds apart that differ only in a table argument.
+#[test]
+fn mock_sees_table_arguments() {
+    let Ok(lua) = which("lua") else {
+        eprintln!("skipping: no `lua` on PATH");
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let f = dir.path().join("t.lua");
+    std::fs::write(
+        &f,
+        "hl.bind(\"SUPER + 3\", hl.dsp.focus({ workspace = 3 }))\n\
+         hl.bind(\"SUPER + 4\", hl.dsp.focus({ workspace = 4 }))\n\
+         hl.unbind(\"all\")\n\
+         hl.bind(\"SUPER + 5\", hl.dsp.focus({ workspace = 5 }), { locked = true })\n",
+    )
+    .unwrap();
+    let (ok, out, err) = run_mock(&lua, dir.path(), true, &[&f]);
+    assert!(ok, "{out}{err}");
+    assert_eq!(
+        bind_lines(&out),
+        ["bind SUPER + 5 | hl.dsp.focus{workspace=5} | locked=true"]
+    );
+}
+
+/// Review Focus 1: hostile names and commands are one `hl.bind` call each after the unbind, and
+/// never run as code.
+#[test]
+fn hostile_binds_run_as_one_call_each() {
+    let Ok(lua) = which("lua") else {
+        eprintln!("skipping: no `lua` on PATH");
+        return;
+    };
+    let reg = ThemeRegistry::load_dir(&repo().join("themes")).unwrap();
+    let t = reg.iter().next().unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let hostile = [
+        "x'; $(id) \"; ]] \\ \") hl.exec_cmd(\"x",
+        "a'b\"c\\d]]e$(id);f",
+        "''",
+    ];
+    // Built past validation on purpose: the renderer must hold up on its own.
+    let mut kb = Keybinds::default();
+    for (i, h) in hostile.iter().enumerate() {
+        kb.custom.push(uq_core::keybinds::CustomBind {
+            id: format!("k-{:04x}", 2 * i + 1),
+            name: (*h).into(),
+            combo: format!("SUPER + F{}", i + 1),
+            enabled: true,
+            locked: false,
+            repeating: false,
+            action: uq_core::keybinds::Action::Command {
+                command: (*h).into(),
+            },
+        });
+        kb.custom.push(uq_core::keybinds::CustomBind {
+            id: format!("k-{:04x}", 2 * i + 2),
+            name: (*h).into(),
+            combo: format!("SUPER + F{}", i + 11),
+            enabled: true,
+            locked: false,
+            repeating: false,
+            action: uq_core::keybinds::Action::Launch {
+                app: format!("{h}.desktop; rm -rf ~"),
+            },
+        });
+    }
+    let gen_ = emit_generated(
+        t,
+        &layouts(),
+        &rules(),
+        &kb,
+        &settings(),
+        &StartupRender::default(),
+    );
+    let (p, _) = tree(&dir.path().join("hostile-binds"), &gen_);
+    let (ok, text, err) = run_mock(
+        &lua,
+        dir.path(),
+        false,
+        &[&p.base_lua, &p.generated_lua, &p.user_lua],
+    );
+    assert!(ok, "{text}{err}");
+    let lines: Vec<&str> = text.lines().collect();
+    let unbind = lines
+        .iter()
+        .position(|l| *l == "hl.unbind:all")
+        .expect(&text);
+    let after = &lines[unbind..];
+    let calls = after.iter().filter(|l| **l == "hl.bind").count();
+    assert_eq!(calls, 54 + 2 * hostile.len(), "{text}");
+    assert_eq!(bind_lines(&text).len(), calls, "{text}");
+    assert!(!text.contains("hl.exec_cmd:x"), "{text}");
+    assert!(!text.contains("hl.exec_cmd:\"x"), "{text}");
+    assert!(!text.contains("rm -rf ~\n"), "{text}");
+}
+
+/// Spec §2.12 for the rendered file: no launcher bind works over the lock screen, your own
+/// included. The mock's own checks run over `generated.lua`'s binds, since it clears
+/// `base.lua`'s at `hl.unbind("all")`; this one reads the printed list.
+#[test]
+fn rendered_launcher_binds_are_not_locked() {
+    let Ok(lua) = which("lua") else {
+        eprintln!("skipping: no `lua` on PATH");
+        return;
+    };
+    let reg = ThemeRegistry::load_dir(&repo().join("themes")).unwrap();
+    let t = reg.iter().next().unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    for (n, kb) in fixtures().iter().enumerate() {
+        let gen_ = emit_generated(
+            t,
+            &layouts(),
+            &rules(),
+            kb,
+            &settings(),
+            &StartupRender::default(),
+        );
+        let f = dir.path().join(format!("gen{n}.lua"));
+        std::fs::write(&f, gen_).unwrap();
+        // The generated file alone, so base.lua can't be what is being checked.
+        let (ok, text, err) = run_mock(&lua, dir.path(), true, &[&f]);
+        assert!(ok, "{text}{err}");
+        let mut seen = 0;
+        for l in bind_lines(&text) {
+            let launcher = [
+                "spotlight",
+                "appmenu",
+                "quick-settings",
+                "notif-centre",
+                "lock",
+                "power-menu",
+            ]
+            .iter()
+            .any(|n| l.contains(&format!("hl.dsp.global(uq:{n})")));
+            if launcher {
+                seen += 1;
+                assert!(!l.contains("locked=true"), "{l}");
+            }
+        }
+        assert!(seen >= 6, "{text}");
+    }
+}
+
+/// `SUPER + SUPER_R` is the one key only a default may take, so it has its own check.
+#[test]
+#[ignore = "needs Hyprland; CI runs it with --ignored"]
+fn super_key_and_mouse_buttons_pass_hyprland_verify() {
+    let reg = ThemeRegistry::load_dir(&repo().join("themes")).unwrap();
+    let t = reg.iter().next().unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let kb = Keybinds::from_section(
+        &serde_json::json!({"overrides": [{"id": "uq.appmenu", "combo": "SUPER + SUPER_R"}]}),
+        &Keybinds::default(),
+    )
+    .unwrap();
+    let gen_ = emit_generated(
+        t,
+        &layouts(),
+        &rules(),
+        &kb,
+        &settings(),
+        &StartupRender::default(),
+    );
+    let (_, main) = tree(&dir.path().join("modkey"), &gen_);
+    let out = Command::new("Hyprland")
+        .arg("--verify-config")
+        .arg("-c")
+        .arg(&main)
+        .output()
+        .unwrap();
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(out.status.success(), "{text}");
+}
+
 #[test]
 fn lua_mock_runs_every_variant() {
     let Ok(lua) = which("lua") else {
@@ -528,16 +978,21 @@ fn lua_mock_runs_every_variant() {
     let reg = ThemeRegistry::load_dir(&repo().join("themes")).unwrap();
     let dir = tempfile::tempdir().unwrap();
     let mock = dir.path().join("mock.lua");
-    std::fs::write(&mock, MOCK).unwrap();
-    for t in reg.iter() {
-        let root = dir.path().join(format!("{}-{}", t.id, t.variant));
+    std::fs::write(&mock, self::mock()).unwrap();
+    for (t, kb) in reg
+        .iter()
+        .flat_map(|t| fixtures().into_iter().map(move |k| (t, k)))
+    {
+        let root = dir
+            .path()
+            .join(format!("{}-{}-{}", t.id, t.variant, kb.custom.len()));
         let (p, _) = tree(
             &root,
             &emit_generated(
                 t,
                 &layouts(),
                 &rules(),
-                &uq_core::keybinds::Keybinds::default(),
+                &kb,
                 &settings(),
                 &StartupRender::default(),
             ),
@@ -569,13 +1024,13 @@ fn hostile_rules_run_as_one_call_each() {
     let t = reg.iter().next().unwrap();
     let dir = tempfile::tempdir().unwrap();
     let mock = dir.path().join("mock.lua");
-    std::fs::write(&mock, MOCK).unwrap();
+    std::fs::write(&mock, self::mock()).unwrap();
     let hostile = hostile_rules();
     let gen_ = emit_generated(
         t,
         &layouts(),
         &hostile,
-        &uq_core::keybinds::Keybinds::default(),
+        &keybinds(),
         &settings(),
         &StartupRender::default(),
     );
@@ -604,15 +1059,20 @@ fn hostile_rules_run_as_one_call_each() {
 fn all_variants_pass_hyprland_verify() {
     let reg = ThemeRegistry::load_dir(&repo().join("themes")).unwrap();
     let dir = tempfile::tempdir().unwrap();
-    for t in reg.iter() {
-        let root = dir.path().join(format!("{}-{}", t.id, t.variant));
+    for (t, kb) in reg
+        .iter()
+        .flat_map(|t| fixtures().into_iter().map(move |k| (t, k)))
+    {
+        let root = dir
+            .path()
+            .join(format!("{}-{}-{}", t.id, t.variant, kb.custom.len()));
         let (_, main) = tree(
             &root,
             &emit_generated(
                 t,
                 &layouts(),
                 &rules(),
-                &uq_core::keybinds::Keybinds::default(),
+                &kb,
                 &settings(),
                 &StartupRender::default(),
             ),
@@ -656,12 +1116,12 @@ fn hostile_env_runs_as_one_call_each() {
     let t = reg.iter().next().unwrap();
     let dir = tempfile::tempdir().unwrap();
     let mock = dir.path().join("mock.lua");
-    std::fs::write(&mock, MOCK).unwrap();
+    std::fs::write(&mock, self::mock()).unwrap();
     let gen_ = emit_generated(
         t,
         &layouts(),
         &rules(),
-        &uq_core::keybinds::Keybinds::default(),
+        &keybinds(),
         &settings(),
         &startup_all(),
     );
@@ -718,7 +1178,7 @@ fn startup_switches_pass_hyprland_verify() {
         t,
         &layouts(),
         &rules(),
-        &uq_core::keybinds::Keybinds::default(),
+        &keybinds(),
         &settings(),
         &startup_all(),
     );

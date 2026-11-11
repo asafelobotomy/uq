@@ -133,6 +133,10 @@ hl.gesture({
 ---- KEYBINDINGS ----
 ---------------------
 
+-- Fallback shortcuts. uqd renders the real set into generated.lua, which starts with
+-- hl.unbind("all") and replaces all of these. They are here so a missing or old
+-- generated.lua still leaves a working desktop. Keep them equal to
+-- crates/uq-core/src/keybinds/defaults.rs (test base_lua_binds_equal_the_default_table).
 hl.bind(mainMod .. " + Return", hl.dsp.exec_cmd(terminal))
 hl.bind(mainMod .. " + Q",      hl.dsp.window.close())
 hl.bind(mainMod .. " + V",      hl.dsp.window.float({ action = "toggle" }))
