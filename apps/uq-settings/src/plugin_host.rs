@@ -12,7 +12,8 @@
 //!   and listed methods and properties (no target is passed). With only Phase 3's `dbus_name`,
 //!   the page names the object path and interface, and any method or property on that name is
 //!   allowed. Types come from introspection (`uq_core::integration::dbus_json`), with a 2 s
-//!   deadline, at most 8 requests in flight per page. A page that waits for its name
+//!   deadline (or the method's `[dbus] timeout_ms`, for a write that may ask for a password),
+//!   at most 8 requests in flight per page. A page that waits for its name
 //!   (`requires.bus_name`) never starts the service.
 //!
 //! This limits mistakes, not attacks: a page is trusted package code.
@@ -20,6 +21,7 @@
 use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::{Mutex, OnceLock};
+use std::time::Duration;
 
 use cxx_qt::{CxxQtType, Threading};
 use cxx_qt_lib::QString;
@@ -183,14 +185,25 @@ pub fn prepare(
     Ok((spec, args))
 }
 
+/// Where a D-Bus request of a page goes and how long it may take.
+#[derive(Debug)]
+pub struct Route {
+    pub target: Target,
+    pub bus: Bus,
+    /// Whether the service may be started by the request.
+    pub auto_start: bool,
+    /// 2 s, or the method's `[dbus] timeout_ms`.
+    pub deadline: Duration,
+}
+
 /// Where a D-Bus request of `page` may go: the target, the bus, whether the service may be
-/// started, and whether `member` is allowed (`property` picks the list).
+/// started, its deadline, and whether `member` is allowed (`property` picks the list).
 pub fn dbus_target(
     manifest: Option<PageManifest>,
     member: &str,
     property: bool,
     target_json: &str,
-) -> Result<(Target, Bus, bool), String> {
+) -> Result<Route, String> {
     let m = manifest.ok_or("this page is not installed any more")?;
     let name = m
         .dbus_name
@@ -218,29 +231,35 @@ pub fn dbus_target(
                     if property { "properties" } else { "methods" }
                 ));
             }
-            Ok((
-                Target {
+            Ok(Route {
+                target: Target {
                     name,
                     path: d.path.clone(),
                     interface: d.interface.clone(),
                 },
-                d.bus,
+                bus: d.bus,
                 auto_start,
-            ))
+                deadline: if property {
+                    dbus_json::CALL_DEADLINE
+                } else {
+                    d.deadline(member)
+                },
+            })
         }
         None => {
             let (Some(path), Some(interface)) = (field("path"), field("interface")) else {
                 return Err("give the object path and interface: {path, interface}".into());
             };
-            Ok((
-                Target {
+            Ok(Route {
+                target: Target {
                     name,
                     path,
                     interface,
                 },
-                Bus::Session,
+                bus: Bus::Session,
                 auto_start,
-            ))
+                deadline: dbus_json::CALL_DEADLINE,
+            })
         }
     }
 }
@@ -398,8 +417,8 @@ impl PluginHost {
             property,
             &target_json.to_string(),
         );
-        let (target, bus, auto_start, args) = match (target, args) {
-            (Ok((t, b, a)), Ok(args)) => (t, b, a, args),
+        let (route, args) = match (target, args) {
+            (Ok(route), Ok(args)) => (route, args),
             (Err(e), _) | (_, Err(e)) => {
                 self.deliver(id, error(e));
                 return id;
@@ -415,12 +434,19 @@ impl PluginHost {
         };
         let qt = self.qt_thread();
         rt.spawn(async move {
+            let Route {
+                target,
+                bus,
+                auto_start,
+                deadline,
+            } = route;
             let result = match connection(bus).await {
                 Err(e) => Err(e),
                 Ok(conn) => if property {
                     dbus_json::get_property(&conn, &target, &member, auto_start).await
                 } else {
-                    dbus_json::call(&conn, &target, &member, &args, auto_start).await
+                    dbus_json::call_within(&conn, &target, &member, &args, auto_start, deadline)
+                        .await
                 }
                 .map_err(|e| e.to_string()),
             };
@@ -479,16 +505,18 @@ mod tests {
     fn dbus_targets_follow_the_manifest() {
         // Phase 3 shape: dbus_name only, the page names path and interface.
         let p3 = || page("dbus_name = \"org.x.Y\"\n");
-        let (t, bus, auto) = dbus_target(
+        let r = dbus_target(
             p3(),
             "Get",
             false,
             r#"{"path": "/org/x/Y", "interface": "org.x.Y"}"#,
         )
         .unwrap();
+        let t = &r.target;
         assert_eq!((t.name.as_str(), t.path.as_str()), ("org.x.Y", "/org/x/Y"));
-        assert_eq!(bus, Bus::Session);
-        assert!(auto);
+        assert_eq!(r.bus, Bus::Session);
+        assert!(r.auto_start);
+        assert_eq!(r.deadline, dbus_json::CALL_DEADLINE);
         assert!(
             dbus_target(p3(), "Get", false, "").is_err(),
             "needs a target"
@@ -502,14 +530,20 @@ mod tests {
         let table = || {
             page(
                 "[requires]\nbus_name = \"org.x.Y\"\n[dbus]\nname = \"org.x.Y\"\npath = \"/o\"\n\
-                 interface = \"org.x.I\"\nmethods = [\"Pause\"]\nproperties = [\"Count\"]\n\
-                 bus = \"system\"\n",
+                 interface = \"org.x.I\"\nmethods = [\"Pause\", \"State\"]\n\
+                 properties = [\"Count\"]\nbus = \"system\"\ntimeout_ms = { Pause = 120000 }\n",
             )
         };
-        let (t, bus, auto) = dbus_target(table(), "Pause", false, "").unwrap();
+        let r = dbus_target(table(), "Pause", false, "").unwrap();
+        let t = &r.target;
         assert_eq!((t.path.as_str(), t.interface.as_str()), ("/o", "org.x.I"));
-        assert_eq!(bus, Bus::System);
-        assert!(!auto, "a page waiting for its name never starts it");
+        assert_eq!(r.bus, Bus::System);
+        assert!(!r.auto_start, "a page waiting for its name never starts it");
+        assert_eq!(r.deadline, Duration::from_secs(120), "its timeout_ms");
+        assert_eq!(
+            dbus_target(table(), "State", false, "").unwrap().deadline,
+            dbus_json::CALL_DEADLINE
+        );
         assert!(dbus_target(table(), "Count", true, "{}").is_ok());
         assert!(
             dbus_target(table(), "Count", false, "").is_err(),

@@ -9,6 +9,10 @@ All notable changes to uQ are listed here. The format follows
 
 ### Added
 
+- **Settings pages: longer D-Bus deadlines for writes that may ask for a password.** A page's
+  `[dbus]` table takes `timeout_ms = { Method = <ms> }`, up to 120 seconds, for listed methods
+  only; every other request still ends within 2 seconds. Checked by the manifest loader and
+  `uqctl integrations check`. See docs/settings-pages.md.
 - **Keyboard shortcuts.** A Keyboard shortcuts page lists every uQ shortcut by what it does:
   change its keys (press them to capture, or pick them), turn it off, reset it, or put all back.
   Add your own shortcuts: open a uQ panel, a window or workspace action, a layout, start an app

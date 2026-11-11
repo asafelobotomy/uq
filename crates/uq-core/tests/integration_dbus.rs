@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use serde_json::json;
 use uq_core::integration::dbus_json::{
-    DbusJsonError, MAX_RESULT_JSON, Target, call, get_properties, get_property,
+    DbusJsonError, MAX_RESULT_JSON, Target, call, call_within, get_properties, get_property,
 };
 use uq_core::test_bus::{connect, private_bus};
 use zbus::zvariant::{OwnedObjectPath, OwnedValue};
@@ -228,6 +228,12 @@ async fn refused_types_bad_args_and_limits() {
         Err(DbusJsonError::Deadline)
     );
     assert!(start.elapsed() < Duration::from_secs(3));
+
+    // A page's `[dbus] timeout_ms` gives one method longer (a password prompt): it finishes.
+    assert_eq!(
+        call_within(&c, &t, "Slow", &json!([]), false, Duration::from_secs(8)).await,
+        Ok(serde_json::Value::Null)
+    );
 }
 
 #[tokio::test]

@@ -48,6 +48,7 @@ interface = "org.example.App1"
 methods = ["Refresh"]
 properties = ["State"]
 bus = "session"                 # or "system" for a system service; default "session"
+timeout_ms = { Refresh = 120000 }   # optional: longer deadlines for listed methods, at most 120000
 
 [[command]]                     # optional, up to 64: what ctx.command.run may run
 id = "status"                   # [a-z0-9_-]{1,40}
@@ -144,7 +145,14 @@ list.
   anything else is an error. In `a{sv}`, `true` is `b`, whole numbers are `x`, other numbers
   `d`, strings `s`, lists of one kind `ab`/`ax`/`ad`/`as`, objects `a{sv}`.
 - Arguments are at most 16 KiB of JSON and results at most 256 KiB. Every request ends within
-  2 seconds. At most 8 requests per page are in flight; more get a "busy" error.
+  2 seconds, except a method given its own deadline in `[dbus] timeout_ms`. At most 8 requests
+  per page are in flight; more get a "busy" error.
+- **Writes that may ask for a password.** A service that checks polkit with user interaction
+  allowed may wait for the person to type their password, which takes longer than 2 seconds; the
+  page would get `{error}` while the change still goes ahead. List such a method in
+  `timeout_ms = { Method = <ms> }` (1 to 120000) under `[dbus]`: its calls may take that long.
+  Only methods in `methods` may be listed, and only pages have it (a widget's calls always end
+  within 2 seconds). Property reads always keep 2 seconds.
 - A page with `requires.bus_name` never starts its service: if the name has no owner, the
   request fails.
 

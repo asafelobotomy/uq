@@ -272,3 +272,38 @@ fn closed_stdout_pipe_is_not_a_panic() {
     assert!(!err.contains("Broken pipe"), "{err}");
     assert!(out.status.success(), "{:?} {err}", out.status);
 }
+
+/// A page's `[dbus] timeout_ms` (a write that may ask for a password) is checked: listed
+/// methods only, at most 120 s.
+#[test]
+fn dbus_timeouts_are_checked() {
+    let d = tempfile::tempdir().unwrap();
+    let uq = d.path().join("uq");
+    good_folder(&uq);
+    let page = |timeouts: &str| {
+        put(
+            &uq.join("pages/demo/page.toml"),
+            &format!(
+                "uq_api = 1\nid = \"demo\"\nname = \"Demo\"\nqml = \"Page.qml\"\n\
+                 [dbus]\nname = \"org.demo.App1\"\npath = \"/org/demo/App1\"\n\
+                 interface = \"org.demo.App1\"\nmethods = [\"SetSize\", \"State\"]\n\
+                 bus = \"system\"\n{timeouts}"
+            ),
+        );
+    };
+    page("timeout_ms = { SetSize = 120000 }\n");
+    let (ok, out) = uqctl(&["integrations", "check", uq.to_str().unwrap()]);
+    assert!(ok, "{out}");
+    for (bad, needle) in [
+        ("timeout_ms = { SetSize = 600000 }\n", "must be 1 to 120000"),
+        (
+            "timeout_ms = { Other = 5000 }\n",
+            "\"Other\" is not listed in dbus.methods",
+        ),
+    ] {
+        page(bad);
+        let (ok, out) = uqctl(&["integrations", "check", uq.to_str().unwrap()]);
+        assert!(!ok, "{bad}: {out}");
+        assert!(out.contains(needle), "{needle:?} missing from:\n{out}");
+    }
+}
