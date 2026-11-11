@@ -1,9 +1,11 @@
-// A uQ Settings page. `ctx` is set by Settings: ctx.theme, ctx.command and ctx.dbus
-// (docs/settings-pages.md). All text goes through UqLabel (plain text only).
+// A uQ Settings page. `ctx` is set by Settings: ctx.theme, ctx.command, ctx.dbus and
+// ctx.openApp (docs/settings-pages.md). All text goes through UqLabel (plain text only); pure
+// logic lives in logic.js beside this file.
 import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
 import org.uq.settings
+import "logic.js" as Logic
 
 Item {
     id: page
@@ -17,17 +19,20 @@ Item {
     function refresh() {
         if (!page.ctx)
             return;
-        page.ctx.command.run("status", [], result => {
-            if (result.error) {
-                page.problem = result.error;
-                return;
-            }
-            page.problem = "";
-            page.status = result.output;
-        });
+        page.ctx.command.run("status", [], page.show);
     }
 
-    onCtxChanged: refresh()
+    function show(result) {
+        page.problem = Logic.problemOf(result);
+        if (page.problem === "")
+            page.status = result.output;
+    }
+
+    // Read now and again whenever the watched file changes (page.toml `watch`).
+    onCtxChanged: {
+        if (page.ctx)
+            page.ctx.command.watch("status", page.show);
+    }
 
     ColumnLayout {
         anchors.fill: parent
@@ -35,7 +40,7 @@ Item {
         spacing: 12
 
         UqLabel {
-            text: page.status ? "Running: " + page.status.state : "Checking…"
+            text: Logic.describe(page.status)
             Layout.fillWidth: true
         }
         UqLabel {

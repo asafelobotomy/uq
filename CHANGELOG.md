@@ -9,6 +9,30 @@ All notable changes to uQ are listed here. The format follows
 
 ### Added
 
+- **Settings pages: longer D-Bus deadlines for writes that may ask for a password.** A page's
+  `[dbus]` table takes `timeout_ms = { Method = <ms> }`, up to 120 seconds, for listed methods
+  only; every other request still ends within 2 seconds. Checked by the manifest loader and
+  `uqctl integrations check`. See docs/settings-pages.md.
+- **`uqctl integrations check --no-programs`.** Skips only the check that each command's and
+  app action's program is installed, so an app's CI can check its `uq/` folder without
+  installing the app. Paths are still checked.
+- **Settings pages may ship sibling files.** A page folder may hold a `logic.js` imported from
+  its QML (`import "logic.js" as Logic`) and further component files; tested and documented in
+  docs/settings-pages.md.
+- **Settings pages follow changes instead of polling.** A page's read `[[command]]` takes a
+  `watch` table (files, absolute or under `~/`, and D-Bus signal matches on the session or system
+  bus); `ctx.command.watch(id, callback)` runs it now and again after each debounced burst of
+  changes, one run at a time, until `ctx.command.unwatch` or the page closes. See
+  docs/settings-pages.md.
+- **`ctx.openApp(desktopId)` for Settings pages.** A page can open an app (its own full app,
+  say) by its `name.desktop` id, the way the launcher does (`uqctl launch`), detached from
+  Settings. Paths and other ids are refused.
+- **A stable component list and a test kit for Settings pages.** docs/settings-pages.md lists the
+  `org.uq.settings` components pages may use under `uq_api = 1` (`UqLabel`, `UqComboBox`,
+  `SettingRow`, `SwitchRow`, `ValueSlider`, `ErrorCard`) with their properties.
+  `templates/settings-page-tests/` is a kit an app copies into its repository: a stub
+  `org.uq.settings` module, a stand-in `ctx` and an example offscreen `qmltestrunner` test. The
+  template page now keeps its logic in `logic.js`.
 - **Keyboard shortcuts.** A Keyboard shortcuts page lists every uQ shortcut by what it does:
   change its keys (press them to capture, or pick them), turn it off, reset it, or put all back.
   Add your own shortcuts: open a uQ panel, a window or workspace action, a layout, start an app

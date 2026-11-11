@@ -7,10 +7,13 @@
 //! declaring a newer `uq_api` major than [`UQ_API`] is refused with "needs a newer uQ" before any
 //! other check, so a newer key never reads as a mistake (§2.6).
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
 use regex::Regex;
+
+use super::command_watch::{RawWatch, WatchSpec, watch_from};
 use serde::Deserialize;
 use zbus::names::{InterfaceName, MemberName, WellKnownName};
 use zbus::zvariant::ObjectPath;
@@ -30,6 +33,10 @@ pub const BIN_DIR: &str = "/usr/bin";
 /// `timeout_ms` when a command gives none, and the most it may ask for (§2.3).
 pub const DEFAULT_TIMEOUT_MS: u64 = 10_000;
 pub const MAX_TIMEOUT_MS: u64 = 600_000;
+
+/// The most a page's `[dbus] timeout_ms` may give one method: long enough for a polkit password
+/// prompt. Methods not listed keep [`crate::integration::dbus_json::CALL_DEADLINE`].
+pub const MAX_DBUS_TIMEOUT_MS: u64 = 120_000;
 
 const MAX_COMMANDS: usize = 64;
 const MAX_ARGV: usize = 64;
@@ -192,6 +199,20 @@ pub struct DbusSpec {
     pub signals: Vec<String>,
     /// `bus = "session" | "system"`, session by default.
     pub bus: Bus,
+    /// `timeout_ms = { Method = ms }`: a longer deadline for listed methods that may wait for a
+    /// password prompt (pages only; at most [`MAX_DBUS_TIMEOUT_MS`]).
+    pub timeout_ms: BTreeMap<String, u64>,
+}
+
+impl DbusSpec {
+    /// How long a call of `method` may take: its `timeout_ms`, else the usual 2 s.
+    pub fn deadline(&self, method: &str) -> std::time::Duration {
+        self.timeout_ms
+            .get(method)
+            .map_or(crate::integration::dbus_json::CALL_DEADLINE, |ms| {
+                std::time::Duration::from_millis(*ms)
+            })
+    }
 }
 
 /// How a command's stdout is handed back (§2.3).
@@ -265,6 +286,8 @@ pub struct CommandSpec {
     pub args: Vec<ArgSpec>,
     /// A fixed question shown before running; at most one `%s` (the first argument).
     pub confirm: Option<String>,
+    /// Re-run this read when a file changes or a signal arrives (pages only).
+    pub watch: Option<WatchSpec>,
 }
 
 impl CommandSpec {
@@ -299,6 +322,8 @@ struct RawDbus {
     signals: Vec<String>,
     #[serde(default)]
     bus: Bus,
+    #[serde(default)]
+    timeout_ms: BTreeMap<String, u64>,
 }
 
 #[derive(Deserialize)]
@@ -318,6 +343,7 @@ struct RawCommand {
     #[serde(default)]
     args: Vec<RawArg>,
     confirm: Option<String>,
+    watch: Option<RawWatch>,
 }
 
 fn requires_from(raw: Option<RawRequires>) -> Result<Requires, ManifestError> {
@@ -382,14 +408,28 @@ fn dbus_from(raw: Option<RawDbus>) -> Result<Option<DbusSpec>, ManifestError> {
             raw.interface
         )));
     }
+    let methods = members("methods", raw.methods)?;
+    for (method, ms) in &raw.timeout_ms {
+        if !methods.contains(method) {
+            return Err(invalid(format!(
+                "dbus.timeout_ms: {method:?} is not listed in dbus.methods"
+            )));
+        }
+        if !(1..=MAX_DBUS_TIMEOUT_MS).contains(ms) {
+            return Err(invalid(format!(
+                "dbus.timeout_ms: {method:?} must be 1 to {MAX_DBUS_TIMEOUT_MS}, not {ms}"
+            )));
+        }
+    }
     Ok(Some(DbusSpec {
-        methods: members("methods", raw.methods)?,
+        methods,
         properties: members("properties", raw.properties)?,
         signals: members("signals", raw.signals)?,
         name: raw.name,
         path: raw.path,
         interface: raw.interface,
         bus: raw.bus,
+        timeout_ms: raw.timeout_ms,
     }))
 }
 
@@ -453,6 +493,12 @@ fn command_from(raw: RawCommand, prefixes: &[PathBuf]) -> Result<CommandSpec, St
             return Err(what("confirm has %s but the command declares no args"));
         }
     }
+    let watch = match raw.watch {
+        None => None,
+        Some(w) => {
+            Some(watch_from(w, !args.is_empty(), raw.confirm.is_some()).map_err(|e| what(&e))?)
+        }
+    };
     Ok(CommandSpec {
         id,
         argv: raw.argv,
@@ -460,6 +506,7 @@ fn command_from(raw: RawCommand, prefixes: &[PathBuf]) -> Result<CommandSpec, St
         timeout_ms,
         args,
         confirm: raw.confirm,
+        watch,
     })
 }
 
@@ -598,9 +645,21 @@ pub fn parse_widget(text: &str) -> Result<WidgetManifest, ManifestError> {
     };
     let requires = requires_from(m.requires)?;
     let dbus = dbus_from(m.dbus)?;
+    if dbus.as_ref().is_some_and(|d| !d.timeout_ms.is_empty()) {
+        return Err(invalid(
+            "dbus.timeout_ms is for settings pages only; a widget's calls end within 2 seconds",
+        ));
+    }
     check_requires_bus(&requires, dbus.as_ref())?;
+    let commands = commands_from(m.command)?;
+    if let Some(c) = commands.iter().find(|c| c.watch.is_some()) {
+        return Err(invalid(format!(
+            "command {:?}: watch is for settings pages only; widgets follow [dbus] signals",
+            c.id
+        )));
+    }
     Ok(WidgetManifest {
-        commands: commands_from(m.command)?,
+        commands,
         id: m.id,
         name: m.name,
         slot: m.slot,

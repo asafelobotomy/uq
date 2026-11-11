@@ -4,6 +4,11 @@
 //                                               {code, output} or {error, …}
 //   ctx.dbus.call(method, args, callback[, target])
 //   ctx.dbus.get(property, callback[, target])  callback gets {value} or {error}
+//   ctx.command.watch(id, callback)             run a [[command]] with a `watch` table now and
+//                                               again after each change; returns a handle
+//   ctx.command.unwatch(handle)                 stop it (closing the page stops them all)
+//   ctx.openApp(desktopId[, callback])          open an app ("name.desktop") as the launcher
+//                                               does; callback gets {ok: true} or {error}
 // `target` is {path, interface}, needed only by a page without a [dbus] table.
 // Everything goes through `host` (the PluginHost singleton); without one every request fails
 // with an error. A command with `confirm` raises confirmNeeded; the page shows the dialog and
@@ -20,6 +25,8 @@ QtObject {
     property var theme: ({})
     /// request id -> callback, for this page's requests only.
     property var callbacks: ({})
+    /// watch id -> {id, callback, running, again}: this page's followed commands.
+    property var watches: ({})
 
     /// A command of this page asks to be confirmed: show `text` and call answer(request, …).
     signal confirmNeeded(int request, string text)
@@ -27,12 +34,15 @@ QtObject {
     readonly property var ctx: ({
             theme: context.theme,
             command: {
-                run: (id, args, callback) => context.run(id, args, callback)
+                run: (id, args, callback) => context.run(id, args, callback),
+                watch: (id, callback) => context.watch(id, callback),
+                unwatch: handle => context.unwatch(handle)
             },
             dbus: {
                 call: (method, args, callback, target) => context.call(method, args, callback, target),
                 get: (property, callback, target) => context.get(property, callback, target)
-            }
+            },
+            openApp: (desktopId, callback) => context.openApp(desktopId, callback)
         })
 
     function finish(callback, result) {
@@ -80,6 +90,62 @@ QtObject {
         return context.track(context.host.dbusGet(context.pageId, String(property), context.targetJson(target)), callback);
     }
 
+    /// Run `id` now and again whenever the host says its files or signals changed. One run
+    /// at a time: a change during a run runs it once more afterwards.
+    function watch(id, callback) {
+        const handle = context.host ? context.host.watchCommand(context.pageId, String(id)) : 0;
+        if (handle <= 0) {
+            // No watch (none in page.toml, or no host): the page still gets this one run.
+            context.run(id, [], callback);
+            return 0;
+        }
+        context.watches[handle] = {
+            id: String(id),
+            callback: callback,
+            running: false,
+            again: false
+        };
+        context.rerun(handle);
+        return handle;
+    }
+
+    function rerun(handle) {
+        const w = context.watches[handle];
+        if (!w)
+            return;
+        if (w.running) {
+            w.again = true;
+            return;
+        }
+        w.running = true;
+        context.run(w.id, [], result => {
+            w.running = false;
+            if (!(handle in context.watches))
+                return;
+            context.finish(w.callback, result);
+            if (w.again) {
+                w.again = false;
+                context.rerun(handle);
+            }
+        });
+    }
+
+    function unwatch(handle) {
+        if (!(handle in context.watches))
+            return;
+        delete context.watches[handle];
+        if (context.host)
+            context.host.unwatch(handle);
+    }
+
+    Component.onDestruction: Object.keys(context.watches).forEach(h => context.unwatch(Number(h)))
+
+    function openApp(desktopId, callback) {
+        if (!context.host)
+            return context.unavailable(callback);
+        return context.track(context.host.openApp(context.pageId, String(desktopId)), callback);
+    }
+
     /// The person's answer to confirmNeeded(request, …).
     function answer(request, confirmed) {
         if (context.host && request in context.callbacks)
@@ -104,6 +170,10 @@ QtObject {
                 };
             }
             context.finish(callback, result);
+        }
+
+        function onCommandChanged(watch) {
+            context.rerun(watch);
         }
 
         function onConfirmRequested(request, page, text) {

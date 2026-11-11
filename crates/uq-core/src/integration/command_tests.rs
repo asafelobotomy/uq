@@ -23,6 +23,7 @@ fn spec(script: &str, output: Output, timeout_ms: u64) -> CommandSpec {
         timeout_ms,
         args: Vec::new(),
         confirm: None,
+        watch: None,
     }
 }
 
