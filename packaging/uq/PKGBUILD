@@ -84,11 +84,12 @@ package() {
   cp -r --no-preserve=ownership themes templates "$pkgdir/usr/share/uq/"
   # The whole shell tree (QML, shell/core/qmldir, logic/*.js).
   find shell -type f -exec install -Dm644 {} "$pkgdir/usr/share/uq/{}" \;
-  # The lock instance (its own Quickshell config). lock/core and lock/logic are symlinks to the
-  # shell's: Quickshell only imports from inside the config directory.
+  # The lock instance (its own Quickshell config). lock/core, lock/logic and lock/auth are
+  # symlinks to the shell's: Quickshell only imports from inside the config directory.
   find lock -type f -exec install -Dm644 {} "$pkgdir/usr/share/uq/{}" \;
   ln -s ../shell/core "$pkgdir/usr/share/uq/lock/core"
   ln -s ../shell/logic "$pkgdir/usr/share/uq/lock/logic"
+  ln -s ../shell/auth "$pkgdir/usr/share/uq/lock/auth"
   install -Dm755 target/release/uq-settings "$pkgdir/usr/bin/uq-settings"
   install -Dm644 packaging/org.uq.Settings.desktop "$pkgdir/usr/share/applications/org.uq.Settings.desktop"
   install -Dm644 packaging/dbus/org.uq.Settings1.service "$pkgdir/usr/share/dbus-1/services/org.uq.Settings1.service"

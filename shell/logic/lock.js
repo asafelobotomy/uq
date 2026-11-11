@@ -1,12 +1,14 @@
 .pragma library
 
 // Lock-screen logic: fingerprint detection, avatar choice and PAM prompt handling. Pure: the QML
-// lock surface owns the processes and PamContext and feeds their output in here.
+// lock surface owns the processes and PamContext and feeds their output in here. The parts the
+// greeter shares (messages, failures, avatars, prompt replies) live in auth.js; they are
+// re-exported here unchanged.
 
-.import "notif.js" as Notif
+.import "auth.js" as Auth
 
 var FPRINT_RETRY_MS = 10000;
-var MAX_MESSAGE = 200;
+var MAX_MESSAGE = Auth.MAX_MESSAGE;
 
 // True only for exit 0 with at least one enrolled-finger line (" - #0: right-index-finger").
 // "no fingers enrolled", "No devices available", errors and non-zero exits are all false.
@@ -17,19 +19,12 @@ function fprintListed(out, exitCode) {
 }
 
 function initialOf(name) {
-    if (typeof name !== "string" || name === "")
-        return "?";
-    var cp = String.fromCodePoint(name.codePointAt(0));
-    return cp.toUpperCase();
+    return Auth.initialOf(name);
 }
 
 // The AccountsService icon, then ~/.face, then the user's initial.
 function avatarSource(accountsIcon, faceExists, home, name) {
-    if (typeof accountsIcon === "string" && accountsIcon !== "")
-        return { path: "file://" + accountsIcon.split("/").map(encodeURIComponent).join("/") };
-    if (faceExists && typeof home === "string" && home !== "")
-        return { path: "file://" + (home + "/.face").split("/").map(encodeURIComponent).join("/") };
-    return { initial: initialOf(name) };
+    return Auth.avatarSource(accountsIcon, faceExists, home, name);
 }
 
 function fprintCanRestart(lastStartMs, nowMs) {
@@ -38,7 +33,7 @@ function fprintCanRestart(lastStartMs, nowMs) {
 
 // The typed text goes only to an echo-off prompt; anything else gets no reply.
 function passwordReply(responseRequired, responseVisible, typed) {
-    return responseRequired && !responseVisible ? typed : null;
+    return Auth.passwordReply(responseRequired, responseVisible, typed);
 }
 
 // The fingerprint context aborts when PAM asks it for a response.
@@ -47,29 +42,16 @@ function fprintAbortOnPrompt(responseRequired) {
 }
 
 function messageView(message, isError) {
-    var text = Notif.cleanText(message, MAX_MESSAGE);
-    return { text: text, error: text !== "" && !!isError };
+    return Auth.messageView(message, isError);
 }
 
 // How many of an attempt's PAM messages a failure shows (pam_faillock sends two).
-var FAILURE_LINES = 2;
+var FAILURE_LINES = Auth.FAILURE_LINES;
 
-// What a failed password attempt shows: the attempt's last non-prompt PAM messages (messageView
-// results, oldest first), e.g. pam_faillock's "The account is locked due to 3 failed logins." and
-// "(10 minutes left to unlock)"; else `fallback` ("Authentication failed"). Always an error.
+// What a failed password attempt shows (auth.js failureView): the attempt's last PAM messages,
+// e.g. pam_faillock's lockout text, else `fallback`. Always an error.
 function failureView(views, fallback) {
-    var texts = [];
-    var list = Array.isArray(views) ? views : [];
-    for (var i = 0; i < list.length; i++) {
-        var v = list[i];
-        var t = v && typeof v.text === "string" ? Notif.cleanText(v.text, MAX_MESSAGE) : "";
-        if (t !== "" && texts[texts.length - 1] !== t)
-            texts.push(t);
-    }
-    var text = Notif.cleanText(texts.slice(-FAILURE_LINES).join(" "), MAX_MESSAGE);
-    if (text === "")
-        text = typeof fallback === "string" && fallback !== "" ? fallback : "Authentication failed";
-    return { text: text, error: true };
+    return Auth.failureView(views, fallback);
 }
 
 // The shell config next to the lock config: <dir>/../shell, normalised (uq-lock calls the shell's
