@@ -94,5 +94,20 @@ Item {
             findChild(c.manualRepeater.itemAt(2), "manualBox").activated(0);
             compare(manual.signalArguments[1], [3, ""]);
         }
+
+        function test_manual_choice_survives_a_new_screen_list() {
+            const c = make({ strategy: "manual", count: 2, manual: [{ workspace: 1, output: "eDP-1", label: "BOE 0x0BCA" }] });
+            const box = findChild(c.manualRepeater.itemAt(0), "manualBox");
+            compare(box.currentIndex, 1);
+            c.plan = Object.assign({}, c.plan, { screens: root.screens.concat([{ output: "DP-2", label: "Other" }]) });
+            tryCompare(findChild(c.manualRepeater.itemAt(0), "manualBox"), "currentIndex", 1);
+        }
+
+        function test_count_box_snaps_back_after_a_refusal() {
+            const c = make({ strategy: "sequential", count: 10 });
+            c.countBox.value = 9;
+            c.countBox.valueModified();
+            compare(c.countBox.value, 10);
+        }
     }
 }

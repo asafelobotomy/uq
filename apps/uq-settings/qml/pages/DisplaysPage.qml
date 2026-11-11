@@ -270,6 +270,22 @@ QQC2.ScrollView {
             Layout.fillWidth: true
         }
 
+        DisplayArrangements {
+            objectName: "arrangements"
+            arrangements: page.snap.arrangements || []
+            offer: page.snap.offer || ""
+            offerName: page.snap.offer_name || ""
+            autoSwitch: page.snap.auto_switch !== false
+            failed: page.snap.arrangement_failed === true
+            idle: page.ready && !dm.busy && dm.pendingSeconds < 0
+            highlight: App.highlight
+            onRemember: name => dm.remember(name)
+            onRename: (id, name) => dm.renameArrangement(id, name)
+            onForget: id => dm.forgetArrangement(id)
+            onAutoSwitchChosen: on => dm.setAutoSwitch(on)
+            Layout.fillWidth: true
+        }
+
         RowLayout {
             Layout.topMargin: Kirigami.Units.largeSpacing
             Layout.alignment: Qt.AlignRight
@@ -299,7 +315,7 @@ QQC2.ScrollView {
             main: page.snap.main || null
             bar: page.snap.bar || ({ show: "all", outputs: [] })
             highlight: App.highlight
-            enabled: page.ready && !dm.busy
+            enabled: page.ready && !dm.busy && dm.pendingSeconds < 0
             onMainChosen: output => dm.setMain(output)
             onBarChosen: (show, outputs) => dm.setBar(show, JSON.stringify(outputs))
             Layout.fillWidth: true
@@ -315,27 +331,12 @@ QQC2.ScrollView {
             objectName: "planner"
             plan: page.snap.plan || ({ strategy: "off", count: 10, move_back: true, manual: [], screens: [], preview: [] })
             highlight: App.highlight
-            enabled: page.ready && !dm.busy
+            enabled: page.ready && !dm.busy && dm.pendingSeconds < 0
             onPlanChosen: (strategy, count, moveBack) => dm.setPlan(strategy, count, moveBack)
             onManualChosen: (workspace, output) => dm.setManual(workspace, output)
             Layout.fillWidth: true
         }
 
-        DisplayArrangements {
-            objectName: "arrangements"
-            arrangements: page.snap.arrangements || []
-            offer: page.snap.offer || ""
-            offerName: page.snap.offer_name || ""
-            autoSwitch: page.snap.auto_switch !== false
-            failed: page.snap.arrangement_failed === true
-            idle: page.ready && !dm.busy && dm.pendingSeconds < 0
-            highlight: App.highlight
-            onRemember: name => dm.remember(name)
-            onRename: (id, name) => dm.renameArrangement(id, name)
-            onForget: id => dm.forgetArrangement(id)
-            onAutoSwitchChosen: on => dm.setAutoSwitch(on)
-            Layout.fillWidth: true
-        }
         Item {
             implicitHeight: Kirigami.Units.largeSpacing
         }

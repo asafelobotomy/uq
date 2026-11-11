@@ -126,7 +126,16 @@ pub(super) async fn apply(proxy: &DesktopProxy<'_>, o: &Outputs, op: Op) -> zbus
                 return refuse("Choose at least one display for the bar.");
             }
             if !on.is_empty() {
-                m.bar.on = on;
+                // Screens that aren't plugged in keep their place in the choice.
+                let mut kept: Vec<MonitorId> = m
+                    .bar
+                    .on
+                    .iter()
+                    .filter(|id| !live.iter().any(|o| &MonitorId::of(o) == *id))
+                    .cloned()
+                    .collect();
+                kept.extend(on);
+                m.bar.on = kept;
             }
         }
         Op::SetAutoSwitch(on) => m.auto_profiles = on,
@@ -135,6 +144,12 @@ pub(super) async fn apply(proxy: &DesktopProxy<'_>, o: &Outputs, op: Op) -> zbus
             count,
             move_back,
         } => {
+            if let Some(s) = m.workspaces.manual.iter().find(|s| s.workspace > count) {
+                return refuse(format!(
+                    "Workspace {} is placed on a display. Set it to Not chosen first, or keep {} workspaces.",
+                    s.workspace, s.workspace
+                ));
+            }
             m.workspaces.strategy = parse_strategy(&strategy)?;
             m.workspaces.count = count;
             m.workspaces.move_back = move_back;

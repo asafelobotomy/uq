@@ -61,6 +61,8 @@ ColumnLayout {
             objectName: "mainBox"
             model: ["Not chosen"].concat(root.screens.map(s => s.label))
             currentIndex: root.mainIndex
+            // A new model (a screen came or went) resets the index.
+            onModelChanged: Qt.callLater(() => currentIndex = Qt.binding(() => root.mainIndex))
             Accessible.name: "Main display"
             Layout.preferredWidth: Kirigami.Units.gridUnit * 16
             onActivated: index => {
@@ -80,7 +82,7 @@ ColumnLayout {
         id: missing
         objectName: "mainMissing"
         visible: root.mainMissing
-        text: root.mainMissing ? "“" + root.main.label + "” isn't connected right now. Another display is used until it is." : ""
+        text: root.mainMissing ? "“" + root.main.label + "” isn't in use right now. Another display is used until it is." : ""
         wrapMode: Text.Wrap
         color: Kirigami.Theme.neutralTextColor
         Layout.fillWidth: true

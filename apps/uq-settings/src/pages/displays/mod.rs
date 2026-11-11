@@ -377,7 +377,7 @@ impl PageLogic for DisplaysState {
         let proxy = DesktopProxy::new(&self.conn).await?;
         let o = outputs(&proxy).await?;
         let draft = self.draft.lock().unwrap().clone();
-        let dirty = draft.as_ref().is_some_and(|d| *d != o.stored);
+        let dirty = draft.as_ref().is_some_and(|d| !d.layout_eq(&o.stored));
         let shown = draft.clone().unwrap_or_else(|| o.stored.clone());
         let mut state = json!({
             "live": o.raw["live"],

@@ -86,5 +86,13 @@ Item {
             compare(c.missingLabel.textFormat, Text.PlainText);
             compare(c.mainBox.currentIndex, 0);
         }
+
+        function test_main_survives_a_new_screen_list() {
+            const c = make({ main: { output: "eDP-1", label: "BOE 0x0BCA", connected: true } });
+            compare(c.mainBox.currentIndex, 1);
+            // A screen is plugged in after the main one: the model changes, the choice stays.
+            c.screens = [{ name: "eDP-1", label: "BOE 0x0BCA" }, { name: "DP-1", label: "Dell U2723QE" }, { name: "DP-2", label: "Other" }];
+            tryCompare(c.mainBox, "currentIndex", 1);
+        }
     }
 }

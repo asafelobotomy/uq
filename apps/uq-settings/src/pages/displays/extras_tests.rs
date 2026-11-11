@@ -429,3 +429,35 @@ async fn bad_values_read_plainly() {
     let out = run(&page, plan_op("backwards", 10)).await;
     assert!(out.error.is_some());
 }
+
+#[tokio::test]
+async fn bar_keeps_screens_that_are_unplugged() {
+    let (r, page) = rig().await;
+    ok(&run(&page, bar("chosen", &["eDP-1", "DP-1"])).await);
+    let dell = r.displays.live_outputs.lock().unwrap().remove(1);
+    // Away from the desk: ticking the laptop's own screen again changes only it.
+    ok(&run(&page, bar("chosen", &["eDP-1"])).await);
+    assert_eq!(
+        stored(&r).bar.on.len(),
+        2,
+        "the unplugged screen stays chosen"
+    );
+    r.displays.live_outputs.lock().unwrap().push(dell);
+    let out = run(&page, Op::Refresh).await;
+    assert_eq!(names(&out.state["bar"]["outputs"]), ["eDP-1", "DP-1"]);
+}
+
+#[tokio::test]
+async fn shrinking_below_a_manual_slot_says_what_to_do() {
+    let (r, page) = rig().await;
+    ok(&run(&page, plan_op("manual", 10)).await);
+    let slot = Op::SetManual {
+        workspace: 10,
+        output: Some("DP-1".into()),
+    };
+    ok(&run(&page, slot).await);
+    let out = run(&page, plan_op("manual", 9)).await;
+    let text = out.error.unwrap();
+    assert!(text.contains("Set it to Not chosen first"), "{text}");
+    assert_eq!(stored(&r).workspaces.count, 10);
+}

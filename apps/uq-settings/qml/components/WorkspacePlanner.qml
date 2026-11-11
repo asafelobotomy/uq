@@ -72,7 +72,7 @@ ColumnLayout {
     }
     UqLabel {
         visible: root.strategy === "off"
-        text: "Each screen shows any workspace, as you switch."
+        text: "Workspaces aren't tied to a screen."
         wrapMode: Text.Wrap
         opacity: 0.7
         Layout.fillWidth: true
@@ -95,7 +95,10 @@ ColumnLayout {
             value: root.count
             editable: true
             Accessible.name: "Number of workspaces"
-            onValueModified: root.planChosen(root.strategy, value, root.moveBack)
+            onValueModified: {
+                root.planChosen(root.strategy, value, root.moveBack);
+                value = Qt.binding(() => root.count);
+            }
         }
     }
     SwitchRow {
@@ -120,7 +123,7 @@ ColumnLayout {
         Layout.fillWidth: true
 
         UqLabel {
-            text: "What you get"
+            text: "On these screens"
             font.bold: true
         }
         Repeater {
@@ -166,6 +169,8 @@ ColumnLayout {
                 objectName: "manualBox"
                 model: ["Not chosen"].concat(root.screens.map(s => s.label))
                 currentIndex: root.slotIndex(slot.workspace)
+                // A new model (a screen came or went) resets the index.
+                onModelChanged: Qt.callLater(() => currentIndex = Qt.binding(() => root.slotIndex(slot.workspace)))
                 Accessible.name: "Display for workspace " + slot.workspace
                 Layout.preferredWidth: Kirigami.Units.gridUnit * 16
                 onActivated: index => {
