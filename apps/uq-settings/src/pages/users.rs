@@ -1,15 +1,19 @@
 //! The Users page (spec §2.6, §3): the accounts on this computer through AccountsService, which
 //! asks polkit itself (administrator password) for every change to someone else, and for most
-//! changes to an account type or password.
+//! changes to an account type. Your own password is changed through `passwd` (users/passwd.rs),
+//! which checks your current password and needs no administrator.
 //!
 //! Rules the page enforces before asking (spec §3): removing a user needs their name typed;
 //! you can't remove yourself or the last administrator, or make the last administrator a
 //! standard user. Passwords are hashed here (crypt(3)) and never kept.
 
 pub(crate) mod crypt;
+pub(crate) mod passwd;
 
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex as StdMutex;
+use std::time::Duration;
 
 use serde_json::{Value, json};
 use tokio::sync::Mutex;
@@ -36,8 +40,10 @@ pub enum Op {
         uid: u64,
         admin: bool,
     },
+    /// `current` is needed (and used) only for your own account.
     SetPassword {
         uid: u64,
+        current: String,
         password: String,
         confirm: String,
     },
@@ -91,6 +97,9 @@ pub struct UsersState {
     system: SystemBus,
     me: u64,
     root: PathBuf,
+    /// `passwd` and its arguments (a stub under `/bin/sh` in tests), and how long it may take.
+    passwd: Vec<OsString>,
+    passwd_timeout: Duration,
     write: Mutex<()>,
     notice: StdMutex<(u64, String)>,
 }
@@ -168,9 +177,19 @@ impl UsersState {
             system,
             me,
             root,
+            passwd: vec![OsString::from(passwd::PASSWD)],
+            passwd_timeout: passwd::TIMEOUT,
             write: Mutex::new(()),
             notice: StdMutex::new((0, String::new())),
         }
+    }
+
+    /// Use `cmd` instead of `/usr/bin/passwd` for your own password (tests).
+    #[cfg(test)]
+    pub fn with_passwd(mut self, cmd: Vec<OsString>, timeout: Duration) -> Self {
+        self.passwd = cmd;
+        self.passwd_timeout = timeout;
+        self
     }
 
     fn notice(&self, text: &str) {
@@ -365,12 +384,24 @@ impl PageLogic for UsersState {
             }
             Op::SetPassword {
                 uid,
+                mut current,
                 mut password,
                 mut confirm,
             } => {
                 let r = async {
                     if let Some(p) = password_problem(&password, &confirm) {
                         return Err(failure(p));
+                    }
+                    if uid == self.me {
+                        // Your own: passwd checks the current password; no administrator.
+                        if current.is_empty() {
+                            return Err(failure("Type your current password."));
+                        }
+                        passwd::change_own(&self.passwd, &current, &password, self.passwd_timeout)
+                            .await
+                            .map_err(failure)?;
+                        self.notice("Your password was changed.");
+                        return Ok(());
                     }
                     let (_, user) = self.find(uid).await?;
                     if self.set_password(&user, &password).await? {
@@ -379,6 +410,7 @@ impl PageLogic for UsersState {
                     Ok(())
                 }
                 .await;
+                wipe(&mut current);
                 wipe(&mut password);
                 wipe(&mut confirm);
                 r

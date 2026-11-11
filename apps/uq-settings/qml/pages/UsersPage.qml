@@ -1,6 +1,7 @@
 // Users (spec §2.6, §3): the people who can log in to this computer. Changes go through the
 // accounts service, which asks for an administrator password itself; a cancelled prompt leaves
-// everything as it was. Removing an account needs its user name typed; you can't remove
+// everything as it was. Your own password is changed with your current one (through passwd),
+// without an administrator. Removing an account needs its user name typed; you can't remove
 // yourself or the last administrator, or make the last administrator a standard user. Password
 // boxes are SecretFields, emptied after every attempt. Names come from the system and are shown
 // through UqLabel (plain text) only.
@@ -94,11 +95,14 @@ QQC2.ScrollView {
         id: passwordDialog
         property int uid: -1
         property string who
+        // Your own account: passwd checks your current password, and no administrator is asked.
+        property bool mine: false
         title: "Change the password"
         standardButtons: Kirigami.Dialog.Cancel
         preferredWidth: Kirigami.Units.gridUnit * 24
-        onOpened: newPassword.forceActiveFocus()
+        onOpened: (mine ? currentPassword : newPassword).forceActiveFocus()
         onClosed: {
+            currentPassword.wipe();
             newPassword.wipe();
             confirmPassword.wipe();
         }
@@ -107,15 +111,28 @@ QQC2.ScrollView {
                 text: "Change"
                 icon.name: "dialog-password"
                 enabled: page.idle && newPassword.text !== "" && newPassword.text === confirmPassword.text
+                         && (!passwordDialog.mine || currentPassword.text !== "")
                 onTriggered: {
-                    um.setPassword(passwordDialog.uid, newPassword.text, confirmPassword.text);
+                    um.setPassword(passwordDialog.uid, passwordDialog.mine ? currentPassword.text : "",
+                                   newPassword.text, confirmPassword.text);
                     passwordDialog.close();
                 }
             }
         ]
         ColumnLayout {
             UqLabel {
-                text: "New password for " + passwordDialog.who
+                visible: passwordDialog.mine
+                text: "Your current password"
+            }
+            SecretField {
+                id: currentPassword
+                objectName: "currentPassword"
+                visible: passwordDialog.mine
+                Accessible.name: "Current password"
+                Layout.fillWidth: true
+            }
+            UqLabel {
+                text: passwordDialog.mine ? "Your new password" : "New password for " + passwordDialog.who
                 wrapMode: Text.Wrap
                 Layout.fillWidth: true
             }
@@ -368,6 +385,7 @@ QQC2.ScrollView {
                             onClicked: {
                                 passwordDialog.uid = card.u.uid;
                                 passwordDialog.who = page.display(card.u);
+                                passwordDialog.mine = !!card.u.me;
                                 passwordDialog.open();
                             }
                         }

@@ -232,6 +232,10 @@ first, keeping the original rollback point.
   - You cannot remove yourself or the last administrator, or demote the last administrator.
   - Password fields set `ImhSensitiveData | ImhNoPredictiveText | ImhHiddenText` and are cleared
     after each attempt.
+  - Your own password is changed through `/usr/bin/passwd` (as GNOME Settings does): the page
+    asks for your current password and answers passwd's prompts one at a time on its standard
+    input, in the C locale. Passwords never go in argv or the environment, and the copies are
+    zeroed. Other people's passwords go through AccountsService `SetPassword` (administrator).
 - **Network secrets:** passed directly to NetworkManager, with "available to all users" off by
   default. They are never logged and never stored by uQ.
 - **Bluetooth:** passkeys are shown in plain text and need an explicit Confirm. There is no

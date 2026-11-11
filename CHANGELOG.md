@@ -263,6 +263,10 @@ All notable changes to uQ are listed here. The format follows
   the copied layout (`/etc/uq/greeter-monitors.toml`, checked like your own; a bad file falls back
   to the automatic layout). Settings → Login screen has **Use automatic layout** to go back
   (new helper call `ClearGreeterMonitors`).
+- **Changing your own password asks for your current one, not an administrator's.** Settings →
+  Users now changes it through `passwd`, which checks the current password and the password
+  rules and says plainly why a password was refused. Other people's passwords still go through
+  the accounts service.
 
 ## [0.2.1] - 2026-11-10
 
