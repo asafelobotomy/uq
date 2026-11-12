@@ -14,6 +14,7 @@ pub mod launcher_providers;
 pub mod lua;
 pub mod paths;
 pub mod profile;
+pub mod qt6ct;
 pub mod render;
 pub mod rules;
 pub mod schedule;
