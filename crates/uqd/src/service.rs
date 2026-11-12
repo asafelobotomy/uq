@@ -1177,6 +1177,11 @@ impl Desktop {
         origin: Origin,
     ) -> Result<(), DesktopError> {
         let theme = c.theme.clone();
+        // The shell reads its icon theme only at start: note a change to restart it below.
+        let shell_env = self.paths.theme_dir.join(uq_core::render::SHELL_ENV);
+        let shell_env_changed = std::fs::read_to_string(&shell_env)
+            .ok()
+            .is_some_and(|old| c.files.0.get(Path::new(uq_core::render::SHELL_ENV)) != Some(&old));
         let committed = atomic_replace_dir(&self.paths.theme_dir, &c.files)
             .map_err(io_err("writing theme files"))
             .and_then(|()| {
@@ -1235,6 +1240,9 @@ impl Desktop {
                         .set_cursor(&theme.icons.cursor_theme, theme.icons.cursor_size)
                         .await;
                     self.live(cursor);
+                    if shell_env_changed && let Err(e) = self.sys.restart_shell() {
+                        tracing::warn!("restarting the shell for its new icons: {e}");
+                    }
                 }
                 let _ = self.events.send(Event::ThemeChanged {
                     name: theme.id.clone(),
@@ -1354,6 +1362,45 @@ mod tests {
                 tokens_path: p.theme_dir.join("tokens.json")
             }]
         );
+    }
+
+    #[tokio::test]
+    async fn shell_restarts_only_when_its_icon_theme_changes() {
+        use std::sync::atomic::Ordering::SeqCst;
+        let mut r = rig();
+        // First render: no shell.env yet, so the running shell is left alone.
+        r.desktop
+            .set_theme("dracula", Variant::Dark, Origin::Settings)
+            .await
+            .unwrap();
+        let env = fs::read_to_string(r.desktop.paths().theme_dir.join("shell.env")).unwrap();
+        assert!(env.contains("QS_ICON_THEME=\"Papirus-Dark\""), "{env}");
+        assert_eq!(r.sys.shell_restarts.load(SeqCst), 0);
+        // Another dark theme: same icons, no restart.
+        r.desktop
+            .set_theme("gruvbox", Variant::Dark, Origin::Settings)
+            .await
+            .unwrap();
+        assert_eq!(r.sys.shell_restarts.load(SeqCst), 0);
+        // Light: Papirus-Light, so the shell restarts to pick it up.
+        r.desktop
+            .set_theme("gruvbox", Variant::Light, Origin::Settings)
+            .await
+            .unwrap();
+        assert_eq!(r.sys.shell_restarts.load(SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn no_shell_restart_without_hyprland() {
+        use std::sync::atomic::Ordering::SeqCst;
+        let mut r = rig_with(false, |_| {});
+        for v in [Variant::Dark, Variant::Light] {
+            r.desktop
+                .set_theme("matcha", v, Origin::Settings)
+                .await
+                .unwrap();
+        }
+        assert_eq!(r.sys.shell_restarts.load(SeqCst), 0);
     }
 
     #[tokio::test]

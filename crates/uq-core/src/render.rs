@@ -50,6 +50,25 @@ fn argb(s: String) -> String {
 /// Kvantum bases uQ's theme can inherit from, in preference order.
 pub const KVANTUM_BASES: [&str; 4] = ["KvGnome", "KvAdapta", "KvArc", "KvFlat"];
 
+/// The environment file uQ's own Quickshell units (`uq-shell`, `uq-lock`) load through
+/// `EnvironmentFile=`, relative to the theme directory.
+pub const SHELL_ENV: &str = "shell.env";
+
+/// `shell.env`: the icon theme for uQ's Quickshell processes. The session runs Qt through qt6ct,
+/// which knows no icon theme until the user's own qt6ct.conf names one (`uqctl setup --apps`
+/// doesn't), so without this the shell finds no `audio-volume-*`, `battery-*` or fallback app
+/// icons at all. Quickshell reads `QS_ICON_THEME` once, at start. A name that isn't a valid theme
+/// name (an imported theme could hold anything) writes no variable: a stray newline or quote must
+/// never reach a systemd environment file.
+pub fn shell_env(theme: &Theme) -> String {
+    let name = &theme.icons.theme;
+    let mut out = String::from("# Written by uqd from the theme's icons; edits are replaced.\n");
+    if crate::settings::valid_theme_name(name) {
+        out.push_str(&format!("QS_ICON_THEME=\"{name}\"\n"));
+    }
+    out
+}
+
 /// Template and output path of the Kvantum theme, rendered only when a base exists.
 const KVANTUM_TARGET: (&str, &str) = ("kvantum.kvconfig.j2", "Kvantum/uq/uq.kvconfig");
 
@@ -92,6 +111,7 @@ pub fn render(
         let body = env.render_str(&src, &ctx).map_err(tmpl_err)?;
         out.insert(PathBuf::from(rel), body);
     }
+    out.insert(PathBuf::from(SHELL_ENV), shell_env(theme));
     Ok(RenderedFiles(out))
 }
 
@@ -145,6 +165,28 @@ mod tests {
         assert!(body.contains("window.color=#282828"), "{body}");
         assert!(body.contains("highlight.color=#d79921"), "{body}");
         assert!(body.contains("disabled.text.color=#bdae93"), "{body}");
+    }
+
+    #[test]
+    fn shell_env_names_the_icon_theme() {
+        let mut t = theme();
+        t.icons.theme = "Papirus-Dark".into();
+        let files = render(&t, &templates(), None).unwrap();
+        assert_eq!(
+            files.0[Path::new(SHELL_ENV)],
+            "# Written by uqd from the theme's icons; edits are replaced.\nQS_ICON_THEME=\"Papirus-Dark\"\n"
+        );
+    }
+
+    #[test]
+    fn shell_env_skips_an_unsafe_icon_theme() {
+        let mut t = theme();
+        for bad in ["Evil\nLD_PRELOAD=/x.so", "a\"b", ""] {
+            t.icons.theme = bad.into();
+            let env = shell_env(&t);
+            assert!(!env.contains("QS_ICON_THEME"), "{bad:?}: {env}");
+            assert_eq!(env.lines().count(), 1, "{env}");
+        }
     }
 
     #[test]

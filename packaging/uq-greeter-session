@@ -113,7 +113,13 @@ valid() { [[ "$1" =~ ^[A-Za-z0-9_,()-]{1,64}$ ]]; }
     fi
 } >"$rt/hyprland.lua"
 
-UQ_GREETER_STATUS="$status" "$hyprland" --config "$rt/hyprland.lua"
+# The greeter is not a desktop session: HYPRLAND_NO_SD_TARGET keeps Hyprland from starting
+# hyprland-session.target (and so graphical-session.target) in the greeter user's manager, which
+# otherwise brings up portals, PipeWire, xdg-user-dirs and the like for an account whose home is
+# `/` and leaves a failed xdg-desktop-portal-gtk behind at every login. HYPRLAND_NO_SD_VARS keeps
+# the greeter's WAYLAND_DISPLAY and friends out of that manager's environment.
+UQ_GREETER_STATUS="$status" HYPRLAND_NO_SD_TARGET=1 HYPRLAND_NO_SD_VARS=1 \
+    "$hyprland" --config "$rt/hyprland.lua"
 
 if grep -qx launched "$status" 2>/dev/null; then
     rm -f "$failures"

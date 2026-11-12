@@ -10,6 +10,10 @@ StartLimitIntervalSec=0
 # priority daemons such as scdr treat it as an app (and demote it under load).
 Slice=session.slice
 ExecCondition=/bin/sh -c 'test -n "$HYPRLAND_INSTANCE_SIGNATURE" && test -S "$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket.sock"'
+# QS_ICON_THEME: the icon theme uqd renders from the theme (%S is ~/.local/state). The session
+# runs Qt through qt6ct, which has no icon theme of its own; without it the icons go blank.
+# Optional (-): a first start before uqd has rendered falls back to Qt's default lookup.
+EnvironmentFile=-%S/uq/theme/shell.env
 ExecStart=/usr/bin/qs -p /usr/share/uq/shell
 Restart=always
 RestartSec=1

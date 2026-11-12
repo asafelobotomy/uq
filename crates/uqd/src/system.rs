@@ -8,6 +8,9 @@ pub trait SystemSettings: Send + Sync {
     /// One key's current value (`gsettings get`), as plain text: `'Inter 11'` reads `Inter 11`
     /// and `uint32 24` reads `24`. `None` when gsettings is missing or fails.
     fn read(&self, schema: &str, key: &str) -> Option<String>;
+    /// Restart uQ's shell (`uq-shell.service`) if it is running, so it starts again with the
+    /// icon theme in the `shell.env` just written: Quickshell reads it only at start.
+    fn restart_shell(&self) -> std::io::Result<()>;
 }
 
 /// `gsettings get` output as plain text: no type prefix, no quotes around a string.
@@ -92,6 +95,21 @@ impl SystemSettings for GSettings {
             .success()
             .then(|| gvariant_text(&String::from_utf8_lossy(&out.stdout)))
     }
+
+    fn restart_shell(&self) -> std::io::Result<()> {
+        // try-restart: a stopped shell (a dev session, or one the user stopped) stays stopped.
+        // --no-block: uqd must not wait on a unit that may be waiting on uqd's bus.
+        let status = std::process::Command::new("systemctl")
+            .args(["--user", "--no-block", "try-restart", "uq-shell.service"])
+            .status()?;
+        if status.success() {
+            Ok(())
+        } else {
+            Err(std::io::Error::other(format!(
+                "systemctl --user try-restart uq-shell.service failed: {status}"
+            )))
+        }
+    }
 }
 
 /// Records the themes it was asked to apply.
@@ -101,6 +119,8 @@ pub struct FakeSystem {
     pub applied: std::sync::Mutex<Vec<String>>,
     /// Makes `apply` fail, as a missing or broken gsettings would.
     pub fail: std::sync::atomic::AtomicBool,
+    /// How many times `restart_shell` was called.
+    pub shell_restarts: std::sync::atomic::AtomicUsize,
     /// What `read` answers per `(schema, key)`.
     pub values: std::sync::Mutex<std::collections::HashMap<(String, String), String>>,
 }
@@ -133,6 +153,11 @@ impl SystemSettings for FakeSystem {
             .unwrap()
             .get(&(schema.to_string(), key.to_string()))
             .cloned()
+    }
+    fn restart_shell(&self) -> std::io::Result<()> {
+        self.shell_restarts
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        Ok(())
     }
 }
 

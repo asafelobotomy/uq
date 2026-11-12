@@ -15,6 +15,14 @@ QQC2.ComboBox {
     Accessible.role: Accessible.ComboBox
     Accessible.description: currentText
     contentItem: UqLabel {
+        // qqc2-desktop-style's ComboBox places a touch selection handle on its contentItem by
+        // calling contentItem.positionToRectangle(selectionStart), expecting the TextField of an
+        // editable box. A label has no cursor: answer with an empty rectangle, so that binding
+        // doesn't throw a TypeError for every box on every page.
+        readonly property int selectionStart: 0
+        function positionToRectangle(position: int): rect {
+            return Qt.rect(0, 0, 0, 0);
+        }
         // Binds currentText because displayText is blanked above.
         text: combo.currentText
         elide: Text.ElideRight
