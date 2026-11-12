@@ -19,6 +19,17 @@ All notable changes to uQ are listed here. The format follows
   the theme wasn't installed; they show each theme's name and apply it (#40).
 - **Settings pages no longer draw over each other** when you click through the page list
   quickly: pages switch at once, without the cross-fade (#40).
+- **The bar's icons show on a fresh install.** The session runs Qt through qt6ct, which has no
+  icon theme until your own `qt6ct.conf` names one, so the volume, battery and network icons,
+  Settings' app icon and every app without its own icon were blank or a magenta square. uqd now
+  writes the theme's icon theme to `~/.local/state/uq/theme/shell.env`, the shell and lock load it,
+  and the shell restarts by itself when the icon theme changes (switching between light and dark
+  switches Papirus-Light and Papirus-Dark, so it restarts then too).
+- **The login screen no longer starts a desktop session for the `greeter` account.** Hyprland
+  started `hyprland-session.target` there, which brought up portals, PipeWire and xdg-user-dirs
+  for an account whose home is `/`, and left a failed `xdg-desktop-portal-gtk` at every boot.
+- **Settings' drop-down lists no longer log a TypeError each** (`positionToRectangle … is not a
+  function`) under the KDE desktop style.
 
 ## [0.3.0-rc.2] - 2026-11-12
 

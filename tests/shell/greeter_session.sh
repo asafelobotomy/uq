@@ -3,7 +3,8 @@
 # (UQ_GREETER_* overrides, test-only). The stub Hyprland runs the config's hyprland.start hook the
 # way the real one would: `uq-greeter-session --shell` with UQ_GREETER_STATUS set.
 #   - a launched session: exit 0, no failure recorded, Hyprland gets the wrapper config with the
-#     localectl layout, and Hyprland is told to exit once the greeter has
+#     localectl layout and HYPRLAND_NO_SD_TARGET/VARS (no systemd session for the greeter user),
+#     and Hyprland is told to exit once the greeter has
 #   - a greeter that exits without a session: exit 1 and a failure recorded
 #   - 3 failures in 60 s: the third run execs `agreety --cmd /usr/bin/uq-session`; the next run
 #     goes straight to agreety; failures older than 60 s don't count
@@ -25,6 +26,7 @@ mkdir -p "$tmp/bin" "$tmp/state" "$tmp/rt"
 cat > "$tmp/bin/Hyprland" <<SH
 #!/bin/bash
 echo "Hyprland \$*" >> "$tmp/calls"
+echo "sd_target=\${HYPRLAND_NO_SD_TARGET:-} sd_vars=\${HYPRLAND_NO_SD_VARS:-}" >> "$tmp/calls"
 cp "\$2" "$tmp/last-config.lua"
 # The hyprland.start hook.
 "$script" --shell
@@ -67,6 +69,7 @@ run launch; rc=$?
 [ "$rc" = 0 ] || { echo "FAIL: launched session exited $rc"; cat "$tmp/stderr"; fail=1; }
 [ -s "$tmp/state/failures" ] && { echo "FAIL: a launched session recorded a failure"; fail=1; }
 grep -q '^Hyprland --config .*/hyprland.lua$' "$tmp/calls" || { echo "FAIL: Hyprland args: $(cat "$tmp/calls")"; fail=1; }
+grep -qx 'sd_target=1 sd_vars=1' "$tmp/calls" || { echo "FAIL: Hyprland would start the systemd session target: $(cat "$tmp/calls")"; fail=1; }
 grep -qx 'qs -p /usr/share/uq/greeter' "$tmp/calls" || { echo "FAIL: quickshell args: $(cat "$tmp/calls")"; fail=1; }
 grep -qx "hyprctl dispatch hl.dsp.exit()" "$tmp/calls" || { echo "FAIL: Hyprland not told to exit"; fail=1; }
 grep -qx 'require("/usr/share/uq/greeter/hyprland.lua")' "$tmp/last-config.lua" || { echo "FAIL: wrapper doesn't load the fixed config"; cat "$tmp/last-config.lua"; fail=1; }
