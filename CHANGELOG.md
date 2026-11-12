@@ -7,6 +7,8 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0-rc.2] - 2026-11-12
+
 ### Added
 
 - **Pages from scdr, crumBS, noti-fi, XZram and scale_tail in Settings.** **Scheduling** shows
