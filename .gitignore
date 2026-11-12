@@ -4,3 +4,7 @@
 /packaging/*/pkg/
 /packaging/*/*.pkg.tar.*
 /apps/*/.qmlls.ini
+
+# Editor swap files
+*.swp
+*.swo
