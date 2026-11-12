@@ -121,12 +121,6 @@ reads. Most rows have already passed in the VM ([vm-live-check-results.md](notes
 on the desktop the point is real hardware, real timing and real eyes, so the rows the VM couldn't
 do are marked below.
 
-Some merged work has no live checklist yet: Phase 3 slices 5 and 6 (Sound, Bluetooth, Network,
-Power, Users, Date and time, Region, Default apps, About), Phase 4 (widgets, app actions, the
-`Super+.` emoji search, rules from apps) and Phase 5 (login screen, Login screen page, Welcome,
-bindle hand-off). Until those exist, check them by eye from [greeter.md](greeter.md),
-[welcome.md](welcome.md) and [integrating.md](integrating.md).
-
 ### 4.1 Lock, idle and power ([lock-idle-live-check.md](notes/lock-idle-live-check.md))
 
 | Rows | Who | Notes |
@@ -209,6 +203,21 @@ short form.
      items it leaves to you (a key press, the theme editor, real screens and cables, a touchpad,
      the companion apps themselves). `--slow` adds the 15 s timers (SK6, SF3).
 3. **[Claude]** Fill each slice file from `results.tsv` and what you reported, one PR per slice.
+
+### 4.6 Sound, Bluetooth, Network, the system pages, integrations and first run
+
+These have no automated live checks yet; run them by hand. [Both] unless the item needs only
+your eyes.
+
+- [settings-slice5-live-check.md](notes/settings-slice5-live-check.md): Sound, Bluetooth and
+  Network on real devices.
+- [settings-slice6-live-check.md](notes/settings-slice6-live-check.md): Power, Users, Login
+  screen, Date and time, Region, Default apps, About. Several items ask for your password.
+- [phase4-integrations-live-check.md](notes/phase4-integrations-live-check.md): widgets, app
+  actions, providers, rules from apps, the emoji key.
+- [phase5-login-first-run-live-check.md](notes/phase5-login-first-run-live-check.md): the uQ
+  session, Welcome, the hand-off and the login screen. Items 1–5 happen on install day (§1), so
+  watch for them then.
 
 ## 5. The first real `uq-dev session`
 
