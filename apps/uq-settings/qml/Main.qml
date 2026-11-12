@@ -288,7 +288,7 @@ Kirigami.ApplicationWindow {
                 Accessible.name: "Page"
                 // Pages switch at once. With the style's cross-fade, clicking through the list
                 // faster than the fade left several pages drawn over each other on a real
-                // desktop (software-rendered Intel laptop, first install).
+                // desktop (the first install on an Intel laptop).
                 replaceEnter: Transition {}
                 replaceExit: Transition {}
                 Component.onCompleted: {
