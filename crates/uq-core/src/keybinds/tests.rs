@@ -314,7 +314,9 @@ fn bare_keys() {
     .unwrap();
     write(
         &mut State::default(),
-        json!({"custom": [custom("X", "Print", term())]}),
+        // Print is uQ's own screenshot key: move it off first, then a bare Print is yours.
+        json!({"custom": [custom("X", "Print", term())],
+               "overrides": [{"id": "uq.screenshot.area", "combo": "SUPER + SHIFT + Print"}]}),
     )
     .unwrap();
     write(
@@ -443,7 +445,7 @@ fn effective_lists_defaults_then_custom() {
     )
     .unwrap();
     let eff = st.keybinds.effective();
-    assert_eq!(eff.len(), 57);
+    assert_eq!(eff.len(), 60);
     let by = |id: &str| eff.iter().find(|e| e.id == id).unwrap();
     assert_eq!(
         combo::canonical(by("uq.spotlight").combo.unwrap()),

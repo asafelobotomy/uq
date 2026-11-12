@@ -4,10 +4,14 @@ import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Widgets
 import "../core"
+import "../logic/minimise.js" as Min
 import "../logic/work.js" as Work
 
-// Focused window: icon, title (untrusted, elided to 40% of the bar width), action buttons and a
-// dropdown. With no focused window it shows "Desktop" and nothing else.
+// Open windows on this bar's screen: one button each (icon and title, untrusted and elided), in
+// Hyprland's order. Clicking one focuses it (or brings a minimised one back); the focused one
+// also has the window buttons and the dropdown. Past Work.MAX_TABS windows the island folds to
+// one icon-sized button, the focused app's icon and the count; clicking it shows every window
+// again until one is chosen or it is folded back. With no windows it shows "Desktop".
 Island {
     id: root
     property var screen: null
@@ -27,6 +31,55 @@ Island {
     readonly property bool isPinned: ipc["pinned"] === true
 
     implicitWidth: row.implicitWidth + Theme.gapIn * 2
+
+    // Every open window, as logic/work.js reads them; rebuilt when Hyprland's list changes.
+    property var windows: []
+    property bool expanded: false
+    readonly property string monitorName: {
+        var m = root.screen ? Hyprland.monitorFor(root.screen) : null;
+        return m ? m.name : "";
+    }
+    readonly property var view: Work.taskView(windows, monitorName, addr, expanded)
+    // Fold again once there are few enough windows to show them all anyway.
+    onViewChanged: if (expanded && view.count <= Work.MAX_TABS) expanded = false
+
+    function rebuild() {
+        var out = [], vals = Hyprland.toplevels.values;
+        for (var i = 0; i < vals.length; i++) {
+            var t = vals[i], o = t.lastIpcObject || ({});
+            out.push({
+                address: t.address,
+                cls: o["class"] ? String(o["class"]) : "",
+                title: t.title || "",
+                workspace: t.workspace ? t.workspace.name : "",
+                minimised: t.workspace ? t.workspace.name === "special:minimized" : false,
+                monitor: t.monitor ? t.monitor.name : ""
+            });
+        }
+        windows = out;
+    }
+    Component.onCompleted: { rebuild(); refreshTimer.restart(); }
+
+    function toplevelFor(address) {
+        var vals = Hyprland.toplevels.values;
+        for (var i = 0; i < vals.length; i++)
+            if (Work.normAddr(vals[i].address) === address)
+                return vals[i];
+        return null;
+    }
+    // Focus a window from its button; a minimised one comes back to the workspace it left.
+    function choose(tab) {
+        if (tab.minimised) {
+            var t = toplevelFor(tab.address);
+            var ws = t && t.lastIpcObject ? Min.wsFromTags(t.lastIpcObject.tags) : null;
+            if (ws === null)
+                ws = Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : 1;
+            Bridge.call("Dispatch", ["restore", { address: tab.address, to_ws: ws }]);
+        } else if (!tab.focused) {
+            Bridge.call("Dispatch", ["focus_window", { address: tab.address }]);
+        }
+        expanded = false;
+    }
 
     function iconFor(cls) {
         if (cls === "")
@@ -72,90 +125,203 @@ Island {
     onActionableChanged: checkMenu()
     Connections {
         target: Hyprland.toplevels
-        function onValuesChanged() { root.checkMenu(); }
+        function onValuesChanged() { root.checkMenu(); root.rebuild(); }
     }
 
     Connections {
         target: Hyprland
         function onRawEvent(event) {
             if (event.name === "activewindowv2" || event.name === "windowtitlev2"
-                    || event.name === "changefloatingmode" || event.name === "pin")
+                    || event.name === "changefloatingmode" || event.name === "pin"
+                    || event.name === "openwindow" || event.name === "closewindow"
+                    || event.name === "movewindowv2")
                 refreshTimer.restart();
         }
     }
     Timer {
         id: refreshTimer
         interval: 60
-        onTriggered: Hyprland.refreshToplevels()
+        onTriggered: {
+            Hyprland.refreshToplevels();
+            rebuildTimer.restart();
+        }
+    }
+    // lastIpcObject (the class) arrives a moment after the refresh.
+    Timer {
+        id: rebuildTimer
+        interval: 120
+        onTriggered: root.rebuild()
     }
 
     RowLayout {
         id: row
         anchors.verticalCenter: parent.verticalCenter
         anchors.left: parent.left
-        spacing: Theme.gapIn
-
-        IconImage {
-            visible: root.hasWindow
-            implicitSize: root.iconSize
-            Layout.preferredWidth: root.iconSize
-            Layout.preferredHeight: root.iconSize
-            backer.sourceSize.width: root.iconSize * root.dpr
-            backer.sourceSize.height: root.iconSize * root.dpr
-            source: root.hasWindow ? root.iconFor(root.cls) : ""
-        }
+        spacing: 2
 
         UqText {
-            id: titleText
-            Layout.maximumWidth: root.barWidth * 0.4
-            elide: Text.ElideRight
-            text: root.hasWindow ? (root.tl.title || root.cls) : "Desktop"
-            color: root.hasWindow ? Theme.text : Theme.textMuted
+            visible: root.view.count === 0
+            text: "Desktop"
+            color: Theme.textMuted
+        }
+
+        // Folded: one icon-sized button, the focused app's icon (else the first window's) and how
+        // many windows are open.
+        Rectangle {
+            id: foldBtn
+            visible: root.view.folded
+            readonly property var lead: {
+                var ts = root.view.tabs;
+                for (var i = 0; i < ts.length; i++)
+                    if (ts[i].focused)
+                        return ts[i];
+                return ts.length > 0 ? ts[0] : null;
+            }
+            Layout.preferredWidth: foldRow.implicitWidth + 8
+            Layout.preferredHeight: root.cell
+            radius: Theme.radius - 2
+            color: foldMouse.containsMouse ? Theme.surfaceAlt : "transparent"
+            Accessible.role: Accessible.Button
+            Accessible.name: root.view.count + " windows open; show them"
+            RowLayout {
+                id: foldRow
+                anchors.centerIn: parent
+                spacing: 2
+                IconImage {
+                    implicitSize: root.iconSize
+                    Layout.preferredWidth: root.iconSize
+                    Layout.preferredHeight: root.iconSize
+                    backer.sourceSize.width: root.iconSize * root.dpr
+                    backer.sourceSize.height: root.iconSize * root.dpr
+                    source: foldBtn.lead ? root.iconFor(foldBtn.lead.cls) : ""
+                }
+                UqText {
+                    text: String(root.view.count)
+                    color: Theme.textMuted
+                }
+            }
+            MouseArea {
+                id: foldMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                onClicked: root.expanded = true
+            }
         }
 
         Repeater {
-            model: root.hasWindow && root.actionable ? [
-                { glyph: "▾", tip: "menu", kind: "menu" },
-                { glyph: "–", tip: "Minimise", kind: "min" },
-                { glyph: "□", tip: "Maximise", kind: "max" },
-                { glyph: "✕", tip: "Close", kind: "close" }
-            ].filter(function (b) { return b.kind !== "min" || root.fromWs !== null; }) : []
+            model: root.view.folded ? [] : root.view.tabs
             delegate: Rectangle {
-                id: btn
+                id: tab
                 required property var modelData
-                Layout.preferredWidth: root.cell
+                readonly property bool isFocused: modelData.focused
                 Layout.preferredHeight: root.cell
+                Layout.preferredWidth: tabRow.implicitWidth + 8
                 radius: Theme.radius - 2
-                color: btnMouse.containsMouse ? Theme.surfaceAlt : "transparent"
-                UqText {
-                    anchors.centerIn: parent
-                    text: btn.modelData.glyph
-                    color: Theme.text
-                }
+                color: tab.isFocused ? Theme.surfaceAlt : (tabMouse.containsMouse ? Theme.surfaceAlt : "transparent")
+                opacity: tab.modelData.minimised ? 0.6 : 1
+                Accessible.role: Accessible.Button
+                Accessible.name: (tab.modelData.title || tab.modelData.cls) + (tab.modelData.minimised ? ", minimised" : "")
+
                 MouseArea {
-                    id: btnMouse
+                    id: tabMouse
                     anchors.fill: parent
                     hoverEnabled: true
-                    onClicked: {
-                        switch (btn.modelData.kind) {
-                        case "menu":
-                            if (menu.visible)
-                                menu.visible = false;
-                            else
-                                root.openMenu(btn);
-                            break;
-                        case "min":
-                            root.dispatch("minimise", { from_ws: root.fromWs });
-                            break;
-                        case "max":
-                            root.dispatch("fullscreen", { mode: "maximized" });
-                            break;
-                        case "close":
-                            root.dispatch("close");
-                            break;
+                    onClicked: root.choose(tab.modelData)
+                }
+
+                RowLayout {
+                    id: tabRow
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.left: parent.left
+                    anchors.leftMargin: 4
+                    spacing: Theme.gapIn
+
+                    IconImage {
+                        implicitSize: root.iconSize
+                        Layout.preferredWidth: root.iconSize
+                        Layout.preferredHeight: root.iconSize
+                        backer.sourceSize.width: root.iconSize * root.dpr
+                        backer.sourceSize.height: root.iconSize * root.dpr
+                        source: root.iconFor(tab.modelData.cls)
+                    }
+                    UqText {
+                        Layout.maximumWidth: Work.titleWidth(root.barWidth, root.view.count)
+                        elide: Text.ElideRight
+                        text: tab.modelData.title || tab.modelData.cls
+                        color: tab.isFocused ? Theme.text : Theme.textMuted
+                    }
+
+                    // The focused window's buttons.
+                    Repeater {
+                        model: tab.isFocused && root.actionable ? [
+                            { glyph: "▾", tip: "menu", kind: "menu" },
+                            { glyph: "–", tip: "Minimise", kind: "min" },
+                            { glyph: "□", tip: "Maximise", kind: "max" },
+                            { glyph: "✕", tip: "Close", kind: "close" }
+                        ].filter(function (b) { return b.kind !== "min" || root.fromWs !== null; }) : []
+                        delegate: Rectangle {
+                            id: btn
+                            required property var modelData
+                            Layout.preferredWidth: root.cell
+                            Layout.preferredHeight: root.cell
+                            radius: Theme.radius - 2
+                            color: btnMouse.containsMouse ? Theme.surface : "transparent"
+                            Accessible.role: Accessible.Button
+                            Accessible.name: btn.modelData.tip
+                            UqText {
+                                anchors.centerIn: parent
+                                text: btn.modelData.glyph
+                                color: Theme.text
+                            }
+                            MouseArea {
+                                id: btnMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                onClicked: {
+                                    switch (btn.modelData.kind) {
+                                    case "menu":
+                                        if (menu.visible)
+                                            menu.visible = false;
+                                        else
+                                            root.openMenu(btn);
+                                        break;
+                                    case "min":
+                                        root.dispatch("minimise", { from_ws: root.fromWs });
+                                        break;
+                                    case "max":
+                                        root.dispatch("fullscreen", { mode: "maximized" });
+                                        break;
+                                    case "close":
+                                        root.dispatch("close");
+                                        break;
+                                    }
+                                }
+                            }
                         }
                     }
                 }
+            }
+        }
+
+        // Shown while a folded island is open: fold it back.
+        Rectangle {
+            visible: root.expanded && root.view.count > Work.MAX_TABS
+            Layout.preferredWidth: root.cell
+            Layout.preferredHeight: root.cell
+            radius: Theme.radius - 2
+            color: unfoldMouse.containsMouse ? Theme.surfaceAlt : "transparent"
+            Accessible.role: Accessible.Button
+            Accessible.name: "Show fewer"
+            UqText {
+                anchors.centerIn: parent
+                text: "‹"
+                color: Theme.text
+            }
+            MouseArea {
+                id: unfoldMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                onClicked: root.expanded = false
             }
         }
     }

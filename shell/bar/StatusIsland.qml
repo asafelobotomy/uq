@@ -12,6 +12,8 @@ import Quickshell.Services.UPower
 import "../core"
 import "../widgets"
 import "../logic/net.js" as Net
+import "../logic/tray.js" as Tray
+import "../notif"
 
 // Widgets from other apps, tray, media, network/VPN, audio, battery and the quick-settings
 // button.
@@ -292,7 +294,10 @@ Island {
                 required property var modelData
                 Layout.preferredWidth: root.cell
                 Layout.preferredHeight: root.cell
+                // Icons uQ already shows elsewhere stay out of the tray (logic/tray.js).
                 visible: modelData.status !== Status.Passive
+                    && !Tray.hiddenInTray(modelData.id, { notifiBell: Tray.notifiBell(NotifBackend.backend,
+                        Tray.find(SystemTray.items.values, Tray.NOTIFI)) })
 
                 IconImage {
                     anchors.centerIn: parent

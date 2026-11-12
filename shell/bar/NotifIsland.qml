@@ -1,12 +1,18 @@
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
+import Quickshell.Services.SystemTray
 import Quickshell.Widgets
 import "../core"
 import "../notif"
 import "../logic/notif.js" as N
 import "../logic/launcher.js" as L
+import "../logic/net.js" as Net
+import "../logic/tray.js" as Tray
 
+// While noti-fi is the backend, its own tray icon stands in for the bell (and leaves the tray):
+// left click does what it does in the tray, right click opens its menu, middle click toggles Do
+// Not Disturb. With another backend, or before noti-fi's icon appears, the island is as follows.
 // The Notifications island (spec §2.5, §2.10): the latest app's icon (else a bell), the count,
 // a Do Not Disturb mark, and the latest summary on hover (or always with notif.show_summary),
 // never while the screen is shared. While another app owns the notification name it says so.
@@ -43,6 +49,8 @@ Island {
         return r.theme === L.DEFAULT_ICON ? "" : Quickshell.iconPath(r.theme, true);
     }
     readonly property bool open: Surfaces.open === "notifcentre" && Surfaces.anchor === root
+    readonly property var notifiItem: Tray.find(SystemTray.items.values, Tray.NOTIFI)
+    readonly property bool notifiBell: Tray.notifiBell(NotifBackend.backend, notifiItem)
 
     function openCentre() {
         if (!NotifBackend.available || !NotifBackend.hasCentre || root.yielded)
@@ -82,14 +90,21 @@ Island {
         }
 
         IconImage {
-            visible: !root.yielded && root.iconSource !== ""
+            visible: !root.yielded && root.notifiBell
+            implicitSize: root.iconSize
+            Layout.preferredWidth: root.iconSize
+            Layout.preferredHeight: root.iconSize
+            source: root.notifiBell ? Net.safeIconSource(root.notifiItem.icon, "") : ""
+        }
+        IconImage {
+            visible: !root.yielded && !root.notifiBell && root.iconSource !== ""
             implicitSize: root.iconSize
             Layout.preferredWidth: root.iconSize
             Layout.preferredHeight: root.iconSize
             source: root.iconSource
         }
         UqText {
-            visible: !root.yielded && root.iconSource === ""
+            visible: !root.yielded && !root.notifiBell && root.iconSource === ""
             text: "\u{1F514}"
             color: NotifBackend.available ? Theme.text : Theme.textMuted
             font.pixelSize: Theme.fontSize + 3
@@ -111,15 +126,33 @@ Island {
         }
     }
 
+    QsMenuAnchor {
+        id: notifiMenu
+        menu: root.notifiItem ? root.notifiItem.menu : null
+        anchor.item: root
+        anchor.edges: Edges.Bottom
+        anchor.gravity: Edges.Bottom
+    }
+
     MouseArea {
         id: mouse
         anchors.fill: parent
         hoverEnabled: true
-        acceptedButtons: Qt.LeftButton | Qt.RightButton
+        acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
         onClicked: function (m) {
+            if (root.notifiBell && !root.yielded) {
+                if (m.button === Qt.MiddleButton)
+                    root.toggleDnd();
+                else if (m.button === Qt.RightButton || root.notifiItem.onlyMenu) {
+                    if (root.notifiItem.hasMenu)
+                        notifiMenu.open();
+                } else
+                    root.notifiItem.activate();
+                return;
+            }
             if (m.button === Qt.RightButton)
                 root.toggleDnd();
-            else
+            else if (m.button === Qt.LeftButton)
                 root.openCentre();
         }
     }

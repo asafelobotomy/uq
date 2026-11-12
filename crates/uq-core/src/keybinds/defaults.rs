@@ -87,7 +87,7 @@ pub fn default_of(id: &str) -> Option<&'static Default> {
     DEFAULTS.iter().find(|d| d.id == id)
 }
 
-static DEFAULTS: [Default; 56] = [
+static DEFAULTS: [Default; 59] = [
     Default {
         id: "uq.terminal",
         label: "Open a terminal",
@@ -206,6 +206,39 @@ static DEFAULTS: [Default; 56] = [
         group: Group::AppsAndDesktop,
         combo: Some("SUPER + Escape"),
         action: DefaultAction::Global("power-menu"),
+        locked: false,
+        repeating: false,
+        release: false,
+        mouse: false,
+    },
+    Default {
+        id: "uq.screenshot.area",
+        label: "Take a screenshot of an area",
+        group: Group::AppsAndDesktop,
+        combo: Some("Print"),
+        action: DefaultAction::Exec("uq-screenshot region"),
+        locked: false,
+        repeating: false,
+        release: false,
+        mouse: false,
+    },
+    Default {
+        id: "uq.screenshot.screen",
+        label: "Take a screenshot of the screen",
+        group: Group::AppsAndDesktop,
+        combo: Some("SHIFT + Print"),
+        action: DefaultAction::Exec("uq-screenshot screen"),
+        locked: false,
+        repeating: false,
+        release: false,
+        mouse: false,
+    },
+    Default {
+        id: "uq.screenshot.window",
+        label: "Take a screenshot of the window",
+        group: Group::AppsAndDesktop,
+        combo: Some("SUPER + Print"),
+        action: DefaultAction::Exec("uq-screenshot window"),
         locked: false,
         repeating: false,
         release: false,
@@ -720,9 +753,9 @@ mod tests {
     }
 
     #[test]
-    fn table_has_56_rows_55_bound() {
-        assert_eq!(defaults().len(), 56);
-        assert_eq!(defaults().iter().filter(|d| d.combo.is_some()).count(), 55);
+    fn table_has_59_rows_58_bound() {
+        assert_eq!(defaults().len(), 59);
+        assert_eq!(defaults().iter().filter(|d| d.combo.is_some()).count(), 58);
     }
 
     #[test]
@@ -763,7 +796,7 @@ mod tests {
             let c = parse(d.combo.unwrap()).unwrap_or_else(|e| panic!("{}: {e}", d.id));
             assert!(seen.insert(c), "{} repeats a combo", d.id);
         }
-        assert_eq!(seen.len(), 55);
+        assert_eq!(seen.len(), 58);
     }
 
     #[test]

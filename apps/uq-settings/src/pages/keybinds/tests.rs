@@ -496,7 +496,7 @@ async fn snapshot_shape_and_catalogue() {
         .iter()
         .map(|g| g["binds"].as_array().unwrap().len())
         .sum();
-    assert_eq!(total, 56, "every default, in a group");
+    assert_eq!(total, 59, "every default, in a group");
     assert_eq!(groups[0]["id"], "apps_and_desktop");
     assert!(groups.iter().all(|g| g["id"] != "custom"));
     let b = row(&out.state, "uq.lock-recovery");

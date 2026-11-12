@@ -1,0 +1,19 @@
+[Desktop Entry]
+Type=Application
+Name=Screenshot
+GenericName=Screen capture
+Comment=Capture an area of the screen, mark it up, then copy and save it
+Exec=uq-screenshot region
+Icon=applets-screenshooter
+Categories=Graphics;
+Keywords=screen;capture;print;snip;grab;
+StartupNotify=false
+Actions=Screen;Window;
+
+[Desktop Action Screen]
+Name=The whole screen
+Exec=uq-screenshot screen
+
+[Desktop Action Window]
+Name=The focused window
+Exec=uq-screenshot window

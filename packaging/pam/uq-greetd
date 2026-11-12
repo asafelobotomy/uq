@@ -1,0 +1,17 @@
+#%PAM-1.0
+# uQ's login screen. Installed to /etc/pam.d/uq-greetd; /etc/uq/greetd.toml names it
+# ([general] service), so greetd's own /etc/pam.d/greetd is never edited.
+#
+# The same as greetd's stack, plus the keyring: the password typed at the login screen unlocks
+# the "login" keyring (GNOME Keyring, the Secret Service Wi-Fi, browsers and apps keep passwords
+# in), and a password change re-encrypts it. Without this, every login asked to unlock it again.
+# The leading `-` skips a line quietly when gnome-keyring isn't installed.
+auth       required     pam_securetty.so
+auth       requisite    pam_nologin.so
+auth       include      system-local-login
+-auth      optional     pam_gnome_keyring.so
+account    include      system-local-login
+password   include      system-local-login
+-password  optional     pam_gnome_keyring.so use_authtok
+session    include      system-local-login
+-session   optional     pam_gnome_keyring.so auto_start

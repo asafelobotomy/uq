@@ -49,4 +49,46 @@ TestCase {
         compare(Work.buildDispatch("move", tgt, { workspace: 0 }), null);
         compare(Work.buildDispatch("evil", tgt), null);
     }
+
+    function win(addr, over) {
+        var w = { address: addr, cls: "kitty", title: "t" + addr, workspace: "1", minimised: false, monitor: "eDP-1" };
+        for (var k in over)
+            w[k] = over[k];
+        return w;
+    }
+    function test_taskView_one_tab_per_window() {
+        var v = Work.taskView([win("a1"), win("a2"), win("a3")], "eDP-1", "0xa2", false);
+        compare(v.count, 3);
+        compare(v.folded, false);
+        compare(v.tabs.map(function (t) { return t.address; }), ["0xa1", "0xa2", "0xa3"]);
+        compare(v.tabs[1].focused, true);
+        compare(v.tabs[0].focused, false);
+    }
+    function test_taskView_folds_past_five_until_expanded() {
+        var ws = [];
+        for (var i = 1; i <= 6; i++)
+            ws.push(win("b" + i));
+        compare(Work.taskView(ws.slice(0, 5), "", null, false).folded, false);
+        compare(Work.taskView(ws, "", null, false).folded, true);
+        compare(Work.taskView(ws, "", null, true).folded, false);
+        compare(Work.taskView(ws, "", null, true).tabs.length, 6);
+    }
+    function test_taskView_filters() {
+        var v = Work.taskView([
+            win("c1", { monitor: "HDMI-A-1" }),
+            win("c2", { workspace: "special:scratch" }),
+            win("c3", { workspace: "special:minimized", minimised: true }),
+            win("zz"),
+            null
+        ], "eDP-1", null, false);
+        compare(v.tabs.map(function (t) { return t.address; }), ["0xc3"]);
+        compare(v.tabs[0].minimised, true);
+        compare(Work.taskView([win("c1", { monitor: "HDMI-A-1" })], "", null, false).count, 1);
+    }
+    function test_titleWidth() {
+        compare(Work.titleWidth(2000, 1), 800);
+        compare(Work.titleWidth(2000, 5), 160);
+        compare(Work.titleWidth(100, 5), 48);
+        compare(Work.titleWidth(0, 0), 512);
+    }
 }
