@@ -4,7 +4,7 @@
 use std::sync::{Arc, OnceLock};
 
 use futures_util::StreamExt;
-use uq_core::client::DESKTOP_NAME;
+use uq_core::client::{DESKTOP_NAME, DesktopProxy};
 use zbus::fdo::DBusProxy;
 use zbus::names::BusName;
 
@@ -55,6 +55,7 @@ pub async fn start(page: &str, setting: &str) -> Result<Option<Session>, StartEr
 pub async fn follow_only() -> zbus::Result<Session> {
     let conn = zbus::Connection::session().await?;
     watch_owner(&conn, DESKTOP_NAME, |up| app::post(Event::UqdUp(up))).await?;
+    watch_theme(&conn, || app::post(Event::ThemeChanged)).await?;
     let _ = BUS.set((tokio::runtime::Handle::current(), conn.clone()));
     Ok(Session { _conn: conn })
 }
@@ -70,7 +71,26 @@ async fn claim_on(conn: &zbus::Connection, page: &str, setting: &str) -> zbus::R
     if let Err(e) = watch_owner(conn, DESKTOP_NAME, |up| app::post(Event::UqdUp(up))).await {
         eprintln!("uq-settings: can't follow {DESKTOP_NAME}: {e}");
     }
+    if let Err(e) = watch_theme(conn, || app::post(Event::ThemeChanged)).await {
+        eprintln!("uq-settings: can't follow theme changes: {e}");
+    }
     Ok(true)
+}
+
+/// Call `report` on every uqd `ThemeChanged`, from a task on the current tokio runtime. The
+/// match rule doesn't need uqd to be running, so a uqd started later is followed too.
+pub async fn watch_theme(
+    conn: &zbus::Connection,
+    report: impl Fn() + Send + 'static,
+) -> zbus::Result<()> {
+    let proxy = DesktopProxy::new(conn).await?;
+    let mut changes = proxy.receive_theme_changed().await?;
+    tokio::spawn(async move {
+        while changes.next().await.is_some() {
+            report();
+        }
+    });
+    Ok(())
 }
 
 /// Report whether `name` has an owner now, then on every `NameOwnerChanged` for it, from a task

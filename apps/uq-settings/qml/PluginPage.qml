@@ -39,8 +39,9 @@ Item {
         asynchronous: false
         visible: status === Loader.Ready
         onLoaded: {
+            // Bound, so a theme change while the page is open reaches it.
             if (item && "theme" in item)
-                item.theme = page.theme;
+                item.theme = Qt.binding(() => page.theme);
             if (item && "highlight" in item)
                 item.highlight = Qt.binding(() => page.highlight);
             if (item && "ctx" in item)

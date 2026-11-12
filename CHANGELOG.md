@@ -43,6 +43,14 @@ All notable changes to uQ are listed here. The format follows
 
 ### Fixed
 
+- **Settings looks like the theme.** Outside Plasma, Kirigami took its colours from KDE's
+  defaults, so Settings was Breeze Light with dark controls on top, whatever the theme. uqd now
+  renders the theme as a KDE colour scheme (`~/.local/state/uq/theme/kde/uq.colors`), and Settings
+  uses it, with the theme's icons and interface font. It follows a theme or light/dark change
+  while it is open (controls drawn by Kvantum change at the next start). Dropdown lists are at
+  least as wide as their box, the selected row in lists and menus uses the theme's text-on-accent
+  colour, and Settings falls back to the Fusion style instead of failing when
+  qqc2-desktop-style is missing. Plugin pages get the new colours as well.
 - **Updating uq no longer leaves Hyprland in emergency mode.** Hyprland reloads its config when
   a file it read changes, and a package update replaces `/usr/share/uq/hypr/base.lua` by
   removing and rewriting it: a reload in between failed its `require` and left only Hyprland's

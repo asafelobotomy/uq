@@ -120,9 +120,18 @@ fn main() {
         "src/sound_model.rs",
     ])
     .cpp_file("cpp/window.cpp");
-    // SAFETY: only adds a warning flag; GCC 16 warns about Qt's own headers.
+    // KColorScheme and KSharedConfig (cpp/window.cpp): Kirigami's colours come from a KDE colour
+    // scheme. Both ship with kcolorscheme and kconfig, which qqc2-desktop-style already needs.
+    let kf6 = std::env::var("UQ_KF6_INCLUDE").unwrap_or_else(|_| "/usr/include/KF6".into());
+    println!("cargo:rerun-if-env-changed=UQ_KF6_INCLUDE");
+    println!("cargo:rustc-link-lib=dylib=KF6ColorScheme");
+    println!("cargo:rustc-link-lib=dylib=KF6ConfigCore");
+    // SAFETY: only adds include paths and a warning flag; GCC 16 warns about Qt's own headers.
     let builder = unsafe {
         builder.cc_builder(|cc| {
+            for dir in ["KColorScheme", "KConfig", "KConfigCore"] {
+                cc.include(format!("{kf6}/{dir}"));
+            }
             cc.flag_if_supported("-Wno-sfinae-incomplete");
         })
     };

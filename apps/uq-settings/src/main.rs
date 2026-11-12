@@ -11,7 +11,6 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::Parser;
-use cxx_qt_lib::{QQuickStyle, QString};
 
 mod about_model;
 mod app;
@@ -146,14 +145,12 @@ fn main() -> ExitCode {
     }
 
     cxx_qt::init_qml_module!("org.uq.settings");
-    // The KDE desktop style draws through the Qt widget style, so Kvantum themes it.
-    if std::env::var_os("QT_QUICK_CONTROLS_STYLE").is_none() {
-        QQuickStyle::set_style(&QString::from("org.kde.desktop"));
-    }
-
+    // The Controls style (the KDE desktop style, which Kvantum themes, else Fusion) is chosen in
+    // cpp/window.cpp, where the QML import paths are known.
     match window::ffi::uqs_run(
         env!("CARGO_PKG_VERSION"),
         "qrc:/qt/qml/org/uq/settings/qml/Main.qml",
+        &app::theme_look(),
     ) {
         0 => ExitCode::SUCCESS,
         -1 => {

@@ -557,6 +557,7 @@ QQC2.ScrollView {
                                 leftPadding: Kirigami.Units.largeSpacing
                                 rightPadding: Kirigami.Units.largeSpacing
                                 verticalAlignment: Text.AlignVCenter
+                                highlighted: templateItem.highlighted || templateItem.down
                             }
                             Accessible.name: String(modelData.name)
                             onTriggered: page.startTemplate(templateItem.modelData)

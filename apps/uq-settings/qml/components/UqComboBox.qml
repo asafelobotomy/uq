@@ -35,14 +35,25 @@ QQC2.ComboBox {
         leftPadding: Kirigami.Units.smallSpacing
         rightPadding: combo.indicator ? combo.indicator.width + Kirigami.Units.smallSpacing : 0
     }
-    delegate: QQC2.ItemDelegate {
+    // The KDE style's popup is a Menu as wide as its widest row. Keep it at least as wide as the
+    // box, so short choices don't sit in a sliver, and let a long choice widen it up to a cap.
+    popup.width: Math.max(combo.width, Math.min(popup.implicitWidth, Kirigami.Units.gridUnit * 30))
+    // MenuItem rows, as the style's own ComboBox uses: menu padding and hover, sized by the Menu.
+    delegate: QQC2.MenuItem {
+        id: row
         required property int index
         required property var modelData
-        width: combo.width
+        // The Menu sizes its rows; other styles' popups (a ListView) need telling.
+        width: ListView.view ? ListView.view.width : implicitWidth
         highlighted: combo.highlightedIndex === index
         contentItem: UqLabel {
-            text: modelData
+            text: row.modelData
+            // About where the style's own MenuItem starts its text (as RulesPage's template rows).
+            leftPadding: Kirigami.Units.largeSpacing
+            rightPadding: Kirigami.Units.largeSpacing
             elide: Text.ElideRight
+            verticalAlignment: Text.AlignVCenter
+            highlighted: row.highlighted || row.down
         }
     }
 }

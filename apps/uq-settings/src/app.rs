@@ -36,8 +36,8 @@ pub mod qobject {
         #[qproperty(bool, uqd_up)]
         /// `[{id, name, icon, category, categoryName, qml, plugin}]` in sidebar order.
         #[qproperty(QString, pages_json)]
-        /// The current design tokens (`tokens.json` as written by uqd), read once at startup;
-        /// `{}` when missing or invalid.
+        /// The current design tokens (`tokens.json` as written by uqd), read at startup and again
+        /// on uqd's `ThemeChanged`; `{}` when missing or invalid.
         #[qproperty(QString, theme_json)]
         /// `--screenshots <dir>`: QML visits each page, saves it here, then quits.
         #[qproperty(QString, screenshot_dir)]
@@ -130,6 +130,29 @@ fn read_tokens() -> String {
         .unwrap_or_else(|| "{}".into())
 }
 
+/// The look the app takes from the current theme: the KDE colour scheme uqd renders next to
+/// `tokens.json`, and the tokens' icon theme, interface font and size.
+pub fn theme_look() -> crate::window::ffi::UqsLook {
+    let dir = uq_core::paths::Paths::from_env().theme_dir;
+    look_from(&read_tokens(), &dir)
+}
+
+fn look_from(tokens: &str, theme_dir: &std::path::Path) -> crate::window::ffi::UqsLook {
+    let v: serde_json::Value = serde_json::from_str(tokens).unwrap_or_default();
+    let text = |a: &str, b: &str| v[a][b].as_str().unwrap_or_default().to_string();
+    let colors = theme_dir.join("kde/uq.colors");
+    crate::window::ffi::UqsLook {
+        colors: colors.to_string_lossy().into_owned(),
+        icon_theme: text("icons", "theme"),
+        font: text("fonts", "ui"),
+        point_size: v["fonts"]["size"]
+            .as_i64()
+            .and_then(|n| i32::try_from(n).ok())
+            .filter(|n| (1..=72).contains(n))
+            .unwrap_or(0),
+    }
+}
+
 /// What the D-Bus side tells the window.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Event {
@@ -143,6 +166,8 @@ pub enum Event {
     /// The plugin pages to show changed (one was installed or removed, or the bus name it
     /// waits for came or went).
     Plugins(Vec<plugins::PluginPage>),
+    /// uqd applied a theme (or an appearance change): re-read the tokens and the look.
+    ThemeChanged,
 }
 
 /// Where events go: kept until `App` exists, then queued to it, then dropped once it is gone.
@@ -219,6 +244,12 @@ impl App {
             Event::UqdUp(up) => self.set_uqd_up(up),
             Event::ScreenshotDir(dir) => self.set_screenshot_dir(QString::from(&dir)),
             Event::Plugins(pages) => self.set_plugins(&pages),
+            Event::ThemeChanged => {
+                let tokens = read_tokens();
+                let dir = uq_core::paths::Paths::from_env().theme_dir;
+                crate::window::ffi::uqs_apply_look(&look_from(&tokens, &dir));
+                self.set_theme_json(QString::from(&tokens));
+            }
         }
     }
 
@@ -302,6 +333,29 @@ mod tests {
         assert!(matches!(route, Route::Gone));
         route.post(ev(true), |_, _| panic!("gone: dropped, not sent"));
         assert!(matches!(route, Route::Gone));
+    }
+
+    #[test]
+    fn look_reads_the_tokens() {
+        let dir = std::path::Path::new("/s/uq/theme");
+        let tokens =
+            r#"{"icons": {"theme": "Papirus-Dark"}, "fonts": {"ui": "Inter", "size": 11}}"#;
+        let look = look_from(tokens, dir);
+        assert_eq!(look.colors, "/s/uq/theme/kde/uq.colors");
+        assert_eq!(look.icon_theme, "Papirus-Dark");
+        assert_eq!(look.font, "Inter");
+        assert_eq!(look.point_size, 11);
+        // Missing or odd values leave that part alone.
+        let none = look_from("{}", dir);
+        assert_eq!(
+            (
+                none.icon_theme.as_str(),
+                none.font.as_str(),
+                none.point_size
+            ),
+            ("", "", 0)
+        );
+        assert_eq!(look_from(r#"{"fonts": {"size": 900}}"#, dir).point_size, 0);
     }
 
     #[test]

@@ -42,7 +42,8 @@ RowLayout {
                 objectName: "themeName"
                 text: chip.themeName
                 font.bold: chip.current
-                color: chip.current ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor
+                // No accent colour of its own: the current theme's button is already checked and
+                // highlighted, and accent text on an accent fill would vanish. As LookStep.
                 elide: Text.ElideRight
                 horizontalAlignment: Text.AlignHCenter
                 Layout.fillWidth: true

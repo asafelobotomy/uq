@@ -96,6 +96,7 @@ Kirigami.Dialog {
                     UqLabel {
                         text: String(item.modelData.name)
                         elide: Text.ElideRight
+                        highlighted: item.highlighted || item.down
                         Layout.fillWidth: true
                     }
                 }

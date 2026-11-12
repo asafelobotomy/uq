@@ -81,6 +81,7 @@ Kirigami.SearchField {
             Accessible.name: "Search results"
 
             delegate: QQC2.ItemDelegate {
+                id: hit
                 required property int index
                 required property var modelData
 
@@ -96,12 +97,14 @@ Kirigami.SearchField {
                     UqLabel {
                         text: modelData.label
                         elide: Text.ElideRight
+                        highlighted: hit.highlighted || hit.down
                         Layout.fillWidth: true
                         Accessible.ignored: true
                     }
                     UqLabel {
                         text: modelData.pageName
                         opacity: 0.7
+                        highlighted: hit.highlighted || hit.down
                         Accessible.ignored: true
                     }
                 }

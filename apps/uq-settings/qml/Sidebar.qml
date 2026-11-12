@@ -94,6 +94,7 @@ QQC2.ScrollView {
                 UqLabel {
                     text: item.name
                     elide: Text.ElideRight
+                    highlighted: item.highlighted || item.down
                     Layout.fillWidth: true
                     Accessible.ignored: true
                 }

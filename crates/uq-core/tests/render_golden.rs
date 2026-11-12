@@ -13,9 +13,10 @@ fn registry() -> ThemeRegistry {
     ThemeRegistry::load_dir(&repo().join("themes")).unwrap()
 }
 
-const EXPECTED_FILES: [&str; 8] = [
+const EXPECTED_FILES: [&str; 9] = [
     "gtk-3.0/gtk.css",
     "gtk-4.0/gtk.css",
+    "kde/uq.colors",
     "qt6ct/colors/uq.conf",
     "shell.env",
     "terminal/alacritty.toml",

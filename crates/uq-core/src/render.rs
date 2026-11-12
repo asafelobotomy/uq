@@ -28,8 +28,9 @@ pub enum RenderError {
 }
 
 /// (template file in `templates_dir`, output path in the theme directory)
-pub const TARGETS: [(&str, &str); 7] = [
+pub const TARGETS: [(&str, &str); 8] = [
     ("tokens.json.j2", "tokens.json"),
+    ("kdecolors.j2", "kde/uq.colors"),
     ("qt6ct.conf.j2", "qt6ct/colors/uq.conf"),
     ("gtk3.css.j2", "gtk-3.0/gtk.css"),
     ("gtk4.css.j2", "gtk-4.0/gtk.css"),
@@ -45,6 +46,28 @@ fn bare(s: String) -> String {
 /// `#rrggbb` → `#ffrrggbb` (Qt's ARGB form).
 fn argb(s: String) -> String {
     format!("#ff{}", s.trim_start_matches('#'))
+}
+
+/// `#rrggbb` → `r,g,b` (a KDE colour scheme's decimal form).
+fn rgb(s: String) -> Result<String, minijinja::Error> {
+    let hex = s.trim_start_matches('#');
+    let channel = |i: usize| {
+        hex.get(i..i + 2)
+            .and_then(|h| u8::from_str_radix(h, 16).ok())
+            .ok_or_else(|| {
+                minijinja::Error::new(
+                    minijinja::ErrorKind::InvalidOperation,
+                    format!("{s:?} is not a #rrggbb colour"),
+                )
+            })
+    };
+    if hex.len() != 6 {
+        return Err(minijinja::Error::new(
+            minijinja::ErrorKind::InvalidOperation,
+            format!("{s:?} is not a #rrggbb colour"),
+        ));
+    }
+    Ok(format!("{},{},{}", channel(0)?, channel(2)?, channel(4)?))
 }
 
 /// Kvantum bases uQ's theme can inherit from, in preference order.
@@ -94,6 +117,7 @@ pub fn render(
     env.set_keep_trailing_newline(true);
     env.add_filter("bare", bare);
     env.add_filter("argb", argb);
+    env.add_filter("rgb", rgb);
     let ctx = context! { theme => theme, variant => theme.variant.as_str(), is_dark => theme.variant == crate::theme::Variant::Dark, base => kvantum_base };
     let mut out = BTreeMap::new();
     let extra = kvantum_base.map(|_| KVANTUM_TARGET);
@@ -165,6 +189,40 @@ mod tests {
         assert!(body.contains("window.color=#282828"), "{body}");
         assert!(body.contains("highlight.color=#d79921"), "{body}");
         assert!(body.contains("disabled.text.color=#bdae93"), "{body}");
+    }
+
+    #[test]
+    fn kde_colour_scheme_maps_the_tokens() {
+        let files = render(&theme(), &templates(), None).unwrap();
+        let body = &files.0[Path::new("kde/uq.colors")];
+        // #282828 bg, #d79921 accent (the fixture).
+        assert!(
+            body.contains("[Colors:Window]\nBackgroundNormal=40,40,40\n"),
+            "{body}"
+        );
+        assert!(
+            body.contains("[Colors:Selection]\nBackgroundNormal=215,153,33\n"),
+            "{body}"
+        );
+        for set in [
+            "Window",
+            "View",
+            "Button",
+            "Header",
+            "Tooltip",
+            "Complementary",
+        ] {
+            assert!(body.contains(&format!("[Colors:{set}]\n")), "{set}: {body}");
+        }
+        assert_eq!(body.matches("ForegroundNormal=").count(), 7, "{body}");
+    }
+
+    #[test]
+    fn rgb_filter_rejects_a_non_colour() {
+        assert_eq!(rgb("#0a0b0c".into()).unwrap(), "10,11,12");
+        assert!(rgb("#0a0b0".into()).is_err());
+        assert!(rgb("#0a0b0g".into()).is_err());
+        assert!(rgb("#0a0b0é".into()).is_err());
     }
 
     #[test]

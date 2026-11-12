@@ -3,6 +3,7 @@
 // neighbours. A click selects a display. Names are plain text (UqLabel).
 import QtQuick
 import QtQuick.Controls as QQC2
+import org.kde.kirigami as Kirigami
 
 Item {
     id: area
@@ -17,7 +18,7 @@ Item {
     readonly property real minY: shown.length ? Math.min(...shown.map(o => o.rect.y)) : 0
     readonly property real spanW: shown.length ? Math.max(...shown.map(o => o.rect.x + o.rect.w)) - minX : 1
     readonly property real spanH: shown.length ? Math.max(...shown.map(o => o.rect.y + o.rect.h)) - minY : 1
-    readonly property real margin: 16
+    readonly property real margin: Kirigami.Units.gridUnit
     readonly property real previewScale: fixedScale > 0 ? fixedScale : Math.max(0.01, Math.min((width - margin * 2) / Math.max(1, spanW), (height - margin * 2) / Math.max(1, spanH)) * 0.8)
     readonly property real offsetX: (width - spanW * previewScale) / 2
     readonly property real offsetY: (height - spanH * previewScale) / 2
@@ -25,7 +26,7 @@ Item {
     signal moved(string name, int x, int y)
     signal picked(string name)
 
-    implicitHeight: 220
+    implicitHeight: Kirigami.Units.gridUnit * 14
     Accessible.role: Accessible.Pane
     Accessible.name: "Display arrangement"
 
@@ -40,18 +41,22 @@ Item {
             objectName: "display-" + modelData.name
             x: area.offsetX + (modelData.rect.x - area.minX) * area.previewScale
             y: area.offsetY + (modelData.rect.y - area.minY) * area.previewScale
-            width: Math.max(8, modelData.rect.w * area.previewScale)
-            height: Math.max(8, modelData.rect.h * area.previewScale)
-            radius: 4
-            color: isSelected ? Qt.rgba(palette.highlight.r, palette.highlight.g, palette.highlight.b, 0.35) : palette.button
+            width: Math.max(Kirigami.Units.smallSpacing * 2, modelData.rect.w * area.previewScale)
+            height: Math.max(Kirigami.Units.smallSpacing * 2, modelData.rect.h * area.previewScale)
+            radius: Kirigami.Units.cornerRadius
+            // Kirigami's colours throughout, like the label inside: mixing them with the Qt
+            // palette put text of one scheme on a box of the other.
+            Kirigami.Theme.colorSet: Kirigami.Theme.Button
+            Kirigami.Theme.inherit: false
+            color: isSelected ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.35) : Kirigami.Theme.backgroundColor
             border.width: isSelected ? 2 : 1
-            border.color: isSelected ? palette.highlight : palette.mid
+            border.color: isSelected ? Kirigami.Theme.highlightColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, 0.3)
             Accessible.role: Accessible.Button
             Accessible.name: modelData.label
 
             UqLabel {
                 anchors.centerIn: parent
-                width: parent.width - 8
+                width: parent.width - Kirigami.Units.smallSpacing * 2
                 horizontalAlignment: Text.AlignHCenter
                 elide: Text.ElideRight
                 text: box.modelData.label
