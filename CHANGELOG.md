@@ -7,6 +7,19 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **`notify takeover --now` works on a uQ session that has been up a while.** uQ keeps the
+  notification name with its built-in server until it has connected to noti-fi's socket, and it
+  looked for that socket on the bridge backoff, every 30 s after the first half minute; noti-fi's
+  takeover waited 10 s and rolled back. While the socket file is missing, uQ now looks every 3 s
+  (the backoff still paces failed connects). noti-fi's takeover also waits longer when uQ holds
+  the name.
+- **Welcome's "Choose a look" buttons** showed `[object V4ReferenceObject]` and applying one said
+  the theme wasn't installed; they show each theme's name and apply it (#40).
+- **Settings pages no longer draw over each other** when you click through the page list
+  quickly: pages switch at once, without the cross-fade (#40).
+
 ## [0.3.0-rc.2] - 2026-11-12
 
 ### Added

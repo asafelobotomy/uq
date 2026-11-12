@@ -12,6 +12,18 @@
 // Every line from the daemon is untrusted. uQ caps a line at 64 KiB (UTF-8 bytes) and drops it.
 
 var MAX_LINE = 65536;
+
+// While noti-fi's socket file is missing, look for it again this often. The probe only checks
+// that a file exists, so it is cheap; and because built-in keeps org.freedesktop.Notifications
+// until uQ has connected here, a notifd started later (`notify takeover --now`) must be found in
+// seconds, not after the backoff's 30 s (noti-fi's takeover gives up and rolls back). The
+// backoff still paces failed connects to a socket that is there.
+var ABSENT_POLL_MS = 3000;
+
+// The wait before the next attempt: `socketMissing` when the probe found no socket file.
+function retryDelay(attempt, socketMissing, backoffMs) {
+    return socketMissing ? ABSENT_POLL_MS : backoffMs;
+}
 var OSD_KINDS = ["volume", "mic", "brightness"];
 var MAX_ERROR = 64;
 

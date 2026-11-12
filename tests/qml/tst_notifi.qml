@@ -219,4 +219,14 @@ TestCase {
         compare(N.expiredIds({ "4": NaN }, 5000), ["4"]);
         compare(N.expiredIds(d, NaN), []);
     }
+
+    // A missing socket is looked for again every few seconds, so a notifd started later is found
+    // well inside noti-fi's takeover wait; failed connects keep the backoff.
+    function test_notifi_retry_delay() {
+        compare(N.retryDelay(0, true, 1000), N.ABSENT_POLL_MS);
+        compare(N.retryDelay(9, true, 30000), N.ABSENT_POLL_MS);
+        verify(N.ABSENT_POLL_MS <= 5000);
+        compare(N.retryDelay(9, false, 30000), 30000);
+        compare(N.retryDelay(0, false, 1000), 1000);
+    }
 }
