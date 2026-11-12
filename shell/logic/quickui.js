@@ -339,3 +339,50 @@ function profileErrorText(e) {
         return "Couldn't switch profiles.";
     return e;
 }
+
+// --- tabs ---
+
+// The quick-settings tabs in order: key and label. "apps" shows only while an app tile has loaded.
+function tabs() {
+    return [
+        { key: "sound", label: "Sound" },
+        { key: "network", label: "Network" },
+        { key: "display", label: "Display" },
+        { key: "system", label: "System" },
+        { key: "apps", label: "Apps" }
+    ];
+}
+
+// The tabs shown, given which keys are hidden (an object of key -> true).
+function shownTabs(hidden) {
+    var h = hidden || {};
+    return tabs().filter(function (t) { return !h[t.key]; });
+}
+
+// The tab to show: `selected` while it is shown, else the first shown tab. `selected` itself is
+// kept by the caller, so a tab that hides and comes back (Apps) is selected again.
+function currentTab(shown, selected) {
+    if (!Array.isArray(shown) || shown.length === 0)
+        return "";
+    for (var i = 0; i < shown.length; i++)
+        if (shown[i].key === selected)
+            return selected;
+    return shown[0].key;
+}
+
+// The key `step` tabs from `current` (+1 next, -1 previous), wrapping; "first" / "last" jump to
+// the ends. An unknown `current` counts as the first tab.
+function stepTab(shown, current, step) {
+    if (!Array.isArray(shown) || shown.length === 0)
+        return "";
+    if (step === "first")
+        return shown[0].key;
+    if (step === "last")
+        return shown[shown.length - 1].key;
+    var at = 0;
+    for (var i = 0; i < shown.length; i++)
+        if (shown[i].key === current)
+            at = i;
+    var n = shown.length;
+    return shown[(((at + (step | 0)) % n) + n) % n].key;
+}

@@ -359,4 +359,39 @@ TestCase {
         compare(U.profileErrorText(undefined), "Couldn't switch profiles.");
         compare(U.profileErrorText(3), "Couldn't switch profiles.");
     }
+
+    // Five tabs in a fixed order; Apps hides while no app tile has loaded.
+    function test_shown_tabs() {
+        compare(U.shownTabs({}).map(function (t) { return t.key; }),
+            ["sound", "network", "display", "system", "apps"]);
+        compare(U.shownTabs({ apps: true }).map(function (t) { return t.key; }),
+            ["sound", "network", "display", "system"]);
+        compare(U.shownTabs(null).length, 5);
+    }
+
+    // The selected tab stays while shown; a hidden one falls back to the first without being
+    // forgotten by the caller.
+    function test_current_tab() {
+        var all = U.shownTabs({});
+        var noApps = U.shownTabs({ apps: true });
+        compare(U.currentTab(all, "display"), "display");
+        compare(U.currentTab(all, "apps"), "apps");
+        compare(U.currentTab(noApps, "apps"), "sound");
+        compare(U.currentTab(all, "bogus"), "sound");
+        compare(U.currentTab([], "sound"), "");
+        compare(U.currentTab(null, "sound"), "");
+    }
+
+    // Arrow keys wrap; Home and End jump to the ends.
+    function test_step_tab() {
+        var t = U.shownTabs({ apps: true });
+        compare(U.stepTab(t, "sound", 1), "network");
+        compare(U.stepTab(t, "system", 1), "sound");
+        compare(U.stepTab(t, "sound", -1), "system");
+        compare(U.stepTab(t, "display", -1), "network");
+        compare(U.stepTab(t, "display", "first"), "sound");
+        compare(U.stepTab(t, "sound", "last"), "system");
+        compare(U.stepTab(t, "bogus", 1), "network");
+        compare(U.stepTab([], "sound", 1), "");
+    }
 }
