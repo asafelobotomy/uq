@@ -3,11 +3,10 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell.Services.Pipewire
 import "../core"
-import "../brightness"
 import "../logic/quick.js" as Q
 import "../logic/quickui.js" as U
 
-// Quick settings: output volume, mute and device; mic mute and input volume; brightness.
+// Quick settings: output volume, mute and device; mic mute and input volume.
 // Pipewire node labels (description / nickname / name) are untrusted: UqText only, elided.
 // With no default sink (unplugged headphones, Pipewire not up) it shows "No output".
 ColumnLayout {
@@ -16,7 +15,6 @@ ColumnLayout {
     // Set by QuickSettings: the window is open. Nodes are only tracked while it is.
     property bool active: false
     property bool showDevices: false
-    property int pendingBrightness: -1
 
     readonly property var sink: Pipewire.defaultAudioSink
     readonly property var source: Pipewire.defaultAudioSource
@@ -38,8 +36,6 @@ ColumnLayout {
 
     function wipe() {
         showDevices = false;
-        pendingBrightness = -1;
-        brightRetry.stop();
     }
 
     // A slider move: raising from 0 while muted unmutes (quickui.volumeSet).
@@ -58,103 +54,13 @@ ColumnLayout {
             setVolume(audio, Q.volumeStep(audio.volume, dir));
     }
 
-    // One brightnessctl at a time: while one runs, keep the latest value and retry shortly, so a
-    // drag lands on where the handle stopped without queueing a process per move.
-    function setBrightness(fraction) {
-        pendingBrightness = Math.round(fraction * 100);
-        flushBrightness();
-    }
-    function flushBrightness() {
-        if (pendingBrightness < 0)
-            return;
-        if (Brightness.set(pendingBrightness))
-            pendingBrightness = -1;
-        else if (Brightness.available)
-            brightRetry.restart();
-        else
-            pendingBrightness = -1;
-    }
-
     onActiveChanged: if (!active) wipe()
 
     PwObjectTracker {
         objects: root.tracked
     }
 
-    Timer {
-        id: brightRetry
-        interval: 60
-        onTriggered: root.flushBrightness()
-    }
-
     // --- shared controls ---
-    component QsSlider: Item {
-        id: s
-        property real value: 0          // 0..1
-        property bool dim: false
-        property bool dragging: mouse.pressed
-        property real dragValue: 0
-        readonly property real shown: Math.max(0, Math.min(1, dragging ? dragValue : value))
-        signal moved(real v)
-        signal stepped(int dir)
-
-        implicitHeight: 24
-        activeFocusOnTab: true
-        Accessible.role: Accessible.Slider
-        Accessible.onIncreaseAction: s.stepped(1)
-        Accessible.onDecreaseAction: s.stepped(-1)
-
-        function pick(x) {
-            dragValue = Math.max(0, Math.min(1, x / Math.max(1, width)));
-            moved(dragValue);
-        }
-
-        Keys.onPressed: function (event) {
-            if (event.key === Qt.Key_Right || event.key === Qt.Key_Up)
-                s.stepped(1);
-            else if (event.key === Qt.Key_Left || event.key === Qt.Key_Down)
-                s.stepped(-1);
-            else
-                return;
-            event.accepted = true;
-        }
-
-        Rectangle {
-            id: track
-            anchors.verticalCenter: parent.verticalCenter
-            width: parent.width
-            height: 6
-            radius: 3
-            color: Theme.overlay
-            Rectangle {
-                width: track.width * s.shown
-                height: parent.height
-                radius: parent.radius
-                color: s.dim ? Theme.textMuted : Theme.accent
-            }
-        }
-        Rectangle {
-            anchors.verticalCenter: parent.verticalCenter
-            x: s.shown * (s.width - width)
-            width: 14
-            height: 14
-            radius: 7
-            color: Theme.text
-            border.color: s.activeFocus ? Theme.accent : Theme.border
-            border.width: s.activeFocus ? 2 : 1
-        }
-        MouseArea {
-            id: mouse
-            anchors.fill: parent
-            onPressed: function (m) { s.forceActiveFocus(); s.pick(m.x); }
-            onPositionChanged: function (m) { if (pressed) s.pick(m.x); }
-            onWheel: function (w) {
-                if (w.angleDelta.y !== 0)
-                    s.stepped(w.angleDelta.y > 0 ? 1 : -1);
-            }
-        }
-    }
-
     component IconButton: Rectangle {
         id: b
         property string glyph: ""
@@ -346,34 +252,6 @@ ColumnLayout {
             Layout.preferredWidth: 34
             horizontalAlignment: Text.AlignRight
             text: root.sourceAudio ? Math.round(root.sourceAudio.volume * 100) + "%" : ""
-            color: Theme.textMuted
-        }
-    }
-
-    // --- brightness ---
-    RowLayout {
-        visible: Brightness.available
-        Layout.fillWidth: true
-        spacing: Theme.gapIn * 2
-
-        UqText {
-            Layout.preferredWidth: 28
-            horizontalAlignment: Text.AlignHCenter
-            text: "☀"
-            font.pixelSize: Theme.fontSize + 2
-            Accessible.ignored: true
-        }
-        QsSlider {
-            Layout.fillWidth: true
-            value: Brightness.percent / 100
-            Accessible.name: "Brightness"
-            onMoved: function (v) { root.setBrightness(v); }
-            onStepped: function (dir) { Brightness.step(dir); }
-        }
-        UqText {
-            Layout.preferredWidth: 34
-            horizontalAlignment: Text.AlignRight
-            text: Brightness.percent + "%"
             color: Theme.textMuted
         }
     }

@@ -21,6 +21,13 @@ All notable changes to uQ are listed here. The format follows
 
 ### Changed
 
+- **Quick settings has tabs.** The Control Center (Super+A, or the Status island's button) is
+  split into **Sound**, **Network** (Wi-Fi and Bluetooth), **Display** (brightness, theme,
+  dark/light, layout), **System** (battery, power profile, Do Not Disturb, Stay awake, profiles)
+  and **Apps** (shown only when an app adds a tile), instead of one long list. The tab you pick
+  stays while the panel is open and next time you open it. Left and Right move between tabs,
+  Home and End jump to the first and last, and Ctrl+Tab / Ctrl+Shift+Tab switch tabs from
+  anywhere in the panel. **Settings…** stays at the bottom of every tab.
 - **Click to focus.** A window takes the keyboard only when you click it; moving the pointer over
   it no longer does (scrolling still reaches the window under the pointer). Put
   `hl.config({ input = { follow_mouse = 1 } })` in `user.lua` to have focus follow the mouse.
