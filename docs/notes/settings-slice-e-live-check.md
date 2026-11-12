@@ -1,5 +1,7 @@
 # Settings slice E (pages from other apps): manual live check
 
+> Automated part: `tests/live/run.sh --only '^SE'` (`tests/live/checks/e-companions.sh`; also CI's settings-live job). The header of that file lists the items below that it leaves to a person, and why.
+
 Run on a real uQ session with each app installed from its repo (`makepkg -si` in each). Not CI.
 Tick each item. Before you start, note `user.lua`'s modification time:
 `stat ~/.config/hypr/uq/user.lua`. It must be the same at the end.

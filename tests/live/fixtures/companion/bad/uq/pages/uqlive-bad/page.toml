@@ -1,0 +1,11 @@
+uq_api = 1
+id = "uqlive-bad"
+name = "uqlive Bad"
+qml = "Page.qml"
+keywords = ["uqlive", "boost"]
+
+[[setting]]
+id = "boost"
+label = "Boost mode"
+keywords = ["boost"]
+

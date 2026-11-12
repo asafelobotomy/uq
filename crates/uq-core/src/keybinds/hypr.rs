@@ -114,6 +114,11 @@ pub const DISPATCHERS: [&str; 11] = [
 
 pub const DESCRIPTION_PREFIX: &str = "uq:";
 pub const CAPTURE_SUBMAP: &str = "uq_capture";
+/// The one bind inside the capture submap. Hyprland registers a submap when a bind is added to it
+/// (an empty one gives "submap doesn't exist (wasn't registered!)" on `hl.dsp.submap`, seen in
+/// CI's live checks), so the submap holds a bind on a key nobody has, which only leaves it.
+pub const CAPTURE_PLACEHOLDER: &str =
+    "hl.bind(\"SUPER + SHIFT + CTRL + ALT + XF86Launch9\", hl.dsp.submap(\"reset\"))";
 pub const UNBIND_ALL: &str = "hl.unbind(\"all\")";
 
 #[cfg(test)]

@@ -795,7 +795,14 @@ fn base_lua_binds_equal_the_default_table() {
     assert!(ok, "{from_base}{err}");
     let (ok, from_table, err) = run_mock(&lua, dir.path(), true, &[&rendered]);
     assert!(ok, "{from_table}{err}");
-    let (a, b) = (bind_lines(&from_base), bind_lines(&from_table));
+    // The capture submap's own bind (it only leaves the submap) isn't one of the shortcuts.
+    let (a, b): (Vec<&str>, Vec<&str>) = (
+        bind_lines(&from_base),
+        bind_lines(&from_table)
+            .into_iter()
+            .filter(|l| !l.contains("XF86Launch9"))
+            .collect(),
+    );
     assert_eq!(a.len(), 55, "{from_base}");
     assert_eq!(a, b, "base.lua and the default table have drifted apart");
 }
@@ -916,7 +923,8 @@ fn hostile_binds_run_as_one_call_each() {
         .expect(&text);
     let after = &lines[unbind..];
     let calls = after.iter().filter(|l| **l == "hl.bind").count();
-    assert_eq!(calls, 55 + 2 * hostile.len(), "{text}");
+    // 55 defaults, the capture submap's placeholder bind and two binds per hostile name.
+    assert_eq!(calls, 56 + 2 * hostile.len(), "{text}");
     assert_eq!(bind_lines(&text).len(), calls, "{text}");
     assert!(!text.contains("hl.exec_cmd:x"), "{text}");
     assert!(!text.contains("hl.exec_cmd:\"x"), "{text}");

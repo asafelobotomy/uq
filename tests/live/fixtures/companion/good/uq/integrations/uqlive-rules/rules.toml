@@ -1,0 +1,7 @@
+uq_api = 1
+
+[[window_rule]]
+id = "uqlive-rules.games"
+name = "uqlive games float"
+class = ["^uqlive-game$"]
+float = true

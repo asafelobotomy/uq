@@ -162,10 +162,11 @@ it to noti-fi.
   - **Reboot** rows [You]: reboot during the window, and after Keep;
   - **Input** [You]: the 250 ms repeat feel, real touchpad tap and natural scroll, per-device speed.
 
-### 4.5 Settings slices A–D
+### 4.5 Settings slices A–G, keybinds and E
 
-Most of these four checklists are automated by `tests/live/run.sh` (added in uq#19), which runs
-35 checks (SA1–SD14) against the session it runs in, saves a restore point and a copy of
+Most of these checklists are automated by `tests/live/run.sh` (added in uq#19, extended for slices
+G, F, E and the keybinds), which runs 67 checks (SA, SB, SC, SD, SE, SF, SG and SK) against the
+session it runs in, saves a restore point and a copy of
 `user.lua` first, and puts everything back at the end. The step-by-step version of this part, with
 what each check does on a real desktop, is the
 [real-desktop check plan](https://claude.ai/artifact/H29L292DtKdbNk4jLty3mu); this section is the
@@ -191,6 +192,12 @@ short form.
    - [D, startup and apps](notes/settings-slice-d-live-check.md): items 1, 3, 4 and 5 need a log
      out and in and are not automated. Items 6–8 are "is it sharp": yours, ideally at 125 %.
      Item 15 needs a Flatpak Chromium-based browser and is manual.
+   - [G, your own themes](notes/settings-slice-g-live-check.md), [keyboard
+     shortcuts](notes/settings-slice4-live-check.md), [F, displays and
+     gestures](notes/settings-slice-f-live-check.md) and [E, companion
+     pages](notes/settings-slice-e-live-check.md): each `checks/<file>.sh` starts with the list of
+     items it leaves to you (a key press, the theme editor, real screens and cables, a touchpad,
+     the companion apps themselves). `--slow` adds the 15 s timers (SK6, SF3).
 3. **[Claude]** Fill each slice file from `results.tsv` and what you reported, one PR per slice.
 
 ## 5. The first real `uq-dev session`

@@ -1,5 +1,7 @@
 # Settings slice F (display arrangements, main display, span wallpaper, workspace planner, bar per screen, touchpad gestures): manual live check
 
+> Automated part: `tests/live/run.sh --only '^SF'` (`tests/live/checks/f-displays.sh`; also CI's settings-live job). The header of that file lists the items below that it leaves to a person, and why.
+
 Run on a real Hyprland session (0.56.2 or newer, up to 0.57.x) with uQ installed. Not CI. You need
 a laptop plus one or two external screens (ideally two of the same model), a touchpad, and
 `xrandr` installed (`xorg-xrandr`). The pages are **Displays**, **Input** and **Wallpaper** in
