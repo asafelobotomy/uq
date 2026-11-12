@@ -69,14 +69,14 @@ fd_cleanup() {
         hc output remove "$FD_HP" >/dev/null 2>&1
     fi
     section monitors 2>/dev/null | jq -e '[.profiles[]? | select(.name | startswith("uqlive"))] | length > 0' >/dev/null 2>&1 &&
-        mon_merge '.profiles |= map(select(.name | startswith("uqlive") | not))' >/dev/null
+        mon_merge '.profiles = ((.profiles // []) | map(select(.name | startswith("uqlive") | not)))' >/dev/null
     return 0
 }
 # fd_reset: no stored layout, no arrangement of ours (the session as the checks found it).
 fd_reset() {
     [ -n "$(fd_pending)" ] && bus RevertMonitors s "$(fd_pending)" >/dev/null
     fd_keep '{"outputs":{}}' >/dev/null
-    mon_merge '.profiles |= map(select(.name | startswith("uqlive") | not))' >/dev/null
+    mon_merge '.profiles = ((.profiles // []) | map(select(.name | startswith("uqlive") | not)))' >/dev/null
 }
 
 check SF1 "Remember: saved by the screen's make, model and serial, not its port; the same screens keep one arrangement" sf1 hypr
@@ -102,26 +102,29 @@ sf1() {
     expect_eq "its name after remembering again" "uqlive Desk renamed" "$(section monitors | jq -r --arg i "$id" '.profiles[] | select(.id == $i) | .name')"
     r=$(bus Undo sb "$(newest_id)" false) || bad "Undo: $r"
     expect_eq "its name after Undo" "uqlive Desk" "$(section monitors | jq -r --arg i "$id" '.profiles[] | select(.id == $i) | .name')"
-    mon_merge '.profiles |= map(select(.name | startswith("uqlive") | not))' >/dev/null
+    mon_merge '.profiles = ((.profiles // []) | map(select(.name | startswith("uqlive") | not)))' >/dev/null
 }
 
 check SF2 "Apply a layout: live at once, Revert puts it back, Keep saves and renders it; a plain SetSection is refused" sf2 hypr
 sf2() {
-    local name s0 t r layout h0
+    local name s0 st0 t r layout h0
     name=$(fd_real); [ -n "$name" ] || { na "no real output to arrange"; return; }
     s0=$(fd_scale "$name"); layout=$(fd_out "$name" 2)
-    note "$name at scale $s0; layout: $layout"
+    # What is stored before: null on a fresh session, the kept scale on a desktop where Displays
+    # (or Welcome) has saved one. Waiting, Revert and Undo all leave it as it was.
+    st0=$(fd_stored_scale "$name")
+    note "$name at scale $s0 (stored: $st0); layout: $layout"
     t=$(bus ApplyMonitors s "$layout") || { bad "ApplyMonitors: $t"; return; }
     wait_for 5 fd_scale_is "$name" 2 || bad "expected scale 2 live on $name; observed $(fd_scale "$name")"
     [ -n "$(fd_pending)" ] || bad "ListOutputs shows no change waiting"
-    expect_eq "what is stored while the change waits" null "$(fd_stored_scale "$name")"
+    expect_eq "what is stored while the change waits" "$st0" "$(fd_stored_scale "$name")"
     r=$(mon_merge '.auto_profiles = false') && bad "a write was accepted while a display change waited"
     note "write while waiting: $r"
     [[ $r == *"keep or revert"* ]] || bad "expected 'keep or revert the display change first'; observed $r"
     r=$(bus RevertMonitors s "$t") || bad "RevertMonitors: $r"
     wait_for 5 fd_scale_is "$name" "$s0" || bad "Revert: expected scale $s0 on $name; observed $(fd_scale "$name")"
     [ -z "$(fd_pending)" ] || bad "a change is still waiting after Revert"
-    expect_eq "what is stored after Revert" null "$(fd_stored_scale "$name")"
+    expect_eq "what is stored after Revert" "$st0" "$(fd_stored_scale "$name")"
     r=$(bus ConfirmMonitors ss "$t" settings) && bad "a token that was reverted still confirms"
     h0=$(newest_id)
     r=$(fd_keep "$layout") || bad "Keep: $r"
@@ -137,15 +140,15 @@ sf2() {
     [[ $r == *"displays change through ApplyMonitors"* ]] || bad "expected 'displays change through ApplyMonitors'; observed $r"
     r=$(bus Undo sb "$(newest_id)" false) || bad "Undo of the layout: $r"
     wait_for 5 fd_scale_is "$name" "$s0" || bad "Undo: expected scale $s0 on $name; observed $(fd_scale "$name")"
-    expect_eq "the stored scale after Undo" null "$(fd_stored_scale "$name")"
+    expect_eq "the stored scale after Undo" "$st0" "$(fd_stored_scale "$name")"
     fd_reset
 }
 
 check SF3 "A change nobody keeps goes back by itself after 15 s" sf3 hypr slow
 sf3() {
-    local name s0 t s end
+    local name s0 st0 t s end
     name=$(fd_real); [ -n "$name" ] || { na "no real output to arrange"; return; }
-    s0=$(fd_scale "$name")
+    s0=$(fd_scale "$name"); st0=$(fd_stored_scale "$name")
     t=$(bus ApplyMonitors s "$(fd_out "$name" 2)") || { bad "ApplyMonitors: $t"; return; }
     s=$(date +%s)
     wait_for 5 fd_scale_is "$name" 2 || bad "expected scale 2 live; observed $(fd_scale "$name")"
@@ -155,7 +158,7 @@ sf3() {
     end=$(($(date +%s) - s)); note "back after about $end s"
     [ "$end" -ge 13 ] && [ "$end" -le 19 ] || bad "expected about 15 s; observed $end s"
     [ -z "$(fd_pending)" ] || bad "a change is still waiting after the timer"
-    expect_eq "what is stored after the timer" null "$(fd_stored_scale "$name")"
+    expect_eq "what is stored after the timer" "$st0" "$(fd_stored_scale "$name")"
     r=$(bus ConfirmMonitors ss "$t" settings) && bad "a token that timed out still confirms"
     return 0
 }
@@ -244,7 +247,7 @@ sf6() {
     expect_eq "generated.lua after a headless output came" "$g0" "$(sha256sum "$CFG/hypr/uq/generated.lua")"
     r=$(bus RememberMonitors ss "uqlive solo" settings) || bad "RememberMonitors: $r"
     expect_eq "screens in an arrangement made with a headless output present" 1 "$(section monitors | jq '[.profiles[] | select(.name == "uqlive solo")][0].outputs | length')"
-    mon_merge '.profiles |= map(select(.name | startswith("uqlive") | not))' >/dev/null
+    mon_merge '.profiles = ((.profiles // []) | map(select(.name | startswith("uqlive") | not)))' >/dev/null
     h0=$(newest_id)
     hc output remove "$new" >/dev/null 2>&1
     wait_for 5 sf6_gone "$new" || bad "$new is still there after hyprctl output remove"

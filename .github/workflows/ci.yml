@@ -54,6 +54,8 @@ jobs:
           su tester -c "set -e
             cd '$GITHUB_WORKSPACE'
             export XDG_RUNTIME_DIR=\$(mktemp -d)
+            # tests/shell/settings_pages_load.sh opens every Settings page with this build.
+            cargo build --locked -p uq-settings
             scripts/lint-shell.sh
             scripts/lint-settings.sh
             for t in tests/shell/*.sh; do echo \"== \$t\"; bash \"\$t\"; done

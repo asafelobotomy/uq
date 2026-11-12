@@ -30,6 +30,17 @@ All notable changes to uQ are listed here. The format follows
   for an account whose home is `/`, and left a failed `xdg-desktop-portal-gtk` at every boot.
 - **Settings' drop-down lists no longer log a TypeError each** (`positionToRectangle … is not a
   function`) under the KDE desktop style.
+- **The Users page opens again.** It used `Kirigami.Avatar`, which Kirigami 6.31 no longer has, so
+  the page didn't load, and every page opened after it was drawn on top of the page before. A
+  user's picture is now uQ's own, with their initial when there is none.
+- **A Settings page that can't load says so** in its place, with the error, instead of leaving
+  the previous page drawn underneath every page after it. `uq-settings --screenshots` exits 1
+  over one, and a new test opens every page in CI.
+- **Opening Settings on a page no longer toggles its window maximized.** Each `uqctl settings
+  <page>` (and each link from the shell into Settings) maximized the open window or restored it,
+  and Settings remembered whichever state it ended in.
+- **Drop-down lists in Settings have a maximum width**, so a long choice no longer squeezes the
+  row's label (on Input, "Switch layouts with" wrapped two letters a line).
 
 ## [0.3.0-rc.2] - 2026-11-12
 
