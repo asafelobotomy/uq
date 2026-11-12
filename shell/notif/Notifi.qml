@@ -161,7 +161,7 @@ QtObject {
         if (found)
             connect();
         else
-            scheduleRetry();
+            scheduleRetry(true);
     }
 
     function connect() {
@@ -200,9 +200,12 @@ QtObject {
             requestTimer.stop();
     }
 
-    function scheduleRetry() {
-        retryTimer.interval = Backoff.next(attempt);
-        attempt++;
+    // `socketMissing`: the probe found no socket file, so look again soon (N.ABSENT_POLL_MS)
+    // without growing the backoff, which is for failed connects.
+    function scheduleRetry(socketMissing) {
+        retryTimer.interval = N.retryDelay(attempt, socketMissing === true, Backoff.next(attempt));
+        if (socketMissing !== true)
+            attempt++;
         retryTimer.restart();
     }
 
