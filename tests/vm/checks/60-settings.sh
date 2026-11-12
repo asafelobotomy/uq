@@ -10,6 +10,8 @@
 #   SC1p  Pick a window: the overlay, a click on a window, Esc, a click on nothing, the 20 s timeout
 #   SD1l  Startup apps at login: started in app.slice, a failing one, a delay, one turned off; a uqd
 #         restart starts nothing twice (logs uqtest out and in)
+#   SK2k  A rebound shortcut from a real key press: Super + K opens Spotlight, Super + Space doesn't,
+#         and after a reset Super + Space does again
 #
 #   tests/vm/run.sh --only '^S[ABCDGKFE]'
 
@@ -209,5 +211,27 @@ c_SD1l() {
         *) bad "expected the killed app to read finished; observed $(g_row uqlive-login.desktop)" ;;
     esac
     vgsh 'pkill -fx "sleep 601"; rm -f ~/.config/autostart/uqlive-*.desktop'
+    g_restore "$p"
+}
+
+check SK2k "Rebind Open Spotlight to Super + K: the new keys open it, the old ones don't, a reset brings them back" c_SK2k
+c_SK2k() {
+    local p r
+    p=$(g_point "VM SK2k")
+    r=$(g_merge keybinds '.overrides = ((.overrides // []) + [{id: "uq.spotlight", combo: "SUPER + K"}])')
+    [ -z "$r" ] || { bad "rebinding Open Spotlight: $r"; g_restore "$p"; return; }
+    sleep 1.5
+    ipc close spotlight >/dev/null; sleep 0.5
+    qmp key meta_l-k
+    if wait_for 3 has_layer uq-spotlight; then note "Super + K opened Spotlight"; else bad "Super + K did not open Spotlight after the rebind"; fi
+    ipc close spotlight >/dev/null; sleep 0.7
+    qmp key meta_l-spc; sleep 1.5
+    has_layer uq-spotlight && bad "Super + Space still opened Spotlight after the rebind"
+    ipc close spotlight >/dev/null; sleep 0.5
+    vgh uqctl keys reset uq.spotlight >/dev/null || bad "uqctl keys reset uq.spotlight failed"
+    sleep 1.5
+    qmp key meta_l-spc
+    if wait_for 3 has_layer uq-spotlight; then note "after the reset Super + Space opened Spotlight"; else bad "Super + Space did not open Spotlight after the reset"; fi
+    ipc close spotlight >/dev/null
     g_restore "$p"
 }
