@@ -27,8 +27,17 @@ fn start(path: PathBuf, timing: Timing) -> mpsc::Receiver<Burst> {
 }
 
 #[test]
-fn parses_only_monitor_events() {
+fn parses_only_monitor_and_reload_events() {
     assert_eq!(parse_event("monitoraddedv2>>1,DP-1,Dell"), None);
+    assert_eq!(
+        parse_event("configreloaded>>"),
+        Some(OutputEvent::ConfigReloaded)
+    );
+    assert_eq!(
+        parse_event("configreloaded>>\n"),
+        Some(OutputEvent::ConfigReloaded)
+    );
+    assert_eq!(parse_event("configreloaded>>x"), None);
     assert_eq!(parse_event("workspace>>2"), None);
     assert_eq!(parse_event(r#"monitoradded>>DP-1"x"#), None);
     assert_eq!(parse_event("monitoradded>>"), None);
@@ -63,7 +72,14 @@ async fn burst_is_debounced() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(burst, Burst { added: true });
+    assert_eq!(
+        burst,
+        Burst {
+            outputs: true,
+            added: true,
+            config: false
+        }
+    );
     // It fired a quiet debounce after the last event, not after the first.
     assert!(started.elapsed() >= sent_all + Duration::from_millis(50));
     assert!(
@@ -86,7 +102,14 @@ async fn a_removal_alone_is_not_an_add() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(b, Burst { added: false });
+    assert_eq!(
+        b,
+        Burst {
+            outputs: true,
+            added: false,
+            config: false
+        }
+    );
 }
 
 #[tokio::test]
@@ -105,7 +128,14 @@ async fn oversized_and_split_lines_are_handled() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(b, Burst { added: false });
+    assert_eq!(
+        b,
+        Burst {
+            outputs: true,
+            added: false,
+            config: false
+        }
+    );
 }
 
 #[tokio::test]
@@ -137,7 +167,14 @@ async fn reconnects_after_hyprland_restarts() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(b, Burst { added: false });
+    assert_eq!(
+        b,
+        Burst {
+            outputs: true,
+            added: false,
+            config: false
+        }
+    );
 }
 
 #[tokio::test(start_paused = true)]
@@ -159,4 +196,42 @@ async fn missing_socket_is_quiet() {
     tokio::time::sleep(Duration::from_secs(300)).await;
     assert!(attempts.load(Ordering::SeqCst) <= 4 + 12, "no busy loop");
     task.abort();
+}
+
+#[tokio::test]
+async fn a_config_reload_is_its_own_kind_of_burst() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = socket_in(dir.path());
+    let listener = UnixListener::bind(&path).unwrap();
+    let mut rx = start(path, fast());
+    let (mut s, _) = listener.accept().await.unwrap();
+    s.write_all(b"configreloaded>>\n").await.unwrap();
+    let b = tokio::time::timeout(Duration::from_secs(3), rx.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        b,
+        Burst {
+            outputs: false,
+            added: false,
+            config: true
+        }
+    );
+    // A reload with a screen change in the same burst carries both.
+    s.write_all(b"monitoradded>>DP-1\nconfigreloaded>>\n")
+        .await
+        .unwrap();
+    let b = tokio::time::timeout(Duration::from_secs(3), rx.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        b,
+        Burst {
+            outputs: true,
+            added: true,
+            config: true
+        }
+    );
 }

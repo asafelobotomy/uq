@@ -1,7 +1,8 @@
-//! Hyprland's event socket: which screens came and went, debounced into one nudge per burst.
+//! Hyprland's event socket: which screens came and went, and config reloads, debounced into one
+//! nudge per burst.
 //!
-//! Only `monitoradded>>NAME` and `monitorremoved>>NAME` are read; the `…v2` events come with each
-//! of them and are ignored. Everything on the socket is untrusted text.
+//! Only `monitoradded>>NAME`, `monitorremoved>>NAME` and `configreloaded>>` are read; the `…v2`
+//! events come with each of them and are ignored. Everything on the socket is untrusted text.
 
 use crate::dbus::SharedDesktop;
 use std::path::PathBuf;
@@ -11,20 +12,24 @@ use tokio::io::AsyncReadExt;
 use tokio::net::UnixStream;
 use tokio::sync::mpsc;
 
-/// A screen appeared or went away.
+/// A screen appeared or went away, or Hyprland reloaded its config.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OutputEvent {
     Added(String),
     Removed(String),
+    ConfigReloaded,
 }
 
 /// How long the socket must be quiet before a burst of events counts as one change.
 pub const DEBOUNCE: Duration = Duration::from_secs(1);
 
-/// One quiet second after a run of events: `added` is whether any of them was an add.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// One quiet second after a run of events: `outputs` is whether any screen came or went,
+/// `added` whether any of them was an add, `config` whether Hyprland reloaded its config.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Burst {
+    pub outputs: bool,
     pub added: bool,
+    pub config: bool,
 }
 
 /// The listener's clocks; tests shorten them.
@@ -48,14 +53,17 @@ impl Default for Timing {
 /// Longest line worth parsing; Hyprland cuts its own at 1024 bytes.
 const MAX_LINE: usize = 4096;
 
-/// `monitoradded>>NAME` and `monitorremoved>>NAME`; anything else, an odd name or a line over
-/// 4 KiB is `None`.
+/// `monitoradded>>NAME`, `monitorremoved>>NAME` and `configreloaded>>`; anything else, an odd
+/// name or a line over 4 KiB is `None`.
 pub fn parse_event(line: &str) -> Option<OutputEvent> {
     if line.len() > MAX_LINE {
         return None;
     }
     let line = line.trim_end_matches(['\n', '\r']);
     let name = |rest: &str| uq_core::settings::valid_output_name(rest).then(|| rest.to_string());
+    if line == "configreloaded>>" {
+        return Some(OutputEvent::ConfigReloaded);
+    }
     if let Some(rest) = line.strip_prefix("monitoradded>>") {
         return name(rest).map(OutputEvent::Added);
     }
@@ -129,8 +137,8 @@ async fn read_events(
 ) -> Result<(), ()> {
     let mut lines = Lines::default();
     let mut chunk = [0u8; 2048];
-    // The pending burst: when it fires, and whether any event in it was an add.
-    let mut burst: Option<(tokio::time::Instant, bool)> = None;
+    // The pending burst: when it fires, and what it holds.
+    let mut burst: Option<(tokio::time::Instant, Burst)> = None;
     loop {
         let fire = async {
             match burst {
@@ -145,32 +153,42 @@ async fn read_events(
                     Ok(n) => n,
                 };
                 let mut seen = false;
-                let mut added = burst.is_some_and(|(_, a)| a);
+                let mut b = burst.map(|(_, b)| b).unwrap_or_default();
                 lines.push(&chunk[..n], |l| {
                     if let Some(ev) = parse_event(l) {
                         seen = true;
-                        added |= matches!(ev, OutputEvent::Added(_));
+                        match ev {
+                            OutputEvent::Added(_) => (b.outputs, b.added) = (true, true),
+                            OutputEvent::Removed(_) => b.outputs = true,
+                            OutputEvent::ConfigReloaded => b.config = true,
+                        }
                     }
                 });
                 if seen {
-                    burst = Some((tokio::time::Instant::now() + debounce, added));
+                    burst = Some((tokio::time::Instant::now() + debounce, b));
                 }
             }
             () = fire => {
-                if let Some((_, added)) = burst.take() {
-                    tx.send(Burst { added }).await.map_err(|_| ())?;
+                if let Some((_, b)) = burst.take() {
+                    tx.send(b).await.map_err(|_| ())?;
                 }
             }
         }
     }
 }
 
-/// Follow Hyprland's screen events for the life of uqd: each burst takes the desktop lock once.
+/// Follow Hyprland's events for the life of uqd: each burst takes the desktop lock once.
 pub async fn run(shared: SharedDesktop, path: PathBuf) {
     let (tx, mut rx) = mpsc::channel(8);
     tokio::spawn(listen(path, tx));
     while let Some(burst) = rx.recv().await {
-        shared.lock().await.outputs_changed(burst.added).await;
+        let mut d = shared.lock().await;
+        if burst.config {
+            d.config_reloaded().await;
+        }
+        if burst.outputs {
+            d.outputs_changed(burst.added).await;
+        }
     }
 }
 

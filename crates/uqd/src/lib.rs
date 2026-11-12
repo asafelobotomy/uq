@@ -2,6 +2,7 @@
 pub mod autostart;
 pub mod capture;
 pub mod compositor;
+mod config_recover;
 pub mod dbus;
 mod files;
 mod hotplug;
