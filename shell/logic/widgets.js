@@ -41,12 +41,55 @@ function widgets(data) {
             ? Math.max(0, Math.min(100, Math.round(w.order))) : 50;
         seen[id] = true;
         out.push({ id: id, name: name, slot: w.slot, order: order, qmlUrl: url,
-                   visible: w.visible === true });
+                   rev: _str(w.rev, 64) || "", visible: w.visible === true });
     }
     out.sort(function (a, b) {
         return a.order !== b.order ? a.order - b.order : (a.id < b.id ? -1 : (a.id > b.id ? 1 : 0));
     });
     return out;
+}
+
+// Qt keeps every QML file it compiled for the life of the shell, keyed by URL, so a widget whose
+// files a package update changed would load its old code again. Each change of a widget's `rev`
+// (the bridge's digest of its files) moves it to a new spelling of the same path, one more "./"
+// before the file name, which Qt compiles afresh, the files beside it included.
+
+// `prev` and the result: {id: {rev, gen}}. A widget seen for the first time starts at 0; each
+// later change of its rev counts up, so no spelling is used twice for different contents.
+function nextRevs(prev, list) {
+    var out = {};
+    for (var i = 0; i < list.length; i++) {
+        var w = list[i], p = prev ? prev[w.id] : undefined;
+        out[w.id] = !p ? { rev: w.rev, gen: 0 } : { rev: w.rev, gen: p.rev === w.rev ? p.gen : p.gen + 1 };
+    }
+    // A widget that went away keeps its count, so coming back can't reuse an old spelling.
+    for (var id in prev)
+        if (!out[id])
+            out[id] = prev[id];
+    return out;
+}
+
+// `url` with `gen` "./" segments before its file name.
+function respell(url, gen) {
+    var cut = url.lastIndexOf("/") + 1;
+    var dots = "";
+    for (var i = 0; i < gen; i++)
+        dots += "./";
+    return url.slice(0, cut) + dots + url.slice(cut);
+}
+
+// `list` with each widget's URL spelled for its generation in `revs`.
+function withRevs(list, revs) {
+    return list.map(function (w) {
+        var r = revs[w.id];
+        if (!r || r.gen === 0)
+            return w;
+        var c = {};
+        for (var k in w)
+            c[k] = w[k];
+        c.qmlUrl = respell(w.qmlUrl, r.gen);
+        return c;
+    });
 }
 
 // The visible widgets of one slot ("bar" or "quick"), in order.
