@@ -97,6 +97,8 @@ impl BusConn {
 struct Known {
     manifest: WidgetManifest,
     qml_url: String,
+    /// A digest of the folder's files, so the shell can tell its code changed (see `content_rev`).
+    rev: String,
     bins_ok: bool,
 }
 
@@ -132,6 +134,41 @@ pub fn file_url(path: &Path) -> String {
     out
 }
 
+/// A digest of the files in a widget's folder (names, sizes, modification times; one level of
+/// sub-folders). The shell keeps compiled QML for the life of the session, keyed by URL; when
+/// this changes it loads the widget under a new spelling of its URL, so a package update's new
+/// code runs without restarting the shell.
+pub fn content_rev(dir: &Path) -> String {
+    use std::hash::{DefaultHasher, Hash, Hasher};
+    fn files(dir: &Path, depth: u8, out: &mut Vec<(String, u64, u128)>) {
+        let Ok(rd) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for e in rd.flatten() {
+            let Ok(md) = e.metadata() else { continue };
+            let path = e.path();
+            if md.is_dir() {
+                if depth > 0 {
+                    files(&path, depth - 1, out);
+                }
+                continue;
+            }
+            let mtime = md
+                .modified()
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map_or(0, |d| d.as_nanos());
+            out.push((path.to_string_lossy().into_owned(), md.len(), mtime));
+        }
+    }
+    let mut all = Vec::new();
+    files(dir, 1, &mut all);
+    all.sort();
+    let mut h = DefaultHasher::new();
+    all.hash(&mut h);
+    format!("{:016x}", h.finish())
+}
+
 /// Whether a widget shows: its programs exist and, with a `requires.bus_name`, that name has an
 /// owner.
 fn is_visible(k: &Known, owners: &HashMap<(Bus, String), Option<String>>) -> bool {
@@ -143,7 +180,7 @@ fn is_visible(k: &Known, owners: &HashMap<(Bus, String), Option<String>>) -> boo
         })
 }
 
-/// The `Widgets` event data: `[{id, name, slot, order, qml_url, visible}]` by order, then id.
+/// The `Widgets` event data: `[{id, name, slot, order, qml_url, rev, visible}]` by order, then id.
 fn list_json(
     widgets: &BTreeMap<String, Known>,
     owners: &HashMap<(Bus, String), Option<String>>,
@@ -159,6 +196,7 @@ fn list_json(
                     "slot": match k.manifest.slot { Slot::Bar => "bar", Slot::Quick => "quick" },
                     "order": k.manifest.order,
                     "qml_url": k.qml_url,
+                    "rev": k.rev,
                     "visible": is_visible(k, owners),
                 })
             })
@@ -302,11 +340,13 @@ impl Widgets {
                 Ok(l) => {
                     let bins_ok = l.manifest.requires.missing_bins(&self.bin_dir).is_empty();
                     let qml_url = file_url(&l.qml_path);
+                    let rev = content_rev(&l.dir);
                     widgets.insert(
                         l.manifest.id.clone(),
                         Known {
                             manifest: l.manifest,
                             qml_url,
+                            rev,
                             bins_ok,
                         },
                     );
@@ -853,8 +893,25 @@ mod tests {
         Known {
             manifest: uq_core::integration::manifest::parse_widget(&toml).unwrap(),
             qml_url: format!("file:///w/{id}/W.qml"),
+            rev: format!("rev-{id}"),
             bins_ok,
         }
+    }
+
+    #[test]
+    fn rev_follows_file_changes() {
+        let dir = std::env::temp_dir().join(format!("uq-rev-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("sub")).unwrap();
+        std::fs::write(dir.join("W.qml"), "Item {}").unwrap();
+        std::fs::write(dir.join("sub/x.js"), "1").unwrap();
+        let first = content_rev(&dir);
+        assert_eq!(content_rev(&dir), first, "same files, same rev");
+        std::fs::write(dir.join("sub/x.js"), "22").unwrap();
+        let second = content_rev(&dir);
+        assert_ne!(second, first, "a changed file beside the QML changes it");
+        std::fs::write(dir.join("Details.qml"), "Item {}").unwrap();
+        assert_ne!(content_rev(&dir), second, "a new file changes it");
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
@@ -879,7 +936,7 @@ mod tests {
         assert_eq!(
             l[2],
             json!({"id":"b","name":"N b","slot":"bar","order":10,
-                   "qml_url":"file:///w/b/W.qml","visible":true})
+                   "qml_url":"file:///w/b/W.qml","rev":"rev-b","visible":true})
         );
         owners.insert((Bus::Session, "org.x.A".to_string()), Some(":1.5".into()));
         assert_eq!(list_json(&w, &owners)[1]["visible"], true);

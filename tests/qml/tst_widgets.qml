@@ -69,6 +69,7 @@ TestCase {
         fake.widgets = [];
         fake.appActions = [];
         fake.calls = [];
+        Widgets.revs = ({});
         Widgets.bridge = fake;
         Widgets.failures = W.failures();
         Widgets.log = [];
@@ -103,6 +104,26 @@ TestCase {
         compare(W.inSlot(l, "quick").length, 0, "hidden widgets don't show");
         compare(W.widgets(null), []);
         compare(W.widgets({}), []);
+    }
+
+    // Qt keeps compiled QML by URL: a widget whose files changed must load under a new spelling.
+    function test_changed_files_get_a_new_url_spelling() {
+        compare(W.respell("file:///w/a/W.qml", 0), "file:///w/a/W.qml");
+        compare(W.respell("file:///w/a/W.qml", 2), "file:///w/a/././W.qml");
+        var r = W.nextRevs({}, [{ id: "a", rev: "1" }]);
+        compare(r.a, { rev: "1", gen: 0 });
+        r = W.nextRevs(r, [{ id: "a", rev: "1" }]);
+        compare(r.a.gen, 0, "same files, same URL");
+        r = W.nextRevs(r, [{ id: "a", rev: "2" }]);
+        compare(r.a.gen, 1);
+        r = W.nextRevs(r, []);
+        compare(r.a.gen, 1, "a widget that goes keeps its count");
+        r = W.nextRevs(r, [{ id: "a", rev: "1" }]);
+        compare(r.a.gen, 2, "going back to old files still gets a new spelling");
+        var l = W.withRevs([{ id: "a", qmlUrl: "file:///w/a/W.qml" }, { id: "b", qmlUrl: "file:///w/b/W.qml" }],
+                           { a: { rev: "x", gen: 1 } });
+        compare(l[0].qmlUrl, "file:///w/a/./W.qml");
+        compare(l[1].qmlUrl, "file:///w/b/W.qml");
     }
 
     function test_bar_layout_overflows_after_four() {
@@ -238,6 +259,22 @@ TestCase {
         s.ctx.dbus.get(function () {});
         compare(fake.calls[calls], { call: "WidgetGet", args: ["good"] });
         tryVerify(function () { return s.ctx.dbus.props.Count === 1; });
+    }
+
+    function test_widget_reloads_when_its_files_change() {
+        var e = entry("good", "good");
+        e.rev = "a";
+        fake.widgets = [e];
+        var s = createTemporaryObject(slotComp, tc, { widget: Widgets.list[0], bridge: fake });
+        tryVerify(function () { return s.loaded; });
+        var first = s.loadedUrl;
+        var e2 = entry("good", "good");
+        e2.rev = "b";
+        fake.widgets = [e2];
+        verify(Widgets.list[0].qmlUrl !== first, "a new spelling of the same file");
+        s.widget = Widgets.list[0];
+        tryVerify(function () { return s.loaded && s.loadedUrl === Widgets.list[0].qmlUrl; });
+        compare(Widgets.log, []);
     }
 
     function test_widget_that_fails_to_load_is_unloaded_and_logged_once() {

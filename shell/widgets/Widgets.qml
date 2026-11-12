@@ -12,7 +12,17 @@ QtObject {
 
     // The bridge link; tests swap in a fake with the same `event` signal and `call`.
     property var bridge: Bridge
-    readonly property var list: W.widgets(bridge ? bridge.widgets : [])
+    // The bridge's list as sent, and as slots load it: a widget whose files changed gets a new
+    // spelling of its URL, so Qt compiles it again (see W.nextRevs).
+    readonly property var sent: W.widgets(bridge ? bridge.widgets : [])
+    property var revs: ({})
+    property var list: []
+    function respell() {
+        revs = W.nextRevs(revs, sent);
+        list = W.withRevs(sent, revs);
+    }
+    onSentChanged: respell()
+    Component.onCompleted: respell()
     readonly property var bar: W.barLayout(list)
     readonly property var quick: W.inSlot(list, "quick")
     readonly property var actions: W.appActions(bridge ? bridge.appActions : [])

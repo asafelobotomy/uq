@@ -43,6 +43,9 @@ All notable changes to uQ are listed here. The format follows
 
 ### Fixed
 
+- **An app's bar or quick-settings widget runs its new code after a package update.** The shell
+  kept the widget's old QML until it restarted. The bridge now sends a digest of each widget's
+  files, and when it changes the shell loads the widget afresh.
 - **Settings looks like the theme.** Outside Plasma, Kirigami took its colours from KDE's
   defaults, so Settings was Breeze Light with dark controls on top, whatever the theme. uqd now
   renders the theme as a KDE colour scheme (`~/.local/state/uq/theme/kde/uq.colors`), and Settings
