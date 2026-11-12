@@ -33,14 +33,11 @@ Nothing here can be undone once the disk is gone, so check each item.
    connect (size, resolution, refresh, VRR), a fingerprint reader, a battery, a touchpad, Bluetooth
    devices. The laptop alone is one 1920x1080 panel with no VRR; the multi-monitor, 4K and VRR
    checks need an external monitor.
-5. **[Claude]** Get the uQ that `main` holds onto the AUR. `v0.3.0-rc.1` (on the AUR since
-   2026-11-12) has the Settings app, `uq-dev`, the login screen and Welcome, but not Settings
-   slices E (pages from other apps) and F (display arrangements, gestures), nor the fix that makes
-   shortcut capture work on Hyprland. Cut `v0.3.0-rc.2` following [releasing.md](releasing.md),
-   and release scdr, crumBS, noti-fi, XZram and scale_tail too: their Settings pages are merged
-   but not in any release yet. Each tag and AUR push needs your go-ahead, and the push needs
-   `pass-cli login` on whatever machine does it. If you'd rather not release yet, the install still
-   works: step 3.4 builds uQ from the checkout instead.
+5. **[Claude]** Check the AUR has the current releases. Done on 2026-11-12: uq `0.3.0rc2`
+   (`v0.3.0-rc.2`, with Settings slices E and F and the Hyprland shortcut-capture fix), scdr
+   `0.3.0` (and `scx-devbox`), `crum-bs-bin` `0.5.0`, noti-fi `0.19.0`, `xzram` `0.5.0` and
+   `scale_tail` `0.6.0`; bindle's latest release is `v0.1.8`. If `main` has moved on since and you
+   want that on the desktop, step 3.4 builds uQ from the checkout instead.
 6. **[You]** Write the Arch ISO to a USB stick.
 
 ## 1. Install day
@@ -63,7 +60,8 @@ Nothing here can be undone once the disk is gone, so check each item.
    - **uQ developer setup** (clones the twelve repos into `~/Projects`, installs the build tools);
    - **appOFholding** and **scale_tail** (with Tailscale) if you use them;
    - at most one scheduler module: `scdr-sched-ext` or `scx-schedulers`, not both (they conflict).
-     (`scdr-devbox` is only on bindle's unmerged `feat/scdr-devbox` branch.)
+     (`scdr-devbox` is merged in bindle but came after `v0.1.8`, so the installer doesn't offer
+     it yet; install `scx-devbox` from the AUR later if you want it.)
 5. **[You]** Review bindle's plan screen and apply. Note the snapshot id it prints; `bindle undo`
    reverts the whole apply.
 6. **[You]** Restart. bindle has switched the login screen from SDDM to uQ's own (greetd), so
@@ -101,7 +99,7 @@ gives a TTY. Bindle's own logs are in `/var/log/bindle`.
    names notifd, and `notify-send hello` shows a popup. **[You]** confirm you saw it.
 3. **[Claude]** scdr runs: `systemctl status scdrd`, `systemctl --user status scdr-session`,
    `scdrctl status`.
-4. **[Claude]** If step 0.5 didn't happen (the AUR still has 0.3.0rc1): run
+4. **[Claude]** Only if `main` has something newer than the AUR's `0.3.0rc2` that you want now: run
    `~/Projects/uq/scripts/uq-dev promote uq`. That builds `main` with the release PKGBUILD and
    installs it with pacman, so it needs your sudo password: **[You]** type it when asked. Then
    **[You]** log out and in.
@@ -265,11 +263,10 @@ All the coding the specs set out is merged: Settings slices A–G, Phase 3 slice
 keybinds, Phase 4 (integrations and the companion pages in each app) and Phase 5 (login screen,
 Welcome, bindle hand-off). What is left:
 
-1. Release what `main` holds (step 0.5): `v0.3.0-rc.2` and the companion apps.
-2. The live checks in section 4, on this machine, and the fixes they turn up.
-3. The game-workspace extras (master layout, no gaps or animations), which Phase 4 left out.
-4. The parked follow-ups in each slice's review notes.
-5. Hardening, more release candidates and the daily-driver period, then `v1.0.0`.
+1. The live checks in section 4, on this machine, and the fixes they turn up.
+2. The game-workspace extras (master layout, no gaps or animations), which Phase 4 left out.
+3. The parked follow-ups in each slice's review notes.
+4. Hardening, more release candidates and the daily-driver period, then `v1.0.0`.
 
 Every slice goes through the same loop, and only the last two steps need the desktop:
 

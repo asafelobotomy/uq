@@ -6,8 +6,8 @@ apps that integrate with it. See the
 [design spec](docs/superpowers/specs/2026-11-08-uq-desktop-design.md) and the
 [road to 1.0](docs/superpowers/plans/2026-11-09-uq-road-to-1.0.md).
 
-uQ is a pre-release: v0.3.0-rc.1 holds all five phases of the design except Settings slices E and
-F, which are on `main` (see [CHANGELOG.md](CHANGELOG.md)). What it gives you:
+uQ is a pre-release: v0.3.0-rc.2 holds all five phases of the design, Settings slices A to G
+included (see [CHANGELOG.md](CHANGELOG.md)). What it gives you:
 
 - **`uqd`**: a session daemon that owns the theme, the dark/light schedule, per-workspace
   layouts and every setting, writes `~/.config/hypr/uq/generated.lua` and the rendered theme
