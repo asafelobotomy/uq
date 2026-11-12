@@ -286,6 +286,11 @@ Kirigami.ApplicationWindow {
                 activeFocusOnTab: true
                 Accessible.role: Accessible.Pane
                 Accessible.name: "Page"
+                // Pages switch at once. With the style's cross-fade, clicking through the list
+                // faster than the fade left several pages drawn over each other on a real
+                // desktop (the first install on an Intel laptop).
+                replaceEnter: Transition {}
+                replaceExit: Transition {}
                 Component.onCompleted: {
                     // A page named on the command line or by ShowPage has set
                     // `App.pageRequested` by now, and wins over the remembered one.

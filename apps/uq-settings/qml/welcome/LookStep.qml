@@ -51,21 +51,22 @@ QQC2.ScrollView {
             Layout.topMargin: Kirigami.Units.largeSpacing
             Repeater {
                 model: step.snap.themes || []
+                // Each theme is {id, name, user} (see appearance.rs `theme_list`).
                 QQC2.Button {
-                    required property string modelData
-                    readonly property bool current: modelData === step.snap.theme
+                    required property var modelData
+                    readonly property bool current: modelData.id === step.snap.theme
                     checkable: true
                     checked: current
                     highlighted: current
-                    Accessible.name: modelData
+                    Accessible.name: modelData.name || modelData.id
                     contentItem: UqLabel {
-                        text: modelData
+                        text: modelData.name || modelData.id
                         horizontalAlignment: Text.AlignHCenter
                         font.bold: current
                         padding: Kirigami.Units.smallSpacing
                     }
                     onClicked: {
-                        am.setTheme(modelData, step.snap.variant || "dark");
+                        am.setTheme(modelData.id, step.snap.variant || "dark");
                         checked = Qt.binding(() => current);
                     }
                 }
