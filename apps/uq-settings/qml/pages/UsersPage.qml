@@ -340,11 +340,9 @@ QQC2.ScrollView {
                         spacing: Kirigami.Units.largeSpacing
                         Layout.fillWidth: true
 
-                        Kirigami.Avatar {
-                            source: card.u.icon !== "" ? "file://" + card.u.icon : ""
+                        UqAvatar {
+                            path: card.u.icon
                             name: page.display(card.u)
-                            implicitWidth: Kirigami.Units.iconSizes.large
-                            implicitHeight: Kirigami.Units.iconSizes.large
                             Accessible.name: "Picture of " + page.display(card.u)
                         }
                         ColumnLayout {

@@ -3,6 +3,7 @@
 // stock ComboBox to declare both contentItem and delegate, so use this instead of QQC2.ComboBox.
 import QtQuick
 import QtQuick.Controls as QQC2
+import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
 QQC2.ComboBox {
@@ -12,6 +13,10 @@ QQC2.ComboBox {
     // UqLabel below shows the value, taken from currentText.
     displayText: ""
     // displayText is blanked, so the accessible value comes from here; callers set Accessible.name.
+    // Wide enough for nearly every choice; a longer one is cut short with "…". Without a cap, a
+    // box sized to its widest choice (WidestText) starved its row's label: on Input, "Switch
+    // layouts with" wrapped to two letters a line. A caller can still set its own.
+    Layout.maximumWidth: Kirigami.Units.gridUnit * 20
     Accessible.role: Accessible.ComboBox
     Accessible.description: currentText
     contentItem: UqLabel {

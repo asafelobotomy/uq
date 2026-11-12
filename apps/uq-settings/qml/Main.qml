@@ -32,6 +32,8 @@ Kirigami.ApplicationWindow {
     property bool stateRestored: false
     /// The window opened on Welcome (`--welcome`, the first login): Finish closes it.
     property bool welcomeAtStart: false
+    /// Built-in pages that failed to load this run (see showCurrent).
+    property var failedPages: []
 
     /// Welcome's Finish: close the window it opened, or go back to the pages.
     function finishWelcome() {
@@ -77,8 +79,38 @@ Kirigami.ApplicationWindow {
         // A plugin page is loaded by PluginPage, which turns a QML error into a card.
         if (page.plugin)
             stack.replace(null, Qt.resolvedUrl("PluginPage.qml"), { source: page.qml, pageId: page.id, host: PluginHost, theme: JSON.parse(App.themeJson || "{}"), highlight: Qt.binding(() => App.highlight) });
-        else
-            stack.replace(null, Qt.resolvedUrl(page.qml));
+        else {
+            // Compiled first: a page that doesn't (a QML error, or a type the installed Kirigami
+            // lacks) made StackView.replace fail half-way, leaving the previous page drawn under
+            // every page after it.
+            const comp = Qt.createComponent(Qt.resolvedUrl(page.qml));
+            if (comp.status === Component.Ready)
+                stack.replace(null, comp);
+            else
+                root.pageFailed(page, comp.errorString());
+        }
+    }
+
+    /// A built-in page that didn't load: say so in its place. `--screenshots` exits non-zero.
+    function pageFailed(page, error) {
+        console.warn("uq-settings: the " + page.id + " page didn't load: " + error);
+        root.failedPages.push(page.id);
+        stack.replace(null, failedPage, { pageName: page.name || page.id, error: error });
+    }
+
+    Component {
+        id: failedPage
+        Item {
+            property string pageName
+            property string error
+            ErrorCard {
+                objectName: "pageFailed"
+                anchors.centerIn: parent
+                width: Math.min(parent.width - Kirigami.Units.largeSpacing * 4, Kirigami.Units.gridUnit * 30)
+                title: "The " + pageName + " page couldn't be shown"
+                detail: "The other pages work. What went wrong: " + error.trim()
+            }
+        }
     }
 
     // Coming back to the window re-reads the page: user.lua or the live session may have changed
@@ -315,7 +347,11 @@ Kirigami.ApplicationWindow {
                 HistoryModel.refresh();
         }
         function onRaiseRequested() {
-            root.show();
+            // show() on a window that is already up re-applies its window state, which on
+            // Hyprland toggled maximized on every ShowPage (`uqctl settings <page>`, the shell's
+            // links into Settings): only show a window that is hidden.
+            if (!root.visible)
+                root.show();
             root.raise();
             root.requestActivate();
         }
@@ -335,7 +371,12 @@ Kirigami.ApplicationWindow {
             if (step > 0 && !App.grabWindow(App.screenshotDir + "/" + ids[step - 1] + ".png"))
                 console.warn("uq-settings: couldn't save " + ids[step - 1] + ".png");
             if (step === ids.length) {
-                Qt.quit();
+                if (root.failedPages.length > 0) {
+                    console.warn("uq-settings: pages that didn't load: " + root.failedPages.join(", "));
+                    Qt.exit(1);
+                } else {
+                    Qt.quit();
+                }
                 return;
             }
             App.showPage(ids[step], "");
