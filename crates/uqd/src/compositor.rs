@@ -224,6 +224,8 @@ pub mod fake {
         pub reload_error: Mutex<Option<String>>,
         /// What `get_option` answers per option path; a missing path is `Rejected`.
         pub options: Mutex<std::collections::HashMap<String, serde_json::Value>>,
+        /// What `config_errors` returns.
+        pub config_errors: Mutex<Vec<String>>,
     }
 
     impl FakeCompositor {
@@ -291,7 +293,8 @@ pub mod fake {
             self.record(format!("setcursor {theme} {size}"))
         }
         async fn config_errors(&self) -> Result<Vec<String>, CompositorError> {
-            self.record("configerrors".into()).map(|()| Vec::new())
+            self.record("configerrors".into())?;
+            Ok(self.config_errors.lock().unwrap().clone())
         }
         async fn monitors(&self) -> Result<String, CompositorError> {
             self.record("monitors".into())?;

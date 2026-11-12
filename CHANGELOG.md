@@ -36,6 +36,12 @@ All notable changes to uQ are listed here. The format follows
 
 ### Fixed
 
+- **Updating uq no longer leaves Hyprland in emergency mode.** Hyprland reloads its config when
+  a file it read changes, and a package update replaces `/usr/share/uq/hypr/base.lua` by
+  removing and rewriting it: a reload in between failed its `require` and left only Hyprland's
+  emergency binds ("a lua config resulted in no binds"). uqd now follows Hyprland's
+  `configreloaded` event, and when a reload failed only because a config file was missing that
+  is there again, it reloads once more (at most once every 10 s).
 - **`notify takeover --now` works on a uQ session that has been up a while.** uQ keeps the
   notification name with its built-in server until it has connected to noti-fi's socket, and it
   looked for that socket on the bridge backoff, every 30 s after the first half minute; noti-fi's
@@ -66,6 +72,10 @@ All notable changes to uQ are listed here. The format follows
 - **Opening Settings on a page no longer toggles its window maximized.** Each `uqctl settings
   <page>` (and each link from the shell into Settings) maximized the open window or restored it,
   and Settings remembered whichever state it ended in.
+- **Qt apps get the theme's icons.** With `uqctl setup --apps`, qt6ct loaded uQ's colours but
+  named no icon theme, so Qt apps (Dolphin, uQ Settings) found no themed icons. uqd now keeps
+  `icon_theme=` in that `qt6ct.conf` in step with the theme, as it does gsettings' for GTK apps,
+  and leaves a `qt6ct.conf` of your own alone. Apps pick it up when they next start.
 - **Drop-down lists in Settings have a maximum width**, so a long choice no longer squeezes the
   row's label (on Input, "Switch layouts with" wrapped two letters a line).
 
