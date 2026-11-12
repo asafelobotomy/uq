@@ -39,6 +39,10 @@ All notable changes to uQ are listed here. The format follows
 - **Opening Settings on a page no longer toggles its window maximized.** Each `uqctl settings
   <page>` (and each link from the shell into Settings) maximized the open window or restored it,
   and Settings remembered whichever state it ended in.
+- **Qt apps get the theme's icons.** With `uqctl setup --apps`, qt6ct loaded uQ's colours but
+  named no icon theme, so Qt apps (Dolphin, uQ Settings) found no themed icons. uqd now keeps
+  `icon_theme=` in that `qt6ct.conf` in step with the theme, as it does gsettings' for GTK apps,
+  and leaves a `qt6ct.conf` of your own alone. Apps pick it up when they next start.
 - **Drop-down lists in Settings have a maximum width**, so a long choice no longer squeezes the
   row's label (on Input, "Switch layouts with" wrapped two letters a line).
 

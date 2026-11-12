@@ -1235,6 +1235,11 @@ impl Desktop {
                     if let Err(e) = self.sys.apply(&theme) {
                         tracing::warn!("system settings: {e}");
                     }
+                    // Qt's icon theme, in a qt6ct.conf `uqctl setup --apps` wrote (and only then).
+                    if let Err(e) = uq_core::qt6ct::sync_icon_theme(&self.paths, &theme.icons.theme)
+                    {
+                        tracing::warn!("qt6ct icon theme: {e}");
+                    }
                     let cursor = self
                         .comp
                         .set_cursor(&theme.icons.cursor_theme, theme.icons.cursor_size)
@@ -1388,6 +1393,49 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(r.sys.shell_restarts.load(SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn qt6ct_icon_theme_follows_the_theme_while_hyprland_runs() {
+        let mut r = rig();
+        let p = r.desktop.paths().clone();
+        let conf = uq_core::qt6ct::conf_path(&p);
+        let ours = format!(
+            "[Appearance]\ncolor_scheme_path={}\nstyle=kvantum\n",
+            p.theme_dir.join("qt6ct/colors/uq.conf").display()
+        );
+        uq_core::atomic::atomic_write(&conf, &ours).unwrap();
+        r.desktop
+            .set_theme("gruvbox", Variant::Dark, Origin::Settings)
+            .await
+            .unwrap();
+        assert!(
+            fs::read_to_string(&conf)
+                .unwrap()
+                .contains("icon_theme=Papirus-Dark\n")
+        );
+        r.desktop
+            .set_theme("gruvbox", Variant::Light, Origin::Settings)
+            .await
+            .unwrap();
+        let body = fs::read_to_string(&conf).unwrap();
+        assert!(body.contains("icon_theme=Papirus-Light\n"), "{body}");
+        assert_eq!(body.matches("icon_theme=").count(), 1, "{body}");
+
+        // Without Hyprland (a uqd left running in another desktop) the file isn't touched.
+        let mut off = rig_with(false, |_| {});
+        let p = off.desktop.paths().clone();
+        let conf = uq_core::qt6ct::conf_path(&p);
+        let ours = format!(
+            "[Appearance]\ncolor_scheme_path={}\n",
+            p.theme_dir.join("qt6ct/colors/uq.conf").display()
+        );
+        uq_core::atomic::atomic_write(&conf, &ours).unwrap();
+        off.desktop
+            .set_theme("matcha", Variant::Dark, Origin::Settings)
+            .await
+            .unwrap();
+        assert_eq!(fs::read_to_string(&conf).unwrap(), ours);
     }
 
     #[tokio::test]
