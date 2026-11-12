@@ -7,6 +7,33 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Screenshots, the Plasma way.** Print freezes the screen and opens it in satty with the crop
+  tool: drag an area, mark it up (arrows, boxes, text, blur), then Enter copies and saves it to
+  `~/Pictures/Screenshots`. Shift+Print takes the whole screen and Super+Print the focused window,
+  both copied and saved at once. All three are on the Keyboard shortcuts page, and **Screenshot**
+  is in Spotlight and the app menu. (Spectacle itself only runs on KDE's own compositor.)
+- **One button per open window in the bar.** The Work island shows each window on its screen
+  (icon and title); click one to focus it, or to bring a minimised one back. The focused one keeps
+  the window buttons and menu. With more than five windows it folds to one icon with the count,
+  and opens again when clicked.
+
+### Changed
+
+- **Click to focus.** A window takes the keyboard only when you click it; moving the pointer over
+  it no longer does (scrolling still reaches the window under the pointer). Put
+  `hl.config({ input = { follow_mouse = 1 } })` in `user.lua` to have focus follow the mouse.
+- **The login password unlocks the keyring.** The login screen now uses its own PAM service,
+  `/etc/pam.d/uq-greetd` (greetd's, plus GNOME Keyring), so saved passwords are unlocked at login
+  instead of asking again. `gnome-keyring` is now a dependency. An `/etc/uq/greetd.toml` you
+  changed yourself (auto-login) keeps its `.pacnew`; add `[general] service = "uq-greetd"` to it.
+- **One Wi-Fi icon.** nm-applet's tray icon is left out, since uQ shows the network beside the
+  tray; nm-applet keeps running for VPN and enterprise Wi-Fi password prompts.
+- **noti-fi's icon replaces the bell** while noti-fi handles notifications, and leaves the tray:
+  left click does what it does in noti-fi, right click opens its menu, middle click toggles Do Not
+  Disturb. With uQ's own notifications the bell stays.
+
 ### Fixed
 
 - **`notify takeover --now` works on a uQ session that has been up a while.** uQ keeps the

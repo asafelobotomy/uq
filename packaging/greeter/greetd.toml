@@ -3,6 +3,11 @@
 # applies only while this file exists. `run0 uqctl greeter enable` makes greetd the display
 # manager. Settings → Users writes an [initial_session] table here for auto-login.
 
+[general]
+# The PAM service for the sessions people log in to: /etc/pam.d/uq-greetd, greetd's stack plus
+# the keyring, so the login password also unlocks saved passwords.
+service = "uq-greetd"
+
 [terminal]
 # The VT greetd runs the greeter on.
 vt = 1

@@ -13,6 +13,12 @@ fail=0
 bad() { echo "FAIL: $*"; fail=1; }
 has() { grep -qx -- "$2" "$1" || bad "${1#"$root"/} lacks: $2"; }
 
+has "$p/greeter/greetd.toml" '\[general\]'
+has "$p/greeter/greetd.toml" 'service = "uq-greetd"'
+has "$p/pam/uq-greetd" 'auth       include      system-local-login'
+has "$p/pam/uq-greetd" '-auth      optional     pam_gnome_keyring.so'
+has "$p/pam/uq-greetd" '-session   optional     pam_gnome_keyring.so auto_start'
+has "$p/uq/PKGBUILD" '  install -Dm644 packaging/pam/uq-greetd "$pkgdir/etc/pam.d/uq-greetd"'
 has "$p/greeter/greetd.toml" '\[terminal\]'
 has "$p/greeter/greetd.toml" 'vt = 1'
 has "$p/greeter/greetd.toml" '\[default_session\]'

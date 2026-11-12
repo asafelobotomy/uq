@@ -115,7 +115,9 @@ hl.config({
 hl.config({
     input = {
         kb_layout    = "us",
-        follow_mouse = 1,
+        -- Click to focus: a window takes the keyboard only when clicked (hover still scrolls the
+        -- window under the cursor). 1 is focus-follows-mouse; set it in user.lua to have that.
+        follow_mouse = 2,
         sensitivity  = 0,
         touchpad = {
             natural_scroll = false,
@@ -152,6 +154,11 @@ hl.bind(mainMod .. " + N",       hl.dsp.global("uq:notif-centre"))
 hl.bind(mainMod .. " + L",       hl.dsp.global("uq:lock"))
 -- SUPER+Escape: the power menu (restart and shut down count down 30 s before they run).
 hl.bind(mainMod .. " + Escape",  hl.dsp.global("uq:power-menu"))
+-- Screenshots (uq-screenshot): an area, marked up before it is copied and saved; the screen;
+-- the focused window. Files go to ~/Pictures/Screenshots.
+hl.bind("Print",                  hl.dsp.exec_cmd("uq-screenshot region"))
+hl.bind("SHIFT + Print",          hl.dsp.exec_cmd("uq-screenshot screen"))
+hl.bind(mainMod .. " + Print",    hl.dsp.exec_cmd("uq-screenshot window"))
 
 -- Per-workspace layout (persisted by uqd)
 hl.bind(mainMod .. " + ALT + D", hl.dsp.exec_cmd("uqctl layout set current dwindle"))

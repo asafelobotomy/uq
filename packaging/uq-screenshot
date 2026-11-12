@@ -1,0 +1,104 @@
+#!/bin/bash
+# /usr/bin/uq-screenshot: uQ's screenshot tool, bound to Print (spec: works like Plasma's
+# Spectacle, which needs KWin and won't run here).
+#
+#   uq-screenshot [region]   Freeze the screen under the pointer and open it in satty, full screen,
+#                            with the crop tool: drag the area, mark it up (arrows, boxes, text,
+#                            blur), then Enter copies it and saves it, Esc cancels. Without satty:
+#                            pick an area with slurp, then copy and save.
+#   uq-screenshot window     The focused window: copied and saved at once.
+#   uq-screenshot screen     The screen under the pointer: copied and saved at once.
+#
+# Files go to $(xdg-user-dir PICTURES)/Screenshots/Screenshot_YYYYMMDD_HHMMSS.png. A notification
+# says where (and offers to open the file). Needs grim and wl-copy; satty and slurp are optional.
+# UQ_SHOT_* overrides are for tests/shell/screenshot.sh only.
+set -u
+
+mode=${1:-region}
+grim=${UQ_SHOT_GRIM:-grim}
+satty=${UQ_SHOT_SATTY:-satty}
+slurp=${UQ_SHOT_SLURP:-slurp}
+copy=${UQ_SHOT_COPY:-wl-copy}
+notify=${UQ_SHOT_NOTIFY:-notify-send}
+hyprctl=${UQ_SHOT_HYPRCTL:-hyprctl}
+
+pictures=${UQ_SHOT_DIR:-}
+if [ -z "$pictures" ]; then
+    pictures=$(xdg-user-dir PICTURES 2>/dev/null)
+    [ -n "$pictures" ] && [ "$pictures" != "$HOME" ] || pictures=$HOME/Pictures
+    pictures=$pictures/Screenshots
+fi
+mkdir -p "$pictures" || exit 1
+file=$pictures/Screenshot_$(date +%Y%m%d_%H%M%S).png
+
+say() {
+    # The action opens the file; a notification server without actions just shows the text.
+    command -v "$notify" >/dev/null 2>&1 || return 0
+    (
+        a=$("$notify" -a "Screenshot" -i "$file" --action=open=Open "$@" 2>/dev/null)
+        [ "$a" = open ] && xdg-open "$file" >/dev/null 2>&1
+    ) &
+}
+fail() {
+    command -v "$notify" >/dev/null 2>&1 && "$notify" -a "Screenshot" -u critical "Screenshot failed" "$1"
+    printf 'uq-screenshot: %s\n' "$1" >&2
+    exit 1
+}
+have() { command -v "$1" >/dev/null 2>&1; }
+
+have "$grim" || fail "grim isn't installed."
+
+# The output under the pointer, as Hyprland names it.
+focused_output() {
+    "$hyprctl" monitors -j 2>/dev/null | jq -r '[.[] | select(.focused)][0].name // empty'
+}
+# "x,y wxh" of the focused window, for grim -g.
+window_geometry() {
+    "$hyprctl" activewindow -j 2>/dev/null |
+        jq -r 'select(.at and .size) | "\(.at[0]),\(.at[1]) \(.size[0])x\(.size[1])"'
+}
+
+# Copy and save an image already written to $file.
+finish() {
+    [ -s "$file" ] || exit 0
+    have "$copy" && "$copy" --type image/png <"$file"
+    say "Screenshot saved and copied" "${file/#$HOME/\~}"
+}
+
+case "$mode" in
+region)
+    out=$(focused_output)
+    if have "$satty"; then
+        tmp=$(mktemp "${XDG_RUNTIME_DIR:-/tmp}/uq-shot.XXXXXX.png") || fail "no room for the capture."
+        trap 'rm -f "$tmp"' EXIT
+        if [ -n "$out" ]; then "$grim" -o "$out" "$tmp"; else "$grim" "$tmp"; fi || fail "the screen couldn't be captured."
+        # Enter: copy and save, then close; Esc: close without saving.
+        "$satty" --filename "$tmp" --fullscreen --initial-tool crop \
+            --copy-command "$copy" --output-filename "$file" \
+            --actions-on-enter save-to-clipboard,save-to-file,exit \
+            --actions-on-escape exit --early-exit --disable-notifications
+        [ -s "$file" ] && say "Screenshot saved and copied" "${file/#$HOME/\~}"
+    else
+        have "$slurp" || fail "Install satty (or slurp) to take a screenshot of an area."
+        geo=$("$slurp") || exit 0
+        "$grim" -g "$geo" "$file" || fail "the area couldn't be captured."
+        finish
+    fi
+    ;;
+window)
+    geo=$(window_geometry)
+    [ -n "$geo" ] || fail "no window is focused."
+    "$grim" -g "$geo" "$file" || fail "the window couldn't be captured."
+    finish
+    ;;
+screen)
+    out=$(focused_output)
+    if [ -n "$out" ]; then "$grim" -o "$out" "$file"; else "$grim" "$file"; fi ||
+        fail "the screen couldn't be captured."
+    finish
+    ;;
+*)
+    printf 'usage: uq-screenshot [region|window|screen]\n' >&2
+    exit 2
+    ;;
+esac

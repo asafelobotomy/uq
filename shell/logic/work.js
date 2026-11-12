@@ -61,3 +61,46 @@ function buildDispatch(name, target, extra) {
     }
     return [name, args];
 }
+
+// Up to this many open windows show as their own button in the Work island; past it the island
+// folds to one icon button until it is clicked open.
+var MAX_TABS = 5;
+
+// The Work island's window buttons. windows: [{address, cls, title, workspace (name), minimised,
+// monitor}] as the bar reads them from Hyprland (untrusted titles, unchanged here); monitor: this
+// bar's monitor name ("" for every monitor); focused: the focused window's address; expanded:
+// the folded island was clicked open. Windows on other special workspaces (a scratchpad) are left
+// out; minimised ones stay, marked. Returns { tabs: [{address, cls, title, focused, minimised}],
+// folded: bool, count } with tabs in Hyprland's order.
+function taskView(windows, monitor, focused, expanded) {
+    var tabs = [];
+    var list = windows || [];
+    for (var i = 0; i < list.length; i++) {
+        var w = list[i];
+        if (!w)
+            continue;
+        var addr = normAddr(w.address);
+        if (addr === null)
+            continue;
+        if (monitor && w.monitor && w.monitor !== monitor)
+            continue;
+        var ws = typeof w.workspace === "string" ? w.workspace : "";
+        if (ws.indexOf("special:") === 0 && w.minimised !== true)
+            continue;
+        tabs.push({
+            address: addr,
+            cls: typeof w.cls === "string" ? w.cls : "",
+            title: typeof w.title === "string" ? w.title : "",
+            focused: addr === normAddr(focused),
+            minimised: w.minimised === true
+        });
+    }
+    return { tabs: tabs, folded: tabs.length > MAX_TABS && expanded !== true, count: tabs.length };
+}
+
+// Width each button's title may take: the island's share of the bar split between the buttons,
+// never less than a short word.
+function titleWidth(barWidth, count) {
+    var share = (barWidth > 0 ? barWidth : 1280) * 0.4;
+    return Math.max(48, Math.floor(share / Math.max(1, count)));
+}
