@@ -408,17 +408,21 @@ mod tests {
     #[test]
     fn scan_reads_only_appaction_files() {
         let d = tempfile::tempdir().unwrap();
-        std::fs::write(d.path().join("a.appaction"), GOOD).unwrap();
+        // The program lives in the temp dir, so the test doesn't depend on whether this machine
+        // has crumbs installed (it does on a uQ desktop, where `uq-dev promote uq` runs check()).
+        let program = d.path().join("crumbs");
+        let good = GOOD.replace("/usr/bin/crumbs", program.to_str().unwrap());
+        std::fs::write(d.path().join("a.appaction"), &good).unwrap();
         std::fs::write(d.path().join("b.appaction"), "junk").unwrap();
-        std::fs::write(d.path().join("c.txt"), GOOD).unwrap();
+        std::fs::write(d.path().join("c.txt"), &good).unwrap();
         let found = scan_app_actions(d.path());
         assert_eq!(found.len(), 2);
         assert!(found[0].1.is_ok());
         assert!(found[1].1.is_err());
-        assert!(
-            !found[0].1.as_ref().unwrap().program_exists(),
-            "no crumbs here"
-        );
+        let action = found[0].1.as_ref().unwrap();
+        assert!(!action.program_exists(), "no program yet");
+        std::fs::write(&program, "").unwrap();
+        assert!(action.program_exists());
         assert!(scan_app_actions(Path::new("/nonexistent")).is_empty());
     }
 }
