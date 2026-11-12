@@ -1,0 +1,10 @@
+# cargo-deny: dependency advisories (CI runs `cargo deny check advisories`).
+[advisories]
+ignore = [
+    # zbus 5's zvariant, zbus_names and zvariant_derive are unmaintained: clearing these needs
+    # the move to zbus 6 (scdr has made it), which changes the D-Bus code in every crate.
+    # Revisit after v0.3.0; they are "unmaintained" notices, not vulnerabilities.
+    { id = "RUSTSEC-2026-0370", reason = "zbus 5 stack; move to zbus 6 after v0.3.0" },
+    { id = "RUSTSEC-2026-0371", reason = "zbus 5 stack; move to zbus 6 after v0.3.0" },
+    { id = "RUSTSEC-2026-0372", reason = "zbus 5 stack; move to zbus 6 after v0.3.0" },
+]
