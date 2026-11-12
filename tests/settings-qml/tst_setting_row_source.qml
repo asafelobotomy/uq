@@ -101,6 +101,11 @@ TestCase {
         compare(text(row), "Overridden in user.lua, line 3", "the label keeps the line number");
     }
 
+    function test_user_lua_url_is_percent_encoded() {
+        const row = make({ source: "user_lua", detail: { line: 1, path: "/home/a #b?c%d/user.lua" } });
+        compare(row.userLuaUrl, "file:///home/a%20%23b%3Fc%25d/user.lua");
+    }
+
     function test_runtime_reapply_emits() {
         const row = make({ source: "runtime", detail: null });
         const got = [];

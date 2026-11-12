@@ -24,8 +24,18 @@ UQVM_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 UQVM_MEM=${UQVM_MEM:-4096}
 UQVM_CPUS=${UQVM_CPUS:-4}
 UQVM_USER=uqtest
+# The throwaway VM user's password: made once per machine and kept outside the repo (secret
+# scanners flag a committed one). Every run's cloud-init seed sets it, so a new one is harmless.
+uqvm_password() {
+    local f="$UQVM_HOME/test-password"
+    if [ ! -s "$f" ]; then
+        mkdir -p "$UQVM_HOME"
+        (umask 077; printf 'uqtest-%s\n' "$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')" >"$f")
+    fi
+    cat "$f"
+}
 # shellcheck disable=SC2034 # used by the checks
-UQVM_PASS=$(sed -n 's/^password=//p' "$UQVM_DIR/test-credentials")
+UQVM_PASS=$(uqvm_password)
 
 log() { printf '[uq-vm %(%H:%M:%S)T] %s\n' -1 "$*" >&2; }
 die() { log "ERROR: $*"; exit 1; }

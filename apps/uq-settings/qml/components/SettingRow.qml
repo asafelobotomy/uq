@@ -39,7 +39,7 @@ Rectangle {
             return "";
         }
     }
-    readonly property string userLuaUrl: sourceDetail.path ? "file://" + sourceDetail.path : ""
+    readonly property string userLuaUrl: sourceDetail.path ? "file://" + sourceDetail.path.split("/").map(encodeURIComponent).join("/") : ""
 
     /// **Open user.lua** was pressed; `line` is the line that sets this value.
     signal openUserLua(int line)

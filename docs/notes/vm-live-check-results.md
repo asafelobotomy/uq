@@ -74,8 +74,8 @@ one adds about 4 minutes of provisioning). The VM gets 4 GB and 4 vCPUs (`UQVM_M
   iw). It is cached by a hash of the image name, the package list and `PROVISION_REV`. Each run
   boots its own qcow2 overlay of it.
 - **cloud-init**: a NoCloud seed ISO (`xorriso`, label CIDATA) from `tests/vm/user-data.in` creates
-  `uqtest` (wheel, passwordless sudo; password from `tests/vm/test-credentials`, a VM-only test
-  value) with an ed25519 key generated per run in the run directory. A new instance-id per run
+  `uqtest` (wheel, passwordless sudo; a random VM-only password made once in
+  `~/.cache/uq-vm/test-password`) with an ed25519 key generated per run in the run directory. A new instance-id per run
   makes cloud-init install that run's key.
 - **Install** (`run.sh`): `scripts/build-local-pkg.sh` builds `uq-hyprland-pin` and `uq` from HEAD on
   the host (`-d --nocheck`, `TMPDIR`/`PKGDEST` under the cache). The packages go in over scp and

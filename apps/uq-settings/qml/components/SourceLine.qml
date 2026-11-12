@@ -30,7 +30,7 @@ RowLayout {
             return "";
         }
     }
-    readonly property string userLuaUrl: detail.path ? "file://" + detail.path : ""
+    readonly property string userLuaUrl: detail.path ? "file://" + detail.path.split("/").map(encodeURIComponent).join("/") : ""
 
     visible: text !== ""
     spacing: Kirigami.Units.smallSpacing

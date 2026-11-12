@@ -1,27 +1,33 @@
 # uQ
 
-A themeable Hyprland desktop: stock Hyprland (pinned), system-wide theming, per-workspace layouts
-and, in later phases, a Quickshell shell and integrated apps. See the
+A themeable Hyprland desktop: stock Hyprland (pinned), system-wide theming, per-workspace layouts,
+a Quickshell shell, a Settings app, its own login screen, and pages and launcher actions from the
+apps that integrate with it. See the
 [design spec](docs/superpowers/specs/2026-11-08-uq-desktop-design.md) and the
-[Phase 1 plan](docs/superpowers/plans/2026-11-08-uq-phase1-foundation.md).
+[road to 1.0](docs/superpowers/plans/2026-11-09-uq-road-to-1.0.md).
 
-## What Phase 1 gives you
+uQ is a pre-release: v0.3.0-rc.1 holds all five phases of the design except Settings slices E and
+F, which are on `main` (see [CHANGELOG.md](CHANGELOG.md)). What it gives you:
 
-- **`uqd`**: a session daemon that owns the theme, the dark/light schedule and per-workspace
-  layouts, writes `~/.config/hypr/uq/generated.lua` and the rendered theme files, and serves
-  `org.uq.Desktop1` on the session bus.
+- **`uqd`**: a session daemon that owns the theme, the dark/light schedule, per-workspace
+  layouts and every setting, writes `~/.config/hypr/uq/generated.lua` and the rendered theme
+  files, records history and restore points, and serves `org.uq.Desktop1` on the session bus.
 - **`uqctl`**: the command-line client.
+- **The shell** (Quickshell): bar, Spotlight launcher, quick settings, notifications, OSD, lock
+  and idle.
+- **`uq-settings`**: the Settings app (below), with pages other apps can add.
+- **A login screen** for greetd (see [docs/greeter.md](docs/greeter.md)), and a first-login
+  Welcome.
 - **Seven themes, each dark and light**: Gruvbox, Dracula, Matcha, Forest, Graphite, Rosewood,
-  Velvet. Every pair of text and background colours meets WCAG AA contrast.
+  Velvet, plus your own. Every pair of text and background colours meets WCAG AA contrast.
 - **Base Hyprland config** with layout keys: `SUPER+ALT+D` dwindle, `SUPER+ALT+M` master,
   `SUPER+ALT+S` scrolling (per workspace, kept across reloads and reboots).
 
 ## Install (Arch, Manjaro)
 
-uQ is not on the AUR yet: `uq` and `uq-hyprland-pin` go up with the first release, v0.2.0.
-After that, `yay -S uq` (or `paru -S uq`) installs both, since `uq` pulls in `uq-hyprland-pin`.
-
-Until then, install from a checkout (builds HEAD; uncommitted changes are not included):
+`yay -S uq` (or `paru -S uq`) installs the latest release from the AUR, and pulls in
+`uq-hyprland-pin`. To run what is on `main` instead, install from a checkout (builds HEAD;
+uncommitted changes are not included):
 
 ```bash
 scripts/build-local-pkg.sh --package uq-hyprland-pin -si
@@ -117,6 +123,9 @@ default layout, per-workspace rules, dwindle/master/scrolling options) and Shell
 24-hour clock, launcher providers on/off and order, terminal for `Terminal=true` apps, idle,
 notification and privacy settings), Displays (arrangement, mode, scale, rotation, mirroring, VRR)
 and Input (keyboard layouts and switch combo, repeat, mouse, touchpad, per-device settings).
+It also has Sound, Bluetooth and Network, Power, Users, Login screen, Date and time, Region,
+Default apps and About, and the pages described below (Profiles, Window rules, History, Keyboard
+shortcuts, Startup, Apps and scaling).
 Animations, monitor lines and keyboard layouts now come from `generated.lua`, so an
 `hl.animation` or `hl.monitor` line in `user.lua` still wins. A display change applies at once
 and asks to be kept; if you don't keep it within 15 seconds, the old layout comes back. `uqctl settings look` (or `wallpaper`, `shell`,
