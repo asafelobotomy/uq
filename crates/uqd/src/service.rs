@@ -153,6 +153,8 @@ pub struct Desktop {
     pub(crate) xrandr: Arc<dyn crate::xrandr::Xrandr>,
     /// What the screen-change matcher remembers between events.
     pub(crate) hotplug: crate::hotplug::HotplugState,
+    /// When uqd last reloaded Hyprland to recover from a file missing for a moment.
+    pub(crate) recover: crate::config_recover::RecoverState,
 }
 
 /// `explain`'s dotted key as a profile path.
@@ -289,6 +291,7 @@ impl Desktop {
             notifier: Arc::new(crate::notify::NoNotifier),
             xrandr: Arc::new(crate::xrandr::NoXrandr),
             hotplug: Default::default(),
+            recover: Default::default(),
         };
         // The user's themes first, so a saved `user-…` theme survives a restart.
         desktop.load_user_themes();

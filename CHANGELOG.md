@@ -9,6 +9,12 @@ All notable changes to uQ are listed here. The format follows
 
 ### Fixed
 
+- **Updating uq no longer leaves Hyprland in emergency mode.** Hyprland reloads its config when
+  a file it read changes, and a package update replaces `/usr/share/uq/hypr/base.lua` by
+  removing and rewriting it: a reload in between failed its `require` and left only Hyprland's
+  emergency binds ("a lua config resulted in no binds"). uqd now follows Hyprland's
+  `configreloaded` event, and when a reload failed only because a config file was missing that
+  is there again, it reloads once more (at most once every 10 s).
 - **`notify takeover --now` works on a uQ session that has been up a while.** uQ keeps the
   notification name with its built-in server until it has connected to noti-fi's socket, and it
   looked for that socket on the bridge backoff, every 30 s after the first half minute; noti-fi's
