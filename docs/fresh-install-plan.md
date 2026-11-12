@@ -33,10 +33,12 @@ Nothing here can be undone once the disk is gone, so check each item.
    connect (size, resolution, refresh, VRR), a fingerprint reader, a battery, a touchpad, Bluetooth
    devices. The laptop alone is one 1920x1080 panel with no VRR; the multi-monitor, 4K and VRR
    checks need an external monitor.
-5. **[Claude]** Get a uQ release onto the AUR that has the Settings app and `uq-dev`. The AUR has
-   0.2.1, which has neither, so bindle would install a uQ without any of slices 1–3 or A–D. Cut
-   `v0.3.0-rc.1` (a pre-release; the slice checklists are what it is waiting for) following
-   [releasing.md](releasing.md). The tag and the AUR push need your go-ahead, and the push needs
+5. **[Claude]** Get the uQ that `main` holds onto the AUR. `v0.3.0-rc.1` (on the AUR since
+   2026-11-12) has the Settings app, `uq-dev`, the login screen and Welcome, but not Settings
+   slices E (pages from other apps) and F (display arrangements, gestures), nor the fix that makes
+   shortcut capture work on Hyprland. Cut `v0.3.0-rc.2` following [releasing.md](releasing.md),
+   and release scdr, crumBS, noti-fi, XZram and scale_tail too: their Settings pages are merged
+   but not in any release yet. Each tag and AUR push needs your go-ahead, and the push needs
    `pass-cli login` on whatever machine does it. If you'd rather not release yet, the install still
    works: step 3.4 builds uQ from the checkout instead.
 6. **[You]** Write the Arch ISO to a USB stick.
@@ -60,10 +62,12 @@ Nothing here can be undone once the disk is gone, so check each item.
    - **snapper** (and **Btrfs scrub**);
    - **uQ developer setup** (clones the twelve repos into `~/Projects`, installs the build tools);
    - **appOFholding** and **scale_tail** (with Tailscale) if you use them;
-   - one scheduler module at most: `scdr-sched-ext` or `scdr-devbox`, not both (they conflict).
+   - at most one scheduler module: `scdr-sched-ext` or `scx-schedulers`, not both (they conflict).
+     (`scdr-devbox` is only on bindle's unmerged `feat/scdr-devbox` branch.)
 5. **[You]** Review bindle's plan screen and apply. Note the snapshot id it prints; `bindle undo`
    reverts the whole apply.
-6. **[You]** Log out and back in. You should land in a themed uQ desktop.
+6. **[You]** Restart. bindle has switched the login screen from SDDM to uQ's own (greetd), so
+   you land on uQ's login screen and then a themed uQ desktop with Welcome.
 
 If something fails here, `bindle undo --list` and `bindle undo` revert the apply, and `CTRL+ALT+F3`
 gives a TTY. Bindle's own logs are in `/var/log/bindle`.
@@ -97,7 +101,7 @@ gives a TTY. Bindle's own logs are in `/var/log/bindle`.
    names notifd, and `notify-send hello` shows a popup. **[You]** confirm you saw it.
 3. **[Claude]** scdr runs: `systemctl status scdrd`, `systemctl --user status scdr-session`,
    `scdrctl status`.
-4. **[Claude]** If step 0.5 didn't happen (the AUR still has 0.2.1): run
+4. **[Claude]** If step 0.5 didn't happen (the AUR still has 0.3.0rc1): run
    `~/Projects/uq/scripts/uq-dev promote uq`. That builds `main` with the release PKGBUILD and
    installs it with pacman, so it needs your sudo password: **[You]** type it when asked. Then
    **[You]** log out and in.
@@ -116,6 +120,12 @@ everything else. Keep a TTY ready (`CTRL+ALT+F3`) and, for the lock, run
 reads. Most rows have already passed in the VM ([vm-live-check-results.md](notes/vm-live-check-results.md));
 on the desktop the point is real hardware, real timing and real eyes, so the rows the VM couldn't
 do are marked below.
+
+Some merged work has no live checklist yet: Phase 3 slices 5 and 6 (Sound, Bluetooth, Network,
+Power, Users, Date and time, Region, Default apps, About), Phase 4 (widgets, app actions, the
+`Super+.` emoji search, rules from apps) and Phase 5 (login screen, Login screen page, Welcome,
+bindle hand-off). Until those exist, check them by eye from [greeter.md](greeter.md),
+[welcome.md](welcome.md) and [integrating.md](integrating.md).
 
 ### 4.1 Lock, idle and power ([lock-idle-live-check.md](notes/lock-idle-live-check.md))
 
@@ -242,21 +252,15 @@ Report a failure in the app's own repo; anything uQ draws (bar, tray, theme) is 
 
 ## 7. Finishing the code, and how each piece reaches the desktop
 
-The remaining work, in the order the specs set it:
+All the coding the specs set out is merged: Settings slices A–G, Phase 3 slices 1–6, the
+keybinds, Phase 4 (integrations and the companion pages in each app) and Phase 5 (login screen,
+Welcome, bindle hand-off). What is left:
 
-1. Settings slice E, companion pages: Scheduling (scdr), Storage and cleanup (crumBS),
-   Notifications (noti-fi), Memory and swap (XZram), Tailscale (scale_tail), with the plugin-page
-   SDK and `command` helper pulled forward.
-2. Settings slice F: monitor profiles, multi-monitor extras, touchpad gestures.
-3. Settings slice G: theme export, import and custom themes.
-4. Phase 3 slice 4: keybinds in uqd with an editor (`keybinds` and `rules` are reserved profile
-   domains; add `uq.profile.next` unbound).
-5. Phase 3 slices 5 and 6: Sound, Bluetooth, Network; Power with `uq-settings-helper`, Users,
-   Date and time, Region, Default apps, About. Then tag `v0.3.0`.
-6. Phase 4: integration foundation (`v0.4.0`), then one slice per repo.
-7. Phase 5: session entry, `uq-greeter`, Login screen page, Welcome, bindle hand-off
-   (`v0.5.0`).
-8. Hardening, release candidates and the daily-driver period, then `v1.0.0`.
+1. Release what `main` holds (step 0.5): `v0.3.0-rc.2` and the companion apps.
+2. The live checks in section 4, on this machine, and the fixes they turn up.
+3. The game-workspace extras (master layout, no gaps or animations), which Phase 4 left out.
+4. The parked follow-ups in each slice's review notes.
+5. Hardening, more release candidates and the daily-driver period, then `v1.0.0`.
 
 Every slice goes through the same loop, and only the last two steps need the desktop:
 

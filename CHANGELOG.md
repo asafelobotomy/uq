@@ -36,6 +36,13 @@ All notable changes to uQ are listed here. The format follows
   `generated.lua`, so a gesture of your own in `user.lua` that overlaps uQ's makes Hyprland
   refuse the config.
 
+### Fixed
+
+- **Recording a shortcut on the Keyboard shortcuts page works on Hyprland.** Capture never
+  started, because Hyprland only registers a submap that holds at least one bind; uQ's capture
+  submap now has one placeholder bind (`SUPER+SHIFT+CTRL+ALT+XF86Launch9`). Found by the new live
+  checks in `tests/live`.
+
 ## [0.3.0-rc.1] - 2026-11-11
 
 ### Added
