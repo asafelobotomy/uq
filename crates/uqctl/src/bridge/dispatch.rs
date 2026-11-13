@@ -81,6 +81,15 @@ pub enum Action {
         address: String,
         to_ws: i64,
     },
+    /// Give a floating window this size and put its top-left corner here (layout coordinates,
+    /// as Hyprland reports `at`): the shell's "keep windows on screen".
+    Place {
+        address: String,
+        x: i64,
+        y: i64,
+        w: i64,
+        h: i64,
+    },
     Dpms {
         on: bool,
     },
@@ -95,6 +104,14 @@ fn address(o: &Value) -> Result<String, String> {
         Ok(a.to_string())
     } else {
         Err(format!("invalid window address {a:?}"))
+    }
+}
+
+/// An integer `key` within `lo..=hi`.
+fn int_in(o: &Value, key: &str, lo: i64, hi: i64) -> Result<i64, String> {
+    match o.get(key).and_then(Value::as_i64) {
+        Some(n) if (lo..=hi).contains(&n) => Ok(n),
+        _ => Err(format!("{key} must be a whole number from {lo} to {hi}")),
     }
 }
 
@@ -164,6 +181,13 @@ impl Action {
                 address: address(a)?,
                 to_ws: ws_id(a, "to_ws")?,
             },
+            "place" => Action::Place {
+                address: address(a)?,
+                x: int_in(a, "x", -65_536, 65_536)?,
+                y: int_in(a, "y", -65_536, 65_536)?,
+                w: int_in(a, "w", 1, 32_768)?,
+                h: int_in(a, "h", 1, 32_768)?,
+            },
             "dpms" => Action::Dpms {
                 on: a
                     .get("on")
@@ -212,6 +236,22 @@ impl Action {
             Action::Minimise { address, from_ws } => vec![
                 tag_lua(address, &format!("+uq_ws_{from_ws}")),
                 move_lua(address, &WsTarget::Special("minimized".into())),
+            ],
+            Action::Place {
+                address,
+                x,
+                y,
+                w,
+                h,
+            } => vec![
+                d(format!(
+                    "hl.dsp.window.resize({{ x = {w}, y = {h}, window = {} }})",
+                    win(address)
+                )),
+                d(format!(
+                    "hl.dsp.window.move({{ x = {x}, y = {y}, window = {} }})",
+                    win(address)
+                )),
             ],
             Action::Restore { address, to_ws } => vec![
                 move_lua(address, &WsTarget::Id(*to_ws)),
@@ -267,26 +307,68 @@ fn eval_err(e: CompositorError) -> String {
     }
 }
 
-/// Send every statement; stop at the first one Hyprland rejects. With `keep_pointer`, the
-/// pointer is read first and moved back afterwards (best effort: a failed read just skips it).
+/// Send every statement; stop at the first one Hyprland rejects. With `keep_pointer` the pointer
+/// never moves: Hyprland's warp to the focused window is switched off (`cursor:no_warps`) just
+/// for the focus and switched back after. When that option can't be read or set, the pointer is
+/// read first and moved back afterwards instead (best effort: a failed read just skips it).
 pub async fn run(hypr: &HyprSocket, action: &Action) -> Result<(), String> {
-    let restore = match action {
+    let keep = matches!(
+        action,
         Action::FocusWindow {
-            keep_pointer: true, ..
-        } => hypr
-            .request("j/cursorpos")
+            keep_pointer: true,
+            ..
+        }
+    );
+    // Some(true): no_warps was off and is now on, to be switched back.
+    let mut unwarp = None;
+    let mut restore = None;
+    if keep {
+        let warps = hypr
+            .request("j/getoption cursor:no_warps")
             .await
             .ok()
-            .and_then(|r| parse_cursorpos(&r)),
-        _ => None,
-    };
-    for lua in action.to_lua() {
-        hypr.eval(&lua).await.map_err(eval_err)?;
+            .and_then(|r| parse_option_bool(&r))
+            .map(|no_warps| !no_warps);
+        match warps {
+            Some(false) => unwarp = Some(false),
+            Some(true) if hypr.eval(&no_warps_lua(true)).await.is_ok() => unwarp = Some(true),
+            _ => {
+                restore = hypr
+                    .request("j/cursorpos")
+                    .await
+                    .ok()
+                    .and_then(|r| parse_cursorpos(&r));
+            }
+        }
     }
+    let mut result = Ok(());
+    for lua in action.to_lua() {
+        if let Err(e) = hypr.eval(&lua).await {
+            result = Err(eval_err(e));
+            break;
+        }
+    }
+    if unwarp == Some(true) {
+        // Back as it was even when the focus failed.
+        hypr.eval(&no_warps_lua(false)).await.map_err(eval_err)?;
+    }
+    result?;
     if let Some((x, y)) = restore {
         hypr.eval(&cursor_move_lua(x, y)).await.map_err(eval_err)?;
     }
     Ok(())
+}
+
+fn no_warps_lua(on: bool) -> String {
+    format!("hl.config({{ cursor = {{ no_warps = {on} }} }})")
+}
+
+/// The value of a bool option from `j/getoption`.
+fn parse_option_bool(reply: &str) -> Option<bool> {
+    serde_json::from_str::<Value>(reply)
+        .ok()?
+        .get("bool")?
+        .as_bool()
 }
 
 /// The bridge's `Dispatch` call: `[name, {args…}]`.
@@ -452,6 +534,44 @@ mod tests {
         assert_eq!(parse_cursorpos(r#"{"x": 10.6, "y": -3.2}"#), Some((11, -3)));
         assert_eq!(parse_cursorpos(r#"{"x": 1}"#), None);
         assert_eq!(parse_cursorpos("0, 250"), None);
+        assert_eq!(
+            no_warps_lua(true),
+            "hl.config({ cursor = { no_warps = true } })"
+        );
+        assert_eq!(
+            parse_option_bool(r#"{"option": "cursor:no_warps", "bool": false, "set": true }"#),
+            Some(false)
+        );
+        assert_eq!(parse_option_bool(r#"{"option": "x", "int": 1}"#), None);
+    }
+
+    #[test]
+    fn place() {
+        let w = r#""address:0x55d0c0ffee""#;
+        assert_eq!(
+            lua(
+                "place",
+                json!({"address": A, "x": -20, "y": 72, "w": 1880, "h": 990})
+            ),
+            [
+                format!(
+                    "return hl.dispatch(hl.dsp.window.resize({{ x = 1880, y = 990, window = {w} }}))"
+                ),
+                format!(
+                    "return hl.dispatch(hl.dsp.window.move({{ x = -20, y = 72, window = {w} }}))"
+                ),
+            ]
+        );
+        for bad in [
+            json!({"address": A, "x": 0, "y": 0, "w": 0, "h": 10}),
+            json!({"address": A, "x": 0, "y": 0, "w": 10}),
+            json!({"address": A, "x": 0.5, "y": 0, "w": 10, "h": 10}),
+            json!({"address": A, "x": "0", "y": 0, "w": 10, "h": 10}),
+            json!({"address": A, "x": 0, "y": 99_999_999, "w": 10, "h": 10}),
+            json!({"address": "nope", "x": 0, "y": 0, "w": 10, "h": 10}),
+        ] {
+            assert!(Action::from_call("place", &bad).is_err(), "{bad}");
+        }
     }
 
     #[test]
@@ -498,11 +618,21 @@ mod tests {
             ("restore", json!({"address": A, "to_ws": 4})),
             ("dpms", json!({"on": true})),
             ("dpms", json!({"on": false})),
+            (
+                "place",
+                json!({"address": A, "x": -20, "y": 72, "w": 800, "h": 600}),
+            ),
         ];
         let mut body = format!(
             "hl.on(\"hyprland.start\", function() {} end)\n",
             cursor_move_lua(0, 250)
         );
+        for on in [true, false] {
+            body.push_str(&format!(
+                "hl.on(\"hyprland.start\", function() {} end)\n",
+                no_warps_lua(on)
+            ));
+        }
         for (name, args) in &all {
             for stmt in Action::from_call(name, args).unwrap().to_lua() {
                 body.push_str(&format!(

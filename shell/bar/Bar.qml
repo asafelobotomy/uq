@@ -7,7 +7,8 @@ import "islands"
 
 // One bar per screen, laid out from `shell.bar` (BarLayout): three zones of islands, left, centre
 // (truly centred) and right, each island Icon, Small, Medium or Large: 1, 2, 4 or 6 times the
-// Icon size (a square island as tall as the bar). Islands never overlap and are never cut off:
+// Icon size (a square island as tall as the bar), or Custom: dragged wider than Large, one Icon
+// size at a time. Islands never overlap and are never cut off:
 // when they don't all fit, the biggest step down a size, and only when every island is at Icon
 // size are the most expendable left out (barlayout.js fit). A right click on an island (or the
 // bar) opens the island menu (BarMenu.qml): edit the islands, add one, remove this one. In edit
@@ -106,7 +107,7 @@ PanelWindow {
         if (s === null || !s.visible)
             return;
         BarLayout.selected = k;
-        islandSettings.showFor(s, { zone: s.zone, index: s.index, id: s.islandId, size: s.size });
+        islandSettings.showFor(s, { zone: s.zone, index: s.index, id: s.islandId, size: s.size, units: s.units });
     }
 
     // Edit mode on, with island `k`'s settings open.
@@ -182,6 +183,7 @@ PanelWindow {
             readonly property string islandId: modelData.id
             readonly property var place: bar.placedMap[key] || null
             readonly property string size: place ? place.size : L.sizeOf(bar.zones[zone][index])
+            readonly property int units: place ? place.units : L.unitsOf(bar.zones[zone][index])
             readonly property Item island: loader.item
             readonly property bool selected: bar.editing && BarLayout.selected === key
             // An island may hide itself (media with no player) outside edit mode.
@@ -202,7 +204,7 @@ PanelWindow {
                 anchors.fill: parent
                 sourceComponent: bar.component(slot.islandId)
                 onLoaded: {
-                    item.size = Qt.binding(function () { return slot.size; });
+                    item.size = Qt.binding(function () { return L.tierOf(slot.size); });
                     if (item.editRequested)
                         item.editRequested.connect(function () { bar.editIsland(slot.key); });
                     if (item.menuRequested)
@@ -276,14 +278,14 @@ PanelWindow {
                         }
                         onPositionChanged: function (m) {
                             var dx = mapToItem(null, m.x, 0).x - startX;
-                            bar.resizeW = Math.max(BarLayout.unit, Math.min(BarLayout.unit * 6, slot.width + dx));
+                            bar.resizeW = Math.max(BarLayout.unit, Math.min(BarLayout.unit * L.MAX_CUSTOM, slot.width + dx));
                         }
                         onReleased: {
                             var s = L.sizeForWidth(bar.resizeW, BarLayout.unit);
                             bar.resizeKey = "";
                             BarLayout.selected = slot.key;
-                            if (s !== L.sizeOf(bar.zones[slot.zone][slot.index]))
-                                BarLayout.setSize(slot.zone, slot.index, s);
+                            if (!L.sameSize(bar.zones[slot.zone][slot.index], s))
+                                BarLayout.setSize(slot.zone, slot.index, s.size, s.units);
                         }
                     }
                 }
@@ -291,10 +293,12 @@ PanelWindow {
 
             // Resizing: the size it will snap to, drawn over the bar.
             Rectangle {
+                id: snapBox
+                readonly property var snap: L.sizeForWidth(bar.resizeW, BarLayout.unit)
                 visible: bar.resizeKey === slot.key
                 z: 20
                 x: 0
-                width: L.UNITS[L.sizeForWidth(bar.resizeW, BarLayout.unit)] * BarLayout.unit
+                width: (snap.size === L.CUSTOM ? snap.units : L.UNITS[snap.size]) * BarLayout.unit
                 height: parent.height
                 radius: Theme.radius
                 color: "transparent"
@@ -309,7 +313,7 @@ PanelWindow {
                     UqText {
                         id: sizeLabel
                         anchors.centerIn: parent
-                        text: L.SIZE_NAMES[L.sizeForWidth(bar.resizeW, BarLayout.unit)]
+                        text: L.sizeLabel(snapBox.snap.size, snapBox.snap.units)
                         color: Theme.accentText
                     }
                 }

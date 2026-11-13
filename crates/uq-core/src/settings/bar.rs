@@ -34,6 +34,9 @@ pub const MAX_SYMBOLS: usize = 12;
 pub const MAX_FEEDS: usize = 8;
 pub const MAX_ZONES: usize = 4;
 const MAX_URL: usize = 512;
+/// A Custom island's width in Icon sizes: one more than Large, up to this.
+pub const MIN_CUSTOM: u32 = 7;
+pub const MAX_CUSTOM: u32 = 24;
 
 pub fn known_island(id: &str) -> bool {
     ISLANDS.iter().any(|(i, _)| *i == id)
@@ -44,7 +47,9 @@ pub fn island_name(id: &str) -> Option<&'static str> {
 }
 
 /// How big an island is, in multiples of the Icon size (a square island as tall as the bar):
-/// Icon 1x, Small 2x, Medium 4x, Large 6x. Each island decides what it shows at each size.
+/// Icon 1x, Small 2x, Medium 4x, Large 6x, and Custom: wider than Large, in whole Icon sizes
+/// ([`BarItem::units`], [`MIN_CUSTOM`] to [`MAX_CUSTOM`]). Each island decides what it shows at
+/// each size; a Custom island shows what it shows at Large, with more room.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Size {
@@ -56,16 +61,19 @@ pub enum Size {
     /// `wide` before there were four sizes.
     #[serde(alias = "wide")]
     Large,
+    /// Its width is the item's `units`.
+    Custom,
 }
 
 impl Size {
-    /// Width in Icon sizes.
+    /// Width in Icon sizes; for Custom, the narrowest it can be (the item's `units` say more).
     pub fn units(self) -> u32 {
         match self {
             Size::Icon => 1,
             Size::Small => 2,
             Size::Medium => 4,
             Size::Large => 6,
+            Size::Custom => MIN_CUSTOM,
         }
     }
 }
@@ -102,21 +110,65 @@ pub struct BarItem {
         deserialize_with = "size_field"
     )]
     pub size: Option<Size>,
+    /// A Custom island's width in Icon sizes ([`MIN_CUSTOM`]..=[`MAX_CUSTOM`]); only with
+    /// `size = "custom"`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub units: Option<u32>,
 }
 
 impl BarItem {
-    pub const FIELDS: [&str; 2] = ["id", "size"];
+    pub const FIELDS: [&str; 3] = ["id", "size", "units"];
 
     pub fn new(id: &str) -> Self {
         Self {
             id: id.into(),
             size: None,
+            units: None,
         }
     }
 
     /// The size it is drawn at, before the bar steps it down to fit.
     pub fn size(&self) -> Size {
         self.size.unwrap_or_else(|| default_size(&self.id))
+    }
+
+    /// Its width in Icon sizes, before the bar steps it down to fit.
+    pub fn width_units(&self) -> u32 {
+        match self.size() {
+            Size::Custom => self.units.unwrap_or(MIN_CUSTOM),
+            s => s.units(),
+        }
+    }
+
+    fn check_units(&self) -> Result<(), String> {
+        match (self.size(), self.units) {
+            (Size::Custom, Some(u)) if (MIN_CUSTOM..=MAX_CUSTOM).contains(&u) => Ok(()),
+            (Size::Custom, Some(u)) => Err(format!(
+                "custom width {u} is outside {MIN_CUSTOM} to {MAX_CUSTOM}"
+            )),
+            (Size::Custom, None) => Err("a custom size needs units".into()),
+            (_, Some(_)) => Err("units are only for a custom size".into()),
+            (_, None) => Ok(()),
+        }
+    }
+
+    /// Load-time repair of the size: a Custom width is clamped (missing, it is the narrowest
+    /// Custom), stray units are dropped, and a separator has no size.
+    fn repair_units(&mut self) {
+        if self.id == SEPARATOR {
+            self.size = None;
+            self.units = None;
+            return;
+        }
+        if self.size() == Size::Custom {
+            self.units = Some(
+                self.units
+                    .unwrap_or(MIN_CUSTOM)
+                    .clamp(MIN_CUSTOM, MAX_CUSTOM),
+            );
+        } else {
+            self.units = None;
+        }
     }
 }
 
@@ -324,6 +376,8 @@ impl BarLayout {
             if !known_island(&item.id) {
                 return Err(invalid(KEY, format!("unknown island {:?}", item.id)));
             }
+            item.check_units()
+                .map_err(|e| invalid(KEY, format!("island {:?}: {e}", item.id)))?;
             if item.id != SEPARATOR {
                 if seen.contains(&item.id.as_str()) {
                     return Err(invalid(
@@ -374,6 +428,7 @@ impl BarLayout {
                 }
                 keep
             });
+            zone.iter_mut().for_each(BarItem::repair_units);
         }
         let o = &mut self.options;
         let mut syms: Vec<String> = Vec::new();
@@ -458,6 +513,9 @@ pub enum BarEdit {
         zone: String,
         index: usize,
         size: Size,
+        /// The width for a Custom size, in Icon sizes.
+        #[serde(default)]
+        units: Option<u32>,
     },
     /// Replace `options.<island>`.
     Options { island: String, value: Value },
@@ -516,10 +574,12 @@ impl BarLayout {
                 zone,
                 index,
                 size,
+                units,
             } => {
                 next.check_at(id, zone, *index)?;
-                next.zone_mut(zone).expect("checked")[*index].size =
-                    (*size != default_size(id)).then_some(*size);
+                let it = &mut next.zone_mut(zone).expect("checked")[*index];
+                it.size = (*size != default_size(id)).then_some(*size);
+                it.units = *units;
             }
             BarEdit::Options { island, value } => {
                 let mut opts = serde_json::to_value(&next.options).expect("options serialise");
@@ -597,7 +657,11 @@ pub(super) fn lenient_bar<'de, D: serde::Deserializer<'de>>(
                     let size = v
                         .get("size")
                         .and_then(|s| serde_json::from_value::<Size>(s.clone()).ok());
-                    Some(BarItem { id, size })
+                    let units = v
+                        .get("units")
+                        .and_then(Value::as_u64)
+                        .map(|u| u.min(u64::from(MAX_CUSTOM)) as u32);
+                    Some(BarItem { id, size, units })
                 })
                 .collect(),
             _ => Vec::new(),
@@ -881,10 +945,75 @@ mod tests {
         let v = serde_json::to_value(BarItem {
             id: "news".into(),
             size: Some(Size::Icon),
+            units: None,
         })
         .unwrap();
         assert_eq!(v, json!({"id": "news", "size": "icon"}));
         assert_eq!(island_name("system"), Some("App menu, workspaces and dock"));
+    }
+
+    #[test]
+    fn custom_size() {
+        let ok = BarLayout::from_value(&json!({
+            "start": [{"id": "work", "size": "custom", "units": 9}]
+        }))
+        .unwrap();
+        assert_eq!(ok.start[0].size(), Size::Custom);
+        assert_eq!(ok.start[0].width_units(), 9);
+        assert_eq!(BarItem::new("work").width_units(), 6);
+        for bad in [
+            json!({"start": [{"id": "work", "size": "custom"}]}),
+            json!({"start": [{"id": "work", "size": "custom", "units": 6}]}),
+            json!({"start": [{"id": "work", "size": "custom", "units": 25}]}),
+            json!({"start": [{"id": "work", "size": "large", "units": 9}]}),
+            json!({"start": [{"id": "work", "units": 9}]}),
+        ] {
+            assert!(BarLayout::from_value(&bad).is_err(), "{bad}");
+        }
+        // Lenient load: clamped, filled in, or dropped.
+        let set: Settings = serde_json::from_value(json!({"shell": {"bar": {"start": [
+            {"id": "work", "size": "custom", "units": 99},
+            {"id": "system", "size": "custom"},
+            {"id": "clock", "size": "small", "units": 9},
+            {"id": "separator", "size": "custom", "units": 8}
+        ]}}}))
+        .unwrap();
+        let b = set.shell.bar.unwrap();
+        assert_eq!(b.start[0].units, Some(MAX_CUSTOM));
+        assert_eq!(b.start[1].units, Some(MIN_CUSTOM));
+        assert_eq!(b.start[2].units, None);
+        assert_eq!((b.start[3].size, b.start[3].units), (None, None));
+        assert!(b.validate().is_ok());
+        // The Size edit stores the width; a tier clears it.
+        let mut l = ok.clone();
+        l.apply(&BarEdit::Size {
+            id: "work".into(),
+            zone: "start".into(),
+            index: 0,
+            size: Size::Custom,
+            units: Some(12),
+        })
+        .unwrap();
+        assert_eq!(l.start[0].width_units(), 12);
+        l.apply(&BarEdit::Size {
+            id: "work".into(),
+            zone: "start".into(),
+            index: 0,
+            size: Size::Large,
+            units: None,
+        })
+        .unwrap();
+        assert_eq!((l.start[0].size, l.start[0].units), (None, None));
+        assert!(
+            l.apply(&BarEdit::Size {
+                id: "work".into(),
+                zone: "start".into(),
+                index: 0,
+                size: Size::Custom,
+                units: None,
+            })
+            .is_err()
+        );
     }
 
     #[test]

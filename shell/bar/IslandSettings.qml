@@ -9,7 +9,8 @@ import "../logic/work.js" as Work
 import "islands"
 
 // An island's settings, in edit mode (a left click on an island, or Enter on the selected one):
-// its size (Icon, Small, Medium, Large), what it shows (the clock's seconds and date, the
+// its size (Icon, Small, Medium, Large, or Custom: wider than Large, one Icon size at a time),
+// what it shows (the clock's seconds and date, the
 // weather's city, the stock symbols, the news feeds, the world clock's time zones), moving it,
 // and removing it. Changes are saved at once (BarLayout). User text (symbols, addresses, city
 // names) only ever reaches the screen through UqText.
@@ -21,6 +22,14 @@ IslandPopup {
     readonly property string island: target ? target.id : ""
     readonly property var item: target && BarLayout.layout[target.zone] ? BarLayout.layout[target.zone][target.index] : null
     readonly property string chosen: item ? L.sizeOf(item) : "medium"
+    readonly property int chosenUnits: item ? L.unitsOf(item) : 0
+    function stepWidth(dir) {
+        if (!pop.target || !pop.item)
+            return;
+        var s = L.stepSize(pop.chosen, dir, pop.item.units);
+        if (s !== null)
+            BarLayout.setSize(pop.target.zone, pop.target.index, s.size, s.units);
+    }
     readonly property var opts: BarLayout.options[island] || ({})
     property string addError: ""
 
@@ -36,7 +45,7 @@ IslandPopup {
     // Edits from here may move the island: follow it.
     function retarget(zone, index) {
         if (target)
-            target = { zone: zone, index: index, id: target.id, size: target.size };
+            target = { zone: zone, index: index, id: target.id, size: target.size, units: target.units };
     }
 
     function setList(key, list) {
@@ -121,7 +130,8 @@ IslandPopup {
                     id: sizeRow
                     required property string modelData
                     required property int index
-                    text: L.SIZE_NAMES[modelData]
+                    text: modelData === L.CUSTOM && pop.chosen === L.CUSTOM
+                        ? L.sizeLabel(L.CUSTOM, pop.chosenUnits) : L.SIZE_NAMES[modelData]
                     detail: pop.chosen === modelData ? "✓" : ""
                     Accessible.checkable: true
                     Accessible.checked: pop.chosen === modelData
@@ -130,13 +140,35 @@ IslandPopup {
                 }
             }
         }
+        // Custom: one Icon size narrower or wider (dragging the island's edge does the same).
+        RowLayout {
+            visible: pop.chosen === L.CUSTOM
+            spacing: 2
+            MenuRow {
+                text: "Narrower"
+                detail: "−"
+                onActivated: pop.stepWidth(-1)
+            }
+            MenuRow {
+                text: "Wider"
+                detail: "+"
+                enabled: pop.chosenUnits < L.MAX_CUSTOM
+                onActivated: pop.stepWidth(1)
+            }
+        }
         QtObject {
             id: firstSize
             property Item row: null
         }
         UqText {
-            visible: pop.target !== null && pop.island !== L.SEPARATOR && pop.target.size !== pop.chosen
-            text: "Shown " + (pop.target ? L.SIZE_NAMES[pop.target.size] : "") + " on this screen, to fit."
+            // What the bar draws now: the slot's live size, else the one it had when opened.
+            readonly property string shownSize: pop.anchorItem && pop.anchorItem.size !== undefined
+                ? pop.anchorItem.size : (pop.target ? pop.target.size : "")
+            readonly property int shownUnits: pop.anchorItem && pop.anchorItem.units !== undefined
+                ? pop.anchorItem.units : (pop.target ? pop.target.units || 0 : 0)
+            visible: pop.target !== null && pop.island !== L.SEPARATOR
+                && (shownSize !== pop.chosen || (pop.chosen === L.CUSTOM && shownUnits !== pop.chosenUnits))
+            text: "Shown " + L.sizeLabel(shownSize, shownUnits) + " on this screen, to fit."
             color: Theme.textMuted
             wrapMode: Text.WordWrap
             Layout.fillWidth: true

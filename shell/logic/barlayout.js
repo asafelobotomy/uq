@@ -1,8 +1,9 @@
 .pragma library
 
-// The bar's layout (`shell.bar`): three zones of islands, each `{id, size}` where size is one of
-// four tiers, in multiples of the Icon size (a square island as tall as the bar): icon 1x,
-// small 2x, medium 4x, large 6x; absent means the island's own default. Pure helpers, no
+// The bar's layout (`shell.bar`): three zones of islands, each `{id, size, units}` where size is
+// one of four tiers, in multiples of the Icon size (a square island as tall as the bar): icon 1x,
+// small 2x, medium 4x, large 6x; or "custom", wider than large in whole Icon sizes (`units`,
+// MIN_CUSTOM to MAX_CUSTOM); absent means the island's own default. Pure helpers, no
 // Quickshell imports. uqd validates every write; these only keep the shell from sending what it
 // would refuse, give an older uqd (no `bar` yet) the layout its switches meant, and decide how
 // the islands fit a screen: never overlapping, never cut off, stepping islands down a size (and
@@ -11,9 +12,14 @@
 var ZONES = ["start", "center", "end"];
 var SEPARATOR = "separator";
 var MAX_ITEMS = 24;
-var SIZES = ["icon", "small", "medium", "large"];
-var UNITS = { icon: 1, small: 2, medium: 4, large: 6 };
-var SIZE_NAMES = { icon: "Icon", small: "Small", medium: "Medium", large: "Large" };
+var CUSTOM = "custom";
+var SIZES = ["icon", "small", "medium", "large", CUSTOM];
+// Same as uq_core::settings::bar::{MIN_CUSTOM, MAX_CUSTOM}.
+var MIN_CUSTOM = 7;
+var MAX_CUSTOM = 24;
+// Custom's entry is its narrowest; the item's `units` say how wide it is.
+var UNITS = { icon: 1, small: 2, medium: 4, large: 6, custom: MIN_CUSTOM };
+var SIZE_NAMES = { icon: "Icon", small: "Small", medium: "Medium", large: "Large", custom: "Custom" };
 
 // Same ids and order as uq_core::settings::bar::ISLANDS.
 var ISLANDS = [
@@ -66,6 +72,27 @@ function sizeOf(item) {
     return item && SIZES.indexOf(item.size) >= 0 ? item.size : defaultSize(item ? item.id : "");
 }
 
+// An item's width in Icon sizes, before the bar steps it down to fit.
+function unitsOf(item) {
+    var s = sizeOf(item);
+    return s === CUSTOM ? _cleanUnits(item.units) : UNITS[s];
+}
+
+// The size as islands read it: what they show at Large, they show at Custom (with more room).
+function tierOf(size) {
+    return size === CUSTOM ? "large" : size;
+}
+
+// A size's name; Custom says how wide.
+function sizeLabel(size, units) {
+    return size === CUSTOM ? "Custom (" + _cleanUnits(units) + "×)" : SIZE_NAMES[size];
+}
+
+function _cleanUnits(u) {
+    var n = Math.round(Number(u));
+    return isFinite(n) ? Math.max(MIN_CUSTOM, Math.min(MAX_CUSTOM, n)) : MIN_CUSTOM;
+}
+
 function _cleanSize(s) {
     if (s === "compact") return "small";
     if (s === "wide") return "large";
@@ -84,7 +111,9 @@ function _items(list, seen, count) {
             continue;
         seen[it.id] = true;
         count.n++;
-        out.push({ id: it.id, size: _cleanSize(it.size) });
+        var size = it.id === SEPARATOR ? null : _cleanSize(it.size);
+        out.push(size === CUSTOM ? { id: it.id, size: size, units: _cleanUnits(it.units) }
+                                 : { id: it.id, size: size });
     }
     return out;
 }
@@ -200,34 +229,59 @@ function add(bar, id, zone, index) {
     return out;
 }
 
-// Set a size; the island's own default is stored as "no size".
-function setSize(bar, zone, index, size) {
+// Set a size (with `units` for Custom; missing, the item keeps its width or takes the
+// narrowest); the island's own default is stored as "no size".
+function setSize(bar, zone, index, size, units) {
     if (SIZES.indexOf(size) < 0 || ZONES.indexOf(zone) < 0 || index < 0
             || index >= bar[zone].length)
         return null;
     var out = _copy(bar);
-    var id = out[zone][index].id;
-    out[zone][index] = { id: id, size: size === defaultSize(id) ? null : size };
+    var old = out[zone][index], id = old.id;
+    if (size === CUSTOM)
+        out[zone][index] = { id: id, size: CUSTOM,
+                             units: _cleanUnits(units !== undefined ? units : old.units) };
+    else
+        out[zone][index] = { id: id, size: size === defaultSize(id) ? null : size };
     return out;
 }
 
-// The next size up (dir 1) or down (-1), or null past the ends.
-function stepSize(size, dir) {
+// The next size up (dir 1) or down (-1) from `size` (with `units` for Custom), as
+// {size, units}, or null past the ends. Past Large it goes Custom, one Icon size at a time.
+function stepSize(size, dir, units) {
+    if (size === CUSTOM) {
+        var u = _cleanUnits(units) + dir;
+        if (u > MAX_CUSTOM)
+            return null;
+        return u < MIN_CUSTOM ? { size: "large", units: null } : { size: CUSTOM, units: u };
+    }
     var i = SIZES.indexOf(size) + dir;
-    return i >= 0 && i < SIZES.length ? SIZES[i] : null;
+    if (i < 0 || i >= SIZES.length)
+        return null;
+    return SIZES[i] === CUSTOM ? { size: CUSTOM, units: MIN_CUSTOM } : { size: SIZES[i], units: null };
 }
 
-// The size whose width is nearest `px`, for a resize by dragging.
+// The size nearest `px` wide, for a resize by dragging: {size, units}. Up to Large it snaps to
+// the tiers; past Large it is Custom, in whole Icon sizes.
 function sizeForWidth(px, unit) {
     var best = "icon", bestD = Infinity;
     for (var i = 0; i < SIZES.length; i++) {
+        if (SIZES[i] === CUSTOM)
+            continue;
         var d = Math.abs(UNITS[SIZES[i]] * unit - px);
         if (d < bestD) {
             bestD = d;
             best = SIZES[i];
         }
     }
-    return best;
+    var n = Math.round(px / unit);
+    if (n >= MIN_CUSTOM && Math.abs(n * unit - px) < bestD)
+        return { size: CUSTOM, units: Math.min(n, MAX_CUSTOM) };
+    return { size: best, units: null };
+}
+
+// Whether {size, units} is what `item` has now.
+function sameSize(item, s) {
+    return sizeOf(item) === s.size && (s.size !== CUSTOM || unitsOf(item) === s.units);
 }
 
 // Where island `id` sits: {zone, index}, or null.
@@ -245,6 +299,8 @@ function find(bar, id) {
 function toSetting(bar) {
     var z = function (list) {
         return list.map(function (it) {
+            if (it.size === CUSTOM)
+                return { id: it.id, size: CUSTOM, units: _cleanUnits(it.units) };
             return SIZES.indexOf(it.size) >= 0 ? { id: it.id, size: it.size } : { id: it.id };
         });
     };
@@ -268,8 +324,8 @@ function withOptions(bar, island, opts) {
 // --- fitting a screen ---
 
 // metrics: {unit, gap (between islands), zoneGap (between zones), sep (a separator's width)}.
-function _widthOf(id, size, m) {
-    return id === SEPARATOR ? m.sep : UNITS[size] * m.unit;
+function _widthOf(id, units, m) {
+    return id === SEPARATOR ? m.sep : units * m.unit;
 }
 
 function _rank(id) {
@@ -277,24 +333,25 @@ function _rank(id) {
     return i < 0 ? EXPENDABLE.length : i;
 }
 
-// How every island is drawn on a bar `width` wide: {sizes: {key: size}, hidden: {key: true},
-// hiddenCount, width (what it all takes)}. While it doesn't fit, the biggest island steps down
-// a size (the most expendable first among equals); once every island is at Icon size, the most
-// expendable are left out. The result always fits (an empty bar fits anything).
+// How every island is drawn on a bar `width` wide: {sizes: {key: size}, units: {key: width in
+// Icon sizes}, hidden: {key: true}, hiddenCount, width (what it all takes)}. While it doesn't
+// fit, the biggest island steps down a size (a Custom one an Icon size at a time; the most
+// expendable first among equals); once every island is at Icon size, the most expendable are
+// left out. The result always fits (an empty bar fits anything).
 function fit(bar, width, m) {
     var items = [];
     for (var z = 0; z < ZONES.length; z++) {
         var list = bar[ZONES[z]];
         for (var i = 0; i < list.length; i++)
             items.push({ k: key(ZONES[z], i), zone: ZONES[z], id: list[i].id,
-                         size: sizeOf(list[i]), hidden: false });
+                         size: sizeOf(list[i]), units: unitsOf(list[i]), hidden: false });
     }
     function total() {
         var sum = 0, per = { start: 0, center: 0, end: 0 }, zones = 0;
         for (var j = 0; j < items.length; j++) {
             if (items[j].hidden)
                 continue;
-            sum += _widthOf(items[j].id, items[j].size, m);
+            sum += _widthOf(items[j].id, items[j].units, m);
             per[items[j].zone]++;
         }
         for (var zz = 0; zz < ZONES.length; zz++)
@@ -305,18 +362,20 @@ function fit(bar, width, m) {
         return sum + Math.max(0, zones - 1) * m.zoneGap;
     }
     var guard = 0;
-    while (total() > width && guard++ < 200) {
+    while (total() > width && guard++ < 2000) {
         var pick = null;
         for (var a = 0; a < items.length; a++) {
             var it = items[a];
             if (it.hidden || it.id === SEPARATOR || it.size === "icon")
                 continue;
-            if (pick === null || UNITS[it.size] > UNITS[pick.size]
-                    || (UNITS[it.size] === UNITS[pick.size] && _rank(it.id) < _rank(pick.id)))
+            if (pick === null || it.units > pick.units
+                    || (it.units === pick.units && _rank(it.id) < _rank(pick.id)))
                 pick = it;
         }
         if (pick !== null) {
-            pick.size = stepSize(pick.size, -1);
+            var next = stepSize(pick.size, -1, pick.units);
+            pick.size = next.size;
+            pick.units = next.size === CUSTOM ? next.units : UNITS[next.size];
             continue;
         }
         var drop = null;
@@ -330,9 +389,10 @@ function fit(bar, width, m) {
             break;
         drop.hidden = true;
     }
-    var out = { sizes: {}, hidden: {}, hiddenCount: 0, width: total() };
+    var out = { sizes: {}, units: {}, hidden: {}, hiddenCount: 0, width: total() };
     for (var c = 0; c < items.length; c++) {
         out.sizes[items[c].k] = items[c].size;
+        out.units[items[c].k] = items[c].units;
         if (items[c].hidden) {
             out.hidden[items[c].k] = true;
             out.hiddenCount++;
@@ -341,7 +401,7 @@ function fit(bar, width, m) {
     return out;
 }
 
-// Where each shown island goes: {key: {x, w, size}}. The left zone from the left edge, the right
+// Where each shown island goes: {key: {x, w, size, units}}. The left zone from the left edge, the right
 // zone from the right edge, the centre zone centred unless that would touch a neighbour, in
 // which case it moves just enough. With a fitted layout nothing overlaps.
 function place(bar, fitted, width, m) {
@@ -352,10 +412,11 @@ function place(bar, fitted, width, m) {
             var k = key(zone, i);
             if (fitted.hidden[k])
                 continue;
-            var w = _widthOf(list[i].id, fitted.sizes[k], m);
+            var u = fitted.units && fitted.units[k] !== undefined ? fitted.units[k] : UNITS[fitted.sizes[k]];
+            var w = _widthOf(list[i].id, u, m);
             if (xs.length > 0)
                 x += m.gap;
-            xs.push({ k: k, x: x, w: w, size: fitted.sizes[k] });
+            xs.push({ k: k, x: x, w: w, size: fitted.sizes[k], units: u });
             x += w;
         }
         return { items: xs, width: x };
@@ -369,7 +430,7 @@ function place(bar, fitted, width, m) {
     for (var p = 0; p < parts.length; p++)
         for (var j = 0; j < parts[p][0].items.length; j++) {
             var it = parts[p][0].items[j];
-            out[it.k] = { x: parts[p][1] + it.x, w: it.w, size: it.size };
+            out[it.k] = { x: parts[p][1] + it.x, w: it.w, size: it.size, units: it.units };
         }
     return out;
 }

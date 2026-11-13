@@ -39,12 +39,20 @@ TestCase {
         compare(L.sizeOf(b.start[3]), "medium");
         compare(L.sizeOf({ id: "keyboard" }), "icon");
         compare([L.UNITS.icon, L.UNITS.small, L.UNITS.medium, L.UNITS.large], [1, 2, 4, 6]);
-        compare(L.stepSize("small", 1), "medium");
+        compare(L.stepSize("small", 1), { size: "medium", units: null });
         compare(L.stepSize("icon", -1), null);
-        compare(L.sizeForWidth(36, 36), "icon");
-        compare(L.sizeForWidth(100, 36), "small");
-        compare(L.sizeForWidth(120, 36), "medium");
-        compare(L.sizeForWidth(400, 36), "large");
+        compare(L.sizeForWidth(36, 36), { size: "icon", units: null });
+        compare(L.sizeForWidth(100, 36), { size: "small", units: null });
+        compare(L.sizeForWidth(120, 36), { size: "medium", units: null });
+        compare(L.sizeForWidth(230, 36), { size: "large", units: null });
+        // Past Large: Custom, one Icon size at a time, up to the most.
+        compare(L.sizeForWidth(36 * 7, 36), { size: "custom", units: 7 });
+        compare(L.sizeForWidth(36 * 9 + 10, 36), { size: "custom", units: 9 });
+        compare(L.sizeForWidth(36 * 40, 36), { size: "custom", units: L.MAX_CUSTOM });
+        compare(L.stepSize("large", 1), { size: "custom", units: 7 });
+        compare(L.stepSize("custom", 1, 7), { size: "custom", units: 8 });
+        compare(L.stepSize("custom", -1, 7), { size: "large", units: null });
+        compare(L.stepSize("custom", 1, L.MAX_CUSTOM), null);
     }
 
     function test_move_within_and_across_zones() {
@@ -70,6 +78,40 @@ TestCase {
         compare(L.setSize(b, "start", 0, "huge"), null);
         compare(L.toSetting(L.setSize(b, "start", 1, "small")).start, [{ id: "system" }, { id: "work", size: "small" }]);
         compare(L.toSetting(b).center, [{ id: "clock", size: "large" }]);
+    }
+
+    function test_custom_size() {
+        var b = sample();
+        var c = L.setSize(b, "start", 1, "custom", 9);
+        compare(c.start[1], { id: "work", size: "custom", units: 9 });
+        compare(L.unitsOf(c.start[1]), 9);
+        compare(L.tierOf("custom"), "large");
+        compare(L.sizeLabel("custom", 9), "Custom (9×)");
+        compare(L.toSetting(c).start[1], { id: "work", size: "custom", units: 9 });
+        // Keeps its width when chosen again without one; a tier drops it.
+        compare(L.setSize(c, "start", 1, "custom").start[1].units, 9);
+        compare(L.setSize(b, "start", 1, "custom").start[1].units, L.MIN_CUSTOM);
+        compare(L.setSize(c, "start", 1, "small").start[1], { id: "work", size: "small" });
+        verify(L.sameSize(c.start[1], { size: "custom", units: 9 }));
+        verify(!L.sameSize(c.start[1], { size: "custom", units: 8 }));
+        // Read from settings: units cleaned, kept only for Custom.
+        var lay = L.layout({ shell: { bar: { start: [
+            { id: "work", size: "custom", units: 99 }, { id: "clock", size: "small", units: 9 },
+            { id: "separator", size: "custom", units: 8 }] } } });
+        compare(lay.start[0].units, L.MAX_CUSTOM);
+        compare(lay.start[1], { id: "clock", size: "small" });
+        compare(lay.start[2], { id: "separator", size: null });
+        // Drawn at its width while there is room; stepped down an Icon size at a time.
+        var f = L.fit(c, 1900, m);
+        compare(f.sizes["start:1"], "custom");
+        compare(f.units["start:1"], 9);
+        compare(L.place(c, f, 1900, m)["start:1"].w, 9 * m.unit);
+        var need = f.width;
+        var g = L.fit(c, need - m.unit, m);
+        compare(g.sizes["start:1"], "custom");
+        compare(g.units["start:1"], 8);
+        var h = L.fit(c, need - m.unit * 3, m);
+        compare(h.sizes["start:1"], "large");
     }
 
     function test_fit_keeps_sizes_when_there_is_room() {

@@ -39,6 +39,7 @@ pub fn label(domain: &str, key: &str) -> Option<String> {
         ("shell", "edge_indicators") => "Screen-edge indicators",
         ("shell", "edge_titles") => "Window titles on screen-edge indicators",
         ("shell", "edge_style") => "Screen-edge indicator style",
+        ("shell", "fit_windows") => "Keep windows on screen",
         ("settings", "pinned") => "Pinned apps",
         ("settings", "weather_location") => "Weather location",
         ("settings", "idle.dim") => "Dim the screen",
@@ -253,6 +254,7 @@ mod tests {
         s.shell.edge_indicators = false;
         s.shell.edge_titles = true;
         s.shell.edge_style = crate::settings::EdgeStyle::Peek;
+        s.shell.fit_windows = false;
         s.mouse.sensitivity = 0.2;
         let kb = &mut s.input.keyboard;
         kb.layouts = vec![KbLayout {

@@ -137,7 +137,9 @@ Island {
                 ws = root.wsId > 0 ? root.wsId : 1;
             Bridge.call("Dispatch", ["restore", { address: w.address, to_ws: ws }]);
         } else if (!w.focused) {
-            Bridge.call("Dispatch", ["focus_window", { address: w.address }]);
+            // The pointer stays put; a window out of view (a scrolled-away column) is brought
+            // into view by the focus itself.
+            Bridge.call("Dispatch", ["focus_window", { address: w.address, keep_pointer: true }]);
         }
     }
     function act(w, name, args) {

@@ -9,6 +9,17 @@ All notable changes to uQ are listed here. The format follows
 
 ### Added
 
+- **Keep windows on screen.** A floating window that opens bigger than its screen, or hanging
+  under the bar or off an edge, is shrunk and moved so all of it shows, on whichever screen it
+  is on (any size or scale). This also happens when it turns floating, moves to another
+  workspace, or screens are added or rearranged. A window you drag part-way off screen yourself
+  stays where you put it. On by default; Settings → Shell → Windows → **Keep windows on
+  screen**.
+- **Custom island size.** Drag an island's edge past Large and it becomes **Custom**, growing
+  one Icon size at a time (up to 24 wide); drag it back in to shrink it, step by step, back to
+  Large. + and − in edit mode and **Narrower**/**Wider** in the island's settings do the same.
+  A Custom island shows what it shows at Large, with more room, and still steps down to fit a
+  small screen.
 - **Edit the bar on the bar.** Right-click any island for the **uQ Island Menu**: **Edit
   Islands**, **Add an Island** and **Remove**. In edit mode (also Super+Alt+B, or **Edit the bar**
   in Settings → Shell) drag islands between the left, centre and right of the bar, drag an
@@ -82,6 +93,12 @@ All notable changes to uQ are listed here. The format follows
 
 ### Changed
 
+- **Screen-edge indicators only point at windows out of view.** A window already wholly on
+  screen gets no indicator (click it where it is); one partly or wholly off screen, behind a
+  fullscreen window, or on another workspace still does.
+- **The screen-edge indicator looks like a window just off screen.** Reaching the edge brings in
+  the near edge of a window frame (at that window's own height when it is in this layout) in
+  place of the thin line, with the app tab beside it as before.
 - **Weather has its own island.** The city is chosen in edit mode (or from the Weather island's
   popup), and the clock's popup keeps the calendar. The old on/off switches for the five islands
   in Settings are replaced by edit mode on the bar, and the Windows island lists the windows it
@@ -115,6 +132,10 @@ All notable changes to uQ are listed here. The format follows
 
 ### Fixed
 
+- **Choosing a window in Open windows no longer moves the pointer.** The pointer stays where it
+  is; a window out of view (a scrolled-away column) is scrolled into view. The screen-edge
+  indicators no longer move the pointer for a moment either: Hyprland's pointer warp is now
+  switched off for the focus instead of the pointer being put back afterwards.
 - **Settings fixes:** adding a pointing device under Input → Devices no longer resets its speed
   to 0; keyboard, mouse and touchpad rows show when `user.lua` overrides them; the Login screen
   page's theme box is never blank; deleting a restore point asks first; the Login screen page
