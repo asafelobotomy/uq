@@ -139,6 +139,45 @@ TestCase {
         compare(Edges.neighbour(ws, 1, "left", [1, 3, 5], "0xc").address, "0xb");
     }
 
+    function test_peek_wanted() {
+        var mon = { x: 0, y: 0, width: 1920, height: 1080 };
+        // Scrolling, maximized column: the neighbours' frames already show at the edges.
+        var max = wins([
+            ipc("0xk", 1, -1877, 1882, { focusHistoryID: 3, fullscreen: 1 }),
+            ipc("0xc", 1, 19, 1882, { focusHistoryID: 0, fullscreen: 1 }),
+            ipc("0xb", 1, 1915, 1882, { focusHistoryID: 1, fullscreen: 1 })
+        ]);
+        var l = Edges.neighbour(max, 1, "left", [1], null);
+        var r = Edges.neighbour(max, 1, "right", [1], null);
+        verify(!Edges.peekWanted(max, 1, l, mon, null), "the left frame ends at x=5, in view");
+        verify(!Edges.peekWanted(max, 1, r, mon, null), "the right frame starts at x=1915");
+        // True fullscreen covers the monitor: both need a slice.
+        var full = wins([
+            ipc("0xk", 1, -1877, 1882, { focusHistoryID: 3 }),
+            { address: "0xc", workspace: { id: 1 }, at: [0, 0], size: [1920, 1080], fullscreen: 2, focusHistoryID: 0 },
+            ipc("0xb", 1, 1915, 1882, { focusHistoryID: 1 })
+        ]);
+        verify(Edges.peekWanted(full, 1, Edges.neighbour(full, 1, "left", [1], null), mon, null));
+        verify(Edges.peekWanted(full, 1, Edges.neighbour(full, 1, "right", [1], null), mon, null));
+        // Dwindle, maximized: the other tile is hidden behind it.
+        var dw = wins([
+            { address: "0xa", workspace: { id: 1 }, at: [12, 60], size: [1896, 1008], fullscreen: 1, focusHistoryID: 0 },
+            { address: "0xb", workspace: { id: 1 }, at: [966, 60], size: [942, 1008], focusHistoryID: 1 }
+        ]);
+        verify(Edges.peekWanted(dw, 1, Edges.neighbour(dw, 1, "right", [1], null), mon, null));
+        // Not fullscreen: never a standing slice.
+        var plain = wins([ipc("0xa", 1, 0, 900, { focusHistoryID: 0 }), ipc("0xb", 1, 3000, 900)]);
+        verify(!Edges.peekWanted(plain, 1, Edges.neighbour(plain, 1, "right", [1], null), mon, null));
+        // Another workspace's window, from a fullscreen one.
+        var other = wins([
+            { address: "0xa", workspace: { id: 1 }, at: [0, 0], size: [1920, 1080], fullscreen: 2, focusHistoryID: 0 },
+            ipc("0xz", 2, 0, 900, { focusHistoryID: 1 })
+        ]);
+        verify(Edges.peekWanted(other, 1, Edges.neighbour(other, 1, "right", [1, 2], null), mon, null));
+        verify(!Edges.peekWanted(other, 1, null, mon, null));
+        verify(!Edges.peekWanted(other, 1, { address: "0xz", workspace: 2 }, null, null));
+    }
+
     function test_free_span() {
         var a = { x: 0, y: 0, width: 1920, height: 1080 };
         var b = { x: 1920, y: 0, width: 1920, height: 1080 };
@@ -196,5 +235,8 @@ TestCase {
         verify(!ShellPrefs.edgeTitles({}));
         verify(!ShellPrefs.edgeTitles({ edge_titles: "yes" }));
         verify(ShellPrefs.edgeTitles({ edge_titles: true }));
+        compare(ShellPrefs.edgeStyle(undefined), "tab");
+        compare(ShellPrefs.edgeStyle({ edge_style: "slice" }), "tab");
+        compare(ShellPrefs.edgeStyle({ edge_style: "peek" }), "peek");
     }
 }

@@ -19,6 +19,9 @@ Scope {
         && !Bridge.locked
     // shell.edge_titles: the tab shows the window's title too; off, it is the icon only.
     readonly property bool showTitles: ShellPrefs.edgeTitles(Settings.values ? Settings.values.shell : null)
+    // shell.edge_style: "tab" (an icon tab on reaching the edge) or "peek" (a slice of the window,
+    // standing while the current window is fullscreen and hides it).
+    readonly property string style: ShellPrefs.edgeStyle(Settings.values ? Settings.values.shell : null)
     // Every window, as logic/edges.js reads them; rebuilt when Hyprland's list or a window's
     // last IPC reply changes.
     property var windows: []
@@ -49,6 +52,15 @@ Scope {
         Bridge.call("Dispatch", ["focus_window", { address: addr, keep_pointer: true }]).catch(function () {});
         root.refresh();
         return true;
+    }
+
+    // The HyprlandToplevel for a window address, or null.
+    function toplevelFor(address) {
+        var a = Work.normAddr(address), vals = Hyprland.toplevels.values;
+        for (var i = 0; a !== null && i < vals.length; i++)
+            if (Work.normAddr(vals[i].address) === a)
+                return vals[i];
+        return null;
     }
 
     function monitorWorkspaces(monitorName) {

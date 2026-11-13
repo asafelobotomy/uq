@@ -35,3 +35,9 @@ function edgeIndicators(shell) {
 function edgeTitles(shell) {
     return !!(shell && shell.edge_titles === true);
 }
+
+// shell.edge_style: "peek" (a slice of the window at the edge) or "tab" (the default, and what
+// any other value means).
+function edgeStyle(shell) {
+    return shell && shell.edge_style === "peek" ? "peek" : "tab";
+}

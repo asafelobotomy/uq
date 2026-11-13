@@ -1,6 +1,7 @@
 //! The `shell` section: which bar islands show, the clock format, the launcher's provider
 //! order and enablement, the terminal for `Terminal=true` launches, and whether the screen-edge
-//! indicators show (and with the window's title, or just its icon). The shell reads it
+//! indicators show, how (an icon tab or a slice of the window) and whether the tab has the
+//! window's title. The shell reads it
 //! through `SettingsChanged`; uqd renders nothing for it.
 //!
 //! Loading is lenient (wrong-typed or unknown values fall back or are dropped, so a bad
@@ -59,6 +60,26 @@ fn lenient_providers<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<ProviderPref
             .collect(),
         _ => Vec::new(),
     })
+}
+
+/// How the screen-edge indicators look (`shell/edge/`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum EdgeStyle {
+    /// A tab with the window's app icon, shown when the pointer reaches the edge.
+    #[default]
+    Tab,
+    /// A slice of the window itself at the edge: always there while the current window is
+    /// fullscreen and hides it, otherwise shown when the pointer reaches the edge.
+    Peek,
+}
+
+impl EdgeStyle {
+    pub const NAMES: [&str; 2] = ["tab", "peek"];
+}
+
+fn lenient_edge_style<'de, D: Deserializer<'de>>(d: D) -> Result<EdgeStyle, D::Error> {
+    lenient_or(d, EdgeStyle::default)
 }
 
 /// The five islands of `shell/bar/Bar.qml`.
@@ -136,6 +157,8 @@ pub struct ShellSettings {
     /// Show the window's title on those tabs; `false` (the default) is the icon only.
     #[serde(deserialize_with = "lenient_false")]
     pub edge_titles: bool,
+    #[serde(deserialize_with = "lenient_edge_style")]
+    pub edge_style: EdgeStyle,
 }
 
 impl Default for ShellSettings {
@@ -147,6 +170,7 @@ impl Default for ShellSettings {
             terminal: None,
             edge_indicators: true,
             edge_titles: false,
+            edge_style: EdgeStyle::Tab,
         }
     }
 }
@@ -167,13 +191,14 @@ fn expect_bool(key: &str, v: &Value) -> Result<bool, SettingError> {
 
 impl ShellSettings {
     /// Every key of the `shell` section.
-    pub const FIELDS: [&str; 6] = [
+    pub const FIELDS: [&str; 7] = [
         "islands",
         "providers",
         "clock_24h",
         "terminal",
         "edge_indicators",
         "edge_titles",
+        "edge_style",
     ];
 
     /// Rules shared by the API and the loader: ids valid, unique, at most 64, terminal valid.
@@ -280,6 +305,14 @@ impl ShellSettings {
         if let Some(e) = obj.get("edge_titles") {
             out.edge_titles = expect_bool("shell.edge_titles", e)?;
         }
+        if let Some(e) = obj.get("edge_style") {
+            out.edge_style = serde_json::from_value(e.clone()).map_err(|_| {
+                invalid(
+                    "shell.edge_style",
+                    format!("expected one of {:?}", EdgeStyle::NAMES),
+                )
+            })?;
+        }
         match obj.get("terminal") {
             None | Some(Value::Null) => {}
             Some(Value::String(s)) => out.terminal = Some(s.clone()),
@@ -347,6 +380,7 @@ mod tests {
         );
         assert!(s.clock_24h && s.providers.is_empty() && s.terminal.is_none());
         assert!(s.edge_indicators && !s.edge_titles);
+        assert_eq!(s.edge_style, EdgeStyle::Tab);
         assert_eq!(s, serde_json::from_value(json!({})).unwrap());
         assert_eq!(s, ShellSettings::from_section(&json!({})).unwrap());
         assert!(s.validate().is_ok());
@@ -388,6 +422,8 @@ mod tests {
             json!({"terminal": 5}),
             json!({"edge_indicators": "off"}),
             json!({"edge_titles": 1}),
+            json!({"edge_style": "slice"}),
+            json!({"edge_style": true}),
             json!([]),
         ] {
             assert!(set.set_section("shell", bad.clone()).is_err(), "{bad}");
@@ -451,6 +487,12 @@ mod tests {
         assert_eq!(set.section("shell").unwrap()["edge_titles"], true);
         set.set_section("shell", json!({})).unwrap();
         assert!(!set.shell.edge_titles, "missing means icon only");
+        set.set_section("shell", json!({"edge_style": "peek"}))
+            .unwrap();
+        assert_eq!(set.shell.edge_style, EdgeStyle::Peek);
+        assert_eq!(set.section("shell").unwrap()["edge_style"], "peek");
+        set.set_section("shell", json!({})).unwrap();
+        assert_eq!(set.shell.edge_style, EdgeStyle::Tab);
         let s: ShellSettings = serde_json::from_value(json!({"edge_indicators": false})).unwrap();
         assert!(!s.edge_indicators);
     }
@@ -492,6 +534,12 @@ mod tests {
         assert!(s.edge_indicators, "a wrong type keeps the default");
         let s: ShellSettings = serde_json::from_value(json!({"edge_titles": "yes"})).unwrap();
         assert!(!s.edge_titles, "a wrong type keeps the default");
+        let s: ShellSettings = serde_json::from_value(json!({"edge_style": "slice"})).unwrap();
+        assert_eq!(
+            s.edge_style,
+            EdgeStyle::Tab,
+            "an unknown style keeps the default"
+        );
         let s: ShellSettings =
             serde_json::from_value(json!({"islands": 3, "providers": 4, "terminal": 1})).unwrap();
         assert_eq!(s, ShellSettings::default());

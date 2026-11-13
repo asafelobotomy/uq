@@ -69,6 +69,13 @@ async fn set_shell_keeps_other_fields() {
     let out = run(&page, shell("edge_indicators", json!(false))).await;
     assert_eq!(out.error, None);
     assert_eq!(out.state["shell"]["edge_indicators"], false);
+
+    let out = run(&page, shell("edge_style", json!("peek"))).await;
+    assert_eq!(out.error, None);
+    assert_eq!(out.state["shell"]["edge_style"], "peek");
+    let out = run(&page, shell("edge_style", json!("slice"))).await;
+    assert!(out.error.unwrap().contains("edge_style"));
+    assert_eq!(out.state["shell"]["edge_style"], "peek");
     assert_eq!(out.state["shell"]["terminal"], Value::Null);
     assert!(!r.state.lock().unwrap().settings.shell.edge_indicators);
 
@@ -355,6 +362,11 @@ async fn every_field_round_trips() {
             json!(false),
         ),
         (
+            shell("edge_style", json!("peek")),
+            "/shell/edge_style",
+            json!("peek"),
+        ),
+        (
             shell("edge_titles", json!(true)),
             "/shell/edge_titles",
             json!(true),
@@ -373,11 +385,11 @@ async fn every_field_round_trips() {
             json!({"id": "run", "enabled": true}),
         ),
     ];
-    // Every setting key, plus clock, the two edge-indicator switches, terminal and a provider
+    // Every setting key, plus clock, the three edge-indicator settings, terminal and a provider
     // switch (the islands follow).
     assert_eq!(
         writes.len(),
-        SETTING_KEYS.len() + 5,
+        SETTING_KEYS.len() + 6,
         "a setting was added without a round trip"
     );
     for island in Islands::FIELDS {

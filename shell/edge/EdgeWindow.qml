@@ -13,7 +13,11 @@ import "../logic/edges.js" as Edges
 // and never keyboard focus; reaching it lights the edge and slides out a tab, at the pointer's
 // height, with the neighbour's app icon (and its workspace number when it is on another
 // workspace). With shell.edge_titles the tab shows the window's title too, except while the
-// screen is shared. A click anywhere on it, or each wheel notch, focuses that neighbour.
+// screen is shared. With shell.edge_style "peek" there is no tab: a slice of the neighbour
+// window itself sits at the edge, like the frame the scrolling layout leaves of a half-width
+// column; it stands there while the current window is fullscreen (or maximized) and hides the
+// neighbour, and otherwise comes out when the pointer reaches the edge. A click anywhere on it,
+// or each wheel notch, focuses that neighbour.
 PanelWindow {
     id: win
 
@@ -31,10 +35,19 @@ PanelWindow {
     // What is on this side (Edges.neighbour), recomputed after its inputs change rather than as
     // a binding: reading Hyprland's workspace list can update it mid-evaluation (a binding loop).
     property var target: null
+    // Peek style: the slice stands at the edge without the pointer (see Edges.peekWanted).
+    property bool standing: false
+    // The neighbour's HyprlandToplevel, whose `wayland` handle the slice captures.
+    property var targetToplevel: null
     function recompute() {
         var ids = win.edge.monitorWorkspaces(win.monitor ? win.monitor.name : "");
-        win.target = Edges.neighbour(win.edge.windows, win.wsId, win.side, ids,
-            win.stepRef === "" ? null : win.stepRef);
+        var ref = win.stepRef === "" ? null : win.stepRef;
+        var t = Edges.neighbour(win.edge.windows, win.wsId, win.side, ids, ref);
+        win.target = t;
+        var d = win.display;
+        var mon = d ? { x: d.x, y: d.y, width: d.width, height: d.height } : null;
+        win.standing = win.peekStyle && Edges.peekWanted(win.edge.windows, win.wsId, t, mon, ref);
+        win.targetToplevel = win.peekStyle && t ? win.edge.toplevelFor(t.address) : null;
     }
     function schedule() {
         Qt.callLater(win.recompute);
@@ -47,7 +60,11 @@ PanelWindow {
         target: win.edge
         function onWindowsChanged() { win.schedule(); }
         function onWsSerialChanged() { win.schedule(); }
+        function onStyleChanged() { win.schedule(); }
     }
+    readonly property bool peekStyle: edge.style === "peek"
+    // Peek style: the slice is out (standing, or reached by the pointer).
+    readonly property bool peekShown: peekStyle && (standing || revealed)
     readonly property var span: Edges.freeSpan(Quickshell.screens, display, side)
     readonly property bool sharing: Bridge.sharing
     readonly property string targetLabel: Edges.label(target, sharing, side)
@@ -60,6 +77,9 @@ PanelWindow {
     readonly property int iconSize: Theme.fontSize * 2
     readonly property int pad: Theme.gapIn
     readonly property int titleMax: Theme.fontSize * 20
+    // The slice: as wide as the outer gap, and wider while pointed at.
+    readonly property int peekNarrow: Math.max(win.stripWidth * 2, Theme.gapOut)
+    readonly property int peekWide: Theme.gapOut * 4
 
     screen: display
     visible: edge.enabled && target !== null && span !== null
@@ -84,10 +104,11 @@ PanelWindow {
     }
     implicitWidth: win.stripWidth + win.iconSize + win.titleMax + Theme.fontSize * 4 + win.pad * 6
 
-    // Input only on the strip, plus the tab while it is out.
+    // Input only on the strip, plus the tab or the slice while it is out.
     mask: Region {
         item: strip
         Region { item: tabHit }
+        Region { item: peek }
     }
 
     function conceal() {
@@ -128,7 +149,7 @@ PanelWindow {
         height: parent.height
         x: win.left ? 0 : parent.width - width
         color: Theme.accent
-        opacity: win.revealed ? 1 : 0
+        opacity: win.revealed && !win.peekStyle ? 1 : 0
         Behavior on opacity {
             enabled: !Settings.reduceMotion
             NumberAnimation { duration: 120 }
@@ -140,8 +161,8 @@ PanelWindow {
         id: tabHit
         x: win.left ? 0 : parent.width - width
         y: tab.y
-        width: win.revealed ? tab.width - tab.radius : 0
-        height: win.revealed ? tab.height : 0
+        width: win.revealed && !win.peekStyle ? tab.width - tab.radius : 0
+        height: win.revealed && !win.peekStyle ? tab.height : 0
     }
 
     MouseArea {
@@ -169,8 +190,58 @@ PanelWindow {
         }
     }
 
+    // Peek style: a slice of the neighbour window, its inner edge showing, the rest off-screen.
+    Rectangle {
+        id: peek
+        readonly property bool hovered: win.peekShown && area.containsMouse
+            && (win.left ? area.mouseX < peek.width : area.mouseX >= peek.x)
+        // While the screen is shared, no window content: the app icon on the surface colour.
+        readonly property bool showContent: !win.sharing && shot.hasContent
+
+        visible: win.peekStyle
+        width: !win.peekShown ? 0 : (hovered ? win.peekWide : win.peekNarrow)
+        height: parent.height
+        x: win.left ? 0 : parent.width - width
+        clip: true
+        color: Theme.surface
+        border.color: hovered ? Theme.accent : Theme.border
+        border.width: Theme.borderWidth
+        Accessible.role: Accessible.Button
+        Accessible.name: "Go to " + win.targetLabel
+
+        Behavior on width {
+            enabled: !Settings.reduceMotion
+            NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
+        }
+
+        ScreencopyView {
+            id: shot
+            captureSource: win.peekShown && !win.sharing && win.targetToplevel ? win.targetToplevel.wayland : null
+            // Live only while pointed at; otherwise the frame taken when it came out.
+            live: peek.hovered
+            visible: peek.showContent
+            height: parent.height
+            width: sourceSize.height > 0 ? height * sourceSize.width / sourceSize.height : parent.width
+            // The neighbour's inner edge: the right edge of the window on the left, and so on.
+            x: win.left ? parent.width - width : 0
+        }
+        IconImage {
+            anchors.centerIn: parent
+            visible: !peek.showContent || peek.hovered
+            implicitSize: Math.min(win.iconSize, Math.max(1, peek.width - Theme.borderWidth * 2))
+            source: win.iconFor(win.target ? win.target.cls : "")
+        }
+        Rectangle {
+            anchors.fill: parent
+            color: "transparent"
+            border.color: peek.hovered ? Theme.accent : Theme.border
+            border.width: Theme.borderWidth
+        }
+    }
+
     Rectangle {
         id: tab
+        visible: !win.peekStyle
         readonly property bool hovered: win.revealed && area.containsMouse
             && area.mouseY >= tab.y && area.mouseY < tab.y + tab.height
             && (win.left ? area.mouseX < tab.x + tab.width : area.mouseX >= tab.x)

@@ -46,6 +46,7 @@ function fromIpc(o, title) {
         floating: o.floating === true,
         pinned: o.pinned === true,
         hidden: o.hidden === true,
+        fullscreen: typeof o.fullscreen === "number" ? o.fullscreen : 0,
         history: typeof o.focusHistoryID === "number" ? o.focusHistoryID : 1e9
     };
 }
@@ -167,6 +168,43 @@ function neighbour(wins, ws, side, monitorWs, refAddr) {
     if (o === null || o.win === null)
         return null;
     return { address: o.win.address, cls: o.win.cls, title: o.win.title, workspace: o.ws };
+}
+
+function _intersect(a, b) {
+    var x = Math.max(a.x, b.x), y = Math.max(a.y, b.y);
+    var r = Math.min(a.x + a.w, b.x + b.w), btm = Math.min(a.y + a.h, b.y + b.h);
+    return r > x && btm > y ? { x: x, y: y, w: r - x, h: btm - y } : null;
+}
+
+function _contains(outer, inner) {
+    return inner.x >= outer.x && inner.y >= outer.y && inner.x + inner.w <= outer.x + outer.w
+        && inner.y + inner.h <= outer.y + outer.h;
+}
+
+// The "window peek" style: whether the neighbour `n` (from neighbour()) should show as a
+// standing slice at the edge. Only while the reference window is fullscreen or maximized, and
+// only when nothing of the neighbour can be seen on the monitor already: off-screen, behind the
+// reference, or on another workspace. (A maximized column in the scrolling layout leaves its
+// neighbour's frame in view, so no slice is added there.) `mon` is the monitor's rectangle
+// {x, y, width, height} in the same (logical, global) coordinates as the windows.
+function peekWanted(wins, ws, n, mon, refAddr) {
+    if (!n || !mon || !Array.isArray(wins))
+        return false;
+    if (refAddr) {
+        var r0 = _find(wins, refAddr);
+        if (r0 !== null && r0.ws >= 1)
+            ws = r0.ws;
+    }
+    var ref = reference(wins, ws, refAddr);
+    if (ref === null || !(ref.fullscreen > 0))
+        return false;
+    if (n.workspace > 0)
+        return true;
+    var w = _find(wins, n.address);
+    if (w === null)
+        return false;
+    var seen = _intersect(w, { x: mon.x, y: mon.y, w: mon.width, h: mon.height });
+    return seen === null || _contains(ref, seen);
 }
 
 // The part of `me`'s `side` edge that no other screen touches, as {top, bottom} offsets from

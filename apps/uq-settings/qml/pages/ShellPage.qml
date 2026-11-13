@@ -250,11 +250,33 @@ QQC2.ScrollView {
             onChosen: v => page.setShell("edge_indicators", v)
             Layout.fillWidth: true
         }
-        SwitchRow {
-            settingId: "edge-titles"
-            label: "Show the window's title, not just its icon"
+        SettingRow {
+            settingId: "edge-style"
+            label: "Show it as"
             highlight: App.highlight
             enabled: page.ready && page.shell.edge_indicators !== false
+            Layout.leftMargin: Kirigami.Units.largeSpacing * 2
+            Layout.fillWidth: true
+            UqComboBox {
+                id: edgeStyleCombo
+                // "Window peek": a slice of the window at the edge, always there while the
+                // current window is fullscreen and covers it.
+                model: ["An icon tab, when the pointer reaches the edge", "A slice of the window, always there over fullscreen apps"]
+                currentIndex: page.shell.edge_style === "peek" ? 1 : 0
+                enabled: page.ready && page.shell.edge_indicators !== false
+                implicitContentWidthPolicy: QQC2.ComboBox.WidestText
+                Accessible.name: "Screen-edge indicator style"
+                onActivated: index => {
+                    page.setShell("edge_style", index === 1 ? "peek" : "tab");
+                    edgeStyleCombo.currentIndex = Qt.binding(() => page.shell.edge_style === "peek" ? 1 : 0);
+                }
+            }
+        }
+        SwitchRow {
+            settingId: "edge-titles"
+            label: "Show the window's title on the tab"
+            highlight: App.highlight
+            enabled: page.ready && page.shell.edge_indicators !== false && page.shell.edge_style !== "peek"
             value: page.shell.edge_titles === true
             onChosen: v => page.setShell("edge_titles", v)
             Layout.leftMargin: Kirigami.Units.largeSpacing * 2
