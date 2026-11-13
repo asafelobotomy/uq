@@ -93,7 +93,8 @@ grep -qE '^d /var/cache/uq-greeter 0[0-7]{3} greeter greeter -$' "$tmpfiles" || 
 
 # --- PKGBUILD -------------------------------------------------------------------------------
 grep -q '^  cargo build .*-p uq-settings-helper' "$pkgbuild" || no "PKGBUILD doesn't build uq-settings-helper"
-grep -q 'kvantum polkit)' "$pkgbuild" || no "PKGBUILD doesn't depend on polkit"
+# The depends=( ... ) array, which may span lines; polkit must be one of its words.
+sed -n '/^depends=(/,/)/p' "$pkgbuild" | tr -s ' ()\t' '\n' | grep -qx polkit || no "PKGBUILD doesn't depend on polkit"
 for line in \
     'install -Dm755 target/release/uq-settings-helper "$pkgdir/usr/lib/uq/uq-settings-helper"' \
     'install -Dm644 packaging/dbus/org.uq.SettingsHelper1.service "$pkgdir/usr/share/dbus-1/system-services/org.uq.SettingsHelper1.service"' \
