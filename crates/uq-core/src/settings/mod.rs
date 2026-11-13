@@ -32,8 +32,8 @@ pub use monitors::{
     counts_in_sets, parse_live, stays_visible, valid_mode, valid_output_name, valid_profile_id,
 };
 pub use shell::{
-    BUILTIN_PROVIDERS, Islands, ProviderPref, ShellSettings, provider_enabled, provider_order,
-    valid_terminal,
+    BUILTIN_PROVIDERS, EdgeStyle, Islands, ProviderPref, ShellSettings, provider_enabled,
+    provider_order, valid_terminal,
 };
 pub use wallpaper::{Fit, Wallpaper, WallpaperEntry};
 
