@@ -60,6 +60,7 @@ pkgbase = uq
 	optdepends = kate: KWrite, a plain text editor
 	options = !lto
 	backup = etc/pam.d/uq-greetd
+	backup = etc/pam.d/uq-greeter
 	backup = etc/pam.d/uq-lock
 	backup = etc/pam.d/uq-lock-fingerprint
 	backup = etc/uq/greetd.toml
