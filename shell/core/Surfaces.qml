@@ -9,9 +9,9 @@ import "../logic/power.js" as P
 QtObject {
     id: root
 
-    property string open: "closed"      // "closed" | "spotlight" | "appmenu" | "quicksettings" | "notifcentre" | "powermenu"
+    property string open: "closed"      // "closed" | "spotlight" | "appmenu" | "quicksettings" | "notifcentre" | "powermenu" | "desktopmenu"
     property var screen: null           // ShellScreen, or null for the focused monitor
-    property var anchor: null           // Item the app menu hangs from, or null
+    property var anchor: null           // Item the app menu hangs from, the desktop menu's {x, y} on its screen, or null
     // The confirm step the power menu opens at ("reboot" | "poweroff", from the app menu's
     // restart and shut-down buttons), or "". Set by toggle(), cleared when the menu closes.
     property string powerConfirm: ""
@@ -47,6 +47,7 @@ QtObject {
                 root.wipe("quicksettings");
                 root.wipe("notifcentre");
                 root.wipe("powermenu");
+                root.wipe("desktopmenu");
             } else if (prev !== "closed") {
                 root.wipe(prev);
             }
@@ -55,7 +56,8 @@ QtObject {
     }
 
     // name: "spotlight" | "appmenu" | "quicksettings" | "notifcentre" (the built-in notification
-    // centre, toggled by NotifBackend) | "powermenu". initialConfirm (powermenu only): the action
+    // centre, toggled by NotifBackend) | "powermenu" | "desktopmenu" (the right-click menu on
+    // empty desktop space; `anchor` is the click's {x, y} on `screen`, not an IPC name). initialConfirm (powermenu only): the action
     // whose confirm step it opens at, "reboot" or "poweroff"; anything else opens the plain menu.
     // Ignored while locked.
     function toggle(name, screen, anchor, initialConfirm) {
@@ -65,7 +67,8 @@ QtObject {
             : (name === "appmenu" ? "toggleAppMenu"
             : (name === "quicksettings" ? "toggleQuickSettings"
             : (name === "notifcentre" ? "toggleNotifCentre"
-            : (name === "powermenu" ? "togglePowerMenu" : ""))));
+            : (name === "powermenu" ? "togglePowerMenu"
+            : (name === "desktopmenu" ? "toggleDesktopMenu" : "")))));
         if (event === "")
             return;
         if (root.open !== name) {

@@ -53,7 +53,7 @@ TestCase {
         Surfaces.toggle("spotlight");
         Bridge.locked = true;
         compare(Surfaces.open, "closed");
-        compare(wipeSpy.count, 5);   // every surface wipes on lock
+        compare(wipeSpy.count, 6);   // every surface wipes on lock
         Surfaces.toggle("spotlight");
         compare(Surfaces.open, "closed");
         Bridge.locked = false;
@@ -199,6 +199,35 @@ TestCase {
         Surfaces.toggle("powermenu", null, null, "reboot");
         compare(Surfaces.open, "closed");
         compare(Surfaces.powerConfirm, "");
+    }
+
+    // The desktop menu opens on the clicked screen with the click as its anchor; the power menu
+    // (its Restart and Shutdown) replaces it; lock wipes it; it is not an IPC name.
+    function test_desktopmenu_surface() {
+        var scr = { name: "HDMI-A-1" };
+        Surfaces.toggle("desktopmenu", scr, { x: 40, y: 50 });
+        compare(Surfaces.open, "desktopmenu");
+        compare(Surfaces.screen, scr);
+        compare(Surfaces.anchor.x, 40);
+        compare(Surfaces.anchor.y, 50);
+        Surfaces.toggle("powermenu", scr, null, "reboot");
+        compare(Surfaces.open, "powermenu");
+        compare(Surfaces.powerConfirm, "reboot");
+        compare(wipeSpy.signalArguments[0][0], "desktopmenu");
+        Surfaces.toggle("desktopmenu", scr, { x: 1, y: 2 });
+        compare(Surfaces.open, "desktopmenu");
+        wipeSpy.clear();
+        Bridge.locked = true;
+        compare(Surfaces.open, "closed");
+        var names = [];
+        for (var i = 0; i < wipeSpy.count; i++)
+            names.push(wipeSpy.signalArguments[i][0]);
+        verify(names.indexOf("desktopmenu") >= 0, "lock wipes desktopmenu");
+        Surfaces.toggle("desktopmenu", scr, { x: 1, y: 2 });
+        compare(Surfaces.open, "closed");
+        Bridge.locked = false;
+        compare(Surfaces.ipc("open", "desktopmenu"), "ignored");
+        compare(Surfaces.open, "closed");
     }
 
     function test_ipc_powermenu() {

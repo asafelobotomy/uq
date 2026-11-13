@@ -6,7 +6,7 @@
 pub(crate) mod mimeapps;
 
 use std::collections::HashSet;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use serde_json::{Value, json};
 use tokio::sync::Mutex;
@@ -16,9 +16,6 @@ use uq_core::desktop_entry::{clean_display, read_entry, valid_desktop_id};
 use super::runner::{PageLogic, parse_json, patch_section};
 use super::sysbus::{self, failure};
 use crate::desktop_entries;
-
-/// The largest `mimeapps.list` read.
-const MAX_FILE: u64 = 1024 * 1024;
 
 /// One kind of file or link: its id, its label, and the types it covers (the first decides
 /// which apps are offered).
@@ -166,38 +163,7 @@ pub fn scan_handlers(dirs: &[PathBuf]) -> Vec<Handler> {
     out
 }
 
-/// `$XDG_CONFIG_HOME/mimeapps.list`, or `~/.config/mimeapps.list`.
-pub fn user_file() -> PathBuf {
-    match std::env::var_os("XDG_CONFIG_HOME") {
-        Some(d) if !d.is_empty() => PathBuf::from(d),
-        _ => std::env::var_os("HOME")
-            .map(|h| PathBuf::from(h).join(".config"))
-            .unwrap_or_default(),
-    }
-    .join("mimeapps.list")
-}
-
-/// The system-wide lists, read when the user's has no answer.
-pub fn system_files() -> Vec<PathBuf> {
-    let mut out: Vec<PathBuf> = std::env::var("XDG_CONFIG_DIRS")
-        .ok()
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| "/etc/xdg".into())
-        .split(':')
-        .map(|d| Path::new(d).join("mimeapps.list"))
-        .collect();
-    out.push(PathBuf::from("/usr/share/applications/mimeapps.list"));
-    out
-}
-
-fn read_capped(path: &Path) -> String {
-    match std::fs::metadata(path) {
-        Ok(m) if m.is_file() && m.len() <= MAX_FILE => {
-            std::fs::read_to_string(path).unwrap_or_default()
-        }
-        _ => String::new(),
-    }
-}
+pub use uq_core::mimeapps::{read_capped, system_files, user_file};
 
 pub struct DefaultAppsState {
     session: Option<zbus::Connection>,
@@ -317,7 +283,9 @@ impl PageLogic for DefaultAppsState {
                     ));
                 }
                 // Never replace a file this page can't read whole.
-                if std::fs::metadata(&self.file).is_ok_and(|m| !m.is_file() || m.len() > MAX_FILE) {
+                if std::fs::metadata(&self.file)
+                    .is_ok_and(|m| !m.is_file() || m.len() > uq_core::mimeapps::MAX_FILE)
+                {
                     return Err(failure(
                         "The list of default apps is too large to change here.",
                     ));
