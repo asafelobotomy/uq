@@ -150,9 +150,9 @@ mod tests {
         }));
         let v = list(&k, None);
         let b = v["binds"].as_array().unwrap();
-        assert_eq!(b.len(), 60);
+        assert_eq!(b.len(), 61);
         assert_eq!(b[0]["id"], "uq.terminal");
-        assert_eq!(b[59]["name"], "Screenshot");
+        assert_eq!(b[60]["name"], "Screenshot");
         let s = row(&v, "uq.spotlight");
         assert_eq!(s["combo"], "SUPER + K");
         assert_eq!(s["combo_text"], "Super + K");
@@ -165,7 +165,7 @@ mod tests {
         assert_eq!(row(&v, "uq.float")["is_default"], true);
         assert_eq!(row(&v, "uq.lock-recovery")["can_disable"], false);
         assert_eq!(row(&v, "uq.lock-recovery")["locked"], true);
-        let c = &b[59];
+        let c = &b[60];
         assert_eq!(c["group"], "custom");
         assert_eq!(c["custom"], true);
         assert_eq!(c["default_combo"], Value::Null);
@@ -190,7 +190,7 @@ mod tests {
         );
         assert_eq!(u[1]["combo"], Value::Null);
         assert_eq!(u[1]["combo_text"], Value::Null);
-        assert_eq!(v["binds"].as_array().unwrap().len(), 59);
+        assert_eq!(v["binds"].as_array().unwrap().len(), 60);
     }
 
     #[test]
@@ -202,7 +202,7 @@ mod tests {
             json!({"spelling": "A", "label": "A", "kind": "key",
                                         "group": "letter"})
         );
-        assert_eq!(v["actions"]["shell"].as_array().unwrap().len(), 13);
+        assert_eq!(v["actions"]["shell"].as_array().unwrap().len(), 14);
         let uq = v["actions"]["uq"].as_array().unwrap();
         assert!(
             uq.iter()

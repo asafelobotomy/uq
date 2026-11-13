@@ -36,3 +36,14 @@ if [ -n "$hits" ]; then
     echo "$hits" >&2
     exit 1
 fi
+
+# Every QML and JavaScript file is compiled into the app (apps/uq-settings/build.rs); one that
+# isn't loads under qmltestrunner but fails in the real app ("X is not a type").
+[ -f apps/uq-settings/build.rs ] || exit 0
+hits=$(cd apps/uq-settings && find qml -type f \( -name '*.qml' -o -name '*.js' \) | sort \
+    | while read -r f; do grep -qF "QmlFile::from(\"$f\")" build.rs || echo "apps/uq-settings/$f"; done)
+if [ -n "$hits" ]; then
+    echo "lint-settings: these files are missing from apps/uq-settings/build.rs (QmlFile::from):" >&2
+    echo "$hits" >&2
+    exit 1
+fi

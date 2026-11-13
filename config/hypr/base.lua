@@ -154,6 +154,8 @@ hl.bind(mainMod .. " + N",       hl.dsp.global("uq:notif-centre"))
 hl.bind(mainMod .. " + L",       hl.dsp.global("uq:lock"))
 -- SUPER+Escape: the power menu (restart and shut down count down 30 s before they run).
 hl.bind(mainMod .. " + Escape",  hl.dsp.global("uq:power-menu"))
+-- SUPER+ALT+B: edit the bar (move, resize, add and remove islands; Esc finishes).
+hl.bind(mainMod .. " + ALT + B", hl.dsp.global("uq:edit-bar"))
 -- Screenshots (uq-screenshot): an area, marked up before it is copied and saved; the screen;
 -- the focused window. Files go to ~/Pictures/Screenshots.
 hl.bind("Print",                  hl.dsp.exec_cmd("uq-screenshot region"))

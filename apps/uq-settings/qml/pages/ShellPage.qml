@@ -1,5 +1,5 @@
-// Shell: pinned apps, launcher providers, the bar's islands and clock, the screen-edge
-// indicators, the terminal, the notification backend, idle timings and privacy. Everything is
+// Shell: pinned apps, launcher providers, the bar (a way into edit mode on the bar, and reset),
+// the screen-edge indicators, the notification backend, idle timings and privacy. Everything is
 // read from and written to uqd through ShellModel; a refused change (an idle stage out of
 // order, say) shows uqd's message and the controls go back to the last good value. App names
 // and provider names are other packages' text: they only ever reach the screen through UqLabel.
@@ -22,18 +22,9 @@ QQC2.ScrollView {
     }
     readonly property var settings: snap.settings || {}
     readonly property var shell: snap.shell || {}
-    readonly property var islands: shell.islands || {}
     readonly property var apps: snap.apps || []
-    readonly property var terminals: snap.terminals || []
     readonly property var knownProviders: snap.providers || []
     readonly property bool ready: App.uqdUp
-    readonly property var islandLabels: [
-        { id: "system", name: "System (volume, network, battery)" },
-        { id: "work", name: "Workspaces" },
-        { id: "time", name: "Clock" },
-        { id: "notif", name: "Notifications" },
-        { id: "status", name: "Status icons" }
-    ]
     readonly property var backendIds: ["auto", "notifi", "builtin", "swaync", "mako", "dunst"]
     readonly property var backendLabels: ({
         auto: "Automatic", notifi: "noti-fi", builtin: "uQ's built-in", swaync: "SwayNotificationCenter",
@@ -63,31 +54,11 @@ QQC2.ScrollView {
                 rows.push({ id: p.id, name: p.name, enabled: true, missing: p.missing === true });
         return rows;
     }
-    /// The terminal choices: the default, the installed emulators, and the saved one when it is
-    /// no longer installed.
-    readonly property var terminalIds: {
-        const ids = terminals.map(t => t.id);
-        if (shell.terminal && ids.indexOf(shell.terminal) < 0)
-            ids.push(shell.terminal);
-        return ids;
-    }
-    readonly property var terminalNames: {
-        const names = ["Default (kitty)"];
-        for (const id of terminalIds) {
-            const t = terminals.find(x => x.id === id);
-            names.push(t ? t.name : id);
-        }
-        return names;
-    }
-
     function setSetting(key, value) {
         sm.setSetting(key, JSON.stringify(value));
     }
     function setShell(field, value) {
         sm.setShell(field, JSON.stringify(value));
-    }
-    function terminalIndex() {
-        return shell.terminal ? terminalIds.indexOf(shell.terminal) + 1 : 0;
     }
     function backendIndex() {
         const i = backendIds.indexOf((settings.notif || {}).backend);
@@ -109,6 +80,14 @@ QQC2.ScrollView {
             if (App.uqdUp)
                 sm.refresh();
         }
+    }
+
+    Kirigami.PromptDialog {
+        id: confirmReset
+        title: "Reset the bar?"
+        subtitle: "Every island goes back to where it was when uQ was installed, at its usual size. Islands you added are taken off the bar."
+        standardButtons: Kirigami.Dialog.Yes | Kirigami.Dialog.No
+        onAccepted: sm.barEdit(JSON.stringify({ op: "reset" }))
     }
 
     Kirigami.PromptDialog {
@@ -209,33 +188,18 @@ QQC2.ScrollView {
         }
         SettingRow {
             settingId: "islands"
-            label: "Islands shown in the bar"
+            label: "The bar's islands are edited on the bar itself: right-click an island and choose Edit Islands, or press Super+Alt+B. Drag islands to move them, drag their edge to resize them, click one for its settings, and press Esc when done."
             highlight: App.highlight
             enabled: page.ready
             Layout.fillWidth: true
-        }
-        Repeater {
-            model: page.islandLabels
-            SwitchRow {
-                required property var modelData
-                label: modelData.name
+            QQC2.Button {
+                objectName: "editBar"
+                text: "Edit the bar"
+                icon.name: "document-edit"
                 enabled: page.ready
-                value: page.islands[modelData.id] !== false
-                onChosen: v => page.setShell("islands." + modelData.id, v)
-                Layout.leftMargin: Kirigami.Units.largeSpacing * 2
-                Layout.fillWidth: true
+                onClicked: sm.editBar()
             }
         }
-        SwitchRow {
-            settingId: "clock-24h"
-            label: "24-hour clock"
-            highlight: App.highlight
-            enabled: page.ready
-            value: page.shell.clock_24h !== false
-            onChosen: v => page.setShell("clock_24h", v)
-            Layout.fillWidth: true
-        }
-
         UqLabel {
             text: "Screen edges"
             font.bold: true
@@ -283,31 +247,20 @@ QQC2.ScrollView {
             Layout.fillWidth: true
         }
 
-        UqLabel {
-            text: "Terminal"
-            font.bold: true
-            Layout.topMargin: Kirigami.Units.largeSpacing
-        }
         SettingRow {
-            settingId: "terminal"
-            label: "Terminal for apps that run in one"
+            settingId: "reset-bar"
+            label: "Put the bar back as it was when uQ was installed. Islands' own settings (symbols, feeds, time zones) are kept."
             highlight: App.highlight
             enabled: page.ready
             Layout.fillWidth: true
-            UqComboBox {
-                id: terminalCombo
-                model: page.terminalNames
-                currentIndex: page.terminalIndex()
-                enabled: page.ready
-                implicitContentWidthPolicy: QQC2.ComboBox.WidestText
-                Accessible.name: "Terminal for apps that run in one"
-                onActivated: index => {
-                    page.setShell("terminal", index === 0 ? null : page.terminalIds[index - 1]);
-                    terminalCombo.currentIndex = Qt.binding(() => page.terminalIndex());
-                }
+            QQC2.Button {
+                objectName: "resetBar"
+                text: "Reset the bar"
+                icon.name: "edit-undo"
+                enabled: page.ready && !sm.busy
+                onClicked: confirmReset.open()
             }
         }
-
         UqLabel {
             text: "Notifications"
             font.bold: true

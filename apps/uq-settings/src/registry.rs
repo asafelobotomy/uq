@@ -254,7 +254,7 @@ static LOOK_SETTINGS: [SearchEntry; 16] = [
     ),
 ];
 
-static SHELL_SETTINGS: [SearchEntry; 19] = [
+static SHELL_SETTINGS: [SearchEntry; 18] = [
     entry(
         "pins",
         "Pinned apps",
@@ -267,13 +267,16 @@ static SHELL_SETTINGS: [SearchEntry; 19] = [
     ),
     entry(
         "islands",
-        "Bar islands",
-        &["bar", "panel", "widgets", "show", "hide"],
+        "Edit the bar",
+        &[
+            "bar", "panel", "islands", "widgets", "show", "hide", "move", "resize", "size",
+            "weather", "stocks", "news",
+        ],
     ),
     entry(
-        "clock-24h",
-        "24-hour clock",
-        &["time", "12 hour", "am pm", "format"],
+        "reset-bar",
+        "Reset the bar",
+        &["bar", "panel", "islands", "default", "layout"],
     ),
     entry(
         "edge-indicators",
@@ -297,11 +300,6 @@ static SHELL_SETTINGS: [SearchEntry; 19] = [
         "edge-titles",
         "Window titles at the screen's edges",
         &["edge", "title", "name", "text", "label", "icon only"],
-    ),
-    entry(
-        "terminal",
-        "Terminal",
-        &["kitty", "console", "emulator", "default terminal"],
     ),
     entry(
         "notif-backend",

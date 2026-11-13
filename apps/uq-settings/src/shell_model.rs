@@ -22,7 +22,7 @@ pub mod qobject {
     unsafe extern "RustQt" {
         #[qobject]
         #[qml_element]
-        /// `{settings, shell, providers, apps, terminals}`; `{}` until uqd has been read.
+        /// `{settings, shell, providers, apps, terminals, islands}`; `{}` until uqd has been read.
         #[qproperty(QString, state_json)]
         /// The message of the last refused change, "" when there is none.
         #[qproperty(QString, error)]
@@ -61,6 +61,15 @@ pub mod qobject {
         /// Turn provider `id` on or off.
         #[qinvokable]
         fn provider_toggle(self: Pin<&mut ShellModel>, id: &QString, on: bool);
+
+        /// Turn the bar's edit mode on (the shell's `uq:edit-bar` shortcut, through Hyprland).
+        #[qinvokable]
+        fn edit_bar(self: Pin<&mut ShellModel>);
+
+        /// One edit of the bar's layout, as JSON: `{op: "move" | "add" | "remove" | "size" |
+        /// "options" | "reset", …}` (uq_core::settings::BarEdit).
+        #[qinvokable]
+        fn bar_edit(self: Pin<&mut ShellModel>, json_edit: &QString);
     }
 
     impl cxx_qt::Threading for ShellModel {}
@@ -175,6 +184,21 @@ impl ShellModel {
     fn provider_toggle(self: Pin<&mut Self>, id: &QString, on: bool) {
         let id = id.to_string();
         model_core::start(self, Op::ProviderToggle { id, on });
+    }
+}
+
+impl ShellModel {
+    fn edit_bar(self: Pin<&mut Self>) {
+        if let Err(e) = crate::pages::shell::start_bar_edit() {
+            self.set_error(QString::from(&e));
+        }
+    }
+
+    fn bar_edit(self: Pin<&mut Self>, json_edit: &QString) {
+        match serde_json::from_str(&json_edit.to_string()) {
+            Ok(edit) => model_core::start(self, Op::Bar { edit }),
+            Err(e) => self.set_error(QString::from(&format!("bar: not a valid change ({e})"))),
+        }
     }
 }
 

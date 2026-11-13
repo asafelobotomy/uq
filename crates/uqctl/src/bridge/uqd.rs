@@ -371,6 +371,9 @@ enum Request {
     ApplyProfile(String),
     ProfileOff,
     PickDone(String, String),
+    /// Replace `shell.bar` (the bar's layout, edited from the bar's own menu), keeping the
+    /// rest of the `shell` section as uqd has it.
+    SetBarLayout(String),
     /// The bridge's own calls; the shell can't make them (`handle()` doesn't pass them on;
     /// `GetWelcome` reaches the shell only inside `Hello` and `WelcomeStatus`).
     GetSection(String),
@@ -464,6 +467,13 @@ impl Request {
                     ),
                 )
             }
+            "SetBarLayout" => {
+                arity(call, args, 1)?;
+                if !args[0].is_object() {
+                    return Err("argument 1 (layout) must be an object".into());
+                }
+                (1, Request::SetBarLayout(args[0].to_string()))
+            }
             "ApplyProfile" => {
                 arity(call, args, 1)?;
                 (1, Request::ApplyProfile(string_arg(args, 0, "profile id")?))
@@ -542,6 +552,24 @@ impl Request {
                 let s: String = proxy.call("GetSection", &(d,)).await.map_err(describe)?;
                 serde_json::from_str(&s).map_err(|e| format!("bad section: {e}"))
             }
+            Request::SetBarLayout(bar) => {
+                let s: String = proxy
+                    .call("GetSection", &("shell",))
+                    .await
+                    .map_err(describe)?;
+                let mut shell: Value =
+                    serde_json::from_str(&s).map_err(|e| format!("bad section: {e}"))?;
+                let bar: Value = serde_json::from_str(&bar).map_err(|e| e.to_string())?;
+                let Some(obj) = shell.as_object_mut() else {
+                    return Err("bad section: not an object".into());
+                };
+                obj.insert("bar".into(), bar);
+                unit(
+                    proxy
+                        .call("SetSection", &("shell", shell.to_string(), ORIGIN))
+                        .await,
+                )
+            }
             Request::ShellReady => unit(proxy.call("ShellReady", &()).await),
             Request::GetWelcome => {
                 let s: String = proxy.call("GetWelcome", &()).await.map_err(describe)?;
@@ -588,6 +616,17 @@ fn describe(err: zbus::Error) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn set_bar_layout_takes_one_object() {
+        assert!(matches!(
+            Request::parse("SetBarLayout", &[json!({"start": []})]),
+            Ok(Request::SetBarLayout(j)) if j == r#"{"start":[]}"#
+        ));
+        assert!(Request::parse("SetBarLayout", &[]).is_err());
+        assert!(Request::parse("SetBarLayout", &[json!("{}")]).is_err());
+        assert!(Request::parse("SetBarLayout", &[json!({}), json!({})]).is_err());
+    }
 
     #[test]
     fn profile_requests_check_arity() {

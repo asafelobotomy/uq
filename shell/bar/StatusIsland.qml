@@ -25,7 +25,44 @@ Island {
     readonly property int cell: 26
     readonly property int retryMs: 300000
 
-    implicitWidth: row.implicitWidth + Theme.gapIn * 2
+    // Sizes: Icon is the quick settings button; Small adds the battery (else the network);
+    // Medium shows network, sound, battery (with its level) and the button; Large adds the
+    // volume level, then, in what is left, widgets from other apps, media and tray icons.
+    readonly property bool wideTier: size === "medium" || size === "large"
+    // The network counts as its icon here; its VPN label only takes what is left (at Large).
+    readonly property real fixedWidth: {
+        var w = 0, n = 0;
+        var parts = [audioItem, batteryItem, quickButton];
+        for (var i = 0; i < parts.length; i++)
+            if (parts[i].visible) {
+                w += parts[i].implicitWidth > 0 ? parts[i].implicitWidth : parts[i].Layout.preferredWidth;
+                n++;
+            }
+        if (netItem.visible) {
+            w += iconSize;
+            n++;
+        }
+        return w + Math.max(0, n - 1) * Theme.gapIn;
+    }
+    readonly property real vpnRoom: room - fixedWidth - 4
+    readonly property bool showVpn: size === "large" && vpnActive && vpnLabel !== "" && vpnRoom >= cell * 2
+    readonly property real spare: size === "large"
+        ? Math.max(0, room - fixedWidth - Theme.gapIn - (showVpn ? vpnText.width + 4 : 0)) : 0
+    readonly property bool showWidgets: size === "large" && widgetHost.wanted && widgetHost.implicitWidth + Theme.gapIn <= spare
+    readonly property real afterWidgets: spare - (showWidgets ? widgetHost.implicitWidth + Theme.gapIn : 0)
+    readonly property bool showMedia: size === "large" && player !== null && !BarLayout.placed("media")
+        && afterWidgets >= cell + Theme.gapIn
+    readonly property int trayRoom: Math.max(0, Math.floor((afterWidgets - (showMedia ? cell + Theme.gapIn : 0)) / (cell + Theme.gapIn)))
+    readonly property var trayShown: {
+        if (size !== "large")
+            return [];
+        var out = [], all = SystemTray.items.values;
+        var bell = Tray.notifiBell(NotifBackend.backend, Tray.find(all, Tray.NOTIFI));
+        for (var i = 0; i < all.length && out.length < trayRoom; i++)
+            if (all[i].status !== Status.Passive && !Tray.hiddenInTray(all[i].id, { notifiBell: bell }))
+                out.push(all[i]);
+        return out;
+    }
 
     // --- media ---
     readonly property var player: {
@@ -260,8 +297,7 @@ Island {
 
     RowLayout {
         id: row
-        anchors.verticalCenter: parent.verticalCenter
-        anchors.left: parent.left
+        anchors.centerIn: parent
         spacing: Theme.gapIn
 
         // Widgets from other apps (Phase 4 spec §2.2): up to 4 icons, the rest under "…".
@@ -269,7 +305,8 @@ Island {
             id: widgetHost
             kind: "bar"
             cell: root.cell
-            visible: loadedCount > 0 || overflow.length > 0
+            readonly property bool wanted: loadedCount > 0 || overflow.length > 0
+            visible: root.showWidgets
             Layout.preferredWidth: implicitWidth
             Layout.preferredHeight: root.cell
             onPopupRequested: function (slot, open) {
@@ -286,18 +323,14 @@ Island {
             }
         }
 
-        // tray
+        // tray: as many as fit at Large (icons uQ already shows elsewhere stay out, logic/tray.js)
         Repeater {
-            model: SystemTray.items
+            model: root.trayShown
             delegate: Item {
                 id: trayItem
                 required property var modelData
                 Layout.preferredWidth: root.cell
                 Layout.preferredHeight: root.cell
-                // Icons uQ already shows elsewhere stay out of the tray (logic/tray.js).
-                visible: modelData.status !== Status.Passive
-                    && !Tray.hiddenInTray(modelData.id, { notifiBell: Tray.notifiBell(NotifBackend.backend,
-                        Tray.find(SystemTray.items.values, Tray.NOTIFI)) })
 
                 IconImage {
                     anchors.centerIn: parent
@@ -358,11 +391,13 @@ Island {
             }
         }
 
-        // media
+        // media (left to the Now playing island while that is on the bar)
         Item {
-            visible: root.player !== null
-            Layout.preferredWidth: mediaRow.implicitWidth
+            visible: root.showMedia
+            Layout.preferredWidth: root.cell
             Layout.preferredHeight: root.cell
+            Accessible.role: Accessible.Button
+            Accessible.name: root.player ? "Play or pause " + String(root.player.trackTitle) : "Media"
             RowLayout {
                 id: mediaRow
                 anchors.verticalCenter: parent.verticalCenter
@@ -372,10 +407,6 @@ Island {
                 Layout.preferredWidth: root.iconSize
                 Layout.preferredHeight: root.iconSize
                 source: Quickshell.iconPath("media-playback-start-symbolic", true)
-            }
-            UqText {
-                Layout.maximumWidth: 160
-                text: root.player ? String(root.player.trackTitle) : ""
             }
             }
             MouseArea {
@@ -390,6 +421,8 @@ Island {
 
         // network
         RowLayout {
+            id: netItem
+            visible: !root.isIcon && (root.size !== "small" || root.battery === null)
             spacing: 4
             IconImage {
                 implicitSize: root.iconSize
@@ -398,8 +431,9 @@ Island {
                 source: Quickshell.iconPath(root.netIcon, true)
             }
             UqText {
-                visible: root.vpnActive && root.vpnLabel !== ""
-                Layout.maximumWidth: 120
+                id: vpnText
+                visible: root.showVpn
+                Layout.maximumWidth: Math.max(0, root.vpnRoom)
                 text: root.vpnLabel + (root.country !== "" ? " · " + root.country : "")
                 color: Theme.textMuted
             }
@@ -407,7 +441,8 @@ Island {
 
         // audio
         Item {
-            visible: root.sinkAudio !== null
+            id: audioItem
+            visible: root.wideTier && root.sinkAudio !== null
             Layout.preferredWidth: audioRow.implicitWidth
             Layout.preferredHeight: root.cell
             RowLayout {
@@ -424,6 +459,7 @@ Island {
                     : "audio-volume-muted-symbolic", true)
             }
             UqText {
+                visible: root.size === "large"
                 text: root.sinkAudio ? Math.round(root.sinkAudio.volume * 100) + "%" : ""
                 color: root.sinkAudio && root.sinkAudio.muted ? Theme.textMuted : Theme.text
             }
@@ -439,7 +475,8 @@ Island {
 
         // battery
         RowLayout {
-            visible: root.battery !== null
+            id: batteryItem
+            visible: !root.isIcon && root.battery !== null
             spacing: 4
             IconImage {
                 implicitSize: root.iconSize
@@ -448,6 +485,7 @@ Island {
                 source: root.battery ? Quickshell.iconPath(root.battery.iconName, true) : ""
             }
             UqText {
+                visible: root.wideTier
                 text: root.battery ? Net.batteryPct(root.battery.percentage) + "%" : ""
             }
         }

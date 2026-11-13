@@ -77,3 +77,9 @@ function togglePin(pins, id, loaded) {
     out.push(id);
     return out;
 }
+
+// The app menu island's apps: pinned apps with no window open anywhere, in pin order. An open
+// app is on the Open windows island instead, and comes back here once all its windows close.
+function launchers(entries) {
+    return (entries || []).filter(function (e) { return e && e.pinned && !e.running; });
+}

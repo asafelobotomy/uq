@@ -1,13 +1,15 @@
-//! The `shell` section: which bar islands show, the clock format, the launcher's provider
-//! order and enablement, the terminal for `Terminal=true` launches, and whether the screen-edge
-//! indicators show, how (an icon tab or a slice of the window) and whether the tab has the
-//! window's title. The shell reads it
+//! The `shell` section: the bar's layout (`bar`, see [`super::bar`]), the old island switches
+//! it replaced (`islands`, read only to derive a layout for older files), the clock format, the
+//! launcher's provider order and enablement, the terminal for `Terminal=true` launches, and
+//! whether the screen-edge indicators show, how (an icon tab or a slice of the window) and
+//! whether the tab has the window's title. The shell reads it
 //! through `SettingsChanged`; uqd renders nothing for it.
 //!
 //! Loading is lenient (wrong-typed or unknown values fall back or are dropped, so a bad
 //! `[shell]` never costs the user their theme or pins); the API is strict
 //! ([`ShellSettings::from_section`]).
 
+use super::bar::BarLayout;
 use super::{SettingError, check_known, invalid, valid_pinned_id};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -82,7 +84,8 @@ fn lenient_edge_style<'de, D: Deserializer<'de>>(d: D) -> Result<EdgeStyle, D::E
     lenient_or(d, EdgeStyle::default)
 }
 
-/// The five islands of `shell/bar/Bar.qml`.
+/// The five on/off switches the bar had before `shell.bar`. Still read, so a file from then
+/// gets an equivalent layout; nothing in uQ writes them any more.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Islands {
@@ -138,6 +141,14 @@ impl ProviderPref {
 pub struct ShellSettings {
     #[serde(deserialize_with = "lenient_islands")]
     pub islands: Islands,
+    /// The bar's layout. `None` only between loading a file that lacks it and
+    /// [`super::Settings::validated`], which derives it from `islands`.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "super::bar::lenient_bar"
+    )]
+    pub bar: Option<BarLayout>,
     /// The user's order; ids the launcher knows but this lacks follow in default order.
     #[serde(deserialize_with = "lenient_providers")]
     pub providers: Vec<ProviderPref>,
@@ -165,6 +176,7 @@ impl Default for ShellSettings {
     fn default() -> Self {
         Self {
             islands: Islands::default(),
+            bar: Some(BarLayout::default()),
             providers: Vec::new(),
             clock_24h: true,
             terminal: None,
@@ -191,8 +203,9 @@ fn expect_bool(key: &str, v: &Value) -> Result<bool, SettingError> {
 
 impl ShellSettings {
     /// Every key of the `shell` section.
-    pub const FIELDS: [&str; 7] = [
+    pub const FIELDS: [&str; 8] = [
         "islands",
+        "bar",
         "providers",
         "clock_24h",
         "terminal",
@@ -223,6 +236,9 @@ impl ShellSettings {
                 ));
             }
         }
+        if let Some(b) = &self.bar {
+            b.validate()?;
+        }
         if let Some(t) = &self.terminal
             && !valid_terminal(t)
         {
@@ -247,18 +263,25 @@ impl ShellSettings {
         });
         self.providers.truncate(MAX_PROVIDERS);
         self.terminal = self.terminal.filter(|t| valid_terminal(t));
+        self.bar = self.bar.map(BarLayout::sanitised);
         self
     }
 
     /// Parse a whole `shell` section strictly: unknown keys and wrong types are errors, and
-    /// missing fields take their defaults.
+    /// missing fields take their defaults; a missing `bar` is `None` (the caller keeps its own).
     pub fn from_section(v: &Value) -> Result<Self, SettingError> {
         const KEY: &str = "shell";
         let obj = v
             .as_object()
             .ok_or_else(|| invalid(KEY, "expected an object"))?;
         check_known(KEY, v, &Self::FIELDS)?;
-        let mut out = Self::default();
+        let mut out = Self {
+            bar: None,
+            ..Self::default()
+        };
+        if let Some(b) = obj.get("bar") {
+            out.bar = Some(BarLayout::from_value(b)?);
+        }
         if let Some(i) = obj.get("islands") {
             let io = i
                 .as_object()
@@ -379,10 +402,12 @@ mod tests {
                 && s.islands.status
         );
         assert!(s.clock_24h && s.providers.is_empty() && s.terminal.is_none());
+        let loaded: ShellSettings = serde_json::from_value(json!({})).unwrap();
+        assert_eq!(loaded.bar, None, "derived later, from the old switches");
+        assert_eq!(s.bar, Some(BarLayout::default()));
+        assert_eq!(ShellSettings::from_section(&json!({})).unwrap().bar, None);
         assert!(s.edge_indicators && !s.edge_titles);
         assert_eq!(s.edge_style, EdgeStyle::Tab);
-        assert_eq!(s, serde_json::from_value(json!({})).unwrap());
-        assert_eq!(s, ShellSettings::from_section(&json!({})).unwrap());
         assert!(s.validate().is_ok());
     }
 
@@ -542,6 +567,12 @@ mod tests {
         );
         let s: ShellSettings =
             serde_json::from_value(json!({"islands": 3, "providers": 4, "terminal": 1})).unwrap();
-        assert_eq!(s, ShellSettings::default());
+        assert_eq!(
+            s,
+            ShellSettings {
+                bar: None,
+                ..ShellSettings::default()
+            }
+        );
     }
 }

@@ -9,15 +9,54 @@ All notable changes to uQ are listed here. The format follows
 
 ### Added
 
+- **Edit the bar on the bar.** Right-click any island for the **uQ Island Menu**: **Edit
+  Islands**, **Add an Island** and **Remove**. In edit mode (also Super+Alt+B, or **Edit the bar**
+  in Settings → Shell) drag islands between the left, centre and right of the bar, drag an
+  island's edge to resize it, and click it for its settings; Esc (or **Done**) finishes. From the
+  keyboard: ← → choose an island, Shift+← → move it, + and − resize it, Enter opens its settings,
+  Delete removes it, A adds one. Changes apply at once on every screen and are kept; your current
+  bar carries over as it was.
+- **Four island sizes.** Every island is **Icon** (a square), **Small**, **Medium** or **Large**:
+  2, 4 and 6 times the Icon size, and each shows more as it grows (the clock adds the date, the
+  weather its city and the day's high and low, Status its volume and tray icons). Islands never
+  overlap or get cut off: when they don't all fit a screen, the biggest step down a size, and
+  only when every island is already an Icon are the least important left out (edit mode says
+  how many).
+- **New islands for the bar.** Add any of these from the uQ Island Menu or edit mode:
+  - **Weather**, now its own island, with today's high and low and the next hours. Only the city
+    you choose is sent to Open-Meteo, as before.
+  - **Stock ticker**: your symbols scroll by with price and day change (▲/▼ as well as colour);
+    click for a list with the day's range. Quotes come from a free, delayed source, and only the
+    symbols are sent.
+  - **News headlines** from the RSS or Atom feeds you pick (a few are suggested); click for the
+    latest headlines and open one in your browser with a click or Enter.
+  - Symbols, feeds, time zones, the weather's city and the clock's seconds and date are set in
+    edit mode (click the island); the islands' own popups just show their news.
+  - **System monitor** (processor, memory and temperature, with every core in its popup),
+    **World clock** (up to four time zones), **Now playing** (track with previous, play/pause
+    and next) and **Keyboard layout** (shows and switches layouts when you have more than one).
+  - **Clock** options: seconds, and no, short or long date.
+  Scrolling text stops while the pointer is over it, while the screen is shared, and when
+  **Reduce motion** is on (then it changes every few seconds instead). Weather, stocks and news
+  are fetched only while their island is on the bar; stocks and news refresh every 5 and 15
+  minutes and keep the last results when offline (marked with their age). Every island popup
+  works from the keyboard.
 - **Screenshots, the Plasma way.** Print freezes the screen and opens it in satty with the crop
   tool: drag an area, mark it up (arrows, boxes, text, blur), then Enter copies and saves it to
   `~/Pictures/Screenshots`. Shift+Print takes the whole screen and Super+Print the focused window,
   both copied and saved at once. All three are on the Keyboard shortcuts page, and **Screenshot**
   is in Spotlight and the app menu. (Spectacle itself only runs on KDE's own compositor.)
-- **One button per open window in the bar.** The Work island shows each window on its screen
-  (icon and title); click one to focus it, or to bring a minimised one back. The focused one keeps
-  the window buttons and menu. With more than five windows it folds to one icon with the count,
-  and opens again when clicked.
+- **Open windows, like browser tabs.** The Open windows island has a pill for every window on
+  the workspace you're on (windows you minimised from it show dimmed): its icon, its title and a
+  close button. As more windows open the pills share the island and shrink, down to the icon and
+  close button; past that, arrows scroll the pills and **+N** lists every window. Left-click a
+  pill to focus the window (or bring it back), middle-click to close it, right-click for
+  Minimise, Maximise, Float, Pin the app, Move to workspace, Close and the uQ Island Menu. Order
+  them in the island's settings (edit mode): **Last opened** (the default, oldest first, so new
+  windows appear on the right), **Last activity** (the app that last sent a notification),
+  **By pin**, **By system usage** (processor and memory) or **By name**, each either way round.
+- **The app menu island shows pinned apps that aren't open.** Open an app and it moves to a pill
+  on Open windows; close its last window and it comes back.
 - **The window beside this one, at the screen's edges.** Push the pointer against the left or
   right edge of a screen, even over a fullscreen app, and the edge lights up with a small tab
   showing the icon of the window on that side. Click, or turn the wheel, to go there: the
@@ -35,6 +74,10 @@ All notable changes to uQ are listed here. The format follows
 
 ### Changed
 
+- **Weather has its own island.** The city is chosen in edit mode (or from the Weather island's
+  popup), and the clock's popup keeps the calendar. The old on/off switches for the five islands
+  in Settings are replaced by edit mode on the bar, and the Windows island lists the windows it
+  doesn't show in a popup instead of growing across the bar.
 - **Settings, redesigned.** Every page (except Shell, which follows the bar's own redesign) is
   split into tabs of two-column cards that fill a 1920x1080 window. Rows lead with an icon, labels
   are short, and longer explanations moved into "?" tooltips. Pages show rather than describe:
