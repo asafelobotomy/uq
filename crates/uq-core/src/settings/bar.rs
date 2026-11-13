@@ -11,12 +11,12 @@ use serde_json::Value;
 
 /// Every island the bar knows, in the order Settings offers them, with its display name.
 pub const ISLANDS: [(&str, &str); 13] = [
-    ("system", "System (volume, network, battery)"),
-    ("work", "Workspaces and windows"),
+    ("system", "App menu, workspaces and dock"),
+    ("work", "Windows"),
     ("clock", "Clock and calendar"),
     ("weather", "Weather"),
     ("notif", "Notifications"),
-    ("status", "Status icons"),
+    ("status", "Status (network, sound, battery)"),
     ("media", "Now playing"),
     ("stocks", "Stock ticker"),
     ("news", "News headlines"),
@@ -43,18 +43,51 @@ pub fn island_name(id: &str) -> Option<&'static str> {
     ISLANDS.iter().find(|(i, _)| *i == id).map(|(_, n)| *n)
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+/// How big an island is, in multiples of the Icon size (a square island as tall as the bar):
+/// Icon 1x, Small 2x, Medium 4x, Large 6x. Each island decides what it shows at each size.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Size {
-    Compact,
-    #[default]
-    Normal,
-    Wide,
+    Icon,
+    /// `compact` before there were four sizes.
+    #[serde(alias = "compact")]
+    Small,
+    Medium,
+    /// `wide` before there were four sizes.
+    #[serde(alias = "wide")]
+    Large,
 }
 
 impl Size {
-    fn is_normal(&self) -> bool {
-        *self == Size::Normal
+    /// Width in Icon sizes.
+    pub fn units(self) -> u32 {
+        match self {
+            Size::Icon => 1,
+            Size::Small => 2,
+            Size::Medium => 4,
+            Size::Large => 6,
+        }
+    }
+}
+
+/// The size an island has until the user picks one.
+pub fn default_size(id: &str) -> Size {
+    match id {
+        "system" | "work" | "status" | "news" => Size::Large,
+        "clock" | "media" | "stocks" | "worldclock" => Size::Medium,
+        "keyboard" => Size::Icon,
+        _ => Size::Small,
+    }
+}
+
+/// `size` as stored: absent (or the old `normal`) is the island's default.
+fn size_field<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Size>, D::Error> {
+    match Option::<String>::deserialize(d)? {
+        None => Ok(None),
+        Some(s) if s == "normal" => Ok(None),
+        Some(s) => {
+            Size::deserialize(serde::de::value::StrDeserializer::<D::Error>::new(&s)).map(Some)
+        }
     }
 }
 
@@ -62,8 +95,13 @@ impl Size {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BarItem {
     pub id: String,
-    #[serde(default, skip_serializing_if = "Size::is_normal")]
-    pub size: Size,
+    /// `None` is the island's [`default_size`].
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "size_field"
+    )]
+    pub size: Option<Size>,
 }
 
 impl BarItem {
@@ -72,8 +110,13 @@ impl BarItem {
     pub fn new(id: &str) -> Self {
         Self {
             id: id.into(),
-            size: Size::Normal,
+            size: None,
         }
+    }
+
+    /// The size it is drawn at, before the bar steps it down to fit.
+    pub fn size(&self) -> Size {
+        self.size.unwrap_or_else(|| default_size(&self.id))
     }
 }
 
@@ -449,7 +492,8 @@ impl BarLayout {
                 size,
             } => {
                 next.check_at(id, zone, *index)?;
-                next.zone_mut(zone).expect("checked")[*index].size = *size;
+                next.zone_mut(zone).expect("checked")[*index].size =
+                    (*size != default_size(id)).then_some(*size);
             }
             BarEdit::Options { island, value } => {
                 let mut opts = serde_json::to_value(&next.options).expect("options serialise");
@@ -523,10 +567,10 @@ pub(super) fn lenient_bar<'de, D: serde::Deserializer<'de>>(
                 .iter()
                 .filter_map(|v| {
                     let id = v.get("id")?.as_str()?.to_string();
+                    // An unknown size (or the old `normal`) is the island's default.
                     let size = v
                         .get("size")
-                        .and_then(|s| serde_json::from_value(s.clone()).ok())
-                        .unwrap_or_default();
+                        .and_then(|s| serde_json::from_value::<Size>(s.clone()).ok());
                     Some(BarItem { id, size })
                 })
                 .collect(),
@@ -651,7 +695,8 @@ mod tests {
             }
         }))
         .unwrap();
-        assert_eq!(b.center[0].size, Size::Wide);
+        assert_eq!(b.center[0].size, Some(Size::Large), "wide is now large");
+        assert_eq!(b.end[0].size, Some(Size::Small), "compact is now small");
         assert!(b.has("stocks") && !b.has("news"));
         assert_eq!(b.options.clock.date, DateStyle::None);
         // Round trip; normal sizes are not written.
@@ -680,7 +725,7 @@ mod tests {
         .unwrap();
         let b = w.bar.unwrap();
         assert_eq!(ids(&b.start), ["work", "clock"]);
-        assert_eq!(b.start[1].size, Size::Normal);
+        assert_eq!(b.start[1].size, None);
         assert!(b.end.is_empty());
         assert_eq!(b.options.stocks.symbols, ["AAPL"]);
         assert_eq!(b.options.clock, ClockOptions::default());
@@ -756,7 +801,19 @@ mod tests {
             json!({"op": "size", "id": "stocks", "zone": "start", "index": 1, "size": "wide"}),
         ))
         .unwrap();
-        assert_eq!(b.start[1].size, Size::Wide);
+        assert_eq!(b.start[1].size, Some(Size::Large));
+        // Setting an island back to its own default stores nothing.
+        b.apply(&e(
+            json!({"op": "size", "id": "stocks", "zone": "start", "index": 1, "size": "medium"}),
+        ))
+        .unwrap();
+        assert_eq!(b.start[1].size, None);
+        assert!(
+            serde_json::from_value::<BarEdit>(
+                json!({"op": "size", "id": "stocks", "zone": "start", "index": 1, "size": "normal"})
+            )
+            .is_err()
+        );
         b.apply(&e(
             json!({"op": "options", "island": "stocks", "value": {"symbols": ["TSLA"]}}),
         ))
@@ -776,6 +833,31 @@ mod tests {
         b.apply(&BarEdit::Reset).unwrap();
         assert_eq!(ids(&b.end), ["clock", "notif", "status"]);
         assert_eq!(b.options.stocks.symbols, ["TSLA"], "reset keeps options");
+    }
+
+    #[test]
+    fn sizes_and_defaults() {
+        let parse = |v| serde_json::from_value::<BarItem>(v).unwrap();
+        assert_eq!(parse(json!({"id": "clock", "size": "normal"})).size, None);
+        assert_eq!(
+            parse(json!({"id": "clock", "size": "icon"})).size,
+            Some(Size::Icon)
+        );
+        assert_eq!(parse(json!({"id": "clock"})).size(), Size::Medium);
+        assert_eq!(parse(json!({"id": "keyboard"})).size(), Size::Icon);
+        assert_eq!(parse(json!({"id": "work"})).size(), Size::Large);
+        assert!(serde_json::from_value::<BarItem>(json!({"id": "clock", "size": "huge"})).is_err());
+        assert_eq!(
+            [Size::Icon, Size::Small, Size::Medium, Size::Large].map(Size::units),
+            [1, 2, 4, 6]
+        );
+        let v = serde_json::to_value(BarItem {
+            id: "news".into(),
+            size: Some(Size::Icon),
+        })
+        .unwrap();
+        assert_eq!(v, json!({"id": "news", "size": "icon"}));
+        assert_eq!(island_name("system"), Some("App menu, workspaces and dock"));
     }
 
     #[test]

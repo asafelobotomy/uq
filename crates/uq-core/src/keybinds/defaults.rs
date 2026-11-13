@@ -87,7 +87,7 @@ pub fn default_of(id: &str) -> Option<&'static Default> {
     DEFAULTS.iter().find(|d| d.id == id)
 }
 
-static DEFAULTS: [Default; 59] = [
+static DEFAULTS: [Default; 60] = [
     Default {
         id: "uq.terminal",
         label: "Open a terminal",
@@ -206,6 +206,17 @@ static DEFAULTS: [Default; 59] = [
         group: Group::AppsAndDesktop,
         combo: Some("SUPER + Escape"),
         action: DefaultAction::Global("power-menu"),
+        locked: false,
+        repeating: false,
+        release: false,
+        mouse: false,
+    },
+    Default {
+        id: "uq.edit-bar",
+        label: "Edit the bar",
+        group: Group::AppsAndDesktop,
+        combo: Some("SUPER + ALT + B"),
+        action: DefaultAction::Global("edit-bar"),
         locked: false,
         repeating: false,
         release: false,
@@ -753,9 +764,9 @@ mod tests {
     }
 
     #[test]
-    fn table_has_59_rows_58_bound() {
-        assert_eq!(defaults().len(), 59);
-        assert_eq!(defaults().iter().filter(|d| d.combo.is_some()).count(), 58);
+    fn table_has_60_rows_59_bound() {
+        assert_eq!(defaults().len(), 60);
+        assert_eq!(defaults().iter().filter(|d| d.combo.is_some()).count(), 59);
     }
 
     #[test]
@@ -796,7 +807,7 @@ mod tests {
             let c = parse(d.combo.unwrap()).unwrap_or_else(|e| panic!("{}: {e}", d.id));
             assert!(seen.insert(c), "{} repeats a combo", d.id);
         }
-        assert_eq!(seen.len(), 58);
+        assert_eq!(seen.len(), 59);
     }
 
     #[test]

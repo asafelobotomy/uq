@@ -395,10 +395,15 @@ impl Net {
         let mut next: Option<tokio::time::Instant> = None;
         let mut failures = 0usize;
         loop {
-            let want = rx
-                .borrow_and_update()
-                .as_ref()
-                .and_then(|s| s.weather_location.clone());
+            // Only while the Weather island is on the bar: nothing else shows the weather.
+            let want = rx.borrow_and_update().as_ref().and_then(|s| {
+                s.shell
+                    .bar
+                    .as_ref()
+                    .is_some_and(|b| b.has("weather"))
+                    .then(|| s.weather_location.clone())
+                    .flatten()
+            });
             if want != current {
                 let had = current.is_some();
                 current = want;
@@ -758,6 +763,11 @@ mod tests {
             ..Settings::default()
         };
         s.privacy.public_ip_lookup = ip;
+        if s.weather_location.is_some()
+            && let Some(b) = s.shell.bar.as_mut()
+        {
+            b.end.insert(0, uq_core::settings::BarItem::new("weather"));
+        }
         Some(s)
     }
 
@@ -836,6 +846,44 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
+    }
+
+    /// A city alone asks nothing: the Weather island must be on the bar. Taking it off clears
+    /// the shown weather and stops the lookups.
+    #[tokio::test]
+    async fn weather_only_while_its_island_is_placed() {
+        let (base, seen) = fake(WX).await;
+        let (tx, mut rx) = mpsc::channel(16);
+        let mut off = settings(Some(("Here", 1.0)), false).unwrap();
+        off.shell
+            .bar
+            .as_mut()
+            .unwrap()
+            .end
+            .retain(|i| i.id != "weather");
+        let (stx, srx) = watch::channel(Some(off.clone()));
+        let stop = CancellationToken::new();
+        let net = Net::new(
+            NetClient::with_bases(&base, &base, &base),
+            tx,
+            srx,
+            stop.clone(),
+            SETTLE,
+        );
+        let task = tokio::spawn(net.weather_loop(Duration::from_secs(60)));
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert!(rx.try_recv().is_err());
+        assert!(
+            seen.lock().unwrap().is_empty(),
+            "no request without the island"
+        );
+
+        stx.send_replace(settings(Some(("Here", 1.0)), false));
+        assert_eq!(event(&mut rx).await.0, "Weather");
+        stx.send_replace(Some(off));
+        assert_eq!(event(&mut rx).await, ("Weather".to_string(), Value::Null));
+        stop.cancel();
+        let _ = tokio::time::timeout(Duration::from_secs(2), task).await;
     }
 
     #[tokio::test]

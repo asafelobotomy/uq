@@ -829,7 +829,7 @@ async fn desktop_proxy_matches_the_interface() {
     assert_eq!(proxy.list_windows().await.unwrap(), "[]");
     let binds: serde_json::Value =
         serde_json::from_str(&proxy.list_binds().await.unwrap()).unwrap();
-    assert_eq!(binds["binds"].as_array().unwrap().len(), 59);
+    assert_eq!(binds["binds"].as_array().unwrap().len(), 60);
     assert!(
         serde_json::from_str::<serde_json::Value>(&proxy.explain("keybinds").await.unwrap())
             .unwrap()
@@ -1043,7 +1043,7 @@ async fn keybinds_section_and_list_binds_over_dbus() {
     assert!(err.to_string().contains("Mine"), "{err}");
     let list: String = s.proxy.call("ListBinds", &()).await.unwrap();
     let list: serde_json::Value = serde_json::from_str(&list).unwrap();
-    assert_eq!(list["binds"].as_array().unwrap().len(), 60);
+    assert_eq!(list["binds"].as_array().unwrap().len(), 61);
     assert_eq!(list["binds"][4]["combo"], "SUPER + K");
     assert_eq!(list["limits"]["custom"], 100);
     let explained: String = s.proxy.call("Explain", &("keybinds",)).await.unwrap();

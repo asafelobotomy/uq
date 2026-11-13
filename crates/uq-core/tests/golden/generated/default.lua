@@ -57,6 +57,7 @@ hl.bind("SUPER + A", hl.dsp.global("uq:quick-settings"), { description = "uq:uq.
 hl.bind("SUPER + N", hl.dsp.global("uq:notif-centre"), { description = "uq:uq.notif-centre" })
 hl.bind("SUPER + L", hl.dsp.global("uq:lock"), { description = "uq:uq.lock" })
 hl.bind("SUPER + Escape", hl.dsp.global("uq:power-menu"), { description = "uq:uq.power-menu" })
+hl.bind("SUPER + ALT + B", hl.dsp.global("uq:edit-bar"), { description = "uq:uq.edit-bar" })
 hl.bind("Print", hl.dsp.exec_cmd("uq-screenshot region"), { description = "uq:uq.screenshot.area" })
 hl.bind("SHIFT + Print", hl.dsp.exec_cmd("uq-screenshot screen"), { description = "uq:uq.screenshot.screen" })
 hl.bind("SUPER + Print", hl.dsp.exec_cmd("uq-screenshot window"), { description = "uq:uq.screenshot.window" })
