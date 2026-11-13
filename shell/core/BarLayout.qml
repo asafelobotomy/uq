@@ -150,7 +150,7 @@ QtObject {
         selected = "";
         return save({
             start: [{ id: "system" }, { id: "work" }], center: [],
-            end: [{ id: "clock" }, { id: "notif" }, { id: "status" }],
+            end: [{ id: "clock" }, { id: "notif" }, { id: "tray" }, { id: "status" }],
             options: layout.options
         });
     }

@@ -38,6 +38,7 @@ var ISLANDS = [
     { id: "weather", name: "Weather" },
     { id: "notif", name: "Notifications" },
     { id: "status", name: "Status (network, sound, battery)" },
+    { id: "tray", name: "Tray icons of other apps" },
     { id: "media", name: "Now playing" },
     { id: "stocks", name: "Stock ticker" },
     { id: "news", name: "News headlines" },
@@ -50,7 +51,7 @@ var ISLANDS = [
 // Left out first when even every island at Icon size doesn't fit: separators, then these, in
 // this order. Same idea for which island steps down first among equals.
 var EXPENDABLE = [SEPARATOR, "keyboard", "worldclock", "news", "stocks", "sysmon", "media",
-                  "weather", "notif", "work", "clock", "system", "status"];
+                  "weather", "tray", "notif", "work", "clock", "system", "status"];
 
 function known(id) {
     for (var i = 0; i < ISLANDS.length; i++)
@@ -70,7 +71,7 @@ function name(id) {
 function defaultSize(id) {
     switch (id) {
     case "system": case "work": case "status": case "news": return "large";
-    case "clock": case "media": case "stocks": case "worldclock": return "medium";
+    case "clock": case "media": case "stocks": case "worldclock": case "tray": return "medium";
     case "keyboard": return "icon";
     default: return "small";
     }

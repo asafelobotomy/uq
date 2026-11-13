@@ -14,9 +14,11 @@ import "../widgets"
 import "../logic/net.js" as Net
 import "../logic/tray.js" as Tray
 import "../notif"
+import "islands"
 
 // Widgets from other apps, tray, media, network/VPN, audio, battery and the quick-settings
-// button.
+// button. Other apps' tray icons move to the Tray island while it is on the bar (as media
+// moves to Now playing).
 // Tray tooltips, track titles, SSIDs and VPN names are untrusted: they only reach UqText.
 Island {
     id: root
@@ -54,14 +56,11 @@ Island {
         && afterWidgets >= cell + Theme.gapIn
     readonly property int trayRoom: Math.max(0, Math.floor((afterWidgets - (showMedia ? cell + Theme.gapIn : 0)) / (cell + Theme.gapIn)))
     readonly property var trayShown: {
-        if (size !== "large")
+        if (size !== "large" || BarLayout.placed("tray"))
             return [];
-        var out = [], all = SystemTray.items.values;
+        var all = SystemTray.items.values;
         var bell = Tray.notifiBell(NotifBackend.backend, Tray.find(all, Tray.NOTIFI));
-        for (var i = 0; i < all.length && out.length < trayRoom; i++)
-            if (all[i].status !== Status.Passive && !Tray.hiddenInTray(all[i].id, { notifiBell: bell }))
-                out.push(all[i]);
-        return out;
+        return Tray.shownItems(all, { notifiBell: bell }).slice(0, trayRoom);
     }
 
     // --- media ---
@@ -323,71 +322,15 @@ Island {
             }
         }
 
-        // tray: as many as fit at Large (icons uQ already shows elsewhere stay out, logic/tray.js)
+        // tray: as many as fit at Large (icons uQ already shows elsewhere stay out, logic/tray.js),
+        // unless the Tray island is on the bar
         Repeater {
             model: root.trayShown
-            delegate: Item {
-                id: trayItem
-                required property var modelData
+            delegate: TrayIcon {
+                cell: root.cell
+                iconSize: root.iconSize
                 Layout.preferredWidth: root.cell
                 Layout.preferredHeight: root.cell
-
-                IconImage {
-                    anchors.centerIn: parent
-                    implicitSize: root.iconSize
-                    width: root.iconSize
-                    height: root.iconSize
-                    source: Net.safeIconSource(trayItem.modelData.icon,
-                        Quickshell.iconPath("application-x-executable", true))
-                }
-                QsMenuAnchor {
-                    id: trayMenu
-                    menu: trayItem.modelData.menu
-                    anchor.item: trayItem
-                    anchor.edges: Edges.Bottom
-                    anchor.gravity: Edges.Bottom
-                }
-                MouseArea {
-                    id: trayMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
-                    onClicked: function (mouse) {
-                        if (mouse.button === Qt.RightButton || trayItem.modelData.onlyMenu) {
-                            if (trayItem.modelData.hasMenu)
-                                trayMenu.open();
-                        } else if (mouse.button === Qt.MiddleButton) {
-                            trayItem.modelData.secondaryActivate();
-                        } else {
-                            trayItem.modelData.activate();
-                        }
-                    }
-                    onWheel: function (w) {
-                        trayItem.modelData.scroll(w.angleDelta.y, false);
-                    }
-                }
-                PopupWindow {
-                    anchor.item: trayItem
-                    anchor.edges: Edges.Bottom
-                    anchor.gravity: Edges.Bottom
-                    implicitWidth: tipText.implicitWidth + Theme.gapIn * 2
-                    implicitHeight: tipText.implicitHeight + Theme.gapIn * 2
-                    color: "transparent"
-                    visible: trayMouse.containsMouse && !trayMenu.visible && tipText.text !== ""
-                    Rectangle {
-                        anchors.fill: parent
-                        color: Theme.surface
-                        radius: Theme.radius
-                        border.color: Theme.border
-                        border.width: Theme.borderWidth
-                        UqText {
-                            id: tipText
-                            anchors.centerIn: parent
-                            width: Math.min(implicitWidth, 260)
-                            text: trayItem.modelData.tooltipTitle || trayItem.modelData.title || ""
-                        }
-                    }
-                }
             }
         }
 

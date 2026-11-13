@@ -68,6 +68,7 @@ PanelWindow {
         case "weather": return cWeather;
         case "notif": return cNotif;
         case "status": return cStatus;
+        case "tray": return cTray;
         case "media": return cMedia;
         case "stocks": return cStocks;
         case "news": return cNews;
@@ -85,6 +86,7 @@ PanelWindow {
     Component { id: cWeather; WeatherIsland {} }
     Component { id: cNotif; NotifIsland { screen: bar.modelData } }
     Component { id: cStatus; StatusIsland { screen: bar.modelData } }
+    Component { id: cTray; TrayIsland {} }
     Component { id: cMedia; MediaIsland {} }
     Component { id: cStocks; StocksIsland {} }
     Component { id: cNews; NewsIsland {} }

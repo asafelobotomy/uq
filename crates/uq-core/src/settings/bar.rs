@@ -10,13 +10,14 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// Every island the bar knows, in the order Settings offers them, with its display name.
-pub const ISLANDS: [(&str, &str); 13] = [
+pub const ISLANDS: [(&str, &str); 14] = [
     ("system", "App menu, workspaces and dock"),
     ("work", "Open windows"),
     ("clock", "Clock and calendar"),
     ("weather", "Weather"),
     ("notif", "Notifications"),
     ("status", "Status (network, sound, battery)"),
+    ("tray", "Tray icons of other apps"),
     ("media", "Now playing"),
     ("stocks", "Stock ticker"),
     ("news", "News headlines"),
@@ -87,7 +88,7 @@ impl Size {
 pub fn default_size(id: &str) -> Size {
     match id {
         "system" | "work" | "status" | "news" => Size::Large,
-        "clock" | "media" | "stocks" | "worldclock" => Size::Medium,
+        "clock" | "media" | "stocks" | "worldclock" | "tray" => Size::Medium,
         "keyboard" => Size::Icon,
         _ => Size::Small,
     }
@@ -375,9 +376,17 @@ pub struct BarLayout {
 }
 
 impl Default for BarLayout {
-    /// A new user's bar: today's islands, weather left out until a location is chosen.
+    /// A new user's bar: today's islands, weather left out until a location is chosen, and the
+    /// other apps' tray icons in their own island before Status.
     fn default() -> Self {
-        BarLayout::from_islands(&super::Islands::default(), false)
+        let mut b = BarLayout::from_islands(&super::Islands::default(), false);
+        let at = b
+            .end
+            .iter()
+            .position(|i| i.id == "status")
+            .unwrap_or(b.end.len());
+        b.end.insert(at, BarItem::new("tray"));
+        b
     }
 }
 
@@ -857,7 +866,7 @@ mod tests {
         let b = BarLayout::default();
         assert_eq!(ids(&b.start), ["system", "work"]);
         assert!(b.center.is_empty());
-        assert_eq!(ids(&b.end), ["clock", "notif", "status"]);
+        assert_eq!(ids(&b.end), ["clock", "notif", "tray", "status"]);
         assert!(b.validate().is_ok());
         assert_eq!(b.options.stocks.symbols, ["^GSPC", "AAPL", "MSFT"]);
     }
@@ -991,7 +1000,8 @@ mod tests {
 
     #[test]
     fn edits() {
-        let mut b = BarLayout::default();
+        // The bar of a file from before the Tray island (the edits don't depend on it).
+        let mut b = BarLayout::from_islands(&Islands::default(), false);
         let e = |v: serde_json::Value| -> BarEdit { serde_json::from_value(v).unwrap() };
         b.apply(&e(
             json!({"op": "move", "id": "clock", "zone": "end", "index": 0,
@@ -1056,7 +1066,7 @@ mod tests {
         }
         assert!(serde_json::from_value::<BarEdit>(json!({"op": "fly"})).is_err());
         b.apply(&BarEdit::Reset).unwrap();
-        assert_eq!(ids(&b.end), ["clock", "notif", "status"]);
+        assert_eq!(ids(&b.end), ["clock", "notif", "tray", "status"]);
         assert_eq!(b.options.stocks.symbols, ["TSLA"], "reset keeps options");
     }
 

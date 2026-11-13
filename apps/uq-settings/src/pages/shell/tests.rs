@@ -443,7 +443,7 @@ async fn bar_edits_apply_to_uqds_layout() {
     );
     assert_eq!(
         zone_ids(&out.state["shell"]["bar"]["end"]),
-        ["clock", "notif", "status"]
+        ["clock", "notif", "tray", "status"]
     );
 
     let out = run(
@@ -493,7 +493,7 @@ async fn bar_edits_apply_to_uqds_layout() {
     assert_eq!(out.error, None);
     assert_eq!(
         zone_ids(&out.state["shell"]["bar"]["end"]),
-        ["clock", "notif", "status"]
+        ["clock", "notif", "tray", "status"]
     );
     assert_eq!(
         out.state["shell"]["bar"]["options"]["stocks"]["symbols"][0],

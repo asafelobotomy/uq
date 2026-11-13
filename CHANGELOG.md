@@ -9,6 +9,12 @@ All notable changes to uQ are listed here. The format follows
 
 ### Added
 
+- **A Tray island for other apps' icons.** Other apps' tray icons (Steam, Discord, password
+  managers…) can have an island of their own, apart from uQ's Status island (network, sound,
+  battery, quick settings). It shows as many icons as fit its size and a **+N** button listing
+  the rest; clicks, menus, the wheel and tooltips work as before. While it is on the bar, Status
+  shows no tray icons. A new user's bar has it before Status; on your own bar, add **Tray icons
+  of other apps** from **Add an Island** (until then Status keeps showing them).
 - **Each island's text, your way.** In edit mode, an island's settings now have a **Text**
   section: the **font** (the theme's, its monospaced font, or any installed font, found by
   name), **formatting** (bold, italic, all capitals) and the **text size** (70% to 150% of the
