@@ -1,8 +1,10 @@
-// Profiles: named sets of settings that are turned on together (spec §4), one card each with
-// Turn on or Back to normal, the settings it holds (removable), Add settings…, Rename…, Export…
-// and Delete; a New profile dialog that takes the settings changed lately or the current
-// settings of some pages; and Import…. Everything goes through ProfilesModel. Profile names and
-// settings come from the user or from imported files, so they are shown through UqLabel only.
+// Profiles: named sets of settings that are turned on together (spec §4). A grid of cards, one
+// per profile: its icon and name, an "On" tag and a switch (on is Turn on, off is Back to
+// normal), the settings it holds (removable), and Add settings, Rename, Export and Delete as
+// icon buttons. The first card makes a new profile (from the settings changed lately or the
+// current settings of some pages) or imports one. Everything goes through ProfilesModel. Profile
+// names and settings come from the user or from imported files, so they are shown through
+// UqLabel only.
 import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Dialogs
@@ -11,7 +13,7 @@ import org.kde.kirigami as Kirigami
 import org.uq.settings
 import "../components"
 
-QQC2.ScrollView {
+SettingsPage {
     id: page
 
     readonly property var snap: {
@@ -107,9 +109,6 @@ QQC2.ScrollView {
     }
 
     Component.onCompleted: pm.refresh()
-    Accessible.role: Accessible.Pane
-    Accessible.name: "Profiles"
-    contentWidth: availableWidth
 
     ProfilesModel {
         id: pm
@@ -507,240 +506,233 @@ QQC2.ScrollView {
             pm.importFrom(page.importUrl, false);
         }
     }
+    Timer {
+        id: toastTimer
+        interval: 6000
+        onTriggered: toast.dismissed = true
+    }
 
-    ColumnLayout {
-        id: column
-        width: Math.min(page.availableWidth - Kirigami.Units.largeSpacing * 2, Kirigami.Units.gridUnit * 40)
-        x: Math.max(Kirigami.Units.largeSpacing, (page.availableWidth - width) / 2)
-        spacing: Kirigami.Units.smallSpacing
-
-        Item {
-            implicitHeight: Kirigami.Units.smallSpacing
-        }
-        UqLabel {
-            text: "Profiles"
-            font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.5
-            font.bold: true
-            Accessible.role: Accessible.Heading
-        }
-        UqLabel {
-            text: "A profile is a set of settings you turn on together, such as for gaming or a presentation. Back to normal puts back the settings it changed, except the ones you changed yourself since."
-            wrapMode: Text.Wrap
-            opacity: 0.7
-            Layout.fillWidth: true
-        }
+    banners: [
         ErrorCard {
             objectName: "uqdDown"
             visible: !page.ready
             title: "uQ's settings service isn't running"
             detail: "Start the uQ desktop service to see and turn on profiles."
             Layout.fillWidth: true
-        }
+        },
         ErrorCard {
             objectName: "profilesError"
             visible: pm.error !== ""
             title: "That wasn't done"
             detail: pm.error
             Layout.fillWidth: true
-        }
+        },
         // What the last Turn on or Back to normal kept and couldn't do.
         ProfileMessage {
             id: reportMessage
             objectName: "profileReport"
             Layout.fillWidth: true
-        }
+        },
         ProfileMessage {
             id: toast
             objectName: "profilesToast"
             Layout.fillWidth: true
         }
-        Timer {
-            id: toastTimer
-            interval: 6000
-            onTriggered: toast.dismissed = true
-        }
+    ]
 
-        SettingRow {
-            settingId: "profiles"
-            label: "Make a profile from your settings"
-            highlight: App.highlight
-            enabled: page.ready
-            Layout.fillWidth: true
-            Layout.topMargin: Kirigami.Units.largeSpacing
+    SettingsTab {
+        title: "Profiles"
+        iconName: "bookmarks"
 
-            QQC2.Button {
-                objectName: "newProfile"
-                text: "New profile"
-                icon.name: "list-add"
-                enabled: page.idle
-                onClicked: newDialog.start()
+        SettingsCard {
+            title: "Add a profile"
+            iconName: "list-add"
+            help: "A profile is a set of settings you turn on together, such as for gaming. Turning it off puts back what it changed, except settings you changed yourself since."
+
+            SettingRow {
+                settingId: "profiles"
+                iconName: "document-new"
+                label: "From your settings"
+                highlight: App.highlight
+                enabled: page.ready
+                Layout.fillWidth: true
+
+                QQC2.Button {
+                    objectName: "newProfile"
+                    text: "New profile"
+                    icon.name: "list-add"
+                    enabled: page.idle
+                    onClicked: newDialog.start()
+                }
+            }
+            SettingRow {
+                settingId: "profile-files"
+                iconName: "document-import"
+                label: "From a file"
+                highlight: App.highlight
+                enabled: page.ready
+                Layout.fillWidth: true
+
+                QQC2.Button {
+                    objectName: "importProfile"
+                    text: "Import…"
+                    icon.name: "document-import"
+                    enabled: page.idle
+                    onClicked: importDialog.open()
+                }
+            }
+            UqLabel {
+                objectName: "noProfiles"
+                text: "No profiles yet."
+                visible: page.ready && page.profiles.length === 0
+                opacity: 0.7
+                Layout.leftMargin: Kirigami.Units.largeSpacing
             }
         }
-        SettingRow {
-            settingId: "profile-files"
-            label: "Import a profile from a file"
-            highlight: App.highlight
-            enabled: page.ready
-            Layout.fillWidth: true
 
-            QQC2.Button {
-                objectName: "importProfile"
-                text: "Import…"
-                icon.name: "document-import"
-                enabled: page.idle
-                onClicked: importDialog.open()
-            }
-        }
-
-        UqLabel {
-            text: "No profiles yet."
-            visible: page.ready && page.profiles.length === 0
-            opacity: 0.7
-            Layout.leftMargin: Kirigami.Units.largeSpacing * 2
-            Layout.topMargin: Kirigami.Units.largeSpacing
-        }
+        // One card per profile.
         Repeater {
             model: page.profiles
-            delegate: Kirigami.AbstractCard {
+            delegate: SettingsCard {
                 id: card
 
                 required property var modelData
                 readonly property bool isOn: modelData.active === true
                 readonly property var keys: modelData.keys || []
 
-                Layout.fillWidth: true
-                Layout.topMargin: Kirigami.Units.largeSpacing
-                Accessible.role: Accessible.Grouping
-                Accessible.name: modelData.name
+                objectName: "profileCard"
+                title: String(modelData.name)
+                iconName: modelData.icon || "bookmarks"
+                // An "on" profile's card is drawn in the highlight colour.
+                border.color: card.isOn ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
+                border.width: card.isOn ? 2 : 1
 
-                contentItem: ColumnLayout {
-                    spacing: Kirigami.Units.smallSpacing
-
-                    RowLayout {
-                        spacing: Kirigami.Units.largeSpacing
-                        Layout.fillWidth: true
-
-                        Kirigami.Icon {
-                            source: card.modelData.icon || "bookmarks"
-                            implicitWidth: Kirigami.Units.iconSizes.medium
-                            implicitHeight: Kirigami.Units.iconSizes.medium
-                            Accessible.ignored: true
+                actions: [
+                    Rectangle {
+                        objectName: "onTag"
+                        visible: card.isOn
+                        radius: height / 2
+                        color: Kirigami.Theme.highlightColor
+                        implicitWidth: onTag.implicitWidth + Kirigami.Units.largeSpacing
+                        implicitHeight: onTag.implicitHeight + Kirigami.Units.smallSpacing
+                        UqLabel {
+                            id: onTag
+                            anchors.centerIn: parent
+                            text: "On"
+                            color: Kirigami.Theme.highlightedTextColor
                         }
-                        ColumnLayout {
-                            spacing: 0
-                            Layout.fillWidth: true
+                    },
+                    QQC2.Switch {
+                        id: onSwitch
+                        objectName: "profileSwitch"
+                        checked: card.isOn
+                        enabled: page.idle
+                        Accessible.name: card.isOn ? "Turn off " + card.modelData.name + " and go back to normal" : "Turn on " + card.modelData.name
+                        QQC2.ToolTip.text: card.isOn ? "Back to normal" : "Turn on"
+                        QQC2.ToolTip.visible: hovered
+                        QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+                        onToggled: {
+                            if (onSwitch.checked)
+                                pm.apply(card.modelData.id);
+                            else
+                                pm.off();
+                            onSwitch.checked = Qt.binding(() => card.isOn);
+                        }
+                    }
+                ]
 
-                            RowLayout {
-                                spacing: Kirigami.Units.smallSpacing
-                                UqLabel {
-                                    text: card.modelData.name
-                                    font.bold: true
-                                    elide: Text.ElideRight
-                                    Layout.fillWidth: true
-                                }
-                                Rectangle {
-                                    visible: card.isOn
-                                    radius: height / 2
-                                    color: Kirigami.Theme.highlightColor
-                                    implicitWidth: onTag.implicitWidth + Kirigami.Units.largeSpacing
-                                    implicitHeight: onTag.implicitHeight + Kirigami.Units.smallSpacing
-                                    UqLabel {
-                                        id: onTag
-                                        anchors.centerIn: parent
-                                        text: "On"
-                                        color: Kirigami.Theme.highlightedTextColor
-                                    }
-                                }
+                RowLayout {
+                    spacing: Kirigami.Units.smallSpacing
+                    Layout.fillWidth: true
+
+                    QQC2.ToolButton {
+                        id: expand
+                        objectName: "expandKeys"
+                        checkable: true
+                        enabled: card.keys.length > 0
+                        Accessible.name: "Settings in this profile"
+                        Accessible.description: page.settingsCount(card.keys.length)
+                        contentItem: RowLayout {
+                            spacing: Kirigami.Units.smallSpacing
+                            Kirigami.Icon {
+                                source: expand.checked ? "arrow-down" : "arrow-right"
+                                implicitWidth: Kirigami.Units.iconSizes.small
+                                implicitHeight: Kirigami.Units.iconSizes.small
+                                Accessible.ignored: true
                             }
                             UqLabel {
                                 text: page.settingsCount(card.keys.length)
-                                opacity: 0.7
                             }
                         }
-                        QQC2.Button {
-                            text: "Turn on"
-                            icon.name: "media-playback-start"
-                            visible: !card.isOn
-                            enabled: page.idle
-                            Accessible.name: "Turn on " + card.modelData.name
-                            onClicked: pm.apply(card.modelData.id)
-                        }
-                        QQC2.Button {
-                            text: "Back to normal"
-                            icon.name: "edit-undo"
-                            visible: card.isOn
-                            enabled: page.idle
-                            Accessible.name: "Turn off " + card.modelData.name + " and go back to normal"
-                            onClicked: pm.off()
+                    }
+                    Item {
+                        Layout.fillWidth: true
+                    }
+                    QQC2.ToolButton {
+                        text: "Add settings…"
+                        icon.name: "list-add"
+                        display: QQC2.AbstractButton.IconOnly
+                        enabled: page.idle
+                        Accessible.name: "Add settings to " + card.modelData.name
+                        QQC2.ToolTip.text: "Add settings…"
+                        QQC2.ToolTip.visible: hovered
+                        QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+                        onClicked: addDialog.start(card.modelData)
+                    }
+                    QQC2.ToolButton {
+                        text: "Rename…"
+                        icon.name: "edit-rename"
+                        display: QQC2.AbstractButton.IconOnly
+                        enabled: page.idle
+                        Accessible.name: "Rename " + card.modelData.name
+                        QQC2.ToolTip.text: "Rename…"
+                        QQC2.ToolTip.visible: hovered
+                        QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+                        onClicked: renameDialog.start(card.modelData)
+                    }
+                    QQC2.ToolButton {
+                        text: "Export…"
+                        icon.name: "document-export"
+                        display: QQC2.AbstractButton.IconOnly
+                        enabled: page.idle
+                        Accessible.name: "Export " + card.modelData.name
+                        QQC2.ToolTip.text: "Export…"
+                        QQC2.ToolTip.visible: hovered
+                        QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+                        onClicked: {
+                            exportDialog.profileId = card.modelData.id;
+                            exportDialog.open();
                         }
                     }
                     QQC2.ToolButton {
-                        id: expand
-                        text: "Settings in this profile"
-                        icon.name: checked ? "arrow-down" : "arrow-right"
-                        checkable: true
-                        display: QQC2.AbstractButton.TextBesideIcon
-                    }
-                    ProfileKeyList {
-                        visible: expand.checked
-                        keys: card.keys
-                        editable: page.ready
-                        Layout.fillWidth: true
-                        Layout.leftMargin: Kirigami.Units.largeSpacing * 2
-                        onRemoveKey: (domain, pathJson) => pm.removeKey(card.modelData.id, domain, pathJson)
-                    }
-                    Flow {
-                        spacing: Kirigami.Units.smallSpacing
-                        Layout.fillWidth: true
-
-                        QQC2.Button {
-                            text: "Add settings…"
-                            icon.name: "list-add"
-                            enabled: page.idle
-                            Accessible.name: "Add settings to " + card.modelData.name
-                            onClicked: addDialog.start(card.modelData)
-                        }
-                        QQC2.Button {
-                            text: "Rename…"
-                            icon.name: "edit-rename"
-                            enabled: page.idle
-                            Accessible.name: "Rename " + card.modelData.name
-                            onClicked: renameDialog.start(card.modelData)
-                        }
-                        QQC2.Button {
-                            text: "Export…"
-                            icon.name: "document-export"
-                            enabled: page.idle
-                            Accessible.name: "Export " + card.modelData.name
-                            onClicked: {
-                                exportDialog.profileId = card.modelData.id;
-                                exportDialog.open();
-                            }
-                        }
-                        QQC2.Button {
-                            text: "Delete"
-                            icon.name: "edit-delete"
-                            enabled: page.idle && !card.isOn
-                            Accessible.name: "Delete " + card.modelData.name
-                            Accessible.description: card.isOn ? "Turn it off first" : ""
-                            onClicked: {
-                                confirmDelete.profileId = card.modelData.id;
-                                confirmDelete.open();
-                            }
-                        }
-                        UqLabel {
-                            text: "Turn it off first"
-                            visible: card.isOn
-                            opacity: 0.7
-                            height: Kirigami.Units.gridUnit * 2
-                            verticalAlignment: Text.AlignVCenter
+                        text: "Delete"
+                        icon.name: "edit-delete"
+                        display: QQC2.AbstractButton.IconOnly
+                        // A disabled button shows no tooltip; keep it hoverable and refuse the click.
+                        enabled: page.idle
+                        opacity: card.isOn ? 0.4 : 1
+                        Accessible.name: "Delete " + card.modelData.name
+                        Accessible.description: card.isOn ? "Turn it off first" : ""
+                        QQC2.ToolTip.text: card.isOn ? "Turn it off first" : "Delete"
+                        QQC2.ToolTip.visible: hovered
+                        QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+                        onClicked: {
+                            if (card.isOn)
+                                return;
+                            confirmDelete.profileId = card.modelData.id;
+                            confirmDelete.open();
                         }
                     }
                 }
+                ProfileKeyList {
+                    visible: expand.checked
+                    keys: card.keys
+                    editable: page.ready
+                    Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.largeSpacing
+                    onRemoveKey: (domain, pathJson) => pm.removeKey(card.modelData.id, domain, pathJson)
+                }
             }
-        }
-        Item {
-            implicitHeight: Kirigami.Units.largeSpacing
         }
     }
 }

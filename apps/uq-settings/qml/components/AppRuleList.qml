@@ -1,6 +1,7 @@
 // "Rules from apps" on the Window rules page (Phase 4 spec §3.3): window rules installed apps
-// offer in their own files, each off until turned on here. One row per rule: its name, which app
-// it comes from, what it matches and does, and a switch. Files that couldn't be used, and rules
+// offer in their own files, each off until turned on here. The page puts it in a titled card.
+// One row per rule: its name and a switch, then (each with an icon) which app it comes from,
+// what it matches and what it does. Files that couldn't be used, and rules
 // that are on but no longer installed, are said under the ruleList. Hidden when there is nothing.
 // Every name, pattern and reason comes from an app's file, so all text is UqLabel (plain text).
 import QtQuick
@@ -34,21 +35,25 @@ ColumnLayout {
             out.push(String(l));
         return out;
     }
+    /// An icon for each of `detailLines(rule)`: the app, then the matches, then the effects.
+    function detailIcons(rule) {
+        const out = ["package-x-generic"];
+        for (const l of rule.matches_text || [])
+            out.push("view-filter");
+        for (const l of rule.effects_text || [])
+            out.push("configure");
+        return out;
+    }
 
     visible: ruleList.rules.length + ruleList.problems.length + ruleList.missing.length > 0
     spacing: Kirigami.Units.smallSpacing
     Accessible.role: Accessible.Grouping
     Accessible.name: "Rules from apps"
 
-    UqLabel {
-        text: "Rules from apps"
-        font.bold: true
-        font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.2
-        Accessible.role: Accessible.Heading
-    }
     SettingRow {
         settingId: "rules-from-apps"
-        label: "Apps you installed can offer rules of their own. Each one is off until you turn it on."
+        iconName: "dialog-information"
+        label: "Each one is off until you turn it on"
         highlight: ruleList.highlight
         Layout.fillWidth: true
     }
@@ -85,14 +90,30 @@ ColumnLayout {
             }
             Repeater {
                 model: ruleList.detailLines(row.modelData)
-                delegate: UqLabel {
+                delegate: RowLayout {
+                    id: detail
+
                     required property string modelData
-                    objectName: "appRuleLine"
-                    text: modelData
-                    wrapMode: Text.Wrap
-                    opacity: 0.7
+                    required property int index
+
+                    spacing: Kirigami.Units.smallSpacing
                     Layout.fillWidth: true
                     Layout.leftMargin: Kirigami.Units.largeSpacing * 2
+
+                    Kirigami.Icon {
+                        source: ruleList.detailIcons(row.modelData)[detail.index] || ""
+                        implicitWidth: Kirigami.Units.iconSizes.small
+                        implicitHeight: Kirigami.Units.iconSizes.small
+                        Layout.alignment: Qt.AlignTop
+                        Accessible.ignored: true
+                    }
+                    UqLabel {
+                        objectName: "appRuleLine"
+                        text: detail.modelData
+                        wrapMode: Text.Wrap
+                        opacity: 0.7
+                        Layout.fillWidth: true
+                    }
                 }
             }
         }

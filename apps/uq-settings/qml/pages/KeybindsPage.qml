@@ -1,6 +1,6 @@
-// Keyboard shortcuts (spec §5): uQ's own shortcuts, grouped, each with the keys it uses now, a
-// switch and Reset; shortcuts of your own (open a panel, start an app, run a command); and the
-// shortcuts marked in user.lua, read-only. Change opens the editor, which can listen for the
+// Keyboard shortcuts (spec §5), in three tabs: uQ's own shortcuts, a card per group, each with
+// its keys drawn as keycaps, a switch and Reset; shortcuts of your own (open a panel, start an
+// app, run a command); and the shortcuts marked in user.lua, read-only. Change opens the editor, which can listen for the
 // keys; while it listens uQ's shortcuts are paused (never for long: uQ puts them back after 15
 // seconds, and this page does as soon as it stops listening, closes or loses focus). Everything
 // goes through KeybindsModel. Shortcut names, keys, app names, user.lua text and Hyprland's
@@ -12,7 +12,7 @@ import org.kde.kirigami as Kirigami
 import org.uq.settings
 import "../components"
 
-QQC2.ScrollView {
+SettingsPage {
     id: page
 
     readonly property var snap: {
@@ -80,9 +80,6 @@ QQC2.ScrollView {
 
     Component.onCompleted: km.refresh()
     Component.onDestruction: editor.stopCapture()
-    Accessible.role: Accessible.Pane
-    Accessible.name: "Keyboard shortcuts"
-    contentWidth: availableWidth
 
     KeybindsModel {
         id: km
@@ -176,34 +173,33 @@ QQC2.ScrollView {
         ]
     }
 
-    ColumnLayout {
-        id: column
-        width: Math.min(page.availableWidth - Kirigami.Units.largeSpacing * 2, Kirigami.Units.gridUnit * 44)
-        x: Math.max(Kirigami.Units.largeSpacing, (page.availableWidth - width) / 2)
-        spacing: Kirigami.Units.smallSpacing
+    /// An icon for each group of uQ's shortcuts.
+    function groupIcon(id) {
+        switch (id) {
+        case "apps_and_desktop":
+            return "user-desktop";
+        case "windows":
+            return "window";
+        case "workspaces":
+            return "virtual-desktops";
+        case "sound_and_brightness":
+            return "audio-volume-high";
+        case "media":
+            return "media-playback-start";
+        case "profiles":
+            return "bookmarks";
+        }
+        return "input-keyboard";
+    }
 
-        Item {
-            implicitHeight: Kirigami.Units.smallSpacing
-        }
-        UqLabel {
-            text: "Keyboard shortcuts"
-            font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.5
-            font.bold: true
-            Accessible.role: Accessible.Heading
-        }
-        UqLabel {
-            text: "Change the keys uQ's shortcuts use, turn one off, or add your own. Two shortcuts can't use the same keys."
-            wrapMode: Text.Wrap
-            opacity: 0.7
-            Layout.fillWidth: true
-        }
+    banners: [
         ErrorCard {
             objectName: "uqdDown"
             visible: !page.ready
             title: "uQ's settings service isn't running"
             detail: "Start the uQ desktop service to see and change keyboard shortcuts."
             Layout.fillWidth: true
-        }
+        },
         // The last change was refused by Hyprland's check: its message, as plain text.
         RuleMessage {
             objectName: "sectionError"
@@ -211,7 +207,7 @@ QQC2.ScrollView {
             closable: false
             lines: page.sectionMessage !== "" ? ["The last change to the shortcuts wasn't applied. Hyprland said: " + page.sectionMessage] : []
             Layout.fillWidth: true
-        }
+        },
         RuleMessage {
             objectName: "keybindsError"
             negative: true
@@ -219,47 +215,30 @@ QQC2.ScrollView {
             // A write Hyprland refused is already said by sectionError: one card, not two.
             lines: km.error !== "" && !(page.sectionMessage !== "" && km.error.indexOf(page.sectionMessage) >= 0) ? ["That wasn't done: " + km.error] : []
             Layout.fillWidth: true
-        }
+        },
         RuleMessage {
             id: noticeMessage
             objectName: "noticeMessage"
             Layout.fillWidth: true
         }
+    ]
 
-        SettingRow {
-            settingId: "shortcut-capture"
-            label: "Press Change, then the keys you want. While you press them your shortcuts are paused, for 15 seconds at most."
-            highlight: App.highlight
-            enabled: page.ready
-            Layout.fillWidth: true
-            Layout.topMargin: Kirigami.Units.largeSpacing
-        }
-        SettingRow {
-            settingId: "shortcut-list"
-            label: "uQ's shortcuts"
-            highlight: App.highlight
-            enabled: page.ready
-            Layout.fillWidth: true
-        }
+    SettingsTab {
+        title: "uQ's shortcuts"
+        iconName: "preferences-desktop-keyboard-shortcut"
 
+        // A card per group of uQ's shortcuts.
         Repeater {
             model: page.groups
-            delegate: ColumnLayout {
+            delegate: SettingsCard {
                 id: group
 
                 required property var modelData
 
-                spacing: 0
-                Layout.fillWidth: true
+                objectName: "groupCard"
+                title: String(group.modelData.label)
+                iconName: page.groupIcon(group.modelData.id)
 
-                UqLabel {
-                    objectName: "groupHeading"
-                    text: String(group.modelData.label)
-                    font.bold: true
-                    Accessible.role: Accessible.Heading
-                    Layout.topMargin: Kirigami.Units.largeSpacing
-                    Layout.leftMargin: Kirigami.Units.largeSpacing
-                }
                 Repeater {
                     model: group.modelData.binds
                     delegate: ShortcutRow {
@@ -278,118 +257,154 @@ QQC2.ScrollView {
             }
         }
 
-        UqLabel {
-            text: "Your own shortcuts"
-            font.bold: true
-            Accessible.role: Accessible.Heading
-            Layout.topMargin: Kirigami.Units.largeSpacing * 2
-            Layout.leftMargin: Kirigami.Units.largeSpacing
-        }
-        SettingRow {
-            settingId: "add-shortcut"
-            label: "Open a uQ panel, start an app or run a command with a shortcut of your own."
-            highlight: App.highlight
-            enabled: page.ready
-            Layout.fillWidth: true
+        SettingsCard {
+            title: "Changing keys"
+            iconName: "input-keyboard"
 
-            QQC2.Button {
-                objectName: "addShortcut"
-                text: "Add shortcut"
-                icon.name: "list-add"
-                enabled: page.idle && page.custom.length < (page.limits.custom || 100)
-                onClicked: editor.startNew()
-            }
-        }
-        UqLabel {
-            objectName: "noCustom"
-            visible: page.ready && page.custom.length === 0
-            text: "No shortcuts of your own yet."
-            opacity: 0.7
-            Layout.leftMargin: Kirigami.Units.largeSpacing * 2
-        }
-        Repeater {
-            model: page.custom
-            delegate: ShortcutRow {
-                required property var modelData
-
-                bind: modelData
-                idle: page.idle
+            SettingRow {
+                settingId: "shortcut-list"
+                iconName: "document-edit"
+                label: "Click a shortcut's keys to change them"
+                help: "Two shortcuts can't use the same keys."
+                highlight: App.highlight
+                enabled: page.ready
                 Layout.fillWidth: true
-                onChangeRequested: editor.change(modelData)
-                onSwitched: on => page.turn(modelData.id, on)
-                onDeleteRequested: {
-                    confirmDelete.bindId = modelData.id;
-                    confirmDelete.open();
+            }
+            SettingRow {
+                settingId: "shortcut-capture"
+                iconName: "media-playback-pause"
+                label: "Shortcuts pause while you press new keys"
+                help: "For 15 seconds at most, and only while the editor listens."
+                highlight: App.highlight
+                enabled: page.ready
+                Layout.fillWidth: true
+            }
+            SettingRow {
+                settingId: "reset-shortcuts"
+                iconName: "edit-undo"
+                label: "All of uQ's shortcuts as they came"
+                help: "Your own shortcuts stay."
+                highlight: App.highlight
+                enabled: page.ready
+                Layout.fillWidth: true
+
+                QQC2.Button {
+                    objectName: "putAllBack"
+                    text: "Put all back"
+                    icon.name: "edit-undo"
+                    enabled: page.idle && page.anyChanged
+                    onClicked: confirmReset.open()
                 }
             }
         }
 
-        SettingRow {
-            settingId: "reset-shortcuts"
-            label: "Put all of uQ's shortcuts back to how they came. Your own shortcuts stay."
-            highlight: App.highlight
-            enabled: page.ready
-            Layout.fillWidth: true
-            Layout.topMargin: Kirigami.Units.largeSpacing * 2
-
-            QQC2.Button {
-                objectName: "putAllBack"
-                text: "Put all back"
-                icon.name: "edit-undo"
-                enabled: page.idle && page.anyChanged
-                onClicked: confirmReset.open()
+        SettingsCard {
+            AdvancedDetails {
+                kind: "shortcuts"
+                rows: page.idRows
+                Layout.fillWidth: true
             }
         }
+    }
 
-        ColumnLayout {
-            objectName: "userLuaList"
-            visible: page.userLua.length > 0
-            spacing: 0
-            Layout.fillWidth: true
+    SettingsTab {
+        title: "My shortcuts"
+        iconName: "user-identity"
 
-            UqLabel {
-                text: "From user.lua"
-                font.bold: true
-                Accessible.role: Accessible.Heading
-                Layout.topMargin: Kirigami.Units.largeSpacing * 2
-                Layout.leftMargin: Kirigami.Units.largeSpacing
-            }
-            UqLabel {
-                text: "These are your own lines in user.lua, marked so they show here. Change them in that file."
-                wrapMode: Text.Wrap
-                opacity: 0.7
+        SettingsCard {
+            title: "Your own shortcuts"
+            iconName: "user-identity"
+            help: "Open a uQ panel, start an app or run a command with keys of your own."
+            wide: true
+
+            actions: [
+                QQC2.Button {
+                    objectName: "addShortcut"
+                    text: "Add shortcut"
+                    icon.name: "list-add"
+                    enabled: page.idle && page.custom.length < (page.limits.custom || 100)
+                    onClicked: editor.startNew()
+                }
+            ]
+
+            SettingRow {
+                settingId: "add-shortcut"
+                visible: page.custom.length === 0
+                iconName: "list-add"
+                label: "No shortcuts of your own yet"
+                highlight: App.highlight
+                enabled: page.ready
                 Layout.fillWidth: true
-                Layout.leftMargin: Kirigami.Units.largeSpacing
             }
             Repeater {
-                model: page.userLua
-                delegate: SettingRow {
+                model: page.custom
+                delegate: ShortcutRow {
                     required property var modelData
 
-                    label: modelData.combo_text ? String(modelData.combo_text) : "Other keys"
+                    bind: modelData
+                    idle: page.idle
                     Layout.fillWidth: true
-
-                    UqLabel {
-                        text: String(modelData.text)
-                        wrapMode: Text.Wrap
-                        opacity: 0.7
-                        Layout.maximumWidth: Kirigami.Units.gridUnit * 24
-                    }
-                    UqLabel {
-                        text: "Line " + modelData.line
-                        opacity: 0.7
+                    onChangeRequested: editor.change(modelData)
+                    onSwitched: on => page.turn(modelData.id, on)
+                    onDeleteRequested: {
+                        confirmDelete.bindId = modelData.id;
+                        confirmDelete.open();
                     }
                 }
             }
         }
+    }
 
-        AdvancedDetails {
-            kind: "shortcuts"
-            rows: page.idRows
-            Layout.topMargin: Kirigami.Units.largeSpacing
-        }
-        Item {
-            implicitHeight: Kirigami.Units.largeSpacing
+    SettingsTab {
+        title: "From user.lua"
+        iconName: "text-x-script"
+        available: page.userLua.length > 0
+
+        SettingsCard {
+            objectName: "userLuaList"
+            title: "Marked in user.lua"
+            iconName: "text-x-script"
+            help: "Your own lines in user.lua, marked so they show here. Change them in that file."
+            wide: true
+
+            Repeater {
+                model: page.userLua
+                delegate: RowLayout {
+                    id: luaRow
+
+                    required property var modelData
+
+                    spacing: Kirigami.Units.largeSpacing
+                    Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.largeSpacing
+                    Layout.rightMargin: Kirigami.Units.largeSpacing
+                    Accessible.role: Accessible.Grouping
+                    Accessible.name: luaRow.modelData.combo_text ? String(luaRow.modelData.combo_text) : "Other keys"
+
+                    KeyCaps {
+                        visible: !!luaRow.modelData.combo_text
+                        combo: luaRow.modelData.combo_text ? String(luaRow.modelData.combo_text) : ""
+                        Layout.preferredWidth: Kirigami.Units.gridUnit * 12
+                    }
+                    UqLabel {
+                        visible: !luaRow.modelData.combo_text
+                        text: "Other keys"
+                        opacity: 0.7
+                        Layout.preferredWidth: Kirigami.Units.gridUnit * 12
+                    }
+                    UqLabel {
+                        text: String(luaRow.modelData.text)
+                        wrapMode: Text.Wrap
+                        font: Kirigami.Theme.fixedWidthFont
+                        opacity: 0.8
+                        Layout.fillWidth: true
+                    }
+                    UqLabel {
+                        text: "Line " + luaRow.modelData.line
+                        opacity: 0.7
+                    }
+                }
+            }
         }
     }
 }

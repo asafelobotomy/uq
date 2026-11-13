@@ -186,6 +186,9 @@ FocusScope {
         ColumnLayout {
             id: bannerColumn
             spacing: Kirigami.Units.smallSpacing
+            // Never more than its banners: with every banner hidden, spare height (a tab whose
+            // content arrived late) went here and left a gap under the title.
+            Layout.maximumHeight: implicitHeight
             Layout.fillWidth: true
             Layout.leftMargin: Kirigami.Units.largeSpacing * 2
             Layout.rightMargin: Kirigami.Units.largeSpacing * 2

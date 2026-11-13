@@ -1,9 +1,9 @@
-// Window rules (spec §5): rules that change how windows open and look, panel rules for bars,
-// notifications and launchers, and workspace rules. Each rule can be turned on and off, edited,
-// moved and deleted; a new one starts blank or from a template. "Pick a window" hides this
-// window while the person clicks the window to match, and "Why does this window…?" lists the
-// rules a clicked window gets. "Rules from apps" lists the window rules installed apps offer,
-// each with a switch (AppRuleList). Everything goes through RulesModel. Window titles, app IDs, rule
+// Window rules (spec §5), a tab each: rules that change how windows open and look, panel rules
+// for bars, notifications and launchers, workspace rules, and the window rules installed apps
+// offer (AppRuleList). Each rule is a card, with its app's icon when it matches one app, a
+// switch, and Edit, Move and Delete; a new one starts blank or from a template. "Pick a window"
+// hides this window while the person clicks the window to match, and "Why does this window…?"
+// lists the rules a clicked window gets. Everything goes through RulesModel. Window titles, app IDs, rule
 // names, patterns and Hyprland's messages are shown through UqLabel (plain text) only.
 import QtQuick
 import QtQuick.Controls as QQC2
@@ -12,7 +12,7 @@ import org.kde.kirigami as Kirigami
 import org.uq.settings
 import "../components"
 
-QQC2.ScrollView {
+SettingsPage {
     id: page
 
     readonly property var snap: {
@@ -29,8 +29,6 @@ QQC2.ScrollView {
     readonly property bool idle: page.ready && !rm.busy
     /// Hyprland's message for the last rules change it refused, or "".
     readonly property string sectionMessage: page.snap.section && page.snap.section.source === "error" ? String(page.snap.section.message || "") : ""
-    readonly property var kinds: ["window", "layer", "workspace"]
-    readonly property string currentKind: kinds[tabs.currentIndex]
     /// The last pick, Why, reopen note and notice shown, so each is shown once.
     property int pickSeen: 0
     property int whySeen: 0
@@ -116,7 +114,7 @@ QQC2.ScrollView {
                 if (page.pickFor === "editor")
                     editor.fillFromPick(String(pick.class_pattern || ""));
                 else if (page.pickFor === "new") {
-                    tabs.currentIndex = 0;
+                    page.show(windowsTab);
                     editor.startNew("window");
                     editor.fillFromPick(String(pick.class_pattern || ""));
                 } else if (page.pickFor === "template")
@@ -146,26 +144,23 @@ QQC2.ScrollView {
             editor.refreshPreview();
     }
     function startTemplate(t) {
-        tabs.currentIndex = 0;
+        page.show(windowsTab);
         if (t.needs === "nothing") {
             rm.fromTemplate(t.id, "", "", false);
             return;
         }
         templateDialog.start(t);
     }
-    function showHighlight() {
-        const tab = { "window-rules": 0, "panel-rules": 1, "workspace-rules": 2 }[App.highlight];
-        if (tab !== undefined)
-            tabs.currentIndex = tab;
+    /// The app ID a window rule's pattern matches exactly ("^org\.kde\.dolphin$" is
+    /// "org.kde.dolphin"), or "" when it matches more than one app or none.
+    function appIdOf(rule) {
+        const m = (rule && rule.raw && rule.raw.matches) || {};
+        const pattern = String(m["class"] || m.initial_class || "");
+        const id = pattern.replace(/^\^/, "").replace(/\$$/, "").replace(/\\(.)/g, "$1");
+        return /^[A-Za-z0-9._-]+$/.test(id) ? id : "";
     }
 
-    Component.onCompleted: {
-        rm.refresh();
-        page.showHighlight();
-    }
-    Accessible.role: Accessible.Pane
-    Accessible.name: "Window rules"
-    contentWidth: availableWidth
+    Component.onCompleted: rm.refresh()
 
     RulesModel {
         id: rm
@@ -181,9 +176,6 @@ QQC2.ScrollView {
         function onUqdUpChanged() {
             if (App.uqdUp)
                 rm.refresh();
-        }
-        function onHighlightChanged() {
-            page.showHighlight();
         }
     }
     // uqd gives up on a pick after 20 s; never stay hidden longer than that.
@@ -332,11 +324,11 @@ QQC2.ScrollView {
         ]
     }
 
-    // One rule in a list: SettingRow gives the name, where it's overridden (with Open user.lua)
-    // and the controls; the match and effects lines go under it. An inline component can't see
-    // the page's ids, so it takes the page as `pg`.
-    component RuleRow: ColumnLayout {
-        id: ruleRow
+    // One rule as a card: its app's icon (or the kind's), its name and switch on the title row,
+    // where it's overridden (with Open user.lua), what it matches and does, and Edit, Move and
+    // Delete. An inline component can't see the page's ids, so it takes the page as `pg`.
+    component RuleCard: SettingsCard {
+        id: ruleCard
 
         required property var modelData
         required property int index
@@ -345,102 +337,147 @@ QQC2.ScrollView {
         property int count: 0
         readonly property bool idle: !!pg && pg.idle
         readonly property string key: kind === "workspace" ? String(modelData.workspace) : String(modelData.id)
-        readonly property string title: kind === "workspace" ? "Workspace " + String(modelData.workspace).replace(/^name:/, "") : String(modelData.name)
-        /// "From the <name> profile" while a profile's switch holds, worded as SettingRow does.
-        /// The name is a profile's, so it's shown only through UqLabel.
-        readonly property string profileText: kind !== "workspace" && modelData.profile ? "From the " + String(modelData.profile) + " profile" : ""
+        readonly property string ruleTitle: kind === "workspace" ? "Workspace " + String(modelData.workspace).replace(/^name:/, "") : String(modelData.name)
+        readonly property string appId: kind === "window" && pg ? pg.appIdOf(modelData) : ""
+        readonly property string kindIcon: kind === "window" ? "window" : kind === "layer" ? "dashboard-show" : "virtual-desktops"
+        readonly property int matchesNow: kind === "window" ? (modelData.matches_now || 0) : 0
+        /// `[{icon, text}]`: what the rule matches and what it does.
         readonly property var lines: {
-            const m = ruleRow.modelData;
-            if (ruleRow.kind === "window") {
-                const n = m.matches_now || 0;
-                return [String(m.match_text), String(m.effects_text), n === 0 ? "" : n === 1 ? "Matches 1 open window" : "Matches " + n + " open windows"];
-            }
-            if (ruleRow.kind === "layer")
-                return ["Panel name: " + String(m.namespace), String(m.effects_text)];
-            return [String(m.fields_text), m.layout ? "Layout: " + String(m.layout) : ""];
+            const m = ruleCard.modelData;
+            if (ruleCard.kind === "window")
+                return [{ icon: "view-filter", text: String(m.match_text) }, { icon: "configure", text: String(m.effects_text) }];
+            if (ruleCard.kind === "layer")
+                return [{ icon: "view-filter", text: "Panel name: " + String(m.namespace) }, { icon: "configure", text: String(m.effects_text) }];
+            return [{ icon: "configure", text: String(m.fields_text) }, { icon: "view-grid", text: m.layout ? "Layout: " + String(m.layout) : "" }];
         }
 
-        spacing: 0
-        Layout.fillWidth: true
-        Accessible.role: Accessible.Grouping
-        Accessible.name: title
+        objectName: "ruleCard"
+        title: ruleTitle
+        iconName: appId !== "" && appIcon.status === Kirigami.Icon.Ready ? appId : kindIcon
+        opacity: kind === "workspace" || modelData.enabled === true ? 1 : 0.75
 
-        SettingRow {
-            label: ruleRow.title
-            // A profile's switch is said under the switch (ruleProfile), so not here as well.
-            source: ({ source: ruleRow.modelData.source === "profile" ? "uq" : ruleRow.modelData.source, detail: { line: ruleRow.modelData.line, path: ruleRow.modelData.path, message: ruleRow.modelData.message } })
+        // Whether the theme has an icon for the app (an app ID with none shows the kind's icon).
+        Kirigami.Icon {
+            id: appIcon
+            visible: false
+            source: ruleCard.appId
+            fallback: ""
+        }
+
+        actions: [
+            QQC2.Switch {
+                id: onSwitch
+                visible: ruleCard.kind !== "workspace"
+                checked: ruleCard.modelData.enabled === true
+                enabled: ruleCard.idle
+                Accessible.name: "Rule on"
+                Accessible.description: ruleCard.ruleTitle
+                onToggled: {
+                    ruleCard.pg.turnRule(ruleCard.kind, ruleCard.key, onSwitch.checked);
+                    onSwitch.checked = Qt.binding(() => ruleCard.modelData.enabled === true);
+                }
+            }
+        ]
+
+        SourceLine {
+            source: ({ source: ruleCard.modelData.source, detail: { line: ruleCard.modelData.line, path: ruleCard.modelData.path, message: ruleCard.modelData.message, name: ruleCard.modelData.profile } })
             Layout.fillWidth: true
+        }
+        Repeater {
+            model: ruleCard.lines.filter(l => l.text !== "")
+            delegate: RowLayout {
+                id: line
 
-            ColumnLayout {
-                visible: ruleRow.kind !== "workspace"
-                spacing: 0
+                required property var modelData
 
-                QQC2.Switch {
-                    id: onSwitch
-                    checked: ruleRow.modelData.enabled === true
-                    enabled: ruleRow.idle
-                    Layout.alignment: Qt.AlignRight
-                    Accessible.name: "Rule on"
-                    Accessible.description: ruleRow.profileText !== "" ? ruleRow.title + ". " + ruleRow.profileText : ruleRow.title
-                    onToggled: {
-                        ruleRow.pg.turnRule(ruleRow.kind, ruleRow.key, onSwitch.checked);
-                        onSwitch.checked = Qt.binding(() => ruleRow.modelData.enabled === true);
-                    }
+                spacing: Kirigami.Units.smallSpacing
+                Layout.fillWidth: true
+
+                Kirigami.Icon {
+                    source: line.modelData.icon
+                    implicitWidth: Kirigami.Units.iconSizes.small
+                    implicitHeight: Kirigami.Units.iconSizes.small
+                    Layout.alignment: Qt.AlignTop
+                    Accessible.ignored: true
                 }
                 UqLabel {
-                    objectName: "ruleProfile"
-                    visible: ruleRow.profileText !== ""
-                    text: ruleRow.profileText
-                    opacity: 0.7
-                    Layout.alignment: Qt.AlignRight
+                    text: line.modelData.text
+                    wrapMode: Text.Wrap
+                    opacity: 0.8
+                    Layout.fillWidth: true
                 }
+            }
+        }
+        RowLayout {
+            spacing: Kirigami.Units.smallSpacing
+            Layout.fillWidth: true
+
+            // How many open windows it matches now.
+            Kirigami.Icon {
+                visible: ruleCard.matchesNow > 0
+                source: "window-new"
+                implicitWidth: Kirigami.Units.iconSizes.small
+                implicitHeight: Kirigami.Units.iconSizes.small
+                Accessible.ignored: true
+            }
+            UqLabel {
+                objectName: "matchesNow"
+                visible: ruleCard.matchesNow > 0
+                text: ruleCard.matchesNow === 1 ? "Matches 1 open window" : "Matches " + ruleCard.matchesNow + " open windows"
+                opacity: 0.7
+            }
+            Item {
+                Layout.fillWidth: true
             }
             QQC2.ToolButton {
                 text: "Edit"
                 icon.name: "document-edit"
                 display: QQC2.AbstractButton.IconOnly
-                enabled: ruleRow.idle
-                Accessible.description: ruleRow.title
-                onClicked: ruleRow.pg.editRule(ruleRow.kind, ruleRow.modelData.raw)
+                enabled: ruleCard.idle
+                Accessible.description: ruleCard.ruleTitle
+                QQC2.ToolTip.text: "Edit"
+                QQC2.ToolTip.visible: hovered
+                QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+                onClicked: ruleCard.pg.editRule(ruleCard.kind, ruleCard.modelData.raw)
             }
             QQC2.ToolButton {
-                text: "Move up"
-                icon.name: "go-up"
+                text: "Move earlier"
+                icon.name: "go-previous"
                 display: QQC2.AbstractButton.IconOnly
-                enabled: ruleRow.idle && ruleRow.index > 0
-                Accessible.description: ruleRow.title
-                onClicked: ruleRow.pg.moveRule(ruleRow.kind, ruleRow.key, ruleRow.index - 1)
+                visible: ruleCard.count > 1
+                enabled: ruleCard.idle && ruleCard.index > 0
+                Accessible.description: ruleCard.ruleTitle
+                QQC2.ToolTip.text: "Move earlier"
+                QQC2.ToolTip.visible: hovered
+                QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+                onClicked: ruleCard.pg.moveRule(ruleCard.kind, ruleCard.key, ruleCard.index - 1)
             }
             QQC2.ToolButton {
-                text: "Move down"
-                icon.name: "go-down"
+                text: "Move later"
+                icon.name: "go-next"
                 display: QQC2.AbstractButton.IconOnly
-                enabled: ruleRow.idle && ruleRow.index < ruleRow.count - 1
-                Accessible.description: ruleRow.title
-                onClicked: ruleRow.pg.moveRule(ruleRow.kind, ruleRow.key, ruleRow.index + 1)
+                visible: ruleCard.count > 1
+                enabled: ruleCard.idle && ruleCard.index < ruleCard.count - 1
+                Accessible.description: ruleCard.ruleTitle
+                QQC2.ToolTip.text: "Move later"
+                QQC2.ToolTip.visible: hovered
+                QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+                onClicked: ruleCard.pg.moveRule(ruleCard.kind, ruleCard.key, ruleCard.index + 1)
             }
             QQC2.ToolButton {
                 text: "Delete"
                 icon.name: "edit-delete"
                 display: QQC2.AbstractButton.IconOnly
-                enabled: ruleRow.idle
-                Accessible.description: ruleRow.title
-                onClicked: ruleRow.pg.askDelete(ruleRow.kind, ruleRow.key)
-            }
-        }
-        Repeater {
-            model: ruleRow.lines.filter(l => l !== "")
-            delegate: UqLabel {
-                required property string modelData
-                text: modelData
-                wrapMode: Text.Wrap
-                opacity: 0.7
-                Layout.fillWidth: true
-                Layout.leftMargin: Kirigami.Units.largeSpacing * 2
+                enabled: ruleCard.idle
+                Accessible.description: ruleCard.ruleTitle
+                QQC2.ToolTip.text: "Delete"
+                QQC2.ToolTip.visible: hovered
+                QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+                onClicked: ruleCard.pg.askDelete(ruleCard.kind, ruleCard.key)
             }
         }
     }
-    // What a RuleRow asks the page to do.
+    // What a RuleCard asks the page to do.
     function turnRule(kind, key, on) {
         rm.setEnabled(kind, key, on);
     }
@@ -456,34 +493,14 @@ QQC2.ScrollView {
         confirmDelete.open();
     }
 
-    ColumnLayout {
-        id: column
-        width: Math.min(page.availableWidth - Kirigami.Units.largeSpacing * 2, Kirigami.Units.gridUnit * 44)
-        x: Math.max(Kirigami.Units.largeSpacing, (page.availableWidth - width) / 2)
-        spacing: Kirigami.Units.smallSpacing
-
-        Item {
-            implicitHeight: Kirigami.Units.smallSpacing
-        }
-        UqLabel {
-            text: "Window rules"
-            font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.5
-            font.bold: true
-            Accessible.role: Accessible.Heading
-        }
-        UqLabel {
-            text: "Rules change how windows open and look: float an app's dialogs, open an app on a workspace, keep the screen awake. Later rules win over earlier ones."
-            wrapMode: Text.Wrap
-            opacity: 0.7
-            Layout.fillWidth: true
-        }
+    banners: [
         ErrorCard {
             objectName: "uqdDown"
             visible: !page.ready
             title: "uQ's settings service isn't running"
             detail: "Start the uQ desktop service to see and change window rules."
             Layout.fillWidth: true
-        }
+        },
         // The last rules change was refused by Hyprland's check (F9): its message, as plain text.
         RuleMessage {
             objectName: "sectionError"
@@ -491,7 +508,7 @@ QQC2.ScrollView {
             closable: false
             lines: page.sectionMessage !== "" ? ["The last change to the rules wasn't applied. Hyprland said: " + page.sectionMessage] : []
             Layout.fillWidth: true
-        }
+        },
         RuleMessage {
             objectName: "rulesError"
             negative: true
@@ -499,182 +516,240 @@ QQC2.ScrollView {
             // A write Hyprland refused is already said by sectionError: one card, not two.
             lines: rm.error !== "" && !(page.sectionMessage !== "" && rm.error.indexOf(page.sectionMessage) >= 0) ? ["That wasn't done: " + rm.error] : []
             Layout.fillWidth: true
-        }
+        },
         RuleMessage {
             id: pickMessage
             objectName: "pickMessage"
             Layout.fillWidth: true
-        }
+        },
         RuleMessage {
             id: whyMessage
             objectName: "whyMessage"
             Layout.fillWidth: true
-        }
+        },
         RuleMessage {
             id: reopenMessage
             objectName: "reopenMessage"
             Layout.fillWidth: true
-        }
+        },
         RuleMessage {
             id: noticeMessage
             objectName: "noticeMessage"
             Layout.fillWidth: true
         }
+    ]
 
-        SettingRow {
-            settingId: "window-rules"
-            label: "Add a rule"
-            highlight: App.highlight
-            enabled: page.ready
-            Layout.fillWidth: true
-            Layout.topMargin: Kirigami.Units.largeSpacing
+    SettingsTab {
+        id: windowsTab
+        title: "Windows"
+        iconName: "window"
 
-            QQC2.Button {
-                id: newButton
-                objectName: "newRule"
-                text: "New rule"
-                icon.name: "list-add"
-                enabled: page.idle
-                onClicked: newMenu.open()
+        SettingsCard {
+            title: "New window rule"
+            iconName: "list-add"
+            help: "Rules change how windows open and look: float an app's dialogs, open an app on a workspace, keep the screen awake. Later rules win over earlier ones."
 
-                QQC2.Menu {
-                    id: newMenu
-                    y: newButton.height
+            SettingRow {
+                settingId: "window-rules"
+                iconName: "document-new"
+                label: "Blank, or from a template"
+                highlight: App.highlight
+                enabled: page.ready
+                Layout.fillWidth: true
 
-                    QQC2.MenuItem {
-                        text: "Blank rule"
-                        onTriggered: editor.startNew(page.currentKind)
-                    }
-                    QQC2.MenuSeparator {}
-                    Instantiator {
-                        model: page.templates
-                        delegate: QQC2.MenuItem {
-                            id: templateItem
-                            required property var modelData
-                            // Template names are shown as plain text (F28).
-                            contentItem: UqLabel {
-                                text: String(templateItem.modelData.name)
-                                leftPadding: Kirigami.Units.largeSpacing
-                                rightPadding: Kirigami.Units.largeSpacing
-                                verticalAlignment: Text.AlignVCenter
-                                highlighted: templateItem.highlighted || templateItem.down
-                            }
-                            Accessible.name: String(modelData.name)
-                            onTriggered: page.startTemplate(templateItem.modelData)
+                QQC2.Button {
+                    id: newButton
+                    objectName: "newRule"
+                    text: "New rule"
+                    icon.name: "list-add"
+                    enabled: page.idle
+                    onClicked: newMenu.open()
+
+                    QQC2.Menu {
+                        id: newMenu
+                        y: newButton.height
+
+                        QQC2.MenuItem {
+                            text: "Blank rule"
+                            icon.name: "document-new"
+                            onTriggered: editor.startNew("window")
                         }
-                        // After "Blank rule" and the separator.
-                        onObjectAdded: (index, object) => newMenu.insertItem(index + 2, object)
-                        onObjectRemoved: (index, object) => newMenu.removeItem(object)
+                        QQC2.MenuSeparator {}
+                        Instantiator {
+                            model: page.templates
+                            delegate: QQC2.MenuItem {
+                                id: templateItem
+                                required property var modelData
+                                // Template names are shown as plain text (F28).
+                                contentItem: UqLabel {
+                                    text: String(templateItem.modelData.name)
+                                    leftPadding: Kirigami.Units.largeSpacing
+                                    rightPadding: Kirigami.Units.largeSpacing
+                                    verticalAlignment: Text.AlignVCenter
+                                    highlighted: templateItem.highlighted || templateItem.down
+                                }
+                                Accessible.name: String(modelData.name)
+                                onTriggered: page.startTemplate(templateItem.modelData)
+                            }
+                            // After "Blank rule" and the separator.
+                            onObjectAdded: (index, object) => newMenu.insertItem(index + 2, object)
+                            onObjectRemoved: (index, object) => newMenu.removeItem(object)
+                        }
                     }
                 }
             }
-        }
-        SettingRow {
-            settingId: "pick-window"
-            label: "Make a rule for a window by clicking it"
-            highlight: App.highlight
-            enabled: page.ready
-            Layout.fillWidth: true
+            SettingRow {
+                settingId: "pick-window"
+                iconName: "edit-select"
+                label: "For a window you click"
+                highlight: App.highlight
+                enabled: page.ready
+                Layout.fillWidth: true
 
-            QQC2.Button {
-                objectName: "pickWindow"
-                text: "Pick a window"
-                icon.name: "edit-select"
-                enabled: page.idle
-                onClicked: page.startPick("new")
+                QQC2.Button {
+                    objectName: "pickWindow"
+                    text: "Pick a window"
+                    icon.name: "edit-select"
+                    enabled: page.idle
+                    onClicked: page.startPick("new")
+                }
             }
-        }
-        SettingRow {
-            settingId: "why-window"
-            label: "See which rules a window gets"
-            highlight: App.highlight
-            enabled: page.ready
-            Layout.fillWidth: true
+            SettingRow {
+                settingId: "why-window"
+                iconName: "help-contextual"
+                label: "Rules a window gets"
+                highlight: App.highlight
+                enabled: page.ready
+                Layout.fillWidth: true
 
-            QQC2.Button {
-                objectName: "whyWindow"
-                text: "Why does this window…?"
-                icon.name: "help-contextual"
-                enabled: page.idle
-                onClicked: page.startPick("why")
+                QQC2.Button {
+                    objectName: "whyWindow"
+                    text: "Why does this window…?"
+                    icon.name: "edit-find"
+                    enabled: page.idle
+                    onClicked: page.startPick("why")
+                }
             }
-        }
-
-        QQC2.TabBar {
-            id: tabs
-            Layout.fillWidth: true
-            Layout.topMargin: Kirigami.Units.largeSpacing
-
-            QQC2.TabButton {
-                text: "Windows"
+            UqLabel {
+                visible: page.ready && (page.snap.window || []).length === 0
+                text: "No window rules yet."
+                opacity: 0.7
+                Layout.leftMargin: Kirigami.Units.largeSpacing
             }
-            QQC2.TabButton {
-                objectName: "panelsTab"
-                text: "Panels"
-            }
-            QQC2.TabButton {
-                objectName: "workspacesTab"
-                text: "Workspaces"
-            }
-        }
-        SettingRow {
-            settingId: "panel-rules"
-            visible: tabs.currentIndex === 1
-            label: "Panel rules change bars, notifications and launchers, such as blur behind them."
-            highlight: App.highlight
-            Layout.fillWidth: true
-        }
-        SettingRow {
-            settingId: "workspace-rules"
-            visible: tabs.currentIndex === 2
-            label: "Workspace rules put a workspace on a screen, keep it when empty or change its gaps. Its layout is set on the Look page."
-            highlight: App.highlight
-            Layout.fillWidth: true
-        }
-        UqLabel {
-            readonly property var list: page.snap[page.currentKind] || []
-            visible: page.ready && list.length === 0
-            text: "No rules here yet."
-            opacity: 0.7
-            Layout.leftMargin: Kirigami.Units.largeSpacing * 2
-            Layout.topMargin: Kirigami.Units.largeSpacing
         }
         Repeater {
-            model: tabs.currentIndex === 0 ? (page.snap.window || []) : []
-            delegate: RuleRow {
+            model: page.snap.window || []
+            delegate: RuleCard {
                 pg: page
                 kind: "window"
                 count: (page.snap.window || []).length
             }
         }
+    }
+
+    SettingsTab {
+        title: "Panels"
+        iconName: "dashboard-show"
+
+        SettingsCard {
+            title: "New panel rule"
+            iconName: "list-add"
+
+            SettingRow {
+                settingId: "panel-rules"
+                iconName: "dashboard-show"
+                label: "Bars, notifications and launchers"
+                help: "Panel rules change them, such as blur behind them. Later rules win over earlier ones."
+                highlight: App.highlight
+                enabled: page.ready
+                Layout.fillWidth: true
+
+                QQC2.Button {
+                    objectName: "newPanelRule"
+                    text: "New rule"
+                    icon.name: "list-add"
+                    enabled: page.idle
+                    onClicked: editor.startNew("layer")
+                }
+            }
+            UqLabel {
+                visible: page.ready && (page.snap.layer || []).length === 0
+                text: "No panel rules yet."
+                opacity: 0.7
+                Layout.leftMargin: Kirigami.Units.largeSpacing
+            }
+        }
         Repeater {
-            model: tabs.currentIndex === 1 ? (page.snap.layer || []) : []
-            delegate: RuleRow {
+            model: page.snap.layer || []
+            delegate: RuleCard {
                 pg: page
                 kind: "layer"
                 count: (page.snap.layer || []).length
             }
         }
+    }
+
+    SettingsTab {
+        title: "Workspaces"
+        iconName: "virtual-desktops"
+
+        SettingsCard {
+            title: "New workspace rule"
+            iconName: "list-add"
+
+            SettingRow {
+                settingId: "workspace-rules"
+                iconName: "virtual-desktops"
+                label: "Screen, gaps, kept when empty"
+                help: "Workspace rules put a workspace on a screen, keep it when empty or change its gaps. Its layout is set on the Look page."
+                highlight: App.highlight
+                enabled: page.ready
+                Layout.fillWidth: true
+
+                QQC2.Button {
+                    objectName: "newWorkspaceRule"
+                    text: "New rule"
+                    icon.name: "list-add"
+                    enabled: page.idle
+                    onClicked: editor.startNew("workspace")
+                }
+            }
+            UqLabel {
+                visible: page.ready && (page.snap.workspace || []).length === 0
+                text: "No workspace rules yet."
+                opacity: 0.7
+                Layout.leftMargin: Kirigami.Units.largeSpacing
+            }
+        }
         Repeater {
-            model: tabs.currentIndex === 2 ? (page.snap.workspace || []) : []
-            delegate: RuleRow {
+            model: page.snap.workspace || []
+            delegate: RuleCard {
                 pg: page
                 kind: "workspace"
                 count: (page.snap.workspace || []).length
             }
         }
+    }
+
+    SettingsTab {
+        title: "From apps"
+        iconName: "package-x-generic"
+        // Like the list, shown only when an app offers rules (or their files have problems).
+        available: page.ready && (((page.snap.apps || {}).rules || []).length + ((page.snap.apps || {}).problems || []).length + ((page.snap.apps || {}).missing || []).length) > 0
+
         // Window rules installed apps offer (Phase 4 §3.3), each off until turned on here.
-        AppRuleList {
-            objectName: "appRules"
-            apps: page.ready ? (page.snap.apps || ({})) : ({})
-            canChange: page.idle
-            highlight: App.highlight
-            Layout.fillWidth: true
-            Layout.topMargin: Kirigami.Units.largeSpacing * 2
-            onTurned: (id, on) => rm.setAppRule(id, on)
-        }
-        Item {
-            implicitHeight: Kirigami.Units.largeSpacing
+        SettingsCard {
+            title: "Rules apps you installed offer"
+            iconName: "package-x-generic"
+            wide: true
+
+            AppRuleList {
+                objectName: "appRules"
+                apps: page.ready ? (page.snap.apps || ({})) : ({})
+                canChange: page.idle
+                highlight: App.highlight
+                Layout.fillWidth: true
+            }
         }
     }
 }
