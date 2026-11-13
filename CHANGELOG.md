@@ -18,6 +18,20 @@ All notable changes to uQ are listed here. The format follows
   (icon and title); click one to focus it, or to bring a minimised one back. The focused one keeps
   the window buttons and menu. With more than five windows it folds to one icon with the count,
   and opens again when clicked.
+- **The window beside this one, at the screen's edges.** Push the pointer against the left or
+  right edge of a screen, even over a fullscreen app, and the edge lights up with a small tab
+  showing the icon of the window on that side. Click, or turn the wheel, to go there: the
+  scrolling layout scrolls to it, and past the last window the tab offers the nearest workspace
+  on that screen with windows in it (its number is shown). Nothing shows when there is nothing
+  on that side, on an edge shared with another screen, or while locked. On the Shell page of
+  Settings, **Show the window beside this one at the screen's edges** turns it off, and **Show
+  the window's title on the tab** adds the title (hidden while the screen is shared). **Show it
+  as: a slice of the window** swaps the tab for a strip of the neighbouring window itself, its
+  near edge peeking in with its rounded corners and border, as the scrolling layout shows the
+  column beside the one in view. It stays at the edge while a fullscreen or maximized window
+  hides its neighbours, so every window can still be reached with a click or the wheel, and
+  its border takes the accent colour when you point at it. While the screen is shared the
+  slice shows the app icon instead of the window.
 
 ### Changed
 
@@ -55,6 +69,9 @@ All notable changes to uQ are listed here. The format follows
   page's theme box is never blank; deleting a restore point asks first; the Login screen page
   comes and goes with uQ's login screen without restarting Settings (and no longer reappears on
   machines without it); searching for "Metered" or "Addresses and DNS" lands on a row you can see.
+- **Packaging metadata matches the PKGBUILD again.** `.SRCINFO` now lists `kcolorscheme` and
+  `kconfig` (build and runtime), and the packaging test checks the whole `depends` array for
+  `polkit` instead of one exact line.
 - **An app's bar or quick-settings widget runs its new code after a package update.** The shell
   kept the widget's old QML until it restarted. The bridge now sends a digest of each widget's
   files, and when it changes the shell loads the widget afresh.

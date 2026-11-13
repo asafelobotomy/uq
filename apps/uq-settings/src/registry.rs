@@ -254,7 +254,7 @@ static LOOK_SETTINGS: [SearchEntry; 16] = [
     ),
 ];
 
-static SHELL_SETTINGS: [SearchEntry; 16] = [
+static SHELL_SETTINGS: [SearchEntry; 19] = [
     entry(
         "pins",
         "Pinned apps",
@@ -274,6 +274,29 @@ static SHELL_SETTINGS: [SearchEntry; 16] = [
         "clock-24h",
         "24-hour clock",
         &["time", "12 hour", "am pm", "format"],
+    ),
+    entry(
+        "edge-indicators",
+        "Screen-edge indicators",
+        &[
+            "edge",
+            "side",
+            "next window",
+            "neighbour",
+            "neighbor",
+            "scroll",
+            "hot edge",
+        ],
+    ),
+    entry(
+        "edge-style",
+        "Screen-edge indicator style",
+        &["edge", "peek", "slice", "tab", "fullscreen", "preview"],
+    ),
+    entry(
+        "edge-titles",
+        "Window titles at the screen's edges",
+        &["edge", "title", "name", "text", "label", "icon only"],
     ),
     entry(
         "terminal",

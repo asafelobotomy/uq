@@ -13,6 +13,7 @@ import "idle"
 import "power"
 import "pick"
 import "wallpaper"
+import "edge"
 
 ShellRoot {
     // NotifBackend is a lazily created singleton: this binding touches it so it picks a backend
@@ -64,6 +65,9 @@ ShellRoot {
 
     // The polkit authentication agent and its dialog (on the focused monitor).
     PolkitAgent {}
+
+    // The screen-edge tabs for the window or workspace beside this one (shell.edge_indicators).
+    EdgeIndicators {}
 
     // The full-screen "click a window" overlay for the rules editor's Pick a window.
     PickOverlay {}

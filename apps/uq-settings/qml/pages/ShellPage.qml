@@ -1,8 +1,8 @@
-// Shell: pinned apps, launcher providers, the bar's islands and clock, the terminal, the
-// notification backend, idle timings and privacy. Everything is read from and written to uqd
-// through ShellModel; a refused change (an idle stage out of order, say) shows uqd's message and
-// the controls go back to the last good value. App names and provider names are other
-// packages' text: they only ever reach the screen through UqLabel.
+// Shell: pinned apps, launcher providers, the bar's islands and clock, the screen-edge
+// indicators, the terminal, the notification backend, idle timings and privacy. Everything is
+// read from and written to uqd through ShellModel; a refused change (an idle stage out of
+// order, say) shows uqd's message and the controls go back to the last good value. App names
+// and provider names are other packages' text: they only ever reach the screen through UqLabel.
 import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
@@ -233,6 +233,53 @@ QQC2.ScrollView {
             enabled: page.ready
             value: page.shell.clock_24h !== false
             onChosen: v => page.setShell("clock_24h", v)
+            Layout.fillWidth: true
+        }
+
+        UqLabel {
+            text: "Screen edges"
+            font.bold: true
+            Layout.topMargin: Kirigami.Units.largeSpacing
+        }
+        SwitchRow {
+            settingId: "edge-indicators"
+            label: "Show the window beside this one at the screen's edges"
+            highlight: App.highlight
+            enabled: page.ready
+            value: page.shell.edge_indicators !== false
+            onChosen: v => page.setShell("edge_indicators", v)
+            Layout.fillWidth: true
+        }
+        SettingRow {
+            settingId: "edge-style"
+            label: "Show it as"
+            highlight: App.highlight
+            enabled: page.ready && page.shell.edge_indicators !== false
+            Layout.leftMargin: Kirigami.Units.largeSpacing * 2
+            Layout.fillWidth: true
+            UqComboBox {
+                id: edgeStyleCombo
+                // "Window peek": a slice of the window at the edge, always there while the
+                // current window is fullscreen and covers it.
+                model: ["An icon tab, when the pointer reaches the edge", "A slice of the window, always there over fullscreen apps"]
+                currentIndex: page.shell.edge_style === "peek" ? 1 : 0
+                enabled: page.ready && page.shell.edge_indicators !== false
+                implicitContentWidthPolicy: QQC2.ComboBox.WidestText
+                Accessible.name: "Screen-edge indicator style"
+                onActivated: index => {
+                    page.setShell("edge_style", index === 1 ? "peek" : "tab");
+                    edgeStyleCombo.currentIndex = Qt.binding(() => page.shell.edge_style === "peek" ? 1 : 0);
+                }
+            }
+        }
+        SwitchRow {
+            settingId: "edge-titles"
+            label: "Show the window's title on the tab"
+            highlight: App.highlight
+            enabled: page.ready && page.shell.edge_indicators !== false && page.shell.edge_style !== "peek"
+            value: page.shell.edge_titles === true
+            onChosen: v => page.setShell("edge_titles", v)
+            Layout.leftMargin: Kirigami.Units.largeSpacing * 2
             Layout.fillWidth: true
         }
 
