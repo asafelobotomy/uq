@@ -82,6 +82,11 @@ All notable changes to uQ are listed here. The format follows
 
 ### Changed
 
+- **Packaging: `uq` depends on the pin it is tested with** (`uq-hyprland-pin>=0.56.2`, from
+  `_pin` in the PKGBUILD), so an updated uQ can't be installed beside an older pin that allows a
+  Hyprland its config doesn't support. After an upgrade, pacman now says to log out and back in:
+  uqd and the shell keep running the old version until then.
+
 - **Weather has its own island.** The city is chosen in edit mode (or from the Weather island's
   popup), and the clock's popup keeps the calendar. The old on/off switches for the five islands
   in Settings are replaced by edit mode on the bar, and the Windows island lists the windows it

@@ -10,7 +10,9 @@
   sorts before `1.0.0`). The PKGBUILD maps it back with `_tag=${pkgver/rc/-rc.}`.
 - Anything below 1.0.0, and every release candidate, is published as a GitHub pre-release.
 - `uq-hyprland-pin` has its own `pkgver`: the lowest Hyprland it allows. Bump it only with the
-  pin itself.
+  pin itself, and set `_pin` in `packaging/uq/PKGBUILD` to the same version: `uq` depends on
+  `uq-hyprland-pin>=$_pin`, so an updated `uq` can't install beside an older pin
+  (`tests/shell/version_test.sh` checks the two agree).
 
 ## Release gate (every tag)
 
@@ -71,12 +73,12 @@ the checksum must come from the published asset.
 
    (The workflow run's summary and its `aur` artifact have both files ready.) Commit this to
    `main` so `packaging/` mirrors the AUR.
-4. Copy `PKGBUILD` and `.SRCINFO` into your clones of the AUR repositories and push:
+4. Copy `PKGBUILD`, `.SRCINFO` and `uq.install` into your clones of the AUR repositories and push:
 
    ```bash
    git clone ssh://aur@aur.archlinux.org/uq.git aur-uq
-   cp packaging/uq/PKGBUILD packaging/uq/.SRCINFO aur-uq/
-   cd aur-uq && makepkg --verifysource && git commit -am "Update to X.Y.Z" && git push
+   cp packaging/uq/PKGBUILD packaging/uq/.SRCINFO packaging/uq/uq.install aur-uq/
+   cd aur-uq && makepkg --verifysource && git add uq.install && git commit -am "Update to X.Y.Z" && git push
    ```
 
    Do the same for `uq-hyprland-pin` (`packaging/uq-hyprland-pin/`) whenever the pin changed.

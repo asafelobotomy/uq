@@ -7,12 +7,17 @@ pkgname=uq
 pkgver=0.3.0rc2
 pkgrel=1
 _tag=${pkgver/rc/-rc.}
+# The uq-hyprland-pin this release's config/hypr/base.lua is tested with: equal to
+# packaging/uq-hyprland-pin's pkgver (tests/shell/version_test.sh checks). A versioned dependency
+# keeps an updated uq from installing beside an older pin that allows a Hyprland it doesn't support.
+_pin=0.56.2
 pkgdesc="Themeable Hyprland desktop: shell, theme and layout daemon, CLI and base config"
 arch=(x86_64)
 url="https://github.com/asafelobotomy/uq"
 license=(MIT)
-depends=(uq-hyprland-pin dbus glib2 qt6ct gcc-libs 'quickshell>=0.3.1' 'quickshell<0.4' brightnessctl upower systemd noto-fonts-emoji gnome-keyring
+depends=("uq-hyprland-pin>=$_pin" dbus glib2 qt6ct gcc-libs 'quickshell>=0.3.1' 'quickshell<0.4' brightnessctl upower systemd noto-fonts-emoji gnome-keyring
   kirigami qqc2-desktop-style qt6-declarative kvantum polkit kcolorscheme kconfig)
+install=uq.install
 makedepends=(cargo qt6-base qt6-declarative kcolorscheme kconfig)
 checkdepends=(lua qt6-declarative)
 optdepends=(

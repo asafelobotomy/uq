@@ -3,6 +3,7 @@ pkgbase = uq
 	pkgver = 0.3.0rc2
 	pkgrel = 1
 	url = https://github.com/asafelobotomy/uq
+	install = uq.install
 	arch = x86_64
 	license = MIT
 	checkdepends = lua
@@ -12,7 +13,7 @@ pkgbase = uq
 	makedepends = qt6-declarative
 	makedepends = kcolorscheme
 	makedepends = kconfig
-	depends = uq-hyprland-pin
+	depends = uq-hyprland-pin>=0.56.2
 	depends = dbus
 	depends = glib2
 	depends = qt6ct
