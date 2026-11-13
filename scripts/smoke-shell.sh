@@ -188,6 +188,8 @@ else
         echo "SKIP (sub-check): dispatch on a real window: $client opened no window headless ($(tail -n 1 "$tmp/client.log"))"
     else
         ws0=$(hc clients -j | jq -r --arg a "$addr" '.[] | select(.address==$a) | .workspace.id')
+        # One window alone: nothing beside it, so no screen-edge indicator.
+        wait_layer uq-edge 0 || fail "a uq-edge layer with a single window and nothing beside it"
         r=$(bridge_call "{\"v\":1,\"id\":1,\"call\":\"Dispatch\",\"args\":[\"focus_window\",{\"address\":\"$addr\"}]}")
         bridge_ok "$r" || fail "Dispatch focus_window: $r $(cat "$tmp/bridge.err")"
         target=2; [ "$ws0" = 2 ] && target=3
@@ -201,6 +203,10 @@ else
         done
         [ "$ws1" = "$target" ] || fail "window $addr did not move from workspace $ws0 to $target (now ${ws1:-gone})"
         echo "ok: Dispatch focus_window and move ($client window $addr: workspace $ws0 -> $ws1)"
+        # The window is now on the next workspace while this one stays shown: the right edge
+        # offers it (shell/edge/).
+        wait_layer uq-edge 1 || fail "no uq-edge layer for the window moved to workspace $ws1 (now $(layer_count uq-edge))"
+        echo "ok: screen-edge indicator for the next workspace's window"
     fi
 fi
 

@@ -2,7 +2,7 @@
 //! tested against the fake uqd. `crate::shell_model` is the thin QML object around it.
 //!
 //! Pins, idle, notifications and privacy are Phase 2 settings (`SetSetting`); the bar islands,
-//! launcher providers, clock and terminal are the `shell` section, which is read, edited and
+//! launcher providers, clock, terminal and screen-edge indicators are the `shell` section, which is read, edited and
 //! written back under the write lock.
 
 use std::path::PathBuf;
@@ -32,7 +32,13 @@ const SETTING_KEYS: [&str; 11] = [
 ];
 
 /// The `shell` section's fields (`islands.<id>` patches one island).
-const SHELL_FIELDS: [&str; 3] = ["providers", "clock_24h", "terminal"];
+const SHELL_FIELDS: [&str; 5] = [
+    "providers",
+    "clock_24h",
+    "terminal",
+    "edge_indicators",
+    "edge_titles",
+];
 
 #[derive(Debug, Clone)]
 pub enum Op {

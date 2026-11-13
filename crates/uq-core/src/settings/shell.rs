@@ -1,5 +1,6 @@
 //! The `shell` section: which bar islands show, the clock format, the launcher's provider
-//! order and enablement, and the terminal for `Terminal=true` launches. The shell reads it
+//! order and enablement, the terminal for `Terminal=true` launches, and whether the screen-edge
+//! indicators show (and with the window's title, or just its icon). The shell reads it
 //! through `SettingsChanged`; uqd renders nothing for it.
 //!
 //! Loading is lenient (wrong-typed or unknown values fall back or are dropped, so a bad
@@ -32,6 +33,10 @@ fn true_() -> bool {
 
 fn lenient_true<'de, D: Deserializer<'de>>(d: D) -> Result<bool, D::Error> {
     lenient_or(d, true_)
+}
+
+fn lenient_false<'de, D: Deserializer<'de>>(d: D) -> Result<bool, D::Error> {
+    lenient_or(d, bool::default)
 }
 
 fn lenient_islands<'de, D: Deserializer<'de>>(d: D) -> Result<Islands, D::Error> {
@@ -124,6 +129,13 @@ pub struct ShellSettings {
         deserialize_with = "lenient_terminal"
     )]
     pub terminal: Option<String>,
+    /// The screen-edge tabs for the window or workspace beside the current one
+    /// (`shell/edge/`).
+    #[serde(deserialize_with = "lenient_true")]
+    pub edge_indicators: bool,
+    /// Show the window's title on those tabs; `false` (the default) is the icon only.
+    #[serde(deserialize_with = "lenient_false")]
+    pub edge_titles: bool,
 }
 
 impl Default for ShellSettings {
@@ -133,6 +145,8 @@ impl Default for ShellSettings {
             providers: Vec::new(),
             clock_24h: true,
             terminal: None,
+            edge_indicators: true,
+            edge_titles: false,
         }
     }
 }
@@ -153,7 +167,14 @@ fn expect_bool(key: &str, v: &Value) -> Result<bool, SettingError> {
 
 impl ShellSettings {
     /// Every key of the `shell` section.
-    pub const FIELDS: [&str; 4] = ["islands", "providers", "clock_24h", "terminal"];
+    pub const FIELDS: [&str; 6] = [
+        "islands",
+        "providers",
+        "clock_24h",
+        "terminal",
+        "edge_indicators",
+        "edge_titles",
+    ];
 
     /// Rules shared by the API and the loader: ids valid, unique, at most 64, terminal valid.
     pub fn validate(&self) -> Result<(), SettingError> {
@@ -253,6 +274,12 @@ impl ShellSettings {
         if let Some(c) = obj.get("clock_24h") {
             out.clock_24h = expect_bool("shell.clock_24h", c)?;
         }
+        if let Some(e) = obj.get("edge_indicators") {
+            out.edge_indicators = expect_bool("shell.edge_indicators", e)?;
+        }
+        if let Some(e) = obj.get("edge_titles") {
+            out.edge_titles = expect_bool("shell.edge_titles", e)?;
+        }
         match obj.get("terminal") {
             None | Some(Value::Null) => {}
             Some(Value::String(s)) => out.terminal = Some(s.clone()),
@@ -319,6 +346,7 @@ mod tests {
                 && s.islands.status
         );
         assert!(s.clock_24h && s.providers.is_empty() && s.terminal.is_none());
+        assert!(s.edge_indicators && !s.edge_titles);
         assert_eq!(s, serde_json::from_value(json!({})).unwrap());
         assert_eq!(s, ShellSettings::from_section(&json!({})).unwrap());
         assert!(s.validate().is_ok());
@@ -358,6 +386,8 @@ mod tests {
             json!({"providers": [{"id": "calc", "enabled": 1}]}),
             json!({"clock_24h": "no"}),
             json!({"terminal": 5}),
+            json!({"edge_indicators": "off"}),
+            json!({"edge_titles": 1}),
             json!([]),
         ] {
             assert!(set.set_section("shell", bad.clone()).is_err(), "{bad}");
@@ -407,6 +437,25 @@ mod tests {
     }
 
     #[test]
+    fn edge_indicators_switch() {
+        let mut set = Settings::default();
+        set.set_section("shell", json!({"edge_indicators": false}))
+            .unwrap();
+        assert!(!set.shell.edge_indicators);
+        assert_eq!(set.section("shell").unwrap()["edge_indicators"], false);
+        set.set_section("shell", json!({})).unwrap();
+        assert!(set.shell.edge_indicators, "missing means on");
+        set.set_section("shell", json!({"edge_titles": true}))
+            .unwrap();
+        assert!(set.shell.edge_titles);
+        assert_eq!(set.section("shell").unwrap()["edge_titles"], true);
+        set.set_section("shell", json!({})).unwrap();
+        assert!(!set.shell.edge_titles, "missing means icon only");
+        let s: ShellSettings = serde_json::from_value(json!({"edge_indicators": false})).unwrap();
+        assert!(!s.edge_indicators);
+    }
+
+    #[test]
     fn provider_order_and_enabled() {
         let prefs = [pref("run", true), pref("org.x.Y", false)];
         let ids: Vec<String> = ["calc", "run", "org.x.Y", "org.a.B"]
@@ -439,6 +488,10 @@ mod tests {
         assert_eq!(s.providers, [pref("calc", true), pref("org.x.Y", true)]);
         assert!(s.clock_24h);
         assert_eq!(s.terminal, None);
+        let s: ShellSettings = serde_json::from_value(json!({"edge_indicators": 0})).unwrap();
+        assert!(s.edge_indicators, "a wrong type keeps the default");
+        let s: ShellSettings = serde_json::from_value(json!({"edge_titles": "yes"})).unwrap();
+        assert!(!s.edge_titles, "a wrong type keeps the default");
         let s: ShellSettings =
             serde_json::from_value(json!({"islands": 3, "providers": 4, "terminal": 1})).unwrap();
         assert_eq!(s, ShellSettings::default());

@@ -24,3 +24,14 @@ function providerOrder(shell) {
     }
     return out;
 }
+
+// shell.edge_indicators: the screen-edge tabs for the window or workspace beside this one
+// (shell/edge/). On unless set to false.
+function edgeIndicators(shell) {
+    return !(shell && shell.edge_indicators === false);
+}
+
+// shell.edge_titles: those tabs also show the window's title. Off (icon only) unless true.
+function edgeTitles(shell) {
+    return !!(shell && shell.edge_titles === true);
+}

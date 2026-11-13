@@ -1,8 +1,8 @@
-// Shell: pinned apps, launcher providers, the bar's islands and clock, the terminal, the
-// notification backend, idle timings and privacy. Everything is read from and written to uqd
-// through ShellModel; a refused change (an idle stage out of order, say) shows uqd's message and
-// the controls go back to the last good value. App names and provider names are other
-// packages' text: they only ever reach the screen through UqLabel.
+// Shell: pinned apps, launcher providers, the bar's islands and clock, the screen-edge
+// indicators, the terminal, the notification backend, idle timings and privacy. Everything is
+// read from and written to uqd through ShellModel; a refused change (an idle stage out of
+// order, say) shows uqd's message and the controls go back to the last good value. App names
+// and provider names are other packages' text: they only ever reach the screen through UqLabel.
 import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
@@ -233,6 +233,31 @@ QQC2.ScrollView {
             enabled: page.ready
             value: page.shell.clock_24h !== false
             onChosen: v => page.setShell("clock_24h", v)
+            Layout.fillWidth: true
+        }
+
+        UqLabel {
+            text: "Screen edges"
+            font.bold: true
+            Layout.topMargin: Kirigami.Units.largeSpacing
+        }
+        SwitchRow {
+            settingId: "edge-indicators"
+            label: "Show the window beside this one at the screen's edges"
+            highlight: App.highlight
+            enabled: page.ready
+            value: page.shell.edge_indicators !== false
+            onChosen: v => page.setShell("edge_indicators", v)
+            Layout.fillWidth: true
+        }
+        SwitchRow {
+            settingId: "edge-titles"
+            label: "Show the window's title, not just its icon"
+            highlight: App.highlight
+            enabled: page.ready && page.shell.edge_indicators !== false
+            value: page.shell.edge_titles === true
+            onChosen: v => page.setShell("edge_titles", v)
+            Layout.leftMargin: Kirigami.Units.largeSpacing * 2
             Layout.fillWidth: true
         }
 

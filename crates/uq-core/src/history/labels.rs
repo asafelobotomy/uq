@@ -26,6 +26,8 @@ pub fn label(domain: &str, key: &str) -> Option<String> {
         ("shell", "providers") => "Launcher search providers",
         ("shell", "clock_24h") => "24-hour clock",
         ("shell", "terminal") => "Terminal",
+        ("shell", "edge_indicators") => "Screen-edge indicators",
+        ("shell", "edge_titles") => "Window titles on screen-edge indicators",
         ("settings", "pinned") => "Pinned apps",
         ("settings", "weather_location") => "Weather location",
         ("settings", "idle.dim") => "Dim the screen",
@@ -237,6 +239,8 @@ mod tests {
             enabled: true,
         }];
         s.shell.terminal = Some("kitty.desktop".into());
+        s.shell.edge_indicators = false;
+        s.shell.edge_titles = true;
         s.mouse.sensitivity = 0.2;
         let kb = &mut s.input.keyboard;
         kb.layouts = vec![KbLayout {
