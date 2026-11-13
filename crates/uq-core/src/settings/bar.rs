@@ -167,7 +167,8 @@ impl TextStyle {
         {
             return Err(format!("invalid font name {f:?}"));
         }
-        if !(MIN_TEXT_SIZE..=MAX_TEXT_SIZE).contains(&self.size) || self.size % TEXT_SIZE_STEP != 0
+        if !(MIN_TEXT_SIZE..=MAX_TEXT_SIZE).contains(&self.size)
+            || !self.size.is_multiple_of(TEXT_SIZE_STEP)
         {
             return Err(format!(
                 "text size {} is not {MIN_TEXT_SIZE} to {MAX_TEXT_SIZE} in steps of {TEXT_SIZE_STEP}",
