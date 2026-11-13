@@ -93,6 +93,8 @@ All notable changes to uQ are listed here. The format follows
 
 ### Changed
 
+- **No second count beside noti-fi's bell.** With noti-fi, the Notifications island shows only
+  noti-fi's icon, which already carries the count, not a number beside it.
 - **Screen-edge indicators only point at windows out of view.** A window already wholly on
   screen gets no indicator (click it where it is); one partly or wholly off screen, behind a
   fullscreen window, or on another workspace still does.

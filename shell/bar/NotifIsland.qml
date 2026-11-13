@@ -12,7 +12,8 @@ import "../logic/tray.js" as Tray
 
 // While noti-fi is the backend, its own tray icon stands in for the bell (and leaves the tray):
 // left click does what it does in the tray, right click opens its menu, middle click toggles Do
-// Not Disturb. With another backend, or before noti-fi's icon appears, the island is as follows.
+// Not Disturb. Its icon carries the count itself, so the island shows no number beside it. With
+// another backend, or before noti-fi's icon appears, the island is as follows.
 // The Notifications island (spec §2.5, §2.10): the latest app's icon (else a bell), the count,
 // a Do Not Disturb mark, and the latest summary on hover (or always with notif.show_summary),
 // never while the screen is shared. While another app owns the notification name it says so.
@@ -113,8 +114,9 @@ Island {
             color: NotifBackend.available ? Theme.text : Theme.textMuted
             font.pixelSize: Theme.fontSize + 3
         }
+        // noti-fi's own icon already shows the count, so no second one beside it.
         UqText {
-            visible: !root.yielded && !root.isIcon && root.countText !== ""
+            visible: !root.yielded && !root.isIcon && !root.notifiBell && root.countText !== ""
             text: root.countText
             Layout.minimumWidth: implicitWidth
         }
