@@ -71,6 +71,14 @@ All notable changes to uQ are listed here. The format follows
   hides its neighbours, so every window can still be reached with a click or the wheel, and
   its border takes the accent colour when you point at it. While the screen is shared the
   slice shows the app icon instead of the window.
+- **A right-click menu on the desktop.** Right-click empty desktop space (anywhere no window, bar
+  or panel is) for **Create workspace +** (a new empty workspace, switched to), **Open** (your
+  terminal, file manager and text editor by their own names and icons, as set on the Default apps
+  page, and uQ Settings), **Appearance** (Change Wallpaper, Light Mode, Dark Mode, with the current
+  one ticked) and **System** (Log Off, Lock, Restart, Shutdown; Restart and Shutdown go through the
+  power menu's 30 s countdown). It opens at the pointer on any monitor and stays on screen near the
+  edges; Up/Down, Right/Left, Enter and Esc work, and a click outside closes it. Right-clicks on
+  windows, the bar and other panels still go to them.
 
 ### Changed
 

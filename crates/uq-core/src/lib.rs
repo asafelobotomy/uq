@@ -12,6 +12,7 @@ pub mod integration;
 pub mod keybinds;
 pub mod launcher_providers;
 pub mod lua;
+pub mod mimeapps;
 pub mod paths;
 pub mod profile;
 pub mod qt6ct;

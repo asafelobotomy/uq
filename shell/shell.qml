@@ -14,6 +14,7 @@ import "power"
 import "pick"
 import "wallpaper"
 import "edge"
+import "desktop"
 
 ShellRoot {
     // NotifBackend is a lazily created singleton: this binding touches it so it picks a backend
@@ -40,6 +41,9 @@ ShellRoot {
         model: Quickshell.screens
         delegate: Wallpaper {}
     }
+
+    // The right-click menu on empty desktop space (opened from the wallpaper layer).
+    DesktopMenu {}
 
     // The bars: every screen, or the ones Settings chose (Outputs.barScreens returns the
     // ShellScreen objects themselves, so Variants keeps each bar while its screen stays).

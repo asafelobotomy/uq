@@ -5,6 +5,7 @@
 
 mod appactions;
 mod calc;
+mod defaultapps;
 pub(crate) mod desktop_entry;
 mod dispatch;
 mod feeds;
@@ -133,6 +134,7 @@ async fn handle(s: &Services, call: &str, args: &[Value]) -> Result<Value, Strin
             }
         }
         "Dispatch" => dispatch::dispatch(args).await,
+        "DefaultApps" => defaultapps::default_apps(link, args),
         "Power" => power::power(args).await,
         "Lock" => logind::lock(args).await,
         "SleepLockReady" if args.is_empty() => {

@@ -149,6 +149,26 @@ TestCase {
         compare(s.open, "powermenu");
     }
 
+    // The desktop menu is one more surface: toggled like the others, replaced by them, wiped on lock.
+    function test_transition_desktopmenu() {
+        verify(L.SURFACES.indexOf("desktopmenu") >= 0);
+        var s = L.transition(L.initialState(), "toggleDesktopMenu");
+        compare(s.open, "desktopmenu");
+        verify(!s.wipe);
+        s = L.transition(s, "toggleDesktopMenu");
+        compare(s.open, "closed");
+        verify(s.wipe);
+        s = L.transition({ open: "desktopmenu", wipe: false }, "togglePowerMenu");
+        compare(s.open, "powermenu");
+        verify(s.wipe);
+        s = L.transition({ open: "spotlight", wipe: false }, "toggleDesktopMenu");
+        compare(s.open, "desktopmenu");
+        verify(s.wipe);
+        s = L.transition({ open: "desktopmenu", wipe: false }, "lock");
+        compare(s.open, "closed");
+        verify(s.wipe);
+    }
+
     // Sections: top hit, then two groups (2 and 3 items).
     function sections() {
         return [

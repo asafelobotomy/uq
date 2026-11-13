@@ -22,10 +22,10 @@ function nextGeneration(g) {
 }
 
 // --- surface state machine ---
-// state: { open: "closed" | "spotlight" | "appmenu" | "quicksettings" | "notifcentre" | "powermenu", wipe: bool }. `wipe` is true when the
+// state: { open: "closed" | "spotlight" | "appmenu" | "quicksettings" | "notifcentre" | "powermenu" | "desktopmenu", wipe: bool }. `wipe` is true when the
 // transition closed a surface (or locked), so that surface must clear its query and results.
 
-var SURFACES = ["closed", "spotlight", "appmenu", "quicksettings", "notifcentre", "powermenu"];
+var SURFACES = ["closed", "spotlight", "appmenu", "quicksettings", "notifcentre", "powermenu", "desktopmenu"];
 
 function initialState() {
     return { open: "closed", wipe: false };
@@ -40,6 +40,7 @@ function transition(state, event) {
     case "toggleQuickSettings": target = open === "quicksettings" ? "closed" : "quicksettings"; break;
     case "toggleNotifCentre": target = open === "notifcentre" ? "closed" : "notifcentre"; break;
     case "togglePowerMenu": target = open === "powermenu" ? "closed" : "powermenu"; break;
+    case "toggleDesktopMenu": target = open === "desktopmenu" ? "closed" : "desktopmenu"; break;
     case "close": target = "closed"; break;
     case "lock": return { open: "closed", wipe: true };
     default: return { open: open, wipe: false };

@@ -1,6 +1,8 @@
 use super::*;
 use crate::pages::fake_uqd;
 use crate::pages::runner::run;
+use std::path::Path;
+use uq_core::mimeapps::MAX_FILE;
 use uq_core::state::State;
 
 struct T {

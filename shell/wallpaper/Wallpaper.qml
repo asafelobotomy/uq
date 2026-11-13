@@ -8,8 +8,10 @@ import "../logic/wallpaper.js" as W
 
 // One wallpaper layer per screen (spec §2.3): a background-layer window with a colour, and one
 // image or a folder slideshow from Settings.values.wallpaper (this output's entry, else "*").
-// It takes no input and reserves no space. An image that fails to load stays transparent, so the
-// colour shows; a slide that fails is skipped at once.
+// It reserves no space and never takes the keyboard. It is the empty desktop, the one place a
+// pointer reaches only where no window or other layer is, so a right click on it opens the
+// desktop menu there (DesktopMenu, the "desktopmenu" surface); other buttons do nothing. An image
+// that fails to load stays transparent, so the colour shows; a slide that fails is skipped at once.
 PanelWindow {
     id: win
 
@@ -63,8 +65,6 @@ PanelWindow {
     WlrLayershell.namespace: "uq-wallpaper"
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
     exclusionMode: ExclusionMode.Ignore
-    // An empty region: clicks and keys go to whatever is above this layer.
-    mask: Region {}
     anchors { top: true; bottom: true; left: true; right: true }
 
     // Re-read the folder. The current slide stays current when the list only grows or shrinks
@@ -177,5 +177,14 @@ PanelWindow {
         // A slideshow skips a bad slide without flashing the colour.
         clearOnFail: !win.slideshow
         onFailed: win.slideFailed()
+    }
+
+    // A right click on empty desktop space: the desktop menu at the pointer, on this screen.
+    MouseArea {
+        anchors.fill: parent
+        acceptedButtons: Qt.RightButton
+        onClicked: function (ev) {
+            Surfaces.toggle("desktopmenu", win.modelData, { x: ev.x, y: ev.y });
+        }
     }
 }

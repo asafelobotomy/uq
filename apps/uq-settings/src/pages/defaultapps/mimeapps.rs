@@ -1,34 +1,7 @@
 //! Reading and editing `mimeapps.list` without touching anything but the keys being set: every
 //! other line, comment, group and key stays exactly as it was.
 
-pub const GROUP: &str = "[Default Applications]";
-
-/// The first desktop id `[Default Applications]` gives for `mime`.
-pub fn default_for(text: &str, mime: &str) -> Option<String> {
-    let mut inside = false;
-    let mut found = None;
-    for line in text.lines() {
-        let t = line.trim();
-        if t.starts_with('[') {
-            inside = t == GROUP;
-            continue;
-        }
-        if !inside || t.starts_with('#') {
-            continue;
-        }
-        if let Some((k, v)) = t.split_once('=')
-            && k.trim() == mime
-            && found.is_none()
-        {
-            found = v
-                .split(';')
-                .map(str::trim)
-                .find(|id| !id.is_empty())
-                .map(str::to_string);
-        }
-    }
-    found
-}
+pub use uq_core::mimeapps::{GROUP, default_for};
 
 /// `text` with each of `mimes` set to `id` in `[Default Applications]`: an existing key is
 /// replaced where it is (a repeat of it is dropped), a missing one is added at the end of the
