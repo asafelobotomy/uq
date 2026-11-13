@@ -68,9 +68,21 @@ struct Args {
     /// Render every page into this directory, then quit.
     #[arg(long, hide = true)]
     screenshots: Option<PathBuf>,
+    /// With --screenshots: the window size, as WIDTHxHEIGHT (default 1920x1080), to check the
+    /// pages at small sizes.
+    #[arg(long, hide = true, value_name = "WxH", requires = "screenshots", value_parser = parse_size)]
+    shot_size: Option<String>,
     /// Read plugin pages from this directory instead of /usr/share/uq/settings/pages.
     #[arg(long, hide = true, value_name = "DIR")]
     plugin_dir: Option<PathBuf>,
+}
+
+fn parse_size(s: &str) -> Result<String, String> {
+    let ok = s.split_once('x').is_some_and(|(w, h)| {
+        w.parse::<u16>().is_ok_and(|w| w > 0) && h.parse::<u16>().is_ok_and(|h| h > 0)
+    });
+    ok.then(|| s.to_string())
+        .ok_or_else(|| "expected WIDTHxHEIGHT, e.g. 540x900".into())
 }
 
 fn main() -> ExitCode {
@@ -109,6 +121,9 @@ fn main() -> ExitCode {
     let _session = match &args.screenshots {
         Some(dir) => {
             app::post(Event::ScreenshotDir(dir.display().to_string()));
+            if let Some(size) = &args.shot_size {
+                app::post(Event::ScreenshotSize(size.clone()));
+            }
             // Only against a private bus the caller points us at; never the real session.
             if std::env::var_os("UQ_SETTINGS_SHOTS_BUS").is_none() {
                 None

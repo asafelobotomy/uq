@@ -82,6 +82,11 @@ All notable changes to uQ are listed here. The format follows
 
 ### Changed
 
+- **Settings fits small windows.** In a narrow window the page list becomes a column of icons
+  (names in tooltips), a page's tabs move under its title and wrap, a setting's controls go under
+  its label when they don't fit beside it, and cards that span two columns stack instead of
+  overlapping. The login screen preview and the clock on Date and time shrink or wrap to fit.
+  Nothing is cut off at the smallest window size.
 - **Weather has its own island.** The city is chosen in edit mode (or from the Weather island's
   popup), and the clock's popup keeps the calendar. The old on/off switches for the five islands
   in Settings are replaced by edit mode on the bar, and the Windows island lists the windows it
