@@ -162,25 +162,25 @@ PanelWindow {
     Rectangle {
         id: sliver
         visible: !win.peekStyle
-        readonly property real top: {
+        readonly property real fromY: {
             var t = win.target, d = win.display, sp = win.span;
             var off = (d ? d.y : 0) + (sp ? sp.top : 0);
             if (t && t.workspace === 0 && t.h > 0)
                 return Math.max(Theme.gapOut, Math.min(t.y - off, win.height - Theme.gapOut * 2));
             return Theme.gapOut;
         }
-        readonly property real bottom: {
+        readonly property real toY: {
             var t = win.target, d = win.display, sp = win.span;
             var off = (d ? d.y : 0) + (sp ? sp.top : 0);
             if (t && t.workspace === 0 && t.h > 0)
-                return Math.max(top + Theme.gapOut, Math.min(t.y + t.h - off, win.height - Theme.gapOut));
+                return Math.max(fromY + Theme.gapOut, Math.min(t.y + t.h - off, win.height - Theme.gapOut));
             return win.height - Theme.gapOut;
         }
         readonly property bool hovered: win.revealed && area.containsMouse && !tab.hovered
             && area.mouseY >= y && area.mouseY < y + height
             && (win.left ? area.mouseX < win.sliverWidth : area.mouseX >= win.width - win.sliverWidth)
-        y: top
-        height: bottom - top
+        y: fromY
+        height: toY - fromY
         // The far side (and far corners) stay off-screen.
         width: win.sliverWidth + radius * 2
         x: win.left ? (win.revealed ? win.sliverWidth - width : -width)
