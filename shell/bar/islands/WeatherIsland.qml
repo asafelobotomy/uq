@@ -6,9 +6,10 @@ import "../../core"
 import "../../logic/weather.js" as Weather
 import ".."
 
-// Weather (`weather`): icon and temperature, and the city unless the screen is shared or the
-// island is compact. The popup has today's high and low, the next hours, a city search and
-// "Turn off weather". Open-Meteo is asked by the bridge, with the chosen location only.
+// Weather (`weather`). Icon: the conditions. Small: and the temperature. Medium: and the city
+// (never while the screen is shared). Large: and today's high and low. A click shows the
+// forecast for the next hours. The city is chosen in edit mode (the island's settings); the
+// bridge asks Open-Meteo, with that location only, while this island is on the bar.
 Island {
     id: root
 
@@ -17,65 +18,17 @@ Island {
     readonly property bool hasWeather: wx !== null && wx !== undefined
     readonly property bool hasLocation: !!Settings.values.weather_location
     readonly property bool sharing: Bridge.sharing
+    readonly property bool showCity: !sharing && (size === "medium" || size === "large")
+        && hasWeather && !!wx.location_name
 
-    implicitWidth: row.implicitWidth + Theme.gapIn * 2
     Accessible.role: Accessible.Button
     Accessible.name: hasWeather ? "Weather: " + Weather.format(wx.temp_c)
         + (wx.location_name && !sharing ? " in " + wx.location_name : "")
-        : (hasLocation ? "Weather: loading" : "Weather: choose a city")
-
-    // --- city search ---
-    property var results: []
-    property string error: ""
-    property int queryGen: 0
-    function onQueryEdited(s) {
-        queryGen++;
-        results = [];
-        error = "";
-        if (Weather.validQuery(s))
-            debounce.restart();
-        else
-            debounce.stop();
-    }
-    function runQuery(q) {
-        var gen = queryGen;
-        Bridge.call("GeocodeCity", [q.trim()]).then(function (r) {
-            if (gen !== root.queryGen)
-                return;
-            var list = Array.isArray(r) ? r.slice(0, 5) : [];
-            root.results = list;
-            root.error = list.length === 0 ? "Couldn't find that city" : "";
-        }).catch(function () {
-            if (gen !== root.queryGen)
-                return;
-            root.results = [];
-            root.error = "Couldn't find that city";
-        });
-    }
-    function choose(r) {
-        var loc = Weather.locationArg(r);
-        if (loc === null)
-            return;
-        Bridge.call("SetSetting", ["weather_location", loc]);
-        popup.hide();
-    }
-    // Off means both: no more lookups and no island.
-    function turnOff() {
-        Bridge.call("SetSetting", ["weather_location", null]);
-        BarLayout.removeId("weather");
-        popup.hide();
-    }
-    property string pendingQuery: ""
-    Timer {
-        id: debounce
-        interval: 400
-        onTriggered: root.runQuery(root.pendingQuery)
-    }
+        : (hasLocation ? "Weather: loading" : "Weather: no city chosen")
 
     RowLayout {
-        id: row
-        anchors.verticalCenter: parent.verticalCenter
-        anchors.left: parent.left
+        anchors.centerIn: parent
+        width: Math.min(implicitWidth, root.room)
         spacing: Theme.gapIn
 
         IconImage {
@@ -87,37 +40,37 @@ Island {
                 : "weather-few-clouds", true)
         }
         UqText {
-            visible: root.hasWeather
+            visible: !root.isIcon && root.hasWeather
             text: root.hasWeather ? Weather.format(root.wx.temp_c) : ""
+            Layout.minimumWidth: implicitWidth
         }
         UqText {
-            visible: !root.sharing && root.size !== "compact" && root.hasWeather && !!root.wx.location_name
-            text: root.hasWeather && root.wx.location_name ? String(root.wx.location_name) : ""
+            visible: root.showCity
+            text: root.showCity ? String(root.wx.location_name) : ""
             color: Theme.textMuted
-            Layout.maximumWidth: Theme.fontSize * (root.size === "wide" ? 16 : 10)
+            Layout.fillWidth: true
         }
         UqText {
-            visible: !root.hasWeather && root.size !== "compact"
-            text: root.hasLocation ? "…" : "Set city"
+            readonly property var today: root.hasWeather && root.wx.today ? root.wx.today : null
+            visible: root.size === "large" && today !== null
+            text: today ? Weather.format(today.max_c) + "/" + Weather.format(today.min_c) : ""
             color: Theme.textMuted
+            Layout.minimumWidth: implicitWidth
+        }
+        UqText {
+            visible: !root.isIcon && !root.hasWeather
+            text: root.hasLocation ? "…" : "No city"
+            color: Theme.textMuted
+            Layout.fillWidth: true
         }
     }
 
     MouseArea {
         anchors.fill: parent
-        onClicked: {
-            if (popup.open && popup.anchorItem === root) {
-                popup.hide();
-            } else {
-                root.results = [];
-                root.error = "";
-                root.queryGen++;
-                popup.show(root, details);
-            }
-        }
+        onClicked: popup.open && popup.anchorItem === root ? popup.hide() : popup.show(root, details)
     }
 
-    IslandPopup {
+    LazyPopup {
         id: popup
     }
 
@@ -127,7 +80,6 @@ Island {
             spacing: Theme.gapIn
             width: Theme.fontSize * 24
 
-            // Now and today
             RowLayout {
                 visible: root.hasWeather
                 spacing: Theme.gapIn
@@ -155,10 +107,9 @@ Island {
                     }
                 }
             }
-            // Next hours
             RowLayout {
                 readonly property var hours: root.hasWeather && Array.isArray(root.wx.hourly)
-                    ? root.wx.hourly.slice(0, root.size === "wide" ? 8 : 6) : []
+                    ? root.wx.hourly.slice(0, 8) : []
                 visible: hours.length > 0
                 spacing: Theme.gapIn
                 Layout.fillWidth: true
@@ -186,42 +137,20 @@ Island {
                     }
                 }
             }
-
             UqText {
-                text: root.hasLocation ? "Change city" : "Choose a city for the weather"
+                visible: !root.hasLocation || !root.hasWeather
+                text: root.hasLocation ? "Fetching the weather…" : "No city chosen yet."
                 color: Theme.textMuted
-            }
-            UqInput {
-                id: cityInput
-                Layout.fillWidth: true
-                placeholder: "City"
-                Accessible.name: "City"
-                onEdited: function (s) {
-                    root.pendingQuery = s;
-                    root.onQueryEdited(s);
-                }
-                Keys.onDownPressed: nextItemInFocusChain(true).forceActiveFocus()
-                Component.onCompleted: forceActiveFocus()
-            }
-            UqText {
-                visible: root.error !== ""
-                text: root.error
-                color: Theme.textMuted
-            }
-            Repeater {
-                model: root.results
-                delegate: MenuRow {
-                    required property var modelData
-                    Layout.fillWidth: true
-                    text: String(modelData.name)
-                    detail: modelData.country ? String(modelData.country) : ""
-                    onActivated: root.choose(modelData)
-                }
             }
             MenuRow {
+                id: setCity
                 Layout.fillWidth: true
-                text: "Turn off weather"
-                onActivated: root.turnOff()
+                text: root.hasLocation ? "Change the city…" : "Choose a city…"
+                onActivated: {
+                    popup.hide();
+                    root.editRequested();
+                }
+                Component.onCompleted: forceActiveFocus()
             }
         }
     }

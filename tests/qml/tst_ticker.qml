@@ -117,6 +117,11 @@ TestCase {
         verify(!T.validFeed("http://x.org/rss"));
         verify(!T.validFeed("https://x.org/a b"));
         verify(!T.validFeed("https://"));
+        compare(T.cleanZone("America/New York"), "America/New_York");
+        compare(T.cleanZone("europe/paris"), "europe/paris", "letter case is the bridge's business");
+        compare(T.cleanZone("UTC"), "UTC");
+        compare(T.cleanZone("../etc"), null);
+        compare(T.cleanZone("Nowhere"), null);
         for (var i = 0; i < T.PRESET_FEEDS.length; i++)
             verify(T.validFeed(T.PRESET_FEEDS[i].url), T.PRESET_FEEDS[i].url);
     }

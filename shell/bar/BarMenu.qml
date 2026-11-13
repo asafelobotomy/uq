@@ -5,13 +5,15 @@ import "../core"
 import "../logic/barlayout.js" as L
 import "islands"
 
-// The bar's own menu, on a right click on an island (or on the bar between islands): move the
-// island left or right, change its size, take it off the bar, add another island next to it,
-// or open the bar's page in Settings. Every edit goes through BarLayout (SetBarLayout), so it is
-// saved and every screen's bar follows. Keyboard: Up/Down, Enter, Esc (IslandPopup). Never above the lock.
+// The uQ Island Menu, on a right click on an island (or on the bar between islands): Edit
+// Islands (edit mode, where islands are moved, resized and set up), Add an Island (next to this
+// one), and Remove (this one). Every change goes through BarLayout (SetBarLayout), so it is saved
+// and every screen's bar follows. Keyboard: Up/Down, Enter, Esc (IslandPopup).
 IslandPopup {
     id: pop
 
+    // The bar's screen, where edit mode takes the keyboard.
+    property var barScreen: null
     // The island the menu is for: {zone, index, id, size}; null on the bar's empty space.
     property var target: null
     // "main" or "add"
@@ -26,15 +28,22 @@ IslandPopup {
 
     readonly property var bar: BarLayout.layout
 
-    onPageChanged: if (page === "main" && visible) focusFirst.restart()
+    onPageChanged: if (visible) focusFirst.restart()
 
     ColumnLayout {
         id: col
         width: Math.max(Theme.fontSize * 18, implicitWidth)
         spacing: 2
+        Accessible.role: Accessible.PopupMenu
+        Accessible.name: "uQ Island Menu"
 
         UqText {
-            text: pop.page === "add" ? "Add to the bar" : (pop.target ? L.name(pop.target.id) : "Bar")
+            text: "uQ Island Menu"
+            font.bold: true
+            Layout.fillWidth: true
+        }
+        UqText {
+            text: pop.page === "add" ? "Add an island" : (pop.target ? L.name(pop.target.id) : "The bar")
             color: Theme.textMuted
             Layout.fillWidth: true
             Layout.bottomMargin: Theme.gapIn
@@ -47,51 +56,28 @@ IslandPopup {
             Layout.fillWidth: true
 
             MenuRow {
-                id: first
-                visible: pop.target !== null && L.canMove(pop.bar, pop.target.zone, pop.target.index, -1)
+                id: editRow
                 Layout.fillWidth: true
-                text: "Move left"
-                onActivated: { BarLayout.move(pop.target.zone, pop.target.index, -1); pop.hide(); }
-            }
-            MenuRow {
-                visible: pop.target !== null && L.canMove(pop.bar, pop.target.zone, pop.target.index, 1)
-                Layout.fillWidth: true
-                text: "Move right"
-                onActivated: { BarLayout.move(pop.target.zone, pop.target.index, 1); pop.hide(); }
-            }
-            Repeater {
-                model: pop.target !== null ? L.SIZES : []
-                delegate: MenuRow {
-                    required property string modelData
-                    Layout.fillWidth: true
-                    text: modelData === "compact" ? "Compact" : (modelData === "wide" ? "Wide" : "Normal size")
-                    detail: pop.target && pop.target.size === modelData ? "✓" : ""
-                    Accessible.checkable: true
-                    Accessible.checked: detail !== ""
-                    onActivated: {
-                        BarLayout.setSize(pop.target.zone, pop.target.index, modelData);
-                        pop.hide();
-                    }
+                text: BarLayout.editing ? "Finish editing" : "Edit Islands"
+                detail: BarLayout.editing ? "Esc" : ""
+                onActivated: {
+                    pop.hide();
+                    BarLayout.toggleEdit(pop.barScreen ? pop.barScreen.name : "");
                 }
-            }
-            MenuRow {
-                visible: pop.target !== null
-                Layout.fillWidth: true
-                text: "Remove from bar"
-                onActivated: { BarLayout.remove(pop.target.zone, pop.target.index); pop.hide(); }
             }
             MenuRow {
                 id: addEntry
                 visible: L.addable(pop.bar).length > 0
                 Layout.fillWidth: true
-                text: "Add island…"
-                onActivated: { pop.page = "add"; }
+                text: "Add an Island…"
+                onActivated: pop.page = "add"
             }
             MenuRow {
+                visible: pop.target !== null
                 Layout.fillWidth: true
-                text: "Edit the bar in Settings…"
+                text: "Remove"
                 onActivated: {
-                    Quickshell.execDetached(["uqctl", "settings", "shell", "islands"]);
+                    BarLayout.remove(pop.target.zone, pop.target.index);
                     pop.hide();
                 }
             }
@@ -110,7 +96,6 @@ IslandPopup {
             spacing: 2
             Layout.fillWidth: true
             Repeater {
-                id: addList
                 model: pop.page === "add" ? L.addable(pop.bar) : []
                 delegate: MenuRow {
                     required property var modelData
@@ -139,14 +124,6 @@ IslandPopup {
     Timer {
         id: focusFirst
         interval: 0
-        onTriggered: {
-            var rows = [first, addEntry];
-            for (var i = 0; i < rows.length; i++)
-                if (rows[i].visible) {
-                    rows[i].forceActiveFocus();
-                    return;
-                }
-            col.forceActiveFocus();
-        }
+        onTriggered: if (pop.page === "main") editRow.forceActiveFocus()
     }
 }

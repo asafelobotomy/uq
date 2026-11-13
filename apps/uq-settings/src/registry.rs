@@ -249,7 +249,7 @@ static LOOK_SETTINGS: [SearchEntry; 16] = [
     ),
 ];
 
-static SHELL_SETTINGS: [SearchEntry; 16] = [
+static SHELL_SETTINGS: [SearchEntry; 17] = [
     entry(
         "pins",
         "Pinned apps",
@@ -262,8 +262,16 @@ static SHELL_SETTINGS: [SearchEntry; 16] = [
     ),
     entry(
         "islands",
-        "Bar islands",
-        &["bar", "panel", "widgets", "show", "hide"],
+        "Edit the bar",
+        &[
+            "bar", "panel", "islands", "widgets", "show", "hide", "move", "resize", "size",
+            "weather", "stocks", "news",
+        ],
+    ),
+    entry(
+        "reset-bar",
+        "Reset the bar",
+        &["bar", "panel", "islands", "default", "layout"],
     ),
     entry(
         "clock-24h",

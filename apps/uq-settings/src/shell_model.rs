@@ -62,6 +62,10 @@ pub mod qobject {
         #[qinvokable]
         fn provider_toggle(self: Pin<&mut ShellModel>, id: &QString, on: bool);
 
+        /// Turn the bar's edit mode on (the shell's `uq:edit-bar` shortcut, through Hyprland).
+        #[qinvokable]
+        fn edit_bar(self: Pin<&mut ShellModel>);
+
         /// One edit of the bar's layout, as JSON: `{op: "move" | "add" | "remove" | "size" |
         /// "options" | "reset", …}` (uq_core::settings::BarEdit).
         #[qinvokable]
@@ -184,6 +188,12 @@ impl ShellModel {
 }
 
 impl ShellModel {
+    fn edit_bar(self: Pin<&mut Self>) {
+        if let Err(e) = crate::pages::shell::start_bar_edit() {
+            self.set_error(QString::from(&e));
+        }
+    }
+
     fn bar_edit(self: Pin<&mut Self>, json_edit: &QString) {
         match serde_json::from_str(&json_edit.to_string()) {
             Ok(edit) => model_core::start(self, Op::Bar { edit }),

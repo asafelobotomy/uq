@@ -219,3 +219,10 @@ function validFeed(u) {
     var s = String(u).trim();
     return s.length <= 512 && /^https:\/\/[A-Za-z0-9.\-:]+(\/|\?|#|$)/.test(s) && !/\s/.test(s);
 }
+
+// An IANA zone name as the world clock takes it (spaces become underscores); null when it
+// can't be one. Letter case is the bridge's business: it finds `europe/paris` too.
+function cleanZone(z) {
+    var s = String(z).trim().replace(/ /g, "_");
+    return /^(UTC|[A-Za-z][A-Za-z0-9_+\-]*\/[A-Za-z][A-Za-z0-9_+\-]*(\/[A-Za-z][A-Za-z0-9_+\-]*)?)$/.test(s) ? s : null;
+}

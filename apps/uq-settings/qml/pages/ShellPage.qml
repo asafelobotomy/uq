@@ -1,4 +1,4 @@
-// Shell: pinned apps, launcher providers, the bar's layout (islands, zones, sizes, options) and clock, the terminal, the
+// Shell: pinned apps, launcher providers, the bar (a way into edit mode on the bar, and reset) and clock, the terminal, the
 // notification backend, idle timings and privacy. Everything is read from and written to uqd
 // through ShellModel; a refused change (an idle stage out of order, say) shows uqd's message and
 // the controls go back to the last good value. App names and provider names are other
@@ -104,6 +104,14 @@ QQC2.ScrollView {
     }
 
     Kirigami.PromptDialog {
+        id: confirmReset
+        title: "Reset the bar?"
+        subtitle: "Every island goes back to where it was when uQ was installed, at its usual size. Islands you added are taken off the bar."
+        standardButtons: Kirigami.Dialog.Yes | Kirigami.Dialog.No
+        onAccepted: sm.barEdit(JSON.stringify({ op: "reset" }))
+    }
+
+    Kirigami.PromptDialog {
         id: confirmClear
         title: "Clear launch history?"
         subtitle: "uQ forgets how often you launched each app, so the launcher stops ranking by it. This can't be undone."
@@ -201,20 +209,31 @@ QQC2.ScrollView {
         }
         SettingRow {
             settingId: "islands"
-            label: "Islands in the bar, left to right. Right-click the bar to change it there too."
+            label: "The bar's islands are edited on the bar itself: right-click an island and choose Edit Islands, or press Super+Alt+B. Drag islands to move them, drag their edge to resize them, click one for its settings, and press Esc when done."
             highlight: App.highlight
             enabled: page.ready
             Layout.fillWidth: true
+            QQC2.Button {
+                objectName: "editBar"
+                text: "Edit the bar"
+                icon.name: "document-edit"
+                enabled: page.ready
+                onClicked: sm.editBar()
+            }
         }
-        BarLayoutEditor {
-            objectName: "barEditor"
-            bar: page.shell.bar || ({})
-            catalog: page.snap.islands || []
-            // Edits are intents applied to uqd's current layout, one at a time.
-            enabled: page.ready && !sm.busy
-            onEdit: e => sm.barEdit(JSON.stringify(e))
-            Layout.leftMargin: Kirigami.Units.largeSpacing * 2
+        SettingRow {
+            settingId: "reset-bar"
+            label: "Put the bar back as it was when uQ was installed. Islands' own settings (symbols, feeds, time zones) are kept."
+            highlight: App.highlight
+            enabled: page.ready
             Layout.fillWidth: true
+            QQC2.Button {
+                objectName: "resetBar"
+                text: "Reset the bar"
+                icon.name: "edit-undo"
+                enabled: page.ready && !sm.busy
+                onClicked: confirmReset.open()
+            }
         }
         SwitchRow {
             settingId: "clock-24h"

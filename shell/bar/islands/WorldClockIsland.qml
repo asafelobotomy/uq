@@ -6,52 +6,76 @@ import "../../logic/ticker.js" as T
 import "../../logic/shellprefs.js" as ShellPrefs
 import ".."
 
-// World clock (`worldclock`): the time in up to four other zones, `New York 09:41`. `compact`
-// shows only the first zone. The popup lists them with the day shift and edits the zones. Qt's
-// JavaScript has no time zones, so the bridge sends each zone's UTC offset (kept current
-// through daylight-saving changes) and the time is worked out here.
+// World clock (`worldclock`). Icon: the first zone's hour over its minutes. Small: the first
+// zone's time. Medium: its name and time. Large: the first two zones. A click lists every zone
+// with the day shift; the zones are chosen in edit mode. Qt's JavaScript has no time zones, so
+// the bridge sends each zone's UTC offset (kept current through daylight-saving changes).
 Island {
     id: root
 
     readonly property var zones: (BarLayout.options.worldclock || {}).zones || []
     readonly property var rows: T.zones(Bridge.worldClock)
-    readonly property var visibleZones: size === "compact" ? rows.slice(0, 1) : rows
     readonly property bool h24: Settings.values.shell ? Settings.values.shell.clock_24h !== false : true
+    readonly property var first: rows.length > 0 ? rows[0] : null
+    readonly property var visibleZones: size === "large" ? rows.slice(0, 2) : rows.slice(0, 1)
+    function time(z) {
+        return T.zoneTime(clock.date.getTime(), z.offset, root.h24);
+    }
 
-    implicitWidth: row.implicitWidth + Theme.gapIn * 2
     Accessible.role: Accessible.Button
-    Accessible.name: "World clock: " + rows.map(function (z) {
-        return z.label + " " + T.zoneTime(clock.date.getTime(), z.offset, root.h24);
-    }).join(", ")
+    Accessible.name: "World clock: " + rows.map(function (z) { return z.label + " " + root.time(z); }).join(", ")
 
     SystemClock {
         id: clock
         precision: SystemClock.Minutes
     }
 
-    RowLayout {
-        id: row
-        anchors.verticalCenter: parent.verticalCenter
-        anchors.left: parent.left
-        spacing: Theme.gapOut
-
+    // Icon: two short lines, so they stay readable in a square.
+    Column {
+        visible: root.isIcon && root.first !== null
+        anchors.centerIn: parent
+        spacing: -2
         UqText {
-            visible: root.zones.length === 0
-            text: "Add a time zone"
+            anchors.horizontalCenter: parent.horizontalCenter
+            text: root.first ? root.time(root.first).split(":")[0] : ""
+            font.bold: true
+        }
+        UqText {
+            anchors.horizontalCenter: parent.horizontalCenter
+            text: root.first ? root.time(root.first).split(":")[1].slice(0, 2) : ""
             color: Theme.textMuted
         }
+    }
+
+    UqText {
+        visible: !root.isIcon && root.zones.length === 0
+        anchors.fill: parent
+        verticalAlignment: Text.AlignVCenter
+        text: "No zones"
+        color: Theme.textMuted
+    }
+
+    RowLayout {
+        visible: !root.isIcon && root.zones.length > 0
+        anchors.centerIn: parent
+        width: Math.min(implicitWidth, root.room)
+        spacing: Theme.gapOut
+
         Repeater {
-            model: root.visibleZones
+            model: root.isIcon ? [] : root.visibleZones
             delegate: RowLayout {
                 required property var modelData
                 spacing: Theme.gapIn
+                Layout.fillWidth: true
                 UqText {
+                    visible: root.size !== "small"
                     text: modelData.label
                     color: Theme.textMuted
-                    Layout.maximumWidth: Theme.fontSize * 10
+                    Layout.fillWidth: true
                 }
                 UqText {
-                    text: T.zoneTime(clock.date.getTime(), modelData.offset, root.h24)
+                    text: root.time(modelData)
+                    Layout.minimumWidth: implicitWidth
                 }
             }
         }
@@ -62,29 +86,24 @@ Island {
         onClicked: popup.open && popup.anchorItem === root ? popup.hide() : popup.show(root, details)
     }
 
-    IslandPopup {
+    LazyPopup {
         id: popup
     }
-
-    function setZones(list) {
-        BarLayout.setOptions("worldclock", { zones: list });
-    }
-
-    // Common zones offered before the user types one.
-    readonly property var suggested: ["America/New_York", "America/Los_Angeles", "Europe/London",
-        "Europe/Berlin", "Asia/Kolkata", "Asia/Shanghai", "Asia/Tokyo", "Australia/Sydney", "UTC"]
 
     Component {
         id: details
         ColumnLayout {
-            id: col
             spacing: Theme.gapIn
-            width: Theme.fontSize * 26
-            property string addError: ""
+            width: Theme.fontSize * 24
 
             UqText {
                 text: "World clock"
                 font.bold: true
+            }
+            UqText {
+                visible: root.zones.length === 0
+                text: "No time zones chosen yet."
+                color: Theme.textMuted
             }
             Repeater {
                 model: root.zones
@@ -103,70 +122,21 @@ Island {
                         Layout.fillWidth: true
                     }
                     UqText {
-                        visible: zrow.info === null && Bridge.worldClock !== null
-                        text: "Not a time zone uQ knows"
+                        text: zrow.info ? root.time(zrow.info) + " " + zrow.info.abbrev + " "
+                            + T.dayShift(clock.date.getTime(), zrow.info.offset, clock.date.getTimezoneOffset())
+                            : (Bridge.worldClock !== null ? "Not a time zone uQ knows" : "")
                         color: Theme.textMuted
                     }
-                    UqText {
-                        visible: zrow.info !== null
-                        text: zrow.info ? T.zoneTime(clock.date.getTime(), zrow.info.offset, root.h24)
-                            + " " + zrow.info.abbrev + " " + T.dayShift(clock.date.getTime(), zrow.info.offset,
-                            clock.date.getTimezoneOffset()) : ""
-                        color: Theme.textMuted
-                    }
-                    MenuRow {
-                        text: "Remove"
-                        Accessible.name: "Remove " + zrow.modelData
-                        onActivated: root.setZones(root.zones.filter(function (z) { return z !== zrow.modelData; }))
-                    }
                 }
             }
-            RowLayout {
+            MenuRow {
                 Layout.fillWidth: true
-                UqInput {
-                    id: zoneInput
-                    Layout.fillWidth: true
-                    placeholder: "Time zone, e.g. Europe/Paris"
-                    maximumLength: 64
-                    Accessible.name: "Add a time zone"
-                    onAccepted: addZone.activated()
-                    Component.onCompleted: forceActiveFocus()
+                text: "Change the time zones…"
+                onActivated: {
+                    popup.hide();
+                    root.editRequested();
                 }
-                MenuRow {
-                    id: addZone
-                    text: "Add"
-                    onActivated: {
-                        var z = zoneInput.text.trim().replace(/ /g, "_");
-                        if (!/^(UTC|[A-Za-z][A-Za-z0-9_+\-]*\/[A-Za-z][A-Za-z0-9_+\-]*(\/[A-Za-z][A-Za-z0-9_+\-]*)?)$/.test(z)) {
-                            col.addError = "Use a zone name like Europe/Paris";
-                        } else if (root.zones.indexOf(z) >= 0 || root.zones.length >= 4) {
-                            col.addError = root.zones.length >= 4 ? "At most 4 zones" : "Already added";
-                        } else {
-                            col.addError = "";
-                            root.setZones(root.zones.concat([z]));
-                            zoneInput.clear();
-                        }
-                    }
-                }
-            }
-            UqText {
-                visible: col.addError !== ""
-                text: col.addError
-                color: Theme.textMuted
-            }
-            Flow {
-                Layout.fillWidth: true
-                spacing: Theme.gapIn
-                visible: root.zones.length < 4
-                Repeater {
-                    model: root.suggested.filter(function (z) { return root.zones.indexOf(z) < 0; })
-                    delegate: MenuRow {
-                        required property string modelData
-                        text: modelData.split("/").pop().replace(/_/g, " ")
-                        Accessible.name: "Add " + modelData
-                        onActivated: root.setZones(root.zones.concat([modelData]))
-                    }
-                }
+                Component.onCompleted: forceActiveFocus()
             }
         }
     }

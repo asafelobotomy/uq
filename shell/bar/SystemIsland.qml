@@ -23,7 +23,35 @@ Island {
     readonly property var refreshEvents: ["openwindow", "closewindow", "movewindow", "movewindowv2",
         "windowtitle", "windowtitlev2", "changefloatingmode", "activewindowv2", "workspace", "workspacev2"]
 
-    implicitWidth: row.implicitWidth + Theme.gapIn * 2
+    // Sizes: Icon is the app menu button; Small adds the focused workspace; Medium as many
+    // workspaces as fit (the focused one always among them); Large adds each workspace's layout
+    // and, in what is left, the dock's apps.
+    readonly property real menuW: Math.min(cell, room)
+    readonly property real wsW: size === "large" ? cell + Theme.fontSize : cell
+    readonly property real wsRoom: room - menuW - Theme.gapIn
+    readonly property var wsShown: {
+        var all = sortedWorkspaces();
+        if (isIcon)
+            return [];
+        var cap = size === "small" ? 1 : Math.max(1, Math.floor((wsRoom + Theme.gapIn) / (wsW + Theme.gapIn)));
+        var focusedWs = null;
+        for (var i = 0; i < all.length; i++)
+            if (all[i].focused)
+                focusedWs = all[i];
+        if (size === "small")
+            return focusedWs ? [focusedWs] : all.slice(0, 1);
+        var out = all.slice(0, cap);
+        if (focusedWs !== null && out.indexOf(focusedWs) < 0 && out.length > 0)
+            out[out.length - 1] = focusedWs;
+        return out;
+    }
+    readonly property int dockRoomCount: {
+        if (size !== "large")
+            return 0;
+        var used = wsShown.length * (wsW + Theme.gapIn) + 1 + Theme.gapIn;
+        return Math.max(0, Math.floor((wsRoom - used) / (cell + Theme.gapIn)));
+    }
+    readonly property var dockShown: dockModel.slice(0, dockRoomCount)
 
     // --- helpers ---
     function hexAddr(a) {
@@ -76,7 +104,8 @@ Island {
     }
     function refreshLayouts() {
         Bridge.call("GetLayouts", []).then(function (m) {
-            if (m && typeof m === "object")
+            // The island may be gone by now (the bar rebuilds its islands when they move).
+            if (root && m && typeof m === "object")
                 root.layouts = m;
         }).catch(function () {});
     }
@@ -176,7 +205,7 @@ Island {
             // Read by AppMenu: its focus grab includes this bar so a second click toggles it shut.
             readonly property var barWindow: root.QsWindow.window
             readonly property bool open: Surfaces.open === "appmenu" && Surfaces.anchor === menuButton
-            Layout.preferredWidth: root.cell
+            Layout.preferredWidth: root.menuW
             Layout.preferredHeight: root.cell
             radius: Theme.radius - 2
             color: open ? Theme.accent : (menuMouse.containsMouse ? Theme.overlay : Theme.surfaceAlt)
@@ -196,10 +225,10 @@ Island {
         }
 
         Repeater {
-            model: root.sortedWorkspaces()
+            model: root.wsShown
             delegate: Rectangle {
                 required property var modelData
-                Layout.preferredWidth: wsRow.implicitWidth + Theme.gapIn * 2
+                Layout.preferredWidth: root.wsW
                 Layout.preferredHeight: root.cell
                 radius: Theme.radius - 2
                 color: modelData.focused ? Theme.accent : (wsMouse.containsMouse ? Theme.surfaceAlt : "transparent")
@@ -212,6 +241,7 @@ Island {
                         color: modelData.focused ? Theme.accentText : Theme.text
                     }
                     UqText {
+                        visible: root.size === "large"
                         text: root.layoutGlyph(root.layoutFor(modelData))
                         color: modelData.focused ? Theme.accentText : Theme.textMuted
                     }
@@ -229,11 +259,11 @@ Island {
             Layout.preferredWidth: 1
             Layout.preferredHeight: root.cell * 0.6
             color: Theme.border
-            visible: root.dockModel.length > 0
+            visible: root.dockShown.length > 0
         }
 
         Repeater {
-            model: root.dockModel
+            model: root.dockShown
             delegate: Item {
                 id: dockItem
                 required property var modelData

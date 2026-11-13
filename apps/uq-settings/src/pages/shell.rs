@@ -108,6 +108,25 @@ impl ShellState {
     }
 }
 
+/// The argv that turns the bar's edit mode on: the shell's `uq:edit-bar` global shortcut,
+/// dispatched through Hyprland (the same as Super+Alt+B).
+pub const EDIT_BAR_ARGV: [&str; 3] = ["hyprctl", "dispatch", "hl.dsp.global(\"uq:edit-bar\")"];
+
+/// Start the bar's edit mode; returns at once (the command is not waited on).
+pub fn start_bar_edit() -> Result<(), String> {
+    std::process::Command::new(EDIT_BAR_ARGV[0])
+        .args(&EDIT_BAR_ARGV[1..])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map(|mut child| {
+            // Reaped in the background, so it never lingers.
+            std::thread::spawn(move || child.wait());
+        })
+        .map_err(|e| format!("Couldn't start editing the bar ({e})"))
+}
+
 fn refuse<T>(text: String) -> zbus::Result<T> {
     Err(zbus::Error::Failure(text))
 }

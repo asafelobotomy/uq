@@ -153,3 +153,58 @@ CHANGELOG entries.
 3. Default news feeds: none (empty island says "Pick feeds"), or a preset like BBC World on
    first add?
 4. Should the default layout for new users change (e.g. add a separator), or stay as today?
+
+---
+
+## Revision (2026-11-13): edit on the bar, four sizes
+
+Asked for after the first version: islands themselves are how the bar is edited, and every
+island has four sizes in multiples of the Icon size. This replaces the Settings list editor and
+the compact/normal/wide sizes above.
+
+**uQ Island Menu** (right-click an island, or the bar): *Edit Islands* (or *Finish editing*),
+*Add an Island…* (next to this one), *Remove*. Islands with their own right-click action (the
+bell's Do Not Disturb, the tray) keep it outside edit mode; the bar's empty space always has the
+menu.
+
+**Edit mode** (`BarLayout.editing`; Super+Alt+B = `uq:edit-bar`, the menu, Settings' *Edit the
+bar*, or a popup's "Change…" row): every island gets an accent outline and its own clicks are off.
+Drag an island to move it (an accent bar shows where it lands, across zones and into empty ones);
+drag its right-edge grip to resize (it snaps to the nearest size, named while dragging); click it
+for its settings (`IslandSettings.qml`: size, its options, move, remove). A panel at the bottom
+of the screen editing started on holds the keyboard: ←/→ choose, Shift+←/→ move, +/− size, Enter
+settings, Delete remove, A add, Esc done; it also says how many islands don't fit that screen.
+Editing ends on Esc, *Done*, the menu, or the lock.
+
+**What moved into edit mode**: the weather city, stock symbols, news feeds, world-clock zones and
+the clock's seconds/date. The islands' own popups show information only, with a "Change…" row
+that opens edit mode on that island's settings.
+
+**Sizes** (`size`: `icon | small | medium | large`, absent = the island's default; old `compact`
+→ small, `wide` → large, `normal` → default). Widths are 1, 2, 4 and 6 × the Icon size (a square
+as tall as the bar, 36 px).
+
+| Island | Default | Icon | Small | Medium | Large |
+|---|---|---|---|---|---|
+| App menu, workspaces, dock | Large | menu | + focused workspace | + workspaces that fit | + layouts, dock icons that fit |
+| Windows | Large | app icon | + window count | icon + title, "+N" | + window buttons |
+| Clock | Medium | hour over minutes | time | + short date | + date as chosen |
+| Weather | Small | conditions | + temperature | + city | + high/low |
+| Notifications | Small | bell (DnD mark when on) | + count | + summary | + summary |
+| Status | Large | quick settings | + battery | network, sound, battery % | + volume %, widgets, media, tray that fit |
+| Now playing | Medium | play/pause | + next | prev, play, next, track | longer track |
+| Stocks | Medium | first change ▲/▼ | symbols + change | + prices | + prices |
+| News | Large | news icon | headlines | + source | + source |
+| System monitor | Small | CPU % | icon + CPU | + RAM | + temperature |
+| World clock | Medium | first zone's hour/minutes | first zone's time | + its name | first two zones |
+| Keyboard | Icon | `US` | icon + `US` | icon + full name | icon + full name |
+
+**Never overlap, never cut off** (`barlayout.js` `fit`/`place`): the islands' widths plus gaps
+must fit the bar; while they don't, the biggest island steps down a size (the most expendable
+first among equals); once every island is an Icon, the most expendable are left out (separators
+first, Status last). Placement is absolute: left zone from the left, right zone from the right,
+centre centred unless that would touch a neighbour. Inside an island, text elides rather than
+overflows; tickers scroll.
+
+**Settings** keeps only a pointer: *Edit the bar* (starts edit mode) and *Reset the bar*, with
+the 24-hour clock. The list editor is gone; editing on the bar replaces it.

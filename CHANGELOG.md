@@ -9,28 +9,38 @@ All notable changes to uQ are listed here. The format follows
 
 ### Added
 
-- **Arrange the bar your way.** The bar now has a left, a centre and a right zone, and every
-  island can be moved between them, made compact, normal or wide, taken off or put back, with
-  separators between islands if you like. Right-click an island (or the bar between islands) to
-  move, resize, remove or add one right there, or edit the whole layout under **Settings →
-  Shell → Bar**: drag rows by their handle, or use the arrow buttons or Alt+Up/Alt+Down. Changes
-  apply at once on every screen and are kept. Your current bar carries over as it was.
-- **New islands for the bar.** Add any of these from the bar's right-click menu or Settings:
+- **Edit the bar on the bar.** Right-click any island for the **uQ Island Menu**: **Edit
+  Islands**, **Add an Island** and **Remove**. In edit mode (also Super+Alt+B, or **Edit the bar**
+  in Settings → Shell) drag islands between the left, centre and right of the bar, drag an
+  island's edge to resize it, and click it for its settings; Esc (or **Done**) finishes. From the
+  keyboard: ← → choose an island, Shift+← → move it, + and − resize it, Enter opens its settings,
+  Delete removes it, A adds one. Changes apply at once on every screen and are kept; your current
+  bar carries over as it was.
+- **Four island sizes.** Every island is **Icon** (a square), **Small**, **Medium** or **Large**:
+  2, 4 and 6 times the Icon size, and each shows more as it grows (the clock adds the date, the
+  weather its city and the day's high and low, Status its volume and tray icons). Islands never
+  overlap or get cut off: when they don't all fit a screen, the biggest step down a size, and
+  only when every island is already an Icon are the least important left out (edit mode says
+  how many).
+- **New islands for the bar.** Add any of these from the uQ Island Menu or edit mode:
   - **Weather**, now its own island, with today's high and low and the next hours. Only the city
     you choose is sent to Open-Meteo, as before.
   - **Stock ticker**: your symbols scroll by with price and day change (▲/▼ as well as colour);
-    click for a list with the day's range, and to add, remove or reorder symbols. Quotes come
-    from a free, delayed source, and only the symbols are sent.
+    click for a list with the day's range. Quotes come from a free, delayed source, and only the
+    symbols are sent.
   - **News headlines** from the RSS or Atom feeds you pick (a few are suggested); click for the
     latest headlines and open one in your browser with a click or Enter.
+  - Symbols, feeds, time zones, the weather's city and the clock's seconds and date are set in
+    edit mode (click the island); the islands' own popups just show their news.
   - **System monitor** (processor, memory and temperature, with every core in its popup),
     **World clock** (up to four time zones), **Now playing** (track with previous, play/pause
     and next) and **Keyboard layout** (shows and switches layouts when you have more than one).
   - **Clock** options: seconds, and no, short or long date.
   Scrolling text stops while the pointer is over it, while the screen is shared, and when
-  **Reduce motion** is on (then it changes every few seconds instead). Stocks and news are
-  fetched only while their island is on the bar, refresh every 5 and 15 minutes, keep the last
-  results when offline (marked with their age), and work from the keyboard in their popups.
+  **Reduce motion** is on (then it changes every few seconds instead). Weather, stocks and news
+  are fetched only while their island is on the bar; stocks and news refresh every 5 and 15
+  minutes and keep the last results when offline (marked with their age). Every island popup
+  works from the keyboard.
 - **Screenshots, the Plasma way.** Print freezes the screen and opens it in satty with the crop
   tool: drag an area, mark it up (arrows, boxes, text, blur), then Enter copies and saves it to
   `~/Pictures/Screenshots`. Shift+Print takes the whole screen and Super+Print the focused window,
@@ -43,10 +53,10 @@ All notable changes to uQ are listed here. The format follows
 
 ### Changed
 
-- **Weather has its own island.** The city search and "Turn off weather" moved from the clock's
-  popup to the Weather island's; the clock's popup keeps the calendar, and offers to show the
-  weather when that island isn't on the bar. The old on/off switches for the five islands are
-  replaced by the bar editor.
+- **Weather has its own island.** The city is chosen in edit mode (or from the Weather island's
+  popup), and the clock's popup keeps the calendar. The old on/off switches for the five islands
+  in Settings are replaced by edit mode on the bar, and the Windows island lists the windows it
+  doesn't show in a popup instead of growing across the bar.
 - **Quick settings has tabs.** The Control Center (Super+A, or the Status island's button) is
   split into **Sound**, **Network** (Wi-Fi and Bluetooth), **Display** (brightness, theme,
   dark/light, layout), **System** (battery, power profile, Do Not Disturb, Stay awake, profiles)

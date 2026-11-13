@@ -466,3 +466,17 @@ async fn bar_edits_apply_to_uqds_layout() {
         "NVDA"
     );
 }
+
+/// Settings' "Edit the bar" fires the shell's `uq:edit-bar` shortcut, as Super+Alt+B does.
+#[test]
+fn edit_bar_dispatches_the_shells_shortcut() {
+    assert_eq!(
+        super::EDIT_BAR_ARGV,
+        ["hyprctl", "dispatch", "hl.dsp.global(\"uq:edit-bar\")"]
+    );
+    let base = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../config/hypr/base.lua"),
+    )
+    .unwrap();
+    assert!(base.contains("hl.dsp.global(\"uq:edit-bar\")"));
+}

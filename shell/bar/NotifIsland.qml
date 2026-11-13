@@ -65,7 +65,9 @@ Island {
             NotifBackend.setDnd(!NotifBackend.dnd);
     }
 
-    implicitWidth: row.implicitWidth + Theme.gapIn * 2
+    // Sizes: Icon shows the bell (or the Do Not Disturb mark while it is on); Small adds the count
+    // and the Do Not Disturb mark; Medium and Large add the summary (elided to fit).
+    readonly property bool withSummary: size === "medium" || size === "large"
     color: open ? Theme.surfaceAlt : Theme.surface
 
     // The count and DnD state only: the summary is never read out.
@@ -77,50 +79,53 @@ Island {
 
     RowLayout {
         id: row
-        anchors.verticalCenter: parent.verticalCenter
-        anchors.left: parent.left
+        anchors.centerIn: parent
+        width: Math.min(implicitWidth, root.room)
         spacing: 4
 
         // While another app owns the notification name.
         UqText {
-            visible: root.yielded
-            Layout.maximumWidth: root.maxText
+            visible: root.yielded && !root.isIcon
+            Layout.fillWidth: true
             text: root.view.yieldedTo
             color: Theme.textMuted
         }
 
         IconImage {
-            visible: !root.yielded && root.notifiBell
+            visible: (!root.yielded || root.isIcon) && root.notifiBell && !(root.isIcon && root.view.dnd)
             implicitSize: root.iconSize
             Layout.preferredWidth: root.iconSize
             Layout.preferredHeight: root.iconSize
             source: root.notifiBell ? Net.safeIconSource(root.notifiItem.icon, "") : ""
         }
         IconImage {
-            visible: !root.yielded && !root.notifiBell && root.iconSource !== ""
+            visible: (!root.yielded || root.isIcon) && !root.notifiBell && root.iconSource !== ""
+                && !(root.isIcon && root.view.dnd)
             implicitSize: root.iconSize
             Layout.preferredWidth: root.iconSize
             Layout.preferredHeight: root.iconSize
             source: root.iconSource
         }
         UqText {
-            visible: !root.yielded && !root.notifiBell && root.iconSource === ""
+            visible: (!root.yielded || root.isIcon) && !root.notifiBell && root.iconSource === ""
+                && !(root.isIcon && root.view.dnd)
             text: "\u{1F514}"
             color: NotifBackend.available ? Theme.text : Theme.textMuted
             font.pixelSize: Theme.fontSize + 3
         }
         UqText {
-            visible: !root.yielded && root.countText !== ""
+            visible: !root.yielded && !root.isIcon && root.countText !== ""
             text: root.countText
+            Layout.minimumWidth: implicitWidth
         }
         UqText {
-            visible: !root.yielded && root.view.dnd
+            visible: (!root.yielded || root.isIcon) && root.view.dnd
             text: "\u{1F515}"
             color: Theme.textMuted
         }
         UqText {
-            visible: !root.yielded && root.view.summary !== ""
-            Layout.maximumWidth: root.maxText
+            visible: !root.yielded && root.withSummary && root.view.summary !== ""
+            Layout.fillWidth: true
             text: root.view.summary
             color: Theme.textMuted
         }

@@ -6,9 +6,10 @@ import "../../core"
 import "../../logic/ticker.js" as T
 import ".."
 
-// System monitor (`sysmon`): CPU and memory use, and the CPU temperature where a sensor exists.
-// `compact` shows CPU only; `wide` adds memory in bytes. The popup shows every core and the
-// memory in use. The bridge reads /proc and /sys every 2 s, only while this island is placed.
+// System monitor (`sysmon`). Icon: processor use. Small: a chip icon and processor use. Medium:
+// and memory use. Large: and the processor's temperature where a sensor exists. A click shows
+// every core and the memory in use. The bridge reads /proc and /sys every 2 s, only while this
+// island is placed.
 Island {
     id: root
 
@@ -16,19 +17,18 @@ Island {
     readonly property bool has: s !== null && s !== undefined
     readonly property int iconSize: Theme.fontSize + 5
 
-    implicitWidth: row.implicitWidth + Theme.gapIn * 2
     Accessible.role: Accessible.Button
     Accessible.name: has ? "Processor " + T.percent(s.cpu) + ", memory " + T.percent(s.mem)
         + (s.temp_c !== null && s.temp_c !== undefined ? ", " + T.temp(s.temp_c) : "")
         : "System monitor"
 
     RowLayout {
-        id: row
-        anchors.verticalCenter: parent.verticalCenter
-        anchors.left: parent.left
+        anchors.centerIn: parent
+        width: Math.min(implicitWidth, root.room)
         spacing: Theme.gapIn
 
         IconImage {
+            visible: !root.isIcon
             implicitSize: root.iconSize
             Layout.preferredWidth: root.iconSize
             Layout.preferredHeight: root.iconSize
@@ -37,24 +37,21 @@ Island {
         UqText {
             text: root.has ? T.percent(root.s.cpu) : "–"
             font.family: Theme.fontMono
+            Layout.minimumWidth: implicitWidth
         }
         UqText {
-            visible: root.size !== "compact"
+            visible: root.size === "medium" || root.size === "large"
             text: "RAM " + (root.has ? T.percent(root.s.mem) : "–")
             font.family: Theme.fontMono
             color: Theme.textMuted
+            Layout.minimumWidth: implicitWidth
         }
         UqText {
-            visible: root.size === "wide" && root.has
-            text: root.has ? T.bytes(root.s.mem_used) : ""
-            font.family: Theme.fontMono
-            color: Theme.textMuted
-        }
-        UqText {
-            visible: root.size !== "compact" && root.has && T.temp(root.s.temp_c) !== ""
+            visible: root.size === "large" && root.has && T.temp(root.s.temp_c) !== ""
             text: root.has ? T.temp(root.s.temp_c) : ""
             font.family: Theme.fontMono
             color: root.has && root.s.temp_c >= 90 ? Theme.warning : Theme.textMuted
+            Layout.minimumWidth: implicitWidth
         }
     }
 
@@ -63,7 +60,7 @@ Island {
         onClicked: popup.open && popup.anchorItem === root ? popup.hide() : popup.show(root, details)
     }
 
-    IslandPopup {
+    LazyPopup {
         id: popup
     }
 

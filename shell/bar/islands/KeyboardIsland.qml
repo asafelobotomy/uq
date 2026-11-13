@@ -1,12 +1,15 @@
 import QtQuick
+import QtQuick.Layouts
 import Quickshell
+import Quickshell.Widgets
 import Quickshell.Hyprland
 import Quickshell.Io
 import "../../core"
 import ".."
 
-// Keyboard layout (`keyboard`): the active layout's short name (`US`, `DE`); a click switches
-// to the next. Hidden with fewer than two layouts (Settings → Input). Hyprland says when the
+// Keyboard layout (`keyboard`). Icon: the active layout's short name (`US`, `DE`, at most 3
+// letters). Small: a keyboard icon and the name. Medium and Large: the icon and the layout's
+// full name (`English (US)`). A click switches to the next layout. Hidden with fewer than two layouts (Settings → Input). Hyprland says when the
 // layout changes; the index comes from `hyprctl devices -j` (the main keyboard).
 Island {
     id: root
@@ -19,18 +22,29 @@ Island {
     property int active: 0
     property string keymap: ""
     readonly property string label: layouts.length > 0
-        ? String(layouts[Math.max(0, Math.min(active, layouts.length - 1))].layout).toUpperCase().slice(0, 8) : ""
+        ? String(layouts[Math.max(0, Math.min(active, layouts.length - 1))].layout).toUpperCase().slice(0, isIcon ? 3 : 8) : ""
 
     shown: layouts.length >= 2
-    implicitWidth: layoutText.implicitWidth + Theme.gapIn * 4
     Accessible.role: Accessible.Button
     Accessible.name: "Keyboard layout: " + (keymap !== "" ? keymap : label) + ". Switch layout"
 
-    UqText {
-        id: layoutText
+    RowLayout {
         anchors.centerIn: parent
-        text: root.label
-        font.family: Theme.fontMono
+        width: Math.min(implicitWidth, root.room)
+        spacing: Theme.gapIn
+        IconImage {
+            visible: !root.isIcon
+            implicitSize: Theme.fontSize + 5
+            Layout.preferredWidth: implicitSize
+            Layout.preferredHeight: implicitSize
+            source: Quickshell.iconPath("input-keyboard", true)
+        }
+        UqText {
+            id: layoutText
+            text: (root.size === "medium" || root.size === "large") && root.keymap !== "" ? root.keymap : root.label
+            font.family: root.isIcon || root.size === "small" ? Theme.fontMono : Theme.fontUi
+            Layout.fillWidth: true
+        }
     }
 
     MouseArea {

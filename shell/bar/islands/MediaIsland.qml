@@ -6,10 +6,10 @@ import Quickshell.Services.Mpris
 import "../../core"
 import ".."
 
-// Now playing (`media`): the playing (else the first) player's track, scrolling when long, with
-// previous, play/pause and next. `compact` keeps just the play/pause button. Hidden while no
-// player is open. While this island is on the bar, the Status island leaves media to it.
-// Track titles are untrusted: they only reach UqText.
+// Now playing (`media`): the playing (else the first) player. Icon: play/pause. Small: and
+// next. Medium and Large: previous, play/pause, next and the track, scrolling when long. Hidden
+// while no player is open (shown, empty, in edit mode). While this island is on the bar, the
+// Status island leaves media to it. Track titles are untrusted: they only reach UqText.
 Island {
     id: root
 
@@ -23,9 +23,9 @@ Island {
     }
     readonly property string track: player ? [String(player.trackTitle || ""), String(player.trackArtist || "")]
         .filter(function (s) { return s !== ""; }).join(" – ") : ""
+    readonly property bool wide: size === "medium" || size === "large"
 
     shown: player !== null
-    implicitWidth: row.implicitWidth + Theme.gapIn * 2
     Accessible.role: Accessible.Grouping
     Accessible.name: track !== "" ? "Now playing: " + track : "Media"
 
@@ -54,46 +54,41 @@ Island {
     }
 
     RowLayout {
-        id: row
-        anchors.verticalCenter: parent.verticalCenter
-        anchors.left: parent.left
-        spacing: Theme.gapIn
+        anchors.fill: parent
+        spacing: 0
 
         Btn {
-            visible: root.size !== "compact"
+            visible: root.wide
             icon: "media-skip-backward"
             label: "Previous track"
             can: !!root.player && root.player.canGoPrevious
             onPressed: root.player.previous()
         }
         Btn {
+            Layout.alignment: Qt.AlignHCenter
+            Layout.fillWidth: root.isIcon
             icon: root.player && root.player.isPlaying ? "media-playback-pause" : "media-playback-start"
             label: root.player && root.player.isPlaying ? "Pause" : "Play"
             can: !!root.player && root.player.canTogglePlaying
             onPressed: root.player.togglePlaying()
         }
         Btn {
-            visible: root.size !== "compact"
+            visible: !root.isIcon
             icon: "media-skip-forward"
             label: "Next track"
             can: !!root.player && root.player.canGoNext
             onPressed: root.player.next()
         }
         Marquee {
-            visible: root.size !== "compact" && root.track !== ""
-            Layout.preferredWidth: Math.min(implicitStrip, Theme.fontSize * (root.size === "wide" ? 28 : 16))
-            Layout.preferredHeight: root.iconSize
-            readonly property real implicitStrip: probe.implicitWidth
+            visible: root.wide && root.track !== ""
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            Layout.leftMargin: Theme.gapIn
             model: [root.track]
             delegate: UqText {
                 required property var modelData
                 text: modelData
                 elide: Text.ElideNone
-            }
-            UqText {
-                id: probe
-                visible: false
-                text: root.track
             }
         }
     }
