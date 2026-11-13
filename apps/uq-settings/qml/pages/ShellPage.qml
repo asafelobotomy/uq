@@ -1,4 +1,4 @@
-// Shell: pinned apps, launcher providers, the bar (a way into edit mode on the bar, and reset) and clock, the terminal, the
+// Shell: pinned apps, launcher providers, the bar (a way into edit mode on the bar, and reset), the
 // notification backend, idle timings and privacy. Everything is read from and written to uqd
 // through ShellModel; a refused change (an idle stage out of order, say) shows uqd's message and
 // the controls go back to the last good value. App names and provider names are other
@@ -23,7 +23,6 @@ QQC2.ScrollView {
     readonly property var settings: snap.settings || {}
     readonly property var shell: snap.shell || {}
     readonly property var apps: snap.apps || []
-    readonly property var terminals: snap.terminals || []
     readonly property var knownProviders: snap.providers || []
     readonly property bool ready: App.uqdUp
     readonly property var backendIds: ["auto", "notifi", "builtin", "swaync", "mako", "dunst"]
@@ -55,31 +54,11 @@ QQC2.ScrollView {
                 rows.push({ id: p.id, name: p.name, enabled: true, missing: p.missing === true });
         return rows;
     }
-    /// The terminal choices: the default, the installed emulators, and the saved one when it is
-    /// no longer installed.
-    readonly property var terminalIds: {
-        const ids = terminals.map(t => t.id);
-        if (shell.terminal && ids.indexOf(shell.terminal) < 0)
-            ids.push(shell.terminal);
-        return ids;
-    }
-    readonly property var terminalNames: {
-        const names = ["Default (kitty)"];
-        for (const id of terminalIds) {
-            const t = terminals.find(x => x.id === id);
-            names.push(t ? t.name : id);
-        }
-        return names;
-    }
-
     function setSetting(key, value) {
         sm.setSetting(key, JSON.stringify(value));
     }
     function setShell(field, value) {
         sm.setShell(field, JSON.stringify(value));
-    }
-    function terminalIndex() {
-        return shell.terminal ? terminalIds.indexOf(shell.terminal) + 1 : 0;
     }
     function backendIndex() {
         const i = backendIds.indexOf((settings.notif || {}).backend);
@@ -235,41 +214,6 @@ QQC2.ScrollView {
                 onClicked: confirmReset.open()
             }
         }
-        SwitchRow {
-            settingId: "clock-24h"
-            label: "24-hour clock"
-            highlight: App.highlight
-            enabled: page.ready
-            value: page.shell.clock_24h !== false
-            onChosen: v => page.setShell("clock_24h", v)
-            Layout.fillWidth: true
-        }
-
-        UqLabel {
-            text: "Terminal"
-            font.bold: true
-            Layout.topMargin: Kirigami.Units.largeSpacing
-        }
-        SettingRow {
-            settingId: "terminal"
-            label: "Terminal for apps that run in one"
-            highlight: App.highlight
-            enabled: page.ready
-            Layout.fillWidth: true
-            UqComboBox {
-                id: terminalCombo
-                model: page.terminalNames
-                currentIndex: page.terminalIndex()
-                enabled: page.ready
-                implicitContentWidthPolicy: QQC2.ComboBox.WidestText
-                Accessible.name: "Terminal for apps that run in one"
-                onActivated: index => {
-                    page.setShell("terminal", index === 0 ? null : page.terminalIds[index - 1]);
-                    terminalCombo.currentIndex = Qt.binding(() => page.terminalIndex());
-                }
-            }
-        }
-
         UqLabel {
             text: "Notifications"
             font.bold: true

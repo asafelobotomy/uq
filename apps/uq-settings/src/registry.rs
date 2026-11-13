@@ -249,7 +249,7 @@ static LOOK_SETTINGS: [SearchEntry; 16] = [
     ),
 ];
 
-static SHELL_SETTINGS: [SearchEntry; 17] = [
+static SHELL_SETTINGS: [SearchEntry; 15] = [
     entry(
         "pins",
         "Pinned apps",
@@ -272,16 +272,6 @@ static SHELL_SETTINGS: [SearchEntry; 17] = [
         "reset-bar",
         "Reset the bar",
         &["bar", "panel", "islands", "default", "layout"],
-    ),
-    entry(
-        "clock-24h",
-        "24-hour clock",
-        &["time", "12 hour", "am pm", "format"],
-    ),
-    entry(
-        "terminal",
-        "Terminal",
-        &["kitty", "console", "emulator", "default terminal"],
     ),
     entry(
         "notif-backend",
