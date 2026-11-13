@@ -1,9 +1,10 @@
-// One shortcut in a list: its name, the keys in words, **Change**, an on/off switch and **Reset**
-// (only for one of uQ's that was changed). One of your own also has **Delete**. Under it, where
-// the shortcut stands out: "Overridden in user.lua, line N" (SettingRow words it, with Open
-// user.lua) and "From the X profile" under the switch. The lock
-// recovery shortcut's switch is disabled and says why. Names, keys, action text and profile
-// names are plain text (UqLabel). The row only reports what was asked; the page does it.
+// One shortcut in a list: its name, the keys drawn as keycaps (pressing them is **Change**), an
+// on/off switch and **Reset** (only for one of uQ's that was changed). One of your own also says
+// what it does and has **Delete**. Under it, where the shortcut stands out: "Overridden in
+// user.lua, line N" (SettingRow words it, with Open user.lua) and "From the X profile" under the
+// switch. The lock recovery shortcut's switch is disabled and says why. Names, keys, action text
+// and profile names are plain text (UqLabel). The row only reports what was asked; the page does
+// it.
 import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
@@ -44,26 +45,53 @@ SettingRow {
     Accessible.description: hasKeys ? String(bind.combo_text) : "No keys"
 
     UqLabel {
-        objectName: "comboText"
-        text: row.hasKeys ? String(row.bind.combo_text) : "No keys"
-        opacity: row.hasKeys && row.bind.enabled !== false ? 1 : 0.6
-        font.bold: row.hasKeys
-        Layout.alignment: Qt.AlignVCenter
-    }
-    UqLabel {
         objectName: "actionText"
         visible: row.custom
         text: String(row.bind.action_text || "")
         opacity: 0.7
+        elide: Text.ElideRight
+        Layout.maximumWidth: Kirigami.Units.gridUnit * 12
         Layout.alignment: Qt.AlignVCenter
     }
-    QQC2.Button {
+    // The keys, drawn as keycaps; pressing them opens the editor. A plain AbstractButton, so the
+    // style draws nothing but the keycaps and a hover or focus wash.
+    QQC2.AbstractButton {
+        id: changeButton
         objectName: "change"
         text: "Change"
-        icon.name: "document-edit"
         enabled: row.idle
-        Accessible.description: row.title
+        focusPolicy: Qt.StrongFocus
+        padding: Kirigami.Units.smallSpacing
+        hoverEnabled: true
+        Accessible.role: Accessible.Button
+        Accessible.name: "Change"
+        Accessible.description: row.title + ". " + (row.hasKeys ? String(row.bind.combo_text) : "No keys")
+        QQC2.ToolTip.text: "Change"
+        QQC2.ToolTip.visible: hovered
+        QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
         onClicked: row.changeRequested()
+        background: Rectangle {
+            radius: Kirigami.Units.cornerRadius
+            color: changeButton.down || changeButton.hovered ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.2) : "transparent"
+            border.width: changeButton.visualFocus ? 1 : 0
+            border.color: Kirigami.Theme.highlightColor
+        }
+        contentItem: RowLayout {
+            spacing: Kirigami.Units.smallSpacing
+            opacity: changeButton.enabled ? 1 : 0.6
+            KeyCaps {
+                objectName: "keycaps"
+                visible: row.hasKeys
+                combo: row.hasKeys ? String(row.bind.combo_text) : ""
+                opacity: row.bind.enabled !== false ? 1 : 0.6
+            }
+            UqLabel {
+                objectName: "comboText"
+                visible: !row.hasKeys
+                text: row.hasKeys ? String(row.bind.combo_text) : "No keys"
+                opacity: row.hasKeys && row.bind.enabled !== false ? 1 : 0.6
+            }
+        }
     }
     QQC2.ToolButton {
         objectName: "reset"
@@ -73,6 +101,9 @@ SettingRow {
         display: QQC2.AbstractButton.IconOnly
         enabled: row.idle
         Accessible.description: row.title + ". Back to " + (row.bind.default_combo_text ? String(row.bind.default_combo_text) : "no keys")
+        QQC2.ToolTip.text: "Back to " + (row.bind.default_combo_text ? String(row.bind.default_combo_text) : "no keys")
+        QQC2.ToolTip.visible: hovered
+        QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
         onClicked: row.resetRequested()
     }
     QQC2.ToolButton {
@@ -83,6 +114,9 @@ SettingRow {
         display: QQC2.AbstractButton.IconOnly
         enabled: row.idle
         Accessible.description: row.title
+        QQC2.ToolTip.text: "Delete"
+        QQC2.ToolTip.visible: hovered
+        QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
         onClicked: row.deleteRequested()
     }
     ColumnLayout {

@@ -142,7 +142,12 @@ static APPEARANCE_SETTINGS: [SearchEntry; 13] = [
     ),
 ];
 
-static WALLPAPER_SETTINGS: [SearchEntry; 5] = [
+static WALLPAPER_SETTINGS: [SearchEntry; 6] = [
+    entry(
+        "wallpaper-display",
+        "Wallpaper display",
+        &["monitor", "screen", "each display", "per display"],
+    ),
     entry(
         "wallpaper-image",
         "Wallpaper image",

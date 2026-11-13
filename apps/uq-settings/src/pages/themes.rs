@@ -7,7 +7,7 @@
 //! whether picked from a file or made in the editor, goes through its `ImportTheme`, so every
 //! theme gets the same checks.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex as StdMutex;
 
 use serde_json::{Value, json};
@@ -345,15 +345,19 @@ impl PageLogic for ThemesState {
     }
 
     async fn snapshot(&self) -> zbus::Result<Value> {
+        // The variant in use picks which rendering of each theme its tile shows.
         let proxy = DesktopProxy::new(&self.conn).await?;
         let info = Self::info(&proxy).await?;
         let (theme, variant) = proxy.get_theme().await?;
+        let rendered = Path::new("/").join(crate::pages::login_screen::RENDERED);
         let themes: Vec<Value> = info["themes"]
             .as_array()
             .into_iter()
             .flatten()
             .map(|t| {
+                let id = t["id"].as_str().unwrap_or("");
                 json!({
+                    "swatches": swatches(&rendered, id, &variant),
                     "id": t["id"],
                     "name": t["name"],
                     "author": t["author"].as_str().unwrap_or(""),
@@ -407,3 +411,75 @@ impl PageLogic for ThemesState {
 
 #[cfg(test)]
 mod tests;
+
+/// The colours a theme's tile is drawn with: `[background, panels, text, accent, success, warning,
+/// error]` from its pre-rendered `<dir>/<id>-<variant>/tokens.json` (the other variant when that
+/// one isn't there), or none for a theme that isn't pre-rendered (the user's own).
+pub fn swatches(dir: &Path, id: &str, variant: &str) -> Vec<String> {
+    const KEYS: [&str; 7] = [
+        "bg", "surface", "text", "accent", "success", "warning", "error",
+    ];
+    const MAX: u64 = 1024 * 1024;
+    if id.is_empty() || id.contains('/') || id.starts_with('.') {
+        return Vec::new();
+    }
+    let other = if variant == "light" { "dark" } else { "light" };
+    for v in [variant, other] {
+        let file = dir.join(format!("{id}-{v}")).join("tokens.json");
+        let Ok(meta) = std::fs::metadata(&file) else {
+            continue;
+        };
+        if meta.len() > MAX {
+            continue;
+        }
+        let Ok(text) = std::fs::read_to_string(&file) else {
+            continue;
+        };
+        let Ok(tokens) = serde_json::from_str::<Value>(&text) else {
+            continue;
+        };
+        let colours: Vec<String> = KEYS
+            .iter()
+            .filter_map(|k| tokens["colors"][*k].as_str())
+            .filter(|c| {
+                c.starts_with('#')
+                    && c.len() <= 9
+                    && c[1..].chars().all(|ch| ch.is_ascii_hexdigit())
+            })
+            .map(str::to_string)
+            .collect();
+        if colours.len() >= 4 {
+            return colours;
+        }
+    }
+    Vec::new()
+}
+
+#[cfg(test)]
+mod swatch_tests {
+    use super::swatches;
+
+    #[test]
+    fn swatches_come_from_the_rendered_variant() {
+        let dir = std::env::temp_dir().join(format!("uq-swatches-{}", std::process::id()));
+        let d = dir.join("forest-dark");
+        std::fs::create_dir_all(&d).unwrap();
+        std::fs::write(
+            d.join("tokens.json"),
+            r##"{"colors":{"bg":"#111111","surface":"#222222","text":"#eeeeee","accent":"#7fb069","success":"#00ff00","warning":"#ffaa00","error":"#ff0000"}}"##,
+        )
+        .unwrap();
+        assert_eq!(swatches(&dir, "forest", "dark").len(), 7);
+        // The light rendering isn't there: the dark one stands in.
+        assert_eq!(swatches(&dir, "forest", "light")[0], "#111111");
+        assert!(
+            swatches(&dir, "mine", "dark").is_empty(),
+            "a theme that isn't rendered"
+        );
+        assert!(
+            swatches(&dir, "../forest", "dark").is_empty(),
+            "no paths in ids"
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+}

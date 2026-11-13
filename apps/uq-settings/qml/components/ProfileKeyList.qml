@@ -4,6 +4,7 @@
 import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
+import org.kde.kirigami as Kirigami
 
 ColumnLayout {
     id: list
@@ -45,15 +46,18 @@ ColumnLayout {
                 text: row.modelData.text
                 opacity: 0.7
                 elide: Text.ElideRight
-                Layout.maximumWidth: list.width / 2
+                Layout.maximumWidth: Kirigami.Units.gridUnit * 10
             }
             QQC2.ToolButton {
                 objectName: "remove"
                 text: "Remove"
                 icon.name: "list-remove"
-                display: QQC2.AbstractButton.TextBesideIcon
+                display: QQC2.AbstractButton.IconOnly
                 visible: list.editable
                 Accessible.name: "Remove " + row.modelData.label
+                QQC2.ToolTip.text: "Remove"
+                QQC2.ToolTip.visible: hovered
+                QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
                 onClicked: list.removeKey(row.modelData.domain, JSON.stringify(row.modelData.path))
             }
         }

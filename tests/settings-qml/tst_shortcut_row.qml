@@ -137,6 +137,17 @@ Item {
             compare(spy.count, 1);
         }
 
+        function test_keys_are_drawn_as_keycaps() {
+            const r = make(root.sample({ combo_text: "Super + Shift + Q" }));
+            const caps = child(r, "keycaps");
+            verify(caps.visible);
+            compare(caps.keys, ["Super", "Shift", "Q"]);
+            verify(!child(r, "comboText").visible, "the keycaps say it; the words are for no keys");
+            r.bind = root.sample({ combo: null, combo_text: null });
+            verify(!caps.visible);
+            verify(child(r, "comboText").visible);
+        }
+
         function test_no_keys_is_said_plainly() {
             const r = make(root.sample({ id: "uq.profile.next", label: "Switch to the next profile", combo: null, combo_text: null }));
             compare(child(r, "comboText").text, "No keys");

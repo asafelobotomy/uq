@@ -13,7 +13,7 @@ import org.kde.kirigami as Kirigami
 import org.uq.settings
 import "../components"
 
-QQC2.ScrollView {
+SettingsPage {
     id: page
 
     readonly property var snap: {
@@ -33,6 +33,10 @@ QQC2.ScrollView {
     readonly property var others: page.saved.filter(c => c.kind !== "vpn" && c.kind !== "wireguard" && c.kind !== "hotspot")
     readonly property var hotspot: snap.hotspot || ({})
     readonly property var secret: snap.secret || null
+    readonly property var wired: snap.wired || []
+    readonly property bool hasWifi: page.ready && (page.wifi.devices || []).length > 0
+    /// The connection in use now (not a VPN or the hotspot), for the Saved tab's quick settings.
+    readonly property var current: page.others.find(c => c.state === "on" && (c.kind === "wifi" || c.kind === "wired")) || page.others.find(c => c.state === "on") || null
     property int noticeSeen: 0
 
     function refresh() {
@@ -96,6 +100,45 @@ QQC2.ScrollView {
             return "Other";
         }
     }
+    function kindIcon(kind) {
+        switch (kind) {
+        case "wifi":
+            return "network-wireless";
+        case "wired":
+            return "network-wired";
+        case "wireguard":
+        case "vpn":
+            return "network-vpn";
+        case "hotspot":
+            return "network-wireless-hotspot";
+        default:
+            return "network-connect";
+        }
+    }
+    function securityIcon(security) {
+        switch (security) {
+        case "open":
+            return "object-unlocked";
+        case "encrypted":
+            return "security-medium";
+        case "old":
+            return "security-low";
+        case "enterprise":
+            return "im-user";
+        default:
+            return "object-locked";
+        }
+    }
+    function methodText(method) {
+        switch (method) {
+        case "manual":
+            return "Set by hand";
+        case "disabled":
+            return "Off";
+        default:
+            return "Automatic";
+        }
+    }
     function join(n) {
         if (n.saved) {
             nm.activate(String(n.saved));
@@ -114,9 +157,6 @@ QQC2.ScrollView {
         detailsDialog.open();
     }
 
-    Accessible.role: Accessible.Pane
-    Accessible.name: "Network"
-    contentWidth: availableWidth
 
     NetworkModel {
         id: nm
@@ -573,6 +613,11 @@ QQC2.ScrollView {
             RowLayout {
                 UqLabel {
                     text: "Metered (limit data use)"
+                }
+                HelpTip {
+                    tip: "A metered connection tells apps to hold back big downloads and updates."
+                }
+                Item {
                     Layout.fillWidth: true
                 }
                 UqComboBox {
@@ -587,19 +632,18 @@ QQC2.ScrollView {
                     }
                 }
             }
-            UqLabel {
-                text: "A metered connection tells apps to hold back big downloads and updates."
-                wrapMode: Text.Wrap
-                opacity: 0.7
-                Layout.fillWidth: true
-            }
 
             Kirigami.Separator {
                 Layout.fillWidth: true
             }
-            UqLabel {
-                text: "IPv4 addresses and DNS"
-                font.bold: true
+            RowLayout {
+                UqLabel {
+                    text: "IPv4 addresses and DNS"
+                    font.bold: true
+                }
+                HelpTip {
+                    tip: "DNS servers you list here are used instead of the network's own."
+                }
             }
             GridLayout {
                 columns: 2
@@ -700,12 +744,6 @@ QQC2.ScrollView {
                 icon.name: "document-save"
                 enabled: page.idle
                 onClicked: nm.setIp(detailsDialog.uuid, 6, detailsDialog.methods[ipv6Method.currentIndex], ipv6Addresses.text, ipv6Gateway.text, ipv6Dns.text)
-            }
-            UqLabel {
-                text: "DNS servers you list here are used instead of the network's own."
-                wrapMode: Text.Wrap
-                opacity: 0.7
-                Layout.fillWidth: true
             }
 
             ColumnLayout {
@@ -841,319 +879,502 @@ QQC2.ScrollView {
         onAccepted: nm.importWireguard(String(selectedFile), false)
     }
 
-    ColumnLayout {
-        width: Math.min(page.availableWidth - Kirigami.Units.largeSpacing * 2, Kirigami.Units.gridUnit * 44)
-        x: Math.max(Kirigami.Units.largeSpacing, (page.availableWidth - width) / 2)
-        spacing: Kirigami.Units.smallSpacing
-
-        Item {
-            implicitHeight: Kirigami.Units.smallSpacing
+    // A small icon that names itself in a tooltip on hover.
+    component TipIcon: Kirigami.Icon {
+        id: tipIcon
+        property string tip: ""
+        implicitWidth: Kirigami.Units.iconSizes.small
+        implicitHeight: Kirigami.Units.iconSizes.small
+        Accessible.name: tipIcon.tip
+        HoverHandler {
+            id: tipHover
         }
+        QQC2.ToolTip.visible: tipHover.hovered && tipIcon.tip !== ""
+        QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+        QQC2.ToolTip.text: tipIcon.tip
+    }
+    // A small rounded tag: a band ("5 GHz") or a speed.
+    component Chip: Rectangle {
+        id: chip
+        property string label: ""
+        implicitWidth: chipText.implicitWidth + Kirigami.Units.smallSpacing * 2
+        implicitHeight: chipText.implicitHeight + 2
+        radius: Kirigami.Units.cornerRadius
+        color: "transparent"
+        border.width: 1
+        border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.3)
         UqLabel {
-            text: "Network"
-            font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.5
-            font.bold: true
-            Accessible.role: Accessible.Heading
+            id: chipText
+            anchors.centerIn: parent
+            text: chip.label
+            font.pointSize: Kirigami.Theme.smallFont.pointSize
+            opacity: 0.8
         }
+    }
+    // A button showing only its icon, named in a tooltip.
+    component IconButton: QQC2.ToolButton {
+        id: ib
+        property string tip: ""
+        display: QQC2.AbstractButton.IconOnly
+        Accessible.name: ib.tip
+        QQC2.ToolTip.text: ib.tip
+        QQC2.ToolTip.visible: hovered
+        QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+    }
+
+    // One Wi-Fi network: signal, lock, name, band, and what can be done with it.
+    component NetworkTile: Rectangle {
+        id: tile
+        required property var modelData
+        readonly property var n: modelData
+        readonly property bool on: tile.n.state === "on"
+
+        implicitHeight: tileRow.implicitHeight + Kirigami.Units.smallSpacing * 2
+        implicitWidth: tileRow.implicitWidth + Kirigami.Units.largeSpacing * 2
+        Layout.fillWidth: true
+        radius: Kirigami.Units.cornerRadius
+        color: tile.on ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15) : "transparent"
+        border.width: tile.on ? 1 : 0
+        border.color: Kirigami.Theme.highlightColor
+        Accessible.role: Accessible.ListItem
+        Accessible.name: String(tile.n.ssid) + ", " + page.securityText(tile.n.security) + ", signal " + tile.n.strength + "%" + (tile.on ? ", connected" : "")
+
+        RowLayout {
+            id: tileRow
+            anchors.fill: parent
+            anchors.leftMargin: Kirigami.Units.largeSpacing
+            anchors.rightMargin: Kirigami.Units.smallSpacing
+            spacing: Kirigami.Units.smallSpacing
+
+            TipIcon {
+                source: ["network-wireless-signal-none", "network-wireless-signal-weak", "network-wireless-signal-ok", "network-wireless-signal-good", "network-wireless-signal-excellent"][tile.n.bars] || "network-wireless"
+                tip: "Signal " + tile.n.strength + "%"
+                implicitWidth: Kirigami.Units.iconSizes.smallMedium
+                implicitHeight: Kirigami.Units.iconSizes.smallMedium
+            }
+            TipIcon {
+                source: page.securityIcon(tile.n.security)
+                tip: page.securityText(tile.n.security)
+                opacity: tile.n.security === "open" ? 0.5 : 1
+            }
+            UqLabel {
+                text: String(tile.n.ssid)
+                font.bold: tile.on
+                elide: Text.ElideRight
+                Layout.fillWidth: true
+                Layout.leftMargin: Kirigami.Units.smallSpacing
+            }
+            UqLabel {
+                visible: tile.n.state === "starting" || tile.n.state === "stopping"
+                text: page.stateText(tile.n.state)
+                opacity: 0.7
+            }
+            TipIcon {
+                visible: !!tile.n.saved
+                source: "bookmarks"
+                tip: "Saved"
+                opacity: 0.7
+            }
+            Chip {
+                visible: String(tile.n.band) !== ""
+                label: String(tile.n.band)
+            }
+            QQC2.Button {
+                text: "Connect"
+                icon.name: "network-connect"
+                visible: tile.n.state === "off"
+                enabled: page.idle
+                onClicked: page.join(tile.n)
+            }
+            QQC2.Button {
+                text: "Disconnect"
+                icon.name: "network-disconnect"
+                visible: tile.n.state !== "off" && !!tile.n.saved
+                enabled: page.idle
+                onClicked: nm.deactivate(String(tile.n.saved))
+            }
+            IconButton {
+                icon.name: "configure"
+                tip: "Details"
+                enabled: page.idle && !!tile.n.saved
+                opacity: tile.n.saved ? 1 : 0
+                onClicked: page.details({
+                    uuid: tile.n.saved
+                })
+            }
+        }
+    }
+
+    // The main Wi-Fi switch, on the title row.
+    headerItems: [
+        IconButton {
+            icon.name: "view-refresh"
+            tip: "Look for networks again"
+            visible: page.hasWifi && page.wifi.enabled === true
+            enabled: page.idle
+            onClicked: nm.scan()
+        },
+        SwitchRow {
+            objectName: "wifiSwitch"
+            settingId: "wifi"
+            iconName: "network-wireless"
+            label: "Wi-Fi"
+            highlight: App.highlight
+            visible: page.hasWifi
+            value: page.wifi.enabled === true
+            enabled: page.idle && page.wifi.hardware !== false
+            onChosen: on => nm.setWifi(on)
+        }
+    ]
+
+    banners: [
         ErrorCard {
             objectName: "notAvailable"
             visible: page.loaded && page.snap.available === false
             title: "Not available"
             detail: String(page.snap.text || "")
             Layout.fillWidth: true
-        }
+        },
+        RuleMessage {
+            objectName: "wifiHardware"
+            closable: false
+            lines: page.ready && page.wifi.hardware === false ? ["Wi-Fi is turned off by a switch or key on the computer."] : []
+            Layout.fillWidth: true
+        },
         RuleMessage {
             objectName: "networkError"
             negative: true
             closable: false
             lines: nm.error !== "" ? ["That wasn't done: " + nm.error] : []
             Layout.fillWidth: true
-        }
+        },
         RuleMessage {
             id: noticeMessage
             Layout.fillWidth: true
         }
+    ]
 
-        // Wi-Fi.
-        SwitchRow {
-            settingId: "wifi"
-            label: "Wi-Fi"
-            highlight: App.highlight
-            visible: page.ready && (page.wifi.devices || []).length > 0
-            value: page.wifi.enabled === true
-            enabled: page.idle && page.wifi.hardware !== false
-            onChosen: on => nm.setWifi(on)
-            Layout.fillWidth: true
-            Layout.topMargin: Kirigami.Units.largeSpacing
+    SettingsTab {
+        title: "Wi-Fi"
+        iconName: "network-wireless"
+        available: page.hasWifi
 
-            QQC2.Button {
-                text: "Look again"
-                icon.name: "view-refresh"
-                visible: page.wifi.enabled === true
-                enabled: page.idle
-                onClicked: nm.scan()
-            }
-        }
-        UqLabel {
-            visible: page.ready && page.wifi.hardware === false
-            text: "Wi-Fi is turned off by a switch or key on the computer."
-            wrapMode: Text.Wrap
-            color: Kirigami.Theme.neutralTextColor
-            Layout.fillWidth: true
-            Layout.leftMargin: Kirigami.Units.largeSpacing
-        }
-        UqLabel {
-            visible: page.ready && page.wifi.enabled === true && page.networks.length === 0
-            text: page.wifi.scanned ? "No networks found." : "Looking for networks…"
-            opacity: 0.7
-            Layout.leftMargin: Kirigami.Units.largeSpacing
-        }
-        Repeater {
-            model: page.wifi.enabled === true ? page.networks : []
-            delegate: Kirigami.AbstractCard {
-                id: netCard
-                required property var modelData
-                readonly property var n: modelData
+        SettingsCard {
+            title: "Networks"
+            iconName: "network-wireless"
+            wide: true
+
+            SettingRow {
+                visible: page.wifi.enabled !== true || page.networks.length === 0
+                iconName: page.wifi.enabled === true ? "network-wireless-acquiring" : "network-wireless-disconnected"
+                label: page.wifi.enabled !== true ? "Wi-Fi is off." : (page.wifi.scanned ? "No networks found." : "Looking for networks…")
+                opacity: 0.8
                 Layout.fillWidth: true
 
-                contentItem: RowLayout {
-                    spacing: Kirigami.Units.largeSpacing
+                QQC2.Button {
+                    text: "Turn on"
+                    icon.name: "network-wireless"
+                    visible: page.wifi.enabled !== true
+                    enabled: page.idle && page.wifi.hardware !== false
+                    onClicked: nm.setWifi(true)
+                }
+            }
+            GridLayout {
+                columns: page.width >= Kirigami.Units.gridUnit * 70 ? 2 : 1
+                columnSpacing: Kirigami.Units.largeSpacing
+                rowSpacing: Kirigami.Units.smallSpacing
+                uniformCellWidths: true
+                visible: page.wifi.enabled === true
+                Layout.fillWidth: true
 
-                    Kirigami.Icon {
-                        source: ["network-wireless-signal-none", "network-wireless-signal-weak", "network-wireless-signal-ok", "network-wireless-signal-good", "network-wireless-signal-excellent"][netCard.n.bars] || "network-wireless"
-                        implicitWidth: Kirigami.Units.iconSizes.medium
-                        implicitHeight: Kirigami.Units.iconSizes.medium
-                        Accessible.name: "Signal " + netCard.n.strength + "%"
-                    }
-                    ColumnLayout {
-                        spacing: 0
-                        Layout.fillWidth: true
-                        UqLabel {
-                            text: String(netCard.n.ssid)
-                            font.bold: netCard.n.state === "on"
-                            elide: Text.ElideRight
-                            Layout.fillWidth: true
-                        }
-                        UqLabel {
-                            text: [page.stateText(netCard.n.state), netCard.n.saved ? "Saved" : "", page.securityText(netCard.n.security), String(netCard.n.band)].filter(t => t !== "").join(" · ")
-                            opacity: 0.7
-                            elide: Text.ElideRight
-                            Layout.fillWidth: true
-                        }
-                    }
-                    QQC2.Button {
-                        text: "Connect"
-                        icon.name: "network-connect"
-                        visible: netCard.n.state === "off"
+                Repeater {
+                    model: page.wifi.enabled === true ? page.networks : []
+                    delegate: NetworkTile {}
+                }
+            }
+            Kirigami.Separator {
+                visible: page.wifi.enabled === true
+                Layout.fillWidth: true
+            }
+            SettingRow {
+                settingId: "hidden-network"
+                iconName: "view-hidden"
+                label: "Hidden network"
+                help: "A network that doesn't show its name. You need its exact name to join."
+                highlight: App.highlight
+                visible: page.wifi.enabled === true
+                Layout.fillWidth: true
+
+                QQC2.Button {
+                    text: "Join…"
+                    icon.name: "list-add"
+                    enabled: page.idle
+                    Accessible.name: "Join a hidden network"
+                    onClicked: hiddenDialog.open()
+                }
+            }
+        }
+    }
+
+    SettingsTab {
+        title: "Wired"
+        iconName: "network-wired"
+        available: page.ready && page.wired.length > 0
+
+        Repeater {
+            model: page.ready ? page.wired : []
+            delegate: SettingsCard {
+                id: wiredCard
+                required property var modelData
+                required property int index
+                title: String(modelData.name)
+                iconName: "network-wired"
+                border.width: modelData.connected ? 2 : 1
+                border.color: modelData.connected ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
+
+                actions: [
+                    IconButton {
+                        icon.name: "configure"
+                        tip: "Details"
+                        visible: !!wiredCard.modelData.uuid
                         enabled: page.idle
-                        onClicked: page.join(netCard.n)
+                        onClicked: page.details({
+                            uuid: wiredCard.modelData.uuid
+                        })
+                    }
+                ]
+
+                SettingRow {
+                    settingId: wiredCard.index === 0 ? "wired" : ""
+                    highlight: App.highlight
+                    iconName: wiredCard.modelData.connected ? "network-connect" : "network-disconnect"
+                    label: String(wiredCard.modelData.state)
+                    Layout.fillWidth: true
+
+                    TipIcon {
+                        visible: String(wiredCard.modelData.speed) !== ""
+                        source: "speedometer"
+                        tip: "Speed"
+                    }
+                    UqLabel {
+                        visible: String(wiredCard.modelData.speed) !== ""
+                        text: String(wiredCard.modelData.speed)
                     }
                     QQC2.Button {
                         text: "Disconnect"
                         icon.name: "network-disconnect"
-                        visible: netCard.n.state !== "off" && !!netCard.n.saved
+                        visible: !!wiredCard.modelData.uuid && wiredCard.modelData.connected
                         enabled: page.idle
-                        onClicked: nm.deactivate(String(netCard.n.saved))
-                    }
-                    QQC2.Button {
-                        text: "Details…"
-                        icon.name: "configure"
-                        visible: !!netCard.n.saved
-                        enabled: page.idle
-                        onClicked: page.details({
-                            uuid: netCard.n.saved
-                        })
+                        onClicked: nm.deactivate(String(wiredCard.modelData.uuid))
                     }
                 }
             }
         }
-        SettingRow {
-            settingId: "hidden-network"
-            label: "A network that doesn't show its name"
-            highlight: App.highlight
-            visible: page.ready && page.wifi.enabled === true
-            Layout.fillWidth: true
+    }
 
-            QQC2.Button {
-                text: "Join a hidden network…"
-                icon.name: "list-add"
-                enabled: page.idle
-                onClicked: hiddenDialog.open()
+    SettingsTab {
+        title: "VPN"
+        iconName: "network-vpn"
+        available: page.ready
+
+        SettingsCard {
+            title: "VPN"
+            iconName: "network-vpn"
+            help: page.snap.openvpn === false ? "For OpenVPN connections, install the networkmanager-openvpn package." : ""
+            wide: true
+            actions: [
+                QQC2.Button {
+                    objectName: "importWireguard"
+                    text: "Add a WireGuard file…"
+                    icon.name: "document-import"
+                    enabled: page.idle
+                    onClicked: wireguardFile.open()
+                }
+            ]
+
+            SettingRow {
+                visible: page.vpns.length === 0
+                settingId: page.vpns.length === 0 ? "vpn" : ""
+                iconName: "network-vpn"
+                label: "No VPNs yet."
+                help: "Your VPN provider gives you a WireGuard file to add here."
+                highlight: App.highlight
+                opacity: 0.8
+                Layout.fillWidth: true
+            }
+            Repeater {
+                model: page.vpns
+                delegate: SwitchRow {
+                    id: vpnRow
+                    required property var modelData
+                    required property int index
+                    settingId: index === 0 ? "vpn" : ""
+                    highlight: App.highlight
+                    iconName: "network-vpn"
+                    label: String(modelData.name) + (modelData.state === "starting" ? " · Connecting…" : "")
+                    value: modelData.state === "on" || modelData.state === "starting"
+                    enabled: page.idle
+                    onChosen: on => on ? nm.activate(String(vpnRow.modelData.uuid)) : nm.deactivate(String(vpnRow.modelData.uuid))
+                    Layout.fillWidth: true
+
+                    IconButton {
+                        icon.name: "configure"
+                        tip: "Details"
+                        enabled: page.idle
+                        onClicked: page.details(vpnRow.modelData)
+                    }
+                }
             }
         }
+    }
 
-        // Hotspot.
-        SwitchRow {
-            settingId: "hotspot"
-            label: page.hotspot.state === "on" ? "Hotspot: sharing as " + String(page.hotspot.name || "") : "Hotspot: share this computer's connection over Wi-Fi"
-            highlight: App.highlight
-            visible: page.ready && page.hotspot.can === true
-            value: page.hotspot.state === "on" || page.hotspot.state === "starting"
-            enabled: page.idle && page.wifi.enabled === true
-            onChosen: on => {
-                if (on)
-                    hotspotDialog.open();
-                else
-                    nm.hotspot(false, "", "");
+    SettingsTab {
+        title: "Hotspot"
+        iconName: "network-wireless-hotspot"
+        available: page.ready && page.hotspot.can === true
+
+        SettingsCard {
+            title: "Hotspot"
+            iconName: "network-wireless-hotspot"
+            help: "While the hotspot is on, this computer's Wi-Fi isn't used to join other networks."
+            wide: true
+
+            SwitchRow {
+                settingId: "hotspot"
+                iconName: "preferences-system-network-sharing"
+                label: page.hotspot.state === "on" ? "Sharing as " + String(page.hotspot.name || "") : "Share this computer's connection over Wi-Fi"
+                highlight: App.highlight
+                value: page.hotspot.state === "on" || page.hotspot.state === "starting"
+                enabled: page.idle && page.wifi.enabled === true
+                onChosen: on => {
+                    if (on)
+                        hotspotDialog.open();
+                    else
+                        nm.hotspot(false, "", "");
+                }
+                Layout.fillWidth: true
             }
-            Layout.fillWidth: true
-            Layout.topMargin: Kirigami.Units.largeSpacing
         }
-        UqLabel {
-            visible: page.ready && page.hotspot.can === true
-            text: "While the hotspot is on, this computer's Wi-Fi isn't used to join other networks."
-            wrapMode: Text.Wrap
-            opacity: 0.7
-            Layout.fillWidth: true
-            Layout.leftMargin: Kirigami.Units.largeSpacing
-        }
+    }
 
-        // Wired.
-        Repeater {
-            model: page.ready ? (page.snap.wired || []) : []
-            delegate: SettingRow {
-                id: wiredRow
-                required property var modelData
-                required property int index
-                settingId: index === 0 ? "wired" : ""
-                label: "Wired (" + String(modelData.name) + "): " + String(modelData.state) + (modelData.speed !== "" ? ", " + String(modelData.speed) : "")
+    SettingsTab {
+        title: "Saved"
+        iconName: "bookmarks"
+        available: page.ready
+
+        // The connection in use now: its data use, and the way to its addresses (search for
+        // "metered" or "DNS" lands here).
+        SettingsCard {
+            title: page.current ? String(page.current.name) : "Not connected"
+            iconName: page.current ? page.kindIcon(page.current.kind) : "network-disconnect"
+            help: "Each saved connection has its own metered and address settings, under Details."
+            actions: [
+                IconButton {
+                    icon.name: "configure"
+                    tip: "Details"
+                    visible: page.current !== null
+                    enabled: page.idle
+                    onClicked: page.details(page.current)
+                }
+            ]
+
+            SettingRow {
+                objectName: "meteredRow"
+                settingId: "metered"
+                iconName: "network-limited"
+                label: "Metered"
+                help: "Tells apps to hold back big downloads and updates on this connection. Details holds it for every connection."
+                highlight: App.highlight
+                enabled: page.idle && page.current !== null
+                Layout.fillWidth: true
+
+                UqComboBox {
+                    id: currentMetered
+                    readonly property var values: ["auto", "yes", "no"]
+                    readonly property int shown: page.current ? Math.max(0, values.indexOf(page.current.metered)) : 0
+                    model: ["Decide automatically", "Yes", "No"]
+                    currentIndex: currentMetered.shown
+                    Accessible.name: "Metered connection"
+                    Layout.preferredWidth: Kirigami.Units.gridUnit * 11
+                    onActivated: index => {
+                        nm.setMetered(String(page.current.uuid), currentMetered.values[index]);
+                        currentMetered.currentIndex = Qt.binding(() => currentMetered.shown);
+                    }
+                }
+            }
+            SettingRow {
+                objectName: "ipSettingsRow"
+                settingId: "ip-settings"
+                iconName: "network-server"
+                label: "Addresses and DNS"
+                help: "Details holds a connection's addresses, gateway and DNS servers."
                 highlight: App.highlight
                 Layout.fillWidth: true
-                Layout.topMargin: index === 0 ? Kirigami.Units.largeSpacing : 0
 
-                QQC2.Button {
-                    text: "Disconnect"
-                    icon.name: "network-disconnect"
-                    visible: !!wiredRow.modelData.uuid && wiredRow.modelData.connected
-                    enabled: page.idle
-                    onClicked: nm.deactivate(String(wiredRow.modelData.uuid))
+                UqLabel {
+                    visible: page.current !== null
+                    text: page.current && page.current.ipv4 ? page.methodText(page.current.ipv4.method) : ""
+                    opacity: 0.8
                 }
                 QQC2.Button {
                     text: "Details…"
                     icon.name: "configure"
-                    visible: !!wiredRow.modelData.uuid
-                    enabled: page.idle
-                    onClicked: page.details({
-                        uuid: wiredRow.modelData.uuid
-                    })
+                    enabled: page.idle && page.current !== null
+                    onClicked: page.details(page.current)
                 }
             }
         }
 
-        // VPN.
-        SettingRow {
-            settingId: "vpn"
-            label: "VPN"
-            highlight: App.highlight
-            visible: page.ready
-            Layout.fillWidth: true
-            Layout.topMargin: Kirigami.Units.largeSpacing
+        SettingsCard {
+            title: "Saved connections"
+            iconName: "bookmarks"
+            help: "Passwords you type here go straight to the network service, which keeps them for the connection. Changes may ask for an administrator password."
 
-            QQC2.Button {
-                objectName: "importWireguard"
-                text: "Add a WireGuard file…"
-                icon.name: "document-import"
-                enabled: page.idle
-                onClicked: wireguardFile.open()
-            }
-        }
-        UqLabel {
-            visible: page.ready && page.vpns.length === 0
-            text: "No VPNs yet. Your VPN provider gives you a WireGuard file to add here."
-            wrapMode: Text.Wrap
-            opacity: 0.7
-            Layout.fillWidth: true
-            Layout.leftMargin: Kirigami.Units.largeSpacing
-        }
-        UqLabel {
-            visible: page.ready && page.snap.openvpn === false
-            text: "For OpenVPN connections, install the networkmanager-openvpn package."
-            wrapMode: Text.Wrap
-            opacity: 0.7
-            Layout.fillWidth: true
-            Layout.leftMargin: Kirigami.Units.largeSpacing
-        }
-        Repeater {
-            model: page.vpns
-            delegate: SwitchRow {
-                id: vpnRow
-                required property var modelData
-                label: String(modelData.name) + " · " + page.kindText(modelData.kind) + (modelData.state === "starting" ? " · Connecting…" : "")
-                value: modelData.state === "on" || modelData.state === "starting"
-                enabled: page.idle
-                onChosen: on => on ? nm.activate(String(vpnRow.modelData.uuid)) : nm.deactivate(String(vpnRow.modelData.uuid))
+            SettingRow {
+                visible: page.others.length === 0
+                settingId: page.others.length === 0 ? "saved-connections" : ""
+                highlight: App.highlight
+                iconName: "bookmarks"
+                label: "None yet."
+                opacity: 0.8
                 Layout.fillWidth: true
-
-                QQC2.Button {
-                    text: "Details…"
-                    icon.name: "configure"
-                    enabled: page.idle
-                    onClicked: page.details(vpnRow.modelData)
-                }
             }
-        }
+            Repeater {
+                model: page.others
+                delegate: SettingRow {
+                    id: savedRow
+                    required property var modelData
+                    required property int index
+                    readonly property var c: modelData
+                    settingId: index === 0 ? "saved-connections" : ""
+                    highlight: App.highlight
+                    iconName: page.kindIcon(savedRow.c.kind)
+                    label: String(savedRow.c.name)
+                    Layout.fillWidth: true
 
-        // Saved connections.
-        SettingRow {
-            settingId: "saved-connections"
-            label: "Saved connections"
-            highlight: App.highlight
-            visible: page.ready
-            Layout.fillWidth: true
-            Layout.topMargin: Kirigami.Units.largeSpacing
-        }
-        SettingRow {
-            settingId: "ip-settings"
-            label: "Addresses, DNS and metered data: choose Details on a connection."
-            highlight: App.highlight
-            visible: page.ready
-            opacity: 0.7
-            Layout.fillWidth: true
-        }
-        Repeater {
-            model: page.others
-            delegate: Kirigami.AbstractCard {
-                id: savedCard
-                required property var modelData
-                readonly property var c: modelData
-                Layout.fillWidth: true
-
-                contentItem: RowLayout {
-                    spacing: Kirigami.Units.largeSpacing
-                    ColumnLayout {
-                        spacing: 0
-                        Layout.fillWidth: true
-                        UqLabel {
-                            text: String(savedCard.c.name)
-                            elide: Text.ElideRight
-                            Layout.fillWidth: true
-                        }
-                        UqLabel {
-                            text: [page.kindText(savedCard.c.kind), page.stateText(savedCard.c.state), savedCard.c.autoconnect ? "" : "Not automatic", savedCard.c.everyone ? "Everyone" : "Only you"].filter(t => t !== "").join(" · ")
-                            opacity: 0.7
-                            elide: Text.ElideRight
-                            Layout.fillWidth: true
-                        }
+                    UqLabel {
+                        visible: savedRow.c.state !== "off"
+                        text: page.stateText(savedRow.c.state)
+                        opacity: 0.7
                     }
-                    QQC2.Button {
-                        text: "Details…"
+                    TipIcon {
+                        source: "chronometer"
+                        tip: savedRow.c.autoconnect ? "Connects automatically" : "Not automatic"
+                        opacity: savedRow.c.autoconnect ? 0.8 : 0.25
+                    }
+                    TipIcon {
+                        source: savedRow.c.everyone ? "system-users" : "user"
+                        tip: savedRow.c.everyone ? "Everyone who uses this computer" : "Only you"
+                        opacity: 0.8
+                    }
+                    IconButton {
                         icon.name: "configure"
+                        tip: "Details"
                         enabled: page.idle
-                        onClicked: page.details(savedCard.c)
+                        onClicked: page.details(savedRow.c)
                     }
                 }
             }
-        }
-        UqLabel {
-            visible: page.ready
-            text: "Passwords you type here go straight to the network service, which keeps them for the connection. Changes may ask for an administrator password."
-            wrapMode: Text.Wrap
-            opacity: 0.7
-            Layout.fillWidth: true
-            Layout.topMargin: Kirigami.Units.largeSpacing
-        }
-        Item {
-            implicitHeight: Kirigami.Units.largeSpacing
         }
     }
 }

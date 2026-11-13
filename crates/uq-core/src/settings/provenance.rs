@@ -271,6 +271,99 @@ pub static OPTIONS: &[OptionRow] = &[
         "Icon theme",
         "icon-theme",
     ),
+    // The `input` table generated.lua renders (`crate::lua::input`): keyboard, mouse (always
+    // rendered), then the touchpad. Labels are the history labels (`crate::history::labels`).
+    hypr(
+        "input.keyboard.layouts",
+        "keyboard-layouts",
+        "Keyboard layouts",
+        "input:kb_layout",
+        Dflt,
+    ),
+    hypr(
+        "input.keyboard.switch_combo",
+        "layout-switch",
+        "Layout switch keys",
+        "input:kb_options",
+        Dflt,
+    ),
+    hypr(
+        "input.keyboard.repeat_rate",
+        "repeat-rate",
+        "Key repeat rate",
+        "input:repeat_rate",
+        Dflt,
+    ),
+    hypr(
+        "input.keyboard.repeat_delay",
+        "repeat-delay",
+        "Key repeat delay",
+        "input:repeat_delay",
+        Dflt,
+    ),
+    hypr(
+        "input.mouse.sensitivity",
+        "mouse-speed",
+        "Pointer speed",
+        "input:sensitivity",
+        Dflt,
+    ),
+    hypr(
+        "input.mouse.accel_profile",
+        "mouse-accel",
+        "Pointer acceleration",
+        "input:accel_profile",
+        Dflt,
+    ),
+    hypr(
+        "input.mouse.natural_scroll",
+        "mouse-natural-scroll",
+        "Natural scrolling",
+        "input:natural_scroll",
+        Dflt,
+    ),
+    hypr(
+        "input.mouse.left_handed",
+        "mouse-left-handed",
+        "Left-handed buttons",
+        "input:left_handed",
+        Dflt,
+    ),
+    hypr(
+        "input.mouse.scroll_factor",
+        "mouse-scroll-speed",
+        "Scroll speed",
+        "input:scroll_factor",
+        Dflt,
+    ),
+    hypr(
+        "input.touchpad.natural_scroll",
+        "touchpad-natural-scroll",
+        "Touchpad natural scrolling",
+        "input:touchpad:natural_scroll",
+        Dflt,
+    ),
+    hypr(
+        "input.touchpad.tap_to_click",
+        "tap-to-click",
+        "Tap to click",
+        "input:touchpad:tap_to_click",
+        Dflt,
+    ),
+    hypr(
+        "input.touchpad.disable_while_typing",
+        "disable-while-typing",
+        "Touchpad off while typing",
+        "input:touchpad:disable_while_typing",
+        Dflt,
+    ),
+    hypr(
+        "input.touchpad.scroll_factor",
+        "touchpad-scroll-speed",
+        "Touchpad scroll speed",
+        "input:touchpad:scroll_factor",
+        Dflt,
+    ),
     // `gestures:workspace_swipe_*`: ConfigValues.cpp lines 400-406 at v0.56.2, 487-493 at
     // v0.57.0. The option names live in `crate::gestures::hypr::SWIPE_OPTIONS`.
     hypr(
@@ -365,6 +458,30 @@ pub fn expected(row: &OptionRow, state: &State, theme: &Theme) -> Option<Value> 
         "appearance.icon_theme" => Some(Value::from(t.icons.theme.clone())),
         // Off renders nothing, so Hyprland's own default is all there is to read back (F6).
         "compat.sharp_x11" => state.compat.sharp_x11.then_some(Value::Bool(true)),
+        "input.keyboard.layouts" => {
+            let k = &s.input.keyboard;
+            (!k.layouts.is_empty()).then(|| {
+                let names: Vec<&str> = k.layouts.iter().map(|l| l.layout.as_str()).collect();
+                Value::from(names.join(","))
+            })
+        }
+        "input.keyboard.switch_combo" => s.input.keyboard.switch_combo.clone().map(Value::from),
+        "input.keyboard.repeat_rate" => s.input.keyboard.repeat_rate.map(Value::from),
+        "input.keyboard.repeat_delay" => s.input.keyboard.repeat_delay.map(Value::from),
+        "input.mouse.sensitivity" => Some(Value::from(s.mouse.sensitivity)),
+        // Default renders nothing: libinput's per-device default.
+        "input.mouse.accel_profile" => match s.mouse.accel_profile {
+            crate::settings::AccelProfile::Default => None,
+            crate::settings::AccelProfile::Adaptive => Some(Value::from("adaptive")),
+            crate::settings::AccelProfile::Flat => Some(Value::from("flat")),
+        },
+        "input.mouse.natural_scroll" => Some(Value::Bool(s.mouse.natural_scroll)),
+        "input.mouse.left_handed" => Some(Value::Bool(s.mouse.left_handed)),
+        "input.mouse.scroll_factor" => Some(Value::from(s.mouse.scroll_factor)),
+        "input.touchpad.natural_scroll" => b(s.input.touchpad.natural_scroll),
+        "input.touchpad.tap_to_click" => b(s.input.touchpad.tap_to_click),
+        "input.touchpad.disable_while_typing" => b(s.input.touchpad.disable_while_typing),
+        "input.touchpad.scroll_factor" => f(s.input.touchpad.scroll_factor),
         "input.swipe.distance" => s.input.swipe.distance.map(Value::from),
         "input.swipe.invert" => b(s.input.swipe.invert),
         "input.swipe.create_new" => b(s.input.swipe.create_new),
@@ -804,7 +921,11 @@ mod tests {
         st.set_section(
             "input",
             json!({"swipe": {"distance": 400, "invert": false, "create_new": false,
-                "cancel_ratio": 0.4}}),
+                "cancel_ratio": 0.4},
+                "keyboard": {"layouts": [{"layout": "us"}], "switch_combo": "grp:alt_shift_toggle",
+                    "repeat_rate": 30, "repeat_delay": 400},
+                "touchpad": {"natural_scroll": true, "tap_to_click": true,
+                    "disable_while_typing": true, "scroll_factor": 1.5}}),
         )
         .unwrap();
         let mut keys = std::collections::HashSet::new();

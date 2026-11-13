@@ -103,8 +103,12 @@ ColumnLayout {
                 Layout.fillWidth: true
             }
         }
-        UqLabel {
-            text: "Wait"
+        Kirigami.Icon {
+            source: "chronometer"
+            implicitWidth: Kirigami.Units.iconSizes.small
+            implicitHeight: Kirigami.Units.iconSizes.small
+            opacity: delay.enabled ? 1 : 0.5
+            Accessible.ignored: true
         }
         QQC2.SpinBox {
             id: delay
@@ -116,6 +120,9 @@ ColumnLayout {
             enabled: row.idle && row.app.can_toggle === true
             Accessible.name: "Seconds to wait after login"
             Accessible.description: row.name
+            QQC2.ToolTip.visible: hovered
+            QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+            QQC2.ToolTip.text: "Seconds to wait after login"
             onValueModified: settle.restart()
         }
         UqLabel {

@@ -56,6 +56,10 @@ pub mod qobject {
         #[qinvokable]
         fn remove_device(self: Pin<&mut InputModel>, name: &QString);
 
+        /// Give a device its own setting, starting from the mouse's pointer speed.
+        #[qinvokable]
+        fn add_device(self: Pin<&mut InputModel>, name: &QString);
+
         /// Save one gesture as JSON; `index` -1 adds it.
         #[qinvokable]
         fn save_gesture(self: Pin<&mut InputModel>, index: i32, json_value: &QString);
@@ -193,6 +197,15 @@ impl InputModel {
         model_core::start(
             self,
             Op::RemoveDevice {
+                name: name.to_string(),
+            },
+        );
+    }
+
+    fn add_device(self: Pin<&mut Self>, name: &QString) {
+        model_core::start(
+            self,
+            Op::AddDevice {
                 name: name.to_string(),
             },
         );

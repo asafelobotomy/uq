@@ -10,7 +10,7 @@ import org.kde.kirigami as Kirigami
 import org.uq.settings
 import "../components"
 
-QQC2.ScrollView {
+SettingsPage {
     id: page
 
     readonly property var snap: {
@@ -49,22 +49,21 @@ QQC2.ScrollView {
             questionDialog.close();
         }
     }
-    function subtitle(d) {
-        const parts = [String(d.kind)];
+    function status(d) {
         if (d.working === "pairing")
-            parts.push("Pairing…");
-        else if (d.working === "connecting")
-            parts.push("Connecting…");
-        else if (d.connected)
-            parts.push("Connected");
-        if (d.battery !== null && d.battery !== undefined)
-            parts.push("Battery " + d.battery + "%");
-        return parts.join(" · ");
+            return "Pairing…";
+        if (d.working === "connecting")
+            return "Connecting…";
+        return d.connected ? "Connected" : "";
     }
-
-    Accessible.role: Accessible.Pane
-    Accessible.name: "Bluetooth"
-    contentWidth: availableWidth
+    function hasBattery(d) {
+        return d.battery !== null && d.battery !== undefined;
+    }
+    /// The battery icon nearest the level: battery-000 to battery-100 in steps of 10.
+    function batteryIcon(level) {
+        const step = Math.max(0, Math.min(10, Math.round(level / 10))) * 10;
+        return "battery-" + String(step).padStart(3, "0");
+    }
 
     BluetoothModel {
         id: bm
@@ -193,144 +192,156 @@ QQC2.ScrollView {
         }
     }
 
-    component DeviceCard: Kirigami.AbstractCard {
+    // One device: its picture and name, battery, connect or pair, and (once paired) whether it
+    // may connect on its own and Forget.
+    component DeviceCard: SettingsCard {
         id: card
         required property var modelData
+        required property int index
         readonly property var d: modelData
-        Layout.fillWidth: true
 
-        contentItem: ColumnLayout {
-            spacing: Kirigami.Units.smallSpacing
-            RowLayout {
-                spacing: Kirigami.Units.largeSpacing
-                Layout.fillWidth: true
+        title: String(card.d.name)
+        iconName: String(card.d.icon || "") === "" || card.d.icon === "bluetooth" ? "network-bluetooth" : String(card.d.icon)
+        border.width: card.d.connected === true ? 2 : 1
+        border.color: card.d.connected === true ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
+        Accessible.description: String(card.d.kind)
 
-                Kirigami.Icon {
-                    source: String(card.d.icon)
-                    fallback: "bluetooth"
-                    implicitWidth: Kirigami.Units.iconSizes.medium
-                    implicitHeight: Kirigami.Units.iconSizes.medium
-                    Accessible.ignored: true
-                }
-                ColumnLayout {
-                    spacing: 0
-                    Layout.fillWidth: true
-                    UqLabel {
-                        text: String(card.d.name)
-                        font.bold: card.d.connected === true
-                        elide: Text.ElideRight
-                        Layout.fillWidth: true
-                    }
-                    UqLabel {
-                        text: page.subtitle(card.d)
-                        opacity: 0.7
-                        elide: Text.ElideRight
-                        Layout.fillWidth: true
-                    }
-                }
-                QQC2.Button {
-                    text: "Pair"
-                    icon.name: "network-connect"
-                    visible: !card.d.paired && !card.d.working
-                    enabled: page.idle && page.powered
-                    onClicked: bm.pair(String(card.d.path))
-                }
-                QQC2.Button {
-                    text: "Stop"
-                    icon.name: "process-stop"
-                    visible: card.d.working === "pairing"
-                    onClicked: bm.cancelPairing(String(card.d.path))
-                }
-                QQC2.Button {
-                    text: "Connect"
-                    icon.name: "network-connect"
-                    visible: card.d.paired && !card.d.connected && !card.d.working
-                    enabled: page.idle && page.powered
-                    onClicked: bm.connectDevice(String(card.d.path))
-                }
-                QQC2.Button {
-                    text: "Disconnect"
-                    icon.name: "network-disconnect"
-                    visible: card.d.paired && card.d.connected === true
-                    enabled: page.idle
-                    onClicked: bm.disconnectDevice(String(card.d.path))
-                }
-            }
-            RowLayout {
+        actions: [
+            Kirigami.Icon {
+                visible: page.hasBattery(card.d)
+                source: page.hasBattery(card.d) ? page.batteryIcon(card.d.battery) : ""
+                implicitWidth: Kirigami.Units.iconSizes.small
+                implicitHeight: Kirigami.Units.iconSizes.small
+                Accessible.ignored: true
+            },
+            UqLabel {
+                visible: page.hasBattery(card.d)
+                text: page.hasBattery(card.d) ? card.d.battery + "%" : ""
+                Accessible.name: "Battery " + text
+            },
+            QQC2.ToolButton {
+                icon.name: "edit-delete"
                 visible: card.d.paired === true
-                Layout.fillWidth: true
-                QQC2.Switch {
-                    id: trustSwitch
-                    text: "Let it connect without asking"
-                    checked: card.d.trusted === true
-                    enabled: page.idle
-                    onToggled: {
-                        bm.setTrusted(String(card.d.path), trustSwitch.checked);
-                        trustSwitch.checked = Qt.binding(() => card.d.trusted === true);
-                    }
-                }
-                Item {
-                    Layout.fillWidth: true
-                }
-                QQC2.Button {
-                    text: "Forget…"
-                    icon.name: "edit-delete"
-                    enabled: page.idle
-                    onClicked: {
-                        forgetDialog.path = String(card.d.path);
-                        forgetDialog.name = String(card.d.name);
-                        forgetDialog.open();
-                    }
+                enabled: page.idle
+                display: QQC2.AbstractButton.IconOnly
+                Accessible.name: "Forget " + String(card.d.name)
+                QQC2.ToolTip.text: "Forget"
+                QQC2.ToolTip.visible: hovered
+                onClicked: {
+                    forgetDialog.path = String(card.d.path);
+                    forgetDialog.name = String(card.d.name);
+                    forgetDialog.open();
                 }
             }
+        ]
+
+        SettingRow {
+            settingId: card.d.paired && card.index === 0 ? "bluetooth-devices" : ""
+            highlight: App.highlight
+            iconName: card.d.connected === true ? "network-connect" : (card.d.working ? "chronometer" : "network-disconnect")
+            label: page.status(card.d) !== "" ? page.status(card.d) : (card.d.paired ? "Not connected" : String(card.d.kind))
+            Layout.fillWidth: true
+
+            QQC2.BusyIndicator {
+                visible: !!card.d.working
+                running: visible
+                implicitWidth: Kirigami.Units.iconSizes.small
+                implicitHeight: Kirigami.Units.iconSizes.small
+            }
+            QQC2.Button {
+                text: "Pair"
+                icon.name: "network-connect"
+                visible: !card.d.paired && !card.d.working
+                enabled: page.idle && page.powered
+                onClicked: bm.pair(String(card.d.path))
+            }
+            QQC2.Button {
+                text: "Stop"
+                icon.name: "process-stop"
+                visible: card.d.working === "pairing"
+                onClicked: bm.cancelPairing(String(card.d.path))
+            }
+            QQC2.Button {
+                text: "Connect"
+                icon.name: "network-connect"
+                visible: card.d.paired && !card.d.connected && !card.d.working
+                enabled: page.idle && page.powered
+                onClicked: bm.connectDevice(String(card.d.path))
+            }
+            QQC2.Button {
+                text: "Disconnect"
+                icon.name: "network-disconnect"
+                visible: card.d.paired && card.d.connected === true
+                enabled: page.idle
+                onClicked: bm.disconnectDevice(String(card.d.path))
+            }
+        }
+        SwitchRow {
+            visible: card.d.paired === true
+            iconName: "security-high"
+            label: "Connects without asking"
+            help: "It can connect to this computer on its own, without a question each time."
+            value: card.d.trusted === true
+            enabled: page.idle
+            Layout.fillWidth: true
+            onChosen: on => bm.setTrusted(String(card.d.path), on)
         }
     }
 
-    ColumnLayout {
-        width: Math.min(page.availableWidth - Kirigami.Units.largeSpacing * 2, Kirigami.Units.gridUnit * 44)
-        x: Math.max(Kirigami.Units.largeSpacing, (page.availableWidth - width) / 2)
-        spacing: Kirigami.Units.smallSpacing
+    // The main switch, on the title row.
+    headerItems: [
+        SwitchRow {
+            objectName: "powerSwitch"
+            settingId: "bluetooth-power"
+            label: page.powered ? "On" : "Off"
+            highlight: App.highlight
+            visible: page.ready
+            value: page.powered
+            enabled: page.idle
+            Accessible.name: "Bluetooth"
+            onChosen: on => bm.setPowered(on)
+        }
+    ]
 
-        Item {
-            implicitHeight: Kirigami.Units.smallSpacing
-        }
-        UqLabel {
-            text: "Bluetooth"
-            font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.5
-            font.bold: true
-            Accessible.role: Accessible.Heading
-        }
+    banners: [
         ErrorCard {
             objectName: "notAvailable"
             visible: page.loaded && page.snap.available === false
             title: "Not available"
             detail: String(page.snap.text || "")
             Layout.fillWidth: true
-        }
-        UqLabel {
+        },
+        ErrorCard {
             objectName: "noAdapter"
             visible: page.loaded && page.snap.available === true && page.adapter === null
-            text: "This computer has no Bluetooth adapter, or it is switched off in the computer's firmware settings."
-            wrapMode: Text.Wrap
+            title: "No Bluetooth adapter"
+            detail: "This computer has none, or it is switched off in the computer's firmware settings."
             Layout.fillWidth: true
-        }
+        },
         RuleMessage {
             objectName: "bluetoothError"
             negative: true
             closable: false
             lines: bm.error !== "" ? ["That wasn't done: " + bm.error] : []
             Layout.fillWidth: true
-        }
+        },
         RuleMessage {
             id: noticeMessage
             Layout.fillWidth: true
-        }
+        },
         // A code to type on the other device.
         Kirigami.AbstractCard {
             objectName: "displayCode"
             visible: page.display !== null
             Layout.fillWidth: true
-            contentItem: ColumnLayout {
+            contentItem: RowLayout {
+                spacing: Kirigami.Units.largeSpacing * 2
+                Kirigami.Icon {
+                    source: "input-keyboard"
+                    implicitWidth: Kirigami.Units.iconSizes.large
+                    implicitHeight: Kirigami.Units.iconSizes.large
+                    Accessible.ignored: true
+                }
                 UqLabel {
                     text: "On " + String(page.display ? page.display.device : "") + ", type this code and press Enter:"
                     wrapMode: Text.Wrap
@@ -340,91 +351,109 @@ QQC2.ScrollView {
                     text: page.display ? String(page.display.code) : ""
                     font.pointSize: Kirigami.Theme.defaultFont.pointSize * 2.5
                     font.bold: true
-                    Layout.alignment: Qt.AlignHCenter
+                    font.letterSpacing: Kirigami.Units.smallSpacing
                     Accessible.name: "Code " + (page.display ? String(page.display.code).split("").join(" ") : "")
                 }
             }
         }
+    ]
 
-        SwitchRow {
-            settingId: "bluetooth-power"
-            label: "Bluetooth"
-            highlight: App.highlight
-            visible: page.ready
-            value: page.powered
-            enabled: page.idle
-            onChosen: on => bm.setPowered(on)
-            Layout.fillWidth: true
-            Layout.topMargin: Kirigami.Units.largeSpacing
-        }
-        SwitchRow {
-            settingId: "bluetooth-visible"
-            label: "Let other devices find this computer" + (page.ready && page.adapter.name !== "" ? " (as " + String(page.adapter.name) + ")" : "")
-            highlight: App.highlight
-            visible: page.powered
-            value: page.ready && page.adapter.discoverable === true
-            enabled: page.idle
-            onChosen: on => bm.setDiscoverable(on)
-            Layout.fillWidth: true
-        }
+    SettingsTab {
+        id: mineTab
+        title: "My devices"
+        iconName: "network-bluetooth"
 
-        SettingRow {
-            settingId: "bluetooth-devices"
-            label: page.paired.length > 0 ? "Your devices" : "Your devices: none paired yet"
-            highlight: App.highlight
-            visible: page.powered
-            Layout.fillWidth: true
-            Layout.topMargin: Kirigami.Units.largeSpacing
-        }
         Repeater {
             model: page.powered ? page.paired : []
             delegate: DeviceCard {}
         }
+        SettingsCard {
+            visible: page.ready && (!page.powered || page.paired.length === 0)
+            wide: true
+            SettingRow {
+                settingId: page.powered && page.paired.length > 0 ? "" : "bluetooth-devices"
+                highlight: App.highlight
+                iconName: "network-bluetooth"
+                label: page.powered ? "No devices paired yet." : "Bluetooth is off."
+                opacity: 0.8
+                Layout.fillWidth: true
 
-        SettingRow {
-            settingId: "bluetooth-pair"
-            label: page.adapter && page.adapter.discovering ? "Looking for devices…" : "Pair a new device"
-            highlight: App.highlight
-            visible: page.powered
-            Layout.fillWidth: true
-            Layout.topMargin: Kirigami.Units.largeSpacing
-
-            QQC2.BusyIndicator {
-                visible: page.adapter !== null && page.adapter.discovering === true
-                running: visible
-                implicitWidth: Kirigami.Units.iconSizes.small
-                implicitHeight: Kirigami.Units.iconSizes.small
-            }
-            QQC2.Button {
-                objectName: "lookButton"
-                text: "Look for devices"
-                icon.name: "view-refresh"
-                visible: !(page.adapter && page.adapter.discovering)
-                enabled: page.idle
-                onClicked: bm.scan(true)
-            }
-            QQC2.Button {
-                text: "Stop looking"
-                icon.name: "process-stop"
-                visible: !!(page.adapter && page.adapter.discovering)
-                enabled: page.idle
-                onClicked: bm.scan(false)
+                QQC2.Button {
+                    text: "Add a device"
+                    icon.name: "list-add"
+                    visible: page.powered
+                    onClicked: page.show(addTab)
+                }
+                QQC2.Button {
+                    text: "Turn on"
+                    icon.name: "network-bluetooth"
+                    visible: !page.powered
+                    enabled: page.idle
+                    onClicked: bm.setPowered(true)
+                }
             }
         }
-        UqLabel {
-            visible: page.powered
-            text: "Put the device in pairing mode (see its manual), then choose Pair."
-            wrapMode: Text.Wrap
-            opacity: 0.7
-            Layout.fillWidth: true
-            Layout.leftMargin: Kirigami.Units.largeSpacing
+    }
+
+    SettingsTab {
+        id: addTab
+        title: "Add a device"
+        iconName: "list-add"
+
+        SettingsCard {
+            title: "Look for devices"
+            iconName: "edit-find"
+            help: "Put the device in pairing mode (see its manual), then choose Pair."
+
+            SettingRow {
+                settingId: "bluetooth-pair"
+                label: page.adapter && page.adapter.discovering ? "Looking…" : (page.powered ? "Ready" : "Bluetooth is off")
+                iconName: "network-bluetooth"
+                highlight: App.highlight
+                Layout.fillWidth: true
+
+                QQC2.BusyIndicator {
+                    visible: page.adapter !== null && page.adapter.discovering === true
+                    running: visible
+                    implicitWidth: Kirigami.Units.iconSizes.small
+                    implicitHeight: Kirigami.Units.iconSizes.small
+                }
+                QQC2.Button {
+                    objectName: "lookButton"
+                    text: "Look for devices"
+                    icon.name: "view-refresh"
+                    visible: !(page.adapter && page.adapter.discovering)
+                    enabled: page.idle && page.powered
+                    onClicked: bm.scan(true)
+                }
+                QQC2.Button {
+                    text: "Stop looking"
+                    icon.name: "process-stop"
+                    visible: !!(page.adapter && page.adapter.discovering)
+                    enabled: page.idle
+                    onClicked: bm.scan(false)
+                }
+            }
+        }
+        SettingsCard {
+            title: "This computer"
+            iconName: "computer"
+
+            SwitchRow {
+                settingId: "bluetooth-visible"
+                iconName: "visibility"
+                label: "Visible to other devices"
+                help: page.ready && page.adapter.name !== "" ? "Other devices see it as " + String(page.adapter.name) + "." : ""
+                highlight: App.highlight
+                value: page.ready && page.adapter.discoverable === true
+                enabled: page.idle && page.powered
+                onChosen: on => bm.setDiscoverable(on)
+                Layout.fillWidth: true
+            }
         }
         Repeater {
             model: page.powered ? page.nearby : []
             delegate: DeviceCard {}
-        }
-        Item {
-            implicitHeight: Kirigami.Units.largeSpacing
         }
     }
 }

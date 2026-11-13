@@ -132,10 +132,12 @@ async fn blurry_lists_only_xwayland_and_names_the_app() {
     assert_eq!(rows[0]["title"], "main.rs - Code");
     assert_eq!(rows[0]["app_id"], "code.desktop");
     assert_eq!(rows[0]["app_name"], "Visual Studio Code");
+    assert_eq!(rows[0]["app_icon"], "vscode");
     assert_eq!(rows[0]["has_fix"], false);
     assert_eq!(rows[1]["class"], "mystery-app");
     assert_eq!(rows[1]["app_id"], Value::Null);
     assert_eq!(rows[1]["app_name"], Value::Null);
+    assert_eq!(rows[1]["app_icon"], "");
     assert_eq!(rows[1]["has_fix"], false);
 
     run(&page, save(code_fix())).await;

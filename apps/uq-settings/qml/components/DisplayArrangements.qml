@@ -116,16 +116,12 @@ ColumnLayout {
                 wrapMode: Text.Wrap
                 Layout.fillWidth: true
             }
-            QQC2.Button {
+            ChoiceButton {
                 id: offerBtn
                 objectName: "offerButton"
                 enabled: root.idle
                 Accessible.name: root.offerButtonText
-                contentItem: UqLabel {
-                    text: root.offerButtonText
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
+                label: root.offerButtonText
                 onClicked: root.offerClicked()
                 Keys.onReturnPressed: root.offerClicked()
                 Keys.onEnterPressed: root.offerClicked()
@@ -135,6 +131,7 @@ ColumnLayout {
 
     SettingRow {
         settingId: "display-remember"
+        iconName: "document-save"
         label: "Remember for these screens"
         highlight: root.highlight
         enabled: root.idle
@@ -144,6 +141,7 @@ ColumnLayout {
             id: rememberBtn
             objectName: "rememberButton"
             text: "Remember…"
+            icon.name: "document-save"
             Accessible.name: "Remember these screens"
             onClicked: root.startRemember()
             Keys.onReturnPressed: root.startRemember()
@@ -151,11 +149,6 @@ ColumnLayout {
         }
     }
 
-    UqLabel {
-        text: "Saved arrangements"
-        font.bold: true
-        Layout.topMargin: Kirigami.Units.smallSpacing
-    }
     UqLabel {
         objectName: "noArrangements"
         visible: root.arrangements.length === 0
@@ -185,6 +178,12 @@ ColumnLayout {
             Layout.fillWidth: true
             Layout.leftMargin: Kirigami.Units.largeSpacing
 
+            Kirigami.Icon {
+                source: row.modelData.current === true ? "emblem-checked" : "preferences-desktop-display-randr"
+                implicitWidth: Kirigami.Units.iconSizes.smallMedium
+                implicitHeight: Kirigami.Units.iconSizes.smallMedium
+                Accessible.ignored: true
+            }
             ColumnLayout {
                 spacing: 0
                 Layout.fillWidth: true
@@ -208,6 +207,10 @@ ColumnLayout {
                 id: renameBtn
                 objectName: "renameButton"
                 text: "Rename"
+                icon.name: "edit-rename"
+                display: QQC2.AbstractButton.IconOnly
+                QQC2.ToolTip.visible: hovered
+                QQC2.ToolTip.text: "Rename"
                 enabled: root.idle
                 Accessible.name: "Rename " + row.modelData.name
                 onClicked: root.startRename(row.modelData.id, String(row.modelData.name))
@@ -216,6 +219,10 @@ ColumnLayout {
                 id: forgetBtn
                 objectName: "forgetButton"
                 text: "Forget"
+                icon.name: "edit-delete"
+                display: QQC2.AbstractButton.IconOnly
+                QQC2.ToolTip.visible: hovered
+                QQC2.ToolTip.text: "Forget"
                 enabled: root.idle
                 Accessible.name: "Forget " + row.modelData.name
                 onClicked: root.askForget(row.modelData.id, String(row.modelData.name))
@@ -226,6 +233,7 @@ ColumnLayout {
     SwitchRow {
         id: autoSwitchRow
         settingId: "display-arrangements-auto"
+        iconName: "media-playlist-shuffle"
         label: "Switch arrangements when screens change"
         highlight: root.highlight
         enabled: root.idle

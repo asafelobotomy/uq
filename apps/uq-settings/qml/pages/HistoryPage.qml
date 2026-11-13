@@ -1,8 +1,10 @@
-// History: every change uqd journalled, grouped by day and filterable by page, each with an Undo
-// button; the restore points, with Restore (after a confirmation) and Delete for the ones the user
-// saved; and a field to save a new one. It shares HistoryModel (and so the undo stack) with the
-// window's Ctrl+Z and its "Changed this session" sheet; the window shows the confirmations and
-// errors. Every summary and name is uqd's text or the user's, shown through UqLabel.
+// History: two tabs. Restore points: save a new one, and each saved point as a card with Restore
+// (after a confirmation) and, for the ones the user saved, Delete (after a confirmation too).
+// Changes: every change uqd journalled, one card per day, each change with its page's icon and an
+// Undo button, filtered by page with a row of page icons. It shares HistoryModel (and so the undo
+// stack) with the window's Ctrl+Z and its "Changed this session" sheet; the window shows the
+// confirmations and errors. Every summary and name is uqd's text or the user's, shown through
+// UqLabel.
 import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
@@ -10,7 +12,7 @@ import org.kde.kirigami as Kirigami
 import org.uq.settings
 import "../components"
 
-QQC2.ScrollView {
+SettingsPage {
     id: page
 
     readonly property var snap: {
@@ -23,7 +25,7 @@ QQC2.ScrollView {
     readonly property var entries: snap.entries || []
     readonly property var points: snap.points || []
     readonly property bool ready: App.uqdUp
-    /// The pages that make journalled changes, from the registry: `[{id, name, domains}]`.
+    /// The pages that make journalled changes, from the registry: `[{id, name, icon, domains}]`.
     readonly property var filterPages: {
         try {
             return JSON.parse(App.pagesJson || "[]").filter(p => (p.domains || []).length > 0);
@@ -46,14 +48,21 @@ QQC2.ScrollView {
         return groups;
     }
 
+    function pageEntry(domain) {
+        return page.filterPages.find(p => p.domains.indexOf(domain) >= 0) || null;
+    }
     /// The id of the page that changes `domain`, "" when none does.
     function pageOf(domain) {
-        const p = page.filterPages.find(p => p.domains.indexOf(domain) >= 0);
+        const p = page.pageEntry(domain);
         return p ? p.id : "";
     }
     function pageName(domain) {
-        const p = page.filterPages.find(p => p.domains.indexOf(domain) >= 0);
+        const p = page.pageEntry(domain);
         return p ? p.name : "";
+    }
+    function pageIcon(domain) {
+        const p = page.pageEntry(domain);
+        return p && p.icon ? p.icon : "configure";
     }
     /// "Today", "Yesterday" or the local date of unix time `t`.
     function dayLabel(t) {
@@ -87,15 +96,28 @@ QQC2.ScrollView {
         }
         return "Saved automatically";
     }
+    /// The icon that says how a restore point was made.
+    function kindIcon(kind) {
+        if (kind === "manual")
+            return "user-identity";
+        switch (kind && kind.auto) {
+        case "before_restore":
+            return "document-revert";
+        case "before_profile":
+            return "bookmarks";
+        case "before_import":
+            return "document-import";
+        case "new_version":
+            return "system-software-install";
+        }
+        return "chronometer";
+    }
     /// Read everything again; Main calls it when the window comes back to the front.
     function refresh() {
         HistoryModel.refresh();
     }
 
     Component.onCompleted: HistoryModel.refresh()
-    Accessible.role: Accessible.Pane
-    Accessible.name: "History"
-    contentWidth: availableWidth
 
     Kirigami.PromptDialog {
         id: confirmRestore
@@ -103,26 +125,33 @@ QQC2.ScrollView {
         property string pointId
 
         title: "Restore these settings?"
-        subtitle: "Every setting goes back to how it was when this restore point was saved. uQ saves a restore point of your current settings first, so you can come back: it appears at the top of this list, marked \u201cSaved automatically before a restore\u201d."
+        subtitle: "Every setting goes back to how it was when this restore point was saved. uQ saves a restore point of your current settings first, so you can come back: it appears first in the list, marked “Saved automatically before a restore”."
         standardButtons: Kirigami.Dialog.Ok | Kirigami.Dialog.Cancel
         onAccepted: HistoryModel.restore(confirmRestore.pointId)
     }
 
-    ColumnLayout {
-        id: column
-        width: Math.min(page.availableWidth - Kirigami.Units.largeSpacing * 2, Kirigami.Units.gridUnit * 40)
-        x: Math.max(Kirigami.Units.largeSpacing, (page.availableWidth - width) / 2)
-        spacing: Kirigami.Units.smallSpacing
+    Kirigami.PromptDialog {
+        id: confirmDelete
 
-        Item {
-            implicitHeight: Kirigami.Units.smallSpacing
-        }
-        UqLabel {
-            text: "History"
-            font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.5
-            font.bold: true
-            Accessible.role: Accessible.Heading
-        }
+        property string pointId
+
+        title: "Delete this restore point?"
+        subtitle: "Your settings stay as they are now. This can't be undone."
+        standardButtons: Kirigami.Dialog.Cancel
+        customFooterActions: [
+            Kirigami.Action {
+                text: "Delete"
+                icon.name: "edit-delete"
+                enabled: page.ready && !HistoryModel.busy
+                onTriggered: {
+                    HistoryModel.deleteRestorePoint(confirmDelete.pointId);
+                    confirmDelete.close();
+                }
+            }
+        ]
+    }
+
+    banners: [
         ErrorCard {
             objectName: "uqdDown"
             visible: !page.ready
@@ -130,143 +159,189 @@ QQC2.ScrollView {
             detail: "Start the uQ desktop service to see and undo changes."
             Layout.fillWidth: true
         }
+    ]
 
-        UqLabel {
-            text: "Restore points"
-            font.bold: true
-            Layout.topMargin: Kirigami.Units.largeSpacing
-        }
-        SettingRow {
-            settingId: "restore-points"
-            label: "Save a restore point"
-            highlight: App.highlight
-            enabled: page.ready
-            Layout.fillWidth: true
+    SettingsTab {
+        title: "Restore points"
+        iconName: "document-revert"
 
-            QQC2.TextField {
-                id: pointName
-                objectName: "pointName"
-                maximumLength: 100
-                placeholderText: "Name, such as Before the party"
-                Accessible.name: "Name of the new restore point"
-                Layout.preferredWidth: Kirigami.Units.gridUnit * 14
-                onAccepted: saveButton.clicked()
-            }
-            QQC2.Button {
-                id: saveButton
-                objectName: "saveRestorePoint"
-                text: "Save"
-                icon.name: "document-save"
-                Accessible.name: "Save a restore point"
-                enabled: page.ready && !HistoryModel.busy && pointName.text.trim() !== ""
-                onClicked: {
-                    if (!enabled)
-                        return;
-                    HistoryModel.saveRestorePoint(pointName.text);
-                    pointName.clear();
+        SettingsCard {
+            title: "New restore point"
+            iconName: "document-save"
+            help: "uQ also saves one automatically before the first change of each day."
+
+            SettingRow {
+                settingId: "restore-points"
+                label: "Name"
+                highlight: App.highlight
+                enabled: page.ready
+                Layout.fillWidth: true
+
+                QQC2.TextField {
+                    id: pointName
+                    objectName: "pointName"
+                    maximumLength: 100
+                    placeholderText: "Such as Before the party"
+                    Accessible.name: "Name of the new restore point"
+                    Layout.preferredWidth: Kirigami.Units.gridUnit * 14
+                    onAccepted: saveButton.clicked()
+                }
+                QQC2.Button {
+                    id: saveButton
+                    objectName: "saveRestorePoint"
+                    text: "Save"
+                    icon.name: "document-save"
+                    Accessible.name: "Save a restore point"
+                    enabled: page.ready && !HistoryModel.busy && pointName.text.trim() !== ""
+                    onClicked: {
+                        if (!enabled)
+                            return;
+                        HistoryModel.saveRestorePoint(pointName.text);
+                        pointName.clear();
+                    }
                 }
             }
+            UqLabel {
+                objectName: "noPoints"
+                text: "No restore points yet."
+                visible: page.points.length === 0
+                opacity: 0.7
+                Layout.leftMargin: Kirigami.Units.largeSpacing
+            }
         }
-        UqLabel {
-            text: "No restore points yet. uQ saves one automatically before the first change of each day."
-            visible: page.points.length === 0
-            opacity: 0.7
-            wrapMode: Text.Wrap
-            Layout.leftMargin: Kirigami.Units.largeSpacing * 2
-            Layout.fillWidth: true
-        }
+
+        // One card per restore point, newest first.
         Repeater {
             model: page.points
-            delegate: RowLayout {
+            delegate: SettingsCard {
                 id: point
 
                 required property var modelData
                 readonly property bool manual: modelData.kind === "manual"
 
-                spacing: Kirigami.Units.largeSpacing
-                Layout.leftMargin: Kirigami.Units.largeSpacing * 2
-                Layout.fillWidth: true
+                objectName: "restorePoint"
+                title: String(modelData.name)
+                iconName: page.kindIcon(modelData.kind)
+                help: page.kindText(modelData.kind)
 
-                ColumnLayout {
-                    spacing: 0
+                actions: [
+                    QQC2.Button {
+                        text: "Restore"
+                        icon.name: "edit-undo"
+                        Accessible.name: "Restore " + point.modelData.name
+                        enabled: page.ready && !HistoryModel.busy
+                        onClicked: {
+                            confirmRestore.pointId = point.modelData.id;
+                            confirmRestore.open();
+                        }
+                    },
+                    QQC2.ToolButton {
+                        objectName: "deletePoint"
+                        text: "Delete"
+                        icon.name: "edit-delete"
+                        display: QQC2.AbstractButton.IconOnly
+                        visible: point.manual
+                        Accessible.name: "Delete " + point.modelData.name
+                        enabled: page.ready && !HistoryModel.busy
+                        QQC2.ToolTip.text: "Delete"
+                        QQC2.ToolTip.visible: hovered
+                        QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+                        onClicked: {
+                            confirmDelete.pointId = point.modelData.id;
+                            confirmDelete.open();
+                        }
+                    }
+                ]
+
+                RowLayout {
+                    spacing: Kirigami.Units.smallSpacing
                     Layout.fillWidth: true
+
+                    Kirigami.Icon {
+                        source: "view-calendar-day"
+                        implicitWidth: Kirigami.Units.iconSizes.small
+                        implicitHeight: Kirigami.Units.iconSizes.small
+                        Accessible.ignored: true
+                    }
                     UqLabel {
-                        text: point.modelData.name
+                        text: page.dayLabel(point.modelData.time) + ", " + page.timeOf(point.modelData.time)
+                        opacity: 0.7
                         elide: Text.ElideRight
                         Layout.fillWidth: true
                     }
-                    UqLabel {
-                        text: page.dayLabel(point.modelData.time) + ", " + page.timeOf(point.modelData.time) + ". " + page.kindText(point.modelData.kind)
-                        opacity: 0.7
-                        wrapMode: Text.Wrap
-                        Layout.fillWidth: true
-                    }
-                }
-                QQC2.Button {
-                    text: "Restore"
-                    icon.name: "edit-undo"
-                    Accessible.name: "Restore " + point.modelData.name
-                    enabled: page.ready && !HistoryModel.busy
-                    onClicked: {
-                        confirmRestore.pointId = point.modelData.id;
-                        confirmRestore.open();
-                    }
-                }
-                QQC2.Button {
-                    text: "Delete"
-                    icon.name: "edit-delete"
-                    visible: point.manual
-                    Accessible.name: "Delete " + point.modelData.name
-                    enabled: page.ready && !HistoryModel.busy
-                    onClicked: HistoryModel.deleteRestorePoint(point.modelData.id)
                 }
             }
         }
+    }
 
-        UqLabel {
-            text: "Changes"
-            font.bold: true
-            Layout.topMargin: Kirigami.Units.largeSpacing * 2
-        }
-        SettingRow {
-            settingId: "history"
-            label: "Show changes made on"
-            highlight: App.highlight
-            enabled: page.ready
-            Layout.fillWidth: true
+    SettingsTab {
+        title: "Changes"
+        iconName: "view-history"
 
-            UqComboBox {
-                id: filter
-                objectName: "pageFilter"
-                model: ["All pages"].concat(page.filterPages.map(p => p.name))
-                currentIndex: 0
-                Accessible.name: "Show changes made on"
-                onActivated: index => page.filterPage = index === 0 ? "" : page.filterPages[index - 1].id
+        // Which page's changes: a row of page icons, "All" first.
+        SettingsCard {
+            wide: true
+
+            SettingRow {
+                settingId: "history"
+                iconName: "view-filter"
+                label: "Show changes made on"
+                highlight: App.highlight
+                enabled: page.ready
+                Layout.fillWidth: true
+
+                QQC2.ButtonGroup {
+                    id: filterGroup
+                }
+                QQC2.ToolButton {
+                    objectName: "filterAll"
+                    text: "All pages"
+                    icon.name: "view-list-icons"
+                    display: QQC2.AbstractButton.TextBesideIcon
+                    checkable: true
+                    checked: page.filterPage === ""
+                    QQC2.ButtonGroup.group: filterGroup
+                    onClicked: page.filterPage = ""
+                }
+                Repeater {
+                    model: page.filterPages
+                    delegate: QQC2.ToolButton {
+                        required property var modelData
+
+                        objectName: "filter-" + modelData.id
+                        icon.name: modelData.icon || "configure"
+                        display: QQC2.AbstractButton.IconOnly
+                        checkable: true
+                        checked: page.filterPage === modelData.id
+                        QQC2.ButtonGroup.group: filterGroup
+                        Accessible.name: modelData.name
+                        QQC2.ToolTip.text: modelData.name
+                        QQC2.ToolTip.visible: hovered
+                        QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+                        onClicked: page.filterPage = modelData.id
+                    }
+                }
+            }
+            UqLabel {
+                objectName: "noChanges"
+                text: page.filterPage === "" ? "No changes in the last 30 days." : "No changes on this page in the last 30 days."
+                visible: page.days.length === 0
+                opacity: 0.7
+                Layout.leftMargin: Kirigami.Units.largeSpacing
             }
         }
-        UqLabel {
-            text: page.filterPage === "" ? "No changes in the last 30 days." : "No changes on this page in the last 30 days."
-            visible: page.days.length === 0
-            opacity: 0.7
-            Layout.leftMargin: Kirigami.Units.largeSpacing * 2
-        }
+
+        // The timeline: one card per day, each change with its page's icon and time.
         Repeater {
             model: page.days
-            delegate: ColumnLayout {
+            delegate: SettingsCard {
                 id: day
 
                 required property var modelData
 
-                spacing: Kirigami.Units.smallSpacing
-                Layout.fillWidth: true
+                title: day.modelData.day
+                iconName: "view-calendar-day"
 
-                UqLabel {
-                    text: day.modelData.day
-                    font.bold: true
-                    opacity: 0.8
-                    Accessible.role: Accessible.Heading
-                    Layout.topMargin: Kirigami.Units.largeSpacing
-                }
                 Repeater {
                     model: day.modelData.entries
                     delegate: RowLayout {
@@ -275,9 +350,29 @@ QQC2.ScrollView {
                         required property var modelData
 
                         spacing: Kirigami.Units.largeSpacing
-                        Layout.leftMargin: Kirigami.Units.largeSpacing * 2
                         Layout.fillWidth: true
+                        Layout.leftMargin: Kirigami.Units.smallSpacing
 
+                        UqLabel {
+                            text: page.timeOf(entry.modelData.time)
+                            opacity: 0.7
+                            Layout.alignment: Qt.AlignTop
+                            Layout.topMargin: Kirigami.Units.smallSpacing / 2
+                        }
+                        Kirigami.Icon {
+                            source: page.pageIcon(entry.modelData.domain)
+                            implicitWidth: Kirigami.Units.iconSizes.smallMedium
+                            implicitHeight: Kirigami.Units.iconSizes.smallMedium
+                            Layout.alignment: Qt.AlignTop
+                            Accessible.name: page.pageName(entry.modelData.domain)
+
+                            HoverHandler {
+                                id: iconHover
+                            }
+                            QQC2.ToolTip.text: page.pageName(entry.modelData.domain)
+                            QQC2.ToolTip.visible: iconHover.hovered && page.pageName(entry.modelData.domain) !== ""
+                            QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+                        }
                         ColumnLayout {
                             spacing: 0
                             Layout.fillWidth: true
@@ -289,7 +384,7 @@ QQC2.ScrollView {
                             RowLayout {
                                 spacing: Kirigami.Units.smallSpacing
                                 UqLabel {
-                                    text: page.timeOf(entry.modelData.time) + (page.pageName(entry.modelData.domain) !== "" ? ", " + page.pageName(entry.modelData.domain) + "," : ",")
+                                    text: "Changed"
                                     opacity: 0.7
                                 }
                                 OriginLabel {
@@ -299,19 +394,21 @@ QQC2.ScrollView {
                                 }
                             }
                         }
-                        QQC2.Button {
+                        QQC2.ToolButton {
                             text: "Undo"
                             icon.name: "edit-undo"
+                            display: QQC2.AbstractButton.IconOnly
                             Accessible.name: "Undo " + entry.modelData.summary
                             enabled: page.ready && !HistoryModel.busy
+                            Layout.alignment: Qt.AlignTop
+                            QQC2.ToolTip.text: "Undo"
+                            QQC2.ToolTip.visible: hovered
+                            QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
                             onClicked: HistoryModel.undo(entry.modelData.id, false)
                         }
                     }
                 }
             }
-        }
-        Item {
-            implicitHeight: Kirigami.Units.largeSpacing
         }
     }
 }
