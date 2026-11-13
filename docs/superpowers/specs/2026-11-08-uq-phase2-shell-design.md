@@ -445,7 +445,7 @@ which maps a closed set of actions to Lua. All string arguments go through the P
 | Action | Lua |
 |---|---|
 | `focus_workspace {id}` | `hl.dsp.focus({ workspace = <int> })` |
-| `focus_window {address}` | `hl.dsp.focus({ window = "address:0x…" })` |
+| `focus_window {address, keep_pointer?}` | `hl.dsp.focus({ window = "address:0x…" })`; with `keep_pointer: true` the bridge reads `j/cursorpos` first and sends `hl.dsp.cursor.move({ x, y })` after, undoing the focus warp (screen-edge indicators) |
 | `close {address}` | `hl.dsp.window.close({ window = … })` |
 | `toggle_float {address}` | `hl.dsp.window.float({ action = "toggle", window = … })` |
 | `pin {address}` | `hl.dsp.window.pin({ window = … })` |

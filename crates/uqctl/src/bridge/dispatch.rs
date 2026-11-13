@@ -8,7 +8,8 @@
 //! and `pin` take `action` toggle/enable/disable (`parseToggleStr`), `fullscreen` takes `mode`
 //! fullscreen/maximized, `window.move` takes `workspace` and `follow` (false = silent), `dpms`
 //! takes `action` on/off, and `window.tag` takes `tag` where a leading `+` sets, `-` unsets and
-//! no prefix toggles (`CTagKeeper::applyTag`).
+//! no prefix toggles (`CTagKeeper::applyTag`). `cursor.move` takes `x` and `y` in global layout
+//! coordinates (checked live on 0.57.2).
 
 use serde_json::Value;
 use uq_core::lua::lua_string;
@@ -50,6 +51,10 @@ pub enum Action {
     },
     FocusWindow {
         address: String,
+        /// Put the pointer back where it was after focusing: Hyprland warps it to the focused
+        /// window unless `cursor:no_warps` is set, which would pull it off a screen-edge
+        /// indicator mid-gesture.
+        keep_pointer: bool,
     },
     Close {
         address: String,
@@ -125,6 +130,10 @@ impl Action {
             },
             "focus_window" => Action::FocusWindow {
                 address: address(a)?,
+                keep_pointer: match a.get("keep_pointer") {
+                    None => false,
+                    Some(v) => v.as_bool().ok_or("keep_pointer must be a boolean")?,
+                },
             },
             "close" => Action::Close {
                 address: address(a)?,
@@ -173,7 +182,7 @@ impl Action {
             Action::FocusWorkspace { id } => {
                 vec![d(format!("hl.dsp.focus({{ workspace = {id} }})"))]
             }
-            Action::FocusWindow { address } => {
+            Action::FocusWindow { address, .. } => {
                 vec![d(format!("hl.dsp.focus({{ window = {} }})", win(address)))]
             }
             Action::Close { address } => vec![d(format!(
@@ -227,6 +236,21 @@ fn move_lua(address: &str, ws: &WsTarget) -> String {
     )
 }
 
+/// Move the pointer to global layout coordinates `(x, y)`.
+fn cursor_move_lua(x: i64, y: i64) -> String {
+    format!("return hl.dispatch(hl.dsp.cursor.move({{ x = {x}, y = {y} }}))")
+}
+
+/// The pointer position from Hyprland's `j/cursorpos` reply (`{"x": …, "y": …}`).
+fn parse_cursorpos(reply: &str) -> Option<(i64, i64)> {
+    let v: Value = serde_json::from_str(reply).ok()?;
+    let n = |k: &str| {
+        let f = v.get(k)?.as_f64()?;
+        f.is_finite().then(|| f.round() as i64)
+    };
+    Some((n("x")?, n("y")?))
+}
+
 fn tag_lua(address: &str, tag: &str) -> String {
     format!(
         "return hl.dispatch(hl.dsp.window.tag({{ tag = {}, window = {} }}))",
@@ -235,15 +259,32 @@ fn tag_lua(address: &str, tag: &str) -> String {
     )
 }
 
-/// Send every statement; stop at the first one Hyprland rejects.
+fn eval_err(e: CompositorError) -> String {
+    match e {
+        CompositorError::NotRunning => "Hyprland is not running".into(),
+        CompositorError::Rejected(msg) => msg,
+        e => e.to_string(),
+    }
+}
+
+/// Send every statement; stop at the first one Hyprland rejects. With `keep_pointer`, the
+/// pointer is read first and moved back afterwards (best effort: a failed read just skips it).
 pub async fn run(hypr: &HyprSocket, action: &Action) -> Result<(), String> {
+    let restore = match action {
+        Action::FocusWindow {
+            keep_pointer: true, ..
+        } => hypr
+            .request("j/cursorpos")
+            .await
+            .ok()
+            .and_then(|r| parse_cursorpos(&r)),
+        _ => None,
+    };
     for lua in action.to_lua() {
-        match hypr.eval(&lua).await {
-            Ok(()) => {}
-            Err(CompositorError::NotRunning) => return Err("Hyprland is not running".into()),
-            Err(CompositorError::Rejected(msg)) => return Err(msg),
-            Err(e) => return Err(e.to_string()),
-        }
+        hypr.eval(&lua).await.map_err(eval_err)?;
+    }
+    if let Some((x, y)) = restore {
+        hypr.eval(&cursor_move_lua(x, y)).await.map_err(eval_err)?;
     }
     Ok(())
 }
@@ -379,6 +420,41 @@ mod tests {
     }
 
     #[test]
+    fn focus_window_keep_pointer() {
+        let w = r#""address:0x55d0c0ffee""#;
+        let plain = format!("return hl.dispatch(hl.dsp.focus({{ window = {w} }}))");
+        let a = Action::from_call("focus_window", &json!({"address": A, "keep_pointer": true}))
+            .unwrap();
+        assert_eq!(
+            a,
+            Action::FocusWindow {
+                address: A.into(),
+                keep_pointer: true
+            }
+        );
+        assert_eq!(a.to_lua(), [plain]);
+        let a = Action::from_call("focus_window", &json!({"address": A})).unwrap();
+        assert!(matches!(
+            a,
+            Action::FocusWindow {
+                keep_pointer: false,
+                ..
+            }
+        ));
+        assert!(
+            Action::from_call("focus_window", &json!({"address": A, "keep_pointer": 1})).is_err()
+        );
+        assert_eq!(
+            cursor_move_lua(-12, 340),
+            "return hl.dispatch(hl.dsp.cursor.move({ x = -12, y = 340 }))"
+        );
+        assert_eq!(parse_cursorpos(r#"{"x": 0, "y": 250}"#), Some((0, 250)));
+        assert_eq!(parse_cursorpos(r#"{"x": 10.6, "y": -3.2}"#), Some((11, -3)));
+        assert_eq!(parse_cursorpos(r#"{"x": 1}"#), None);
+        assert_eq!(parse_cursorpos("0, 250"), None);
+    }
+
+    #[test]
     fn rejects_unknown_action() {
         let e = Action::from_call("kill", &json!({"address": A})).unwrap_err();
         assert!(e.contains("unknown action"), "{e}");
@@ -423,7 +499,10 @@ mod tests {
             ("dpms", json!({"on": true})),
             ("dpms", json!({"on": false})),
         ];
-        let mut body = String::new();
+        let mut body = format!(
+            "hl.on(\"hyprland.start\", function() {} end)\n",
+            cursor_move_lua(0, 250)
+        );
         for (name, args) in &all {
             for stmt in Action::from_call(name, args).unwrap().to_lua() {
                 body.push_str(&format!(

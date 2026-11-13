@@ -57,6 +57,20 @@ All notable changes to uQ are listed here. The format follows
   **By pin**, **By system usage** (processor and memory) or **By name**, each either way round.
 - **The app menu island shows pinned apps that aren't open.** Open an app and it moves to a pill
   on Open windows; close its last window and it comes back.
+- **The window beside this one, at the screen's edges.** Push the pointer against the left or
+  right edge of a screen, even over a fullscreen app, and the edge lights up with a small tab
+  showing the icon of the window on that side. Click, or turn the wheel, to go there: the
+  scrolling layout scrolls to it, and past the last window the tab offers the nearest workspace
+  on that screen with windows in it (its number is shown). Nothing shows when there is nothing
+  on that side, on an edge shared with another screen, or while locked. On the Shell page of
+  Settings, **Show the window beside this one at the screen's edges** turns it off, and **Show
+  the window's title on the tab** adds the title (hidden while the screen is shared). **Show it
+  as: a slice of the window** swaps the tab for a strip of the neighbouring window itself, its
+  near edge peeking in with its rounded corners and border, as the scrolling layout shows the
+  column beside the one in view. It stays at the edge while a fullscreen or maximized window
+  hides its neighbours, so every window can still be reached with a click or the wheel, and
+  its border takes the accent colour when you point at it. While the screen is shared the
+  slice shows the app icon instead of the window.
 
 ### Changed
 
