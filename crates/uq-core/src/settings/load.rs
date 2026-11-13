@@ -130,6 +130,12 @@ impl Settings {
             Err(e) => errors.push(e),
         }
         out.shell = self.shell.clone().sanitised();
+        if out.shell.bar.is_none() {
+            out.shell.bar = Some(super::BarLayout::from_islands(
+                &out.shell.islands,
+                out.weather_location.is_some(),
+            ));
+        }
         let (monitors, repaired) = self.monitors.clone().sanitised();
         errors.extend(repaired);
         out.monitors = monitors;

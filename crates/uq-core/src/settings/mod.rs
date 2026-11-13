@@ -6,6 +6,7 @@ use serde_json::Value;
 pub(crate) use load::{check_kept, lenient};
 
 mod appearance;
+pub mod bar;
 mod input;
 mod layouts;
 mod load;
@@ -15,6 +16,7 @@ pub mod provenance;
 mod shell;
 mod wallpaper;
 pub use appearance::{Appearance, valid_theme_name};
+pub use bar::{BarItem, BarLayout, BarOptions};
 pub use input::{
     DeviceOverride, InputSettings, KbLayout, KeyboardSettings, TouchpadSettings, input_summary,
     valid_device_name, valid_layout, valid_switch_combo, valid_variant,
@@ -369,7 +371,13 @@ impl Settings {
                 check_kept(domain, &value, Some(&parsed))?;
                 self.look = l.normalised()?;
             }
-            "shell" => self.shell = ShellSettings::from_section(&value)?,
+            "shell" => {
+                let mut sh = ShellSettings::from_section(&value)?;
+                if sh.bar.is_none() {
+                    sh.bar = self.shell.bar.clone();
+                }
+                self.shell = sh;
+            }
             "monitors" => self.monitors = Monitors::from_section(&value)?,
             "input" => self.set_input(&value)?,
             _ => return Err(SettingError::UnknownKey(domain.to_string())),
