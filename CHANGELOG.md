@@ -100,6 +100,9 @@ All notable changes to uQ are listed here. The format follows
 
 ### Fixed
 
+- **Packaging metadata matches the PKGBUILD again.** `.SRCINFO` now lists `kcolorscheme` and
+  `kconfig` (build and runtime), and the packaging test checks the whole `depends` array for
+  `polkit` instead of one exact line.
 - **An app's bar or quick-settings widget runs its new code after a package update.** The shell
   kept the widget's old QML until it restarted. The bridge now sends a digest of each widget's
   files, and when it changes the shell loads the widget afresh.
