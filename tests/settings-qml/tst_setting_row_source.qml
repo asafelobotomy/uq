@@ -125,7 +125,10 @@ TestCase {
         compare(none.implicitHeight, bare.implicitHeight);
         compare(uq.implicitHeight, bare.implicitHeight);
         const themed = make({ source: "theme", detail: null });
-        verify(themed.implicitHeight > bare.implicitHeight, "a source line adds height");
+        // A source line needs room for two lines; the even row height may already give it.
+        verify(themed.implicitHeight >= bare.implicitHeight, "a source line never shrinks the row");
+        verify(themed.implicitHeight >= label.implicitHeight * 2 + Kirigami.Units.smallSpacing * 2,
+               "a source line fits under the label");
     }
 
     function test_source_changes_follow() {
