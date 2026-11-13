@@ -1,5 +1,5 @@
 // Wallpaper: an image or a folder slideshow, how it fits, and the background colour, for all
-// displays or for one. Everything is read from and written to uqd through WallpaperModel; a
+// displays or for one (picked from a row of display chips), beside a large preview. Everything is read from and written to uqd through WallpaperModel; a
 // refused change shows uqd's message and the controls go back to the last good value.
 import QtQuick
 import QtQuick.Controls as QQC2
@@ -8,7 +8,7 @@ import org.kde.kirigami as Kirigami
 import org.uq.settings
 import "../components"
 
-QQC2.ScrollView {
+SettingsPage {
     id: page
 
     readonly property var snap: {
@@ -25,33 +25,41 @@ QQC2.ScrollView {
     property string selected: "*"
     /// "All displays", the connected screens, then saved entries for displays that aren't connected.
     readonly property var displays: {
-        const list = [{ name: "*", title: "All displays" }];
+        const list = [{ name: "*", title: "All displays", connected: true }];
         const seen = { "*": true };
         for (const s of Qt.application.screens) {
             if (!seen[s.name]) {
                 seen[s.name] = true;
-                list.push({ name: s.name, title: s.name });
+                list.push({ name: s.name, title: s.name || "Display " + list.length, connected: true });
             }
         }
         for (const name of Object.keys(outputs).sort()) {
             if (!seen[name]) {
                 seen[name] = true;
-                list.push({ name: name, title: name + " (not connected)" });
+                list.push({ name: name, title: name, connected: false });
             }
         }
-        return list.map(d => ({
-            name: d.name,
-            title: d.name !== "*" && outputs[d.name] ? d.title + " — own wallpaper" : d.title
-        }));
+        return list.map(d => Object.assign(d, { own: d.name !== "*" && outputs[d.name] !== undefined }));
     }
     readonly property bool hasOwn: outputs[selected] !== undefined
+    /// The selected display's shape (the first screen's for All displays or one not connected).
+    readonly property real aspect: {
+        const screens = Qt.application.screens;
+        const s = screens.find(x => x.name === page.selected) || screens[0];
+        return s && s.height > 0 ? s.width / s.height : 16 / 9;
+    }
+    /// The theme's background, what the wallpaper shows without a colour of its own.
+    readonly property var tokens: {
+        try {
+            return JSON.parse(App.themeJson || "{}");
+        } catch (e) {
+            return {};
+        }
+    }
     /// What the editor shows: the display's own entry, else the one for all displays.
     readonly property var shown: outputs[selected] || (selected !== "*" ? outputs["*"] : undefined) || {}
 
     Component.onCompleted: wm.refresh()
-    Accessible.role: Accessible.Pane
-    Accessible.name: "Wallpaper"
-    contentWidth: availableWidth
 
     WallpaperModel {
         id: wm
@@ -65,28 +73,14 @@ QQC2.ScrollView {
         }
     }
 
-    ColumnLayout {
-        id: column
-        width: Math.min(page.availableWidth - Kirigami.Units.largeSpacing * 2, Kirigami.Units.gridUnit * 40)
-        x: Math.max(Kirigami.Units.largeSpacing, (page.availableWidth - width) / 2)
-        spacing: Kirigami.Units.smallSpacing
-
-        Item {
-            implicitHeight: Kirigami.Units.smallSpacing
-        }
-        UqLabel {
-            text: "Wallpaper"
-            font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.5
-            font.bold: true
-            Accessible.role: Accessible.Heading
-        }
+    banners: [
         ErrorCard {
             objectName: "uqdDown"
             visible: !page.ready
             title: "uQ's settings service isn't running"
             detail: "Start the uQ desktop service to change these settings."
             Layout.fillWidth: true
-        }
+        },
         ErrorCard {
             objectName: "changeError"
             visible: wm.error !== ""
@@ -94,62 +88,133 @@ QQC2.ScrollView {
             detail: wm.error
             Layout.fillWidth: true
         }
+    ]
 
-        SettingRow {
-            settingId: "wallpaper-display"
-            label: "Display"
-            enabled: page.ready
-            Layout.fillWidth: true
-            Layout.topMargin: Kirigami.Units.largeSpacing
-            UqComboBox {
-                id: displayBox
-                objectName: "displayBox"
-                model: page.displays.map(d => d.title)
-                currentIndex: Math.max(0, page.displays.findIndex(d => d.name === page.selected))
-                Accessible.name: "Display"
-                Layout.preferredWidth: Kirigami.Units.gridUnit * 16
-                onActivated: index => {
-                    page.selected = page.displays[index].name;
-                    displayBox.currentIndex = Qt.binding(() => Math.max(0, page.displays.findIndex(d => d.name === page.selected)));
+    SettingsTab {
+        title: "Wallpaper"
+        iconName: "preferences-desktop-wallpaper"
+
+        SettingsCard {
+            id: wallCard
+            wide: true
+
+            // The displays as chips: All displays, the connected screens, then saved ones that
+            // aren't connected (dimmed). A dot marks a display with a wallpaper of its own.
+            SettingRow {
+                settingId: "wallpaper-display"
+                highlight: App.highlight
+                enabled: page.ready
+                wideControls: true
+                Layout.fillWidth: true
+
+                RowLayout {
+                    id: displayBox
+                    objectName: "displayBox"
+                    spacing: Kirigami.Units.smallSpacing
+                    Layout.fillWidth: true
+                    Accessible.role: Accessible.Grouping
+                    Accessible.name: "Display"
+
+                    QQC2.ButtonGroup {
+                        id: displayGroup
+                    }
+                    Repeater {
+                        model: page.displays
+                        QQC2.Button {
+                            required property var modelData
+                            objectName: "display-" + modelData.name
+                            checkable: true
+                            checked: page.selected === modelData.name
+                            QQC2.ButtonGroup.group: displayGroup
+                            opacity: modelData.connected ? 1 : 0.6
+                            Accessible.name: modelData.title + (modelData.connected ? "" : ", not connected") + (modelData.own ? ", own wallpaper" : "")
+                            QQC2.ToolTip.visible: hovered && (modelData.own || !modelData.connected)
+                            QQC2.ToolTip.text: !modelData.connected ? "Not connected" : "Has its own wallpaper"
+                            contentItem: RowLayout {
+                                spacing: Kirigami.Units.smallSpacing
+                                Kirigami.Icon {
+                                    source: modelData.name === "*" ? "view-grid" : "monitor"
+                                    implicitWidth: Kirigami.Units.iconSizes.small
+                                    implicitHeight: Kirigami.Units.iconSizes.small
+                                    Accessible.ignored: true
+                                }
+                                UqLabel {
+                                    text: modelData.title
+                                    font.bold: page.selected === modelData.name
+                                }
+                                Rectangle {
+                                    visible: modelData.own
+                                    implicitWidth: Kirigami.Units.smallSpacing * 2
+                                    implicitHeight: implicitWidth
+                                    radius: implicitWidth / 2
+                                    color: Kirigami.Theme.highlightColor
+                                }
+                            }
+                            onClicked: {
+                                page.selected = modelData.name;
+                                checked = Qt.binding(() => page.selected === modelData.name);
+                            }
+                        }
+                    }
+                    Item {
+                        Layout.fillWidth: true
+                    }
+                    QQC2.Button {
+                        objectName: "removeEntry"
+                        visible: page.hasOwn
+                        enabled: page.ready
+                        Accessible.name: page.selected === "*" ? "Remove the wallpaper" : "Use the All displays wallpaper"
+                        contentItem: RowLayout {
+                            spacing: Kirigami.Units.smallSpacing
+                            Kirigami.Icon {
+                                source: page.selected === "*" ? "edit-delete" : "edit-undo"
+                                implicitWidth: Kirigami.Units.iconSizes.small
+                                implicitHeight: Kirigami.Units.iconSizes.small
+                                Accessible.ignored: true
+                            }
+                            UqLabel {
+                                text: page.selected === "*" ? "Remove the wallpaper" : "Use the All displays wallpaper"
+                            }
+                        }
+                        onClicked: wm.clearEntry(page.selected)
+                    }
                 }
             }
-        }
-        UqLabel {
-            visible: page.selected !== "*" && !page.hasOwn
-            text: page.outputs["*"] ? "This display shows the All displays wallpaper. Changing anything here gives it its own." : "This display has no wallpaper of its own. Changing anything here gives it one."
-            wrapMode: Text.Wrap
-            color: Kirigami.Theme.disabledTextColor
-            Layout.fillWidth: true
-            Layout.leftMargin: Kirigami.Units.largeSpacing
-        }
-
-        WallpaperEntryEditor {
-            objectName: "editor"
-            output: page.selected
-            entry: page.shown
-            problem: page.problems[page.selected] || (page.selected !== "*" && !page.hasOwn ? page.problems["*"] || "" : "")
-            highlight: App.highlight
-            error: wm.error
-            enabled: page.ready
-            toPath: url => wm.localPath(url)
-            onChanged: patch => wm.patchEntry(page.selected, JSON.stringify(patch))
-            Layout.fillWidth: true
-        }
-
-        QQC2.Button {
-            objectName: "removeEntry"
-            visible: page.hasOwn
-            enabled: page.ready
-            Accessible.name: page.selected === "*" ? "Remove the wallpaper" : "Use the All displays wallpaper"
-            contentItem: UqLabel {
-                text: page.selected === "*" ? "Remove the wallpaper" : "Use the All displays wallpaper"
-                padding: Kirigami.Units.smallSpacing
+            RowLayout {
+                visible: page.selected !== "*" && !page.hasOwn
+                spacing: Kirigami.Units.smallSpacing
+                Layout.fillWidth: true
+                Layout.leftMargin: Kirigami.Units.largeSpacing
+                Kirigami.Icon {
+                    source: "documentinfo"
+                    implicitWidth: Kirigami.Units.iconSizes.small
+                    implicitHeight: Kirigami.Units.iconSizes.small
+                    Accessible.ignored: true
+                }
+                UqLabel {
+                    objectName: "inheritNote"
+                    text: page.outputs["*"] ? "Shows the All displays wallpaper. A change here gives it its own." : "No wallpaper of its own yet. A change here gives it one."
+                    wrapMode: Text.Wrap
+                    opacity: 0.7
+                    Layout.fillWidth: true
+                }
             }
-            Layout.leftMargin: Kirigami.Units.largeSpacing
-            onClicked: wm.clearEntry(page.selected)
-        }
-        Item {
-            implicitHeight: Kirigami.Units.largeSpacing
+
+            WallpaperEntryEditor {
+                objectName: "editor"
+                output: page.selected
+                entry: page.shown
+                aspect: page.aspect
+                themeBackground: (page.tokens.colors && page.tokens.colors.bg) || Kirigami.Theme.backgroundColor
+                problem: page.problems[page.selected] || (page.selected !== "*" && !page.hasOwn ? page.problems["*"] || "" : "")
+                highlight: App.highlight
+                error: wm.error
+                enabled: page.ready
+                toPath: url => wm.localPath(url)
+                onChanged: patch => wm.patchEntry(page.selected, JSON.stringify(patch))
+                Layout.fillWidth: true
+                Layout.topMargin: Kirigami.Units.smallSpacing
+            }
         }
     }
 }

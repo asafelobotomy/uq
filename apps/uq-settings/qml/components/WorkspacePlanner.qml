@@ -52,7 +52,9 @@ ColumnLayout {
 
     SettingRow {
         settingId: "display-workspaces"
-        label: "Workspaces across screens"
+        iconName: "virtual-desktops"
+        label: "Spread workspaces"
+        help: "Off: workspaces aren't tied to a screen. One after another: the first screen gets the first ones. In turn: they alternate between screens."
         highlight: root.highlight
         enabled: root.enabled
         Layout.fillWidth: true
@@ -70,18 +72,11 @@ ColumnLayout {
             }
         }
     }
-    UqLabel {
-        visible: root.strategy === "off"
-        text: "Workspaces aren't tied to a screen."
-        wrapMode: Text.Wrap
-        opacity: 0.7
-        Layout.fillWidth: true
-        Layout.leftMargin: Kirigami.Units.largeSpacing
-    }
 
     SettingRow {
         objectName: "countRow"
         visible: root.strategy !== "off"
+        iconName: "view-list-details"
         label: "Number of workspaces"
         enabled: root.enabled
         Layout.fillWidth: true
@@ -106,6 +101,7 @@ ColumnLayout {
         settingId: "display-workspaces-back"
         objectName: "moveBackRow"
         visible: root.strategy !== "off"
+        iconName: "edit-undo"
         label: "Move workspaces back when a screen returns"
         highlight: root.highlight
         enabled: root.enabled
@@ -115,17 +111,16 @@ ColumnLayout {
         Layout.leftMargin: Kirigami.Units.largeSpacing * 2
     }
 
+    // Each screen with its workspaces as numbered tiles: the plan at a glance.
     ColumnLayout {
         objectName: "preview"
         visible: root.preview.length > 0
-        spacing: 0
+        spacing: Kirigami.Units.smallSpacing
         Layout.leftMargin: Kirigami.Units.largeSpacing * 2
+        Layout.rightMargin: Kirigami.Units.largeSpacing
+        Layout.topMargin: Kirigami.Units.smallSpacing
         Layout.fillWidth: true
 
-        UqLabel {
-            text: "On these screens"
-            font.bold: true
-        }
         Repeater {
             id: previewRows
             model: root.preview
@@ -137,16 +132,43 @@ ColumnLayout {
                 objectName: "previewRow"
                 spacing: Kirigami.Units.largeSpacing
                 Layout.fillWidth: true
+                Accessible.role: Accessible.StaticText
+                Accessible.name: row.screenLabel + ": " + row.workspacesText
+
+                Kirigami.Icon {
+                    source: "video-display"
+                    implicitWidth: Kirigami.Units.iconSizes.smallMedium
+                    implicitHeight: Kirigami.Units.iconSizes.smallMedium
+                    Accessible.ignored: true
+                }
                 UqLabel {
                     objectName: "previewScreen"
                     text: row.screenLabel
                     elide: Text.ElideRight
-                    Layout.fillWidth: true
+                    Layout.preferredWidth: Kirigami.Units.gridUnit * 10
                 }
-                UqLabel {
+                Flow {
                     objectName: "previewWorkspaces"
-                    text: row.workspacesText
-                    opacity: 0.8
+                    spacing: Kirigami.Units.smallSpacing
+                    Layout.fillWidth: true
+
+                    Repeater {
+                        model: row.modelData.workspaces || []
+                        Rectangle {
+                            required property var modelData
+                            width: Kirigami.Units.gridUnit * 1.8
+                            height: width
+                            radius: Kirigami.Units.cornerRadius
+                            color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.2)
+                            border.width: 1
+                            border.color: Kirigami.Theme.highlightColor
+                            UqLabel {
+                                anchors.centerIn: parent
+                                text: String(parent.modelData)
+                                font.bold: true
+                            }
+                        }
+                    }
                 }
             }
         }

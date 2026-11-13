@@ -119,8 +119,9 @@ TestCase {
         const none = make(null);
         const uq = make({ source: "uq", detail: null });
         const label = createTemporaryObject(plainLabel, tc);
-        // Today's row: one line of label plus the row's padding.
-        compare(bare.implicitHeight, label.implicitHeight + Kirigami.Units.smallSpacing * 2);
+        // Today's row: one line of label plus the row's padding, and never less than the
+        // rows' even height.
+        compare(bare.implicitHeight, Math.max(label.implicitHeight + Kirigami.Units.smallSpacing * 2, Kirigami.Units.gridUnit * 2.25));
         compare(none.implicitHeight, bare.implicitHeight);
         compare(uq.implicitHeight, bare.implicitHeight);
         const themed = make({ source: "theme", detail: null });

@@ -40,6 +40,30 @@ ColumnLayout {
     /// "Back to uQ's gestures" was pressed.
     signal resetRequested()
 
+    /// An arrow for a gesture's direction.
+    function directionIcon(direction) {
+        switch (String(direction || "")) {
+        case "up":
+            return "go-up";
+        case "down":
+            return "go-down";
+        case "left":
+            return "go-previous";
+        case "right":
+            return "go-next";
+        case "pinch_in":
+            return "zoom-out";
+        case "pinch_out":
+            return "zoom-in";
+        case "horizontal":
+            return "transform-move-horizontal";
+        case "vertical":
+            return "transform-move-vertical";
+        default:
+            return "transform-move";
+        }
+    }
+
     spacing: Kirigami.Units.smallSpacing
     Accessible.role: Accessible.Grouping
     Accessible.name: "Touchpad gestures"
@@ -87,7 +111,6 @@ ColumnLayout {
             objectName: "gestureRow"
             spacing: 0
             Layout.fillWidth: true
-            Layout.leftMargin: Kirigami.Units.largeSpacing
             Accessible.role: Accessible.Grouping
             Accessible.name: String(row.modelData.label) + ": " + String(row.modelData.action_label)
 
@@ -95,6 +118,29 @@ ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
                 Layout.fillWidth: true
 
+                // How many fingers, and which way: the gesture at a glance.
+                Rectangle {
+                    readonly property var g: row.modelData.gesture || ({})
+                    implicitWidth: Kirigami.Units.gridUnit * 3
+                    implicitHeight: Kirigami.Units.gridUnit * 2
+                    radius: Kirigami.Units.cornerRadius
+                    color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15)
+                    opacity: row.modelData.enabled === true ? 1 : 0.5
+                    Accessible.ignored: true
+                    RowLayout {
+                        anchors.centerIn: parent
+                        spacing: 2
+                        UqLabel {
+                            text: parent.parent.g.fingers ? String(parent.parent.g.fingers) : ""
+                            font.bold: true
+                        }
+                        Kirigami.Icon {
+                            source: root.directionIcon(parent.parent.g.direction)
+                            implicitWidth: Kirigami.Units.iconSizes.small
+                            implicitHeight: Kirigami.Units.iconSizes.small
+                        }
+                    }
+                }
                 ColumnLayout {
                     spacing: 0
                     Layout.fillWidth: true
@@ -131,6 +177,10 @@ ColumnLayout {
                     id: changeBtn
                     objectName: "changeButton"
                     text: "Change"
+                    icon.name: "document-edit"
+                    display: QQC2.AbstractButton.IconOnly
+                    QQC2.ToolTip.visible: hovered
+                    QQC2.ToolTip.text: "Change"
                     enabled: root.idle
                     Accessible.name: "Change " + String(row.modelData.label)
                     onClicked: root.changeRequested(row.index)
@@ -139,6 +189,10 @@ ColumnLayout {
                     id: removeBtn
                     objectName: "removeButton"
                     text: "Remove"
+                    icon.name: "edit-delete"
+                    display: QQC2.AbstractButton.IconOnly
+                    QQC2.ToolTip.visible: hovered
+                    QQC2.ToolTip.text: "Remove"
                     enabled: root.idle
                     Accessible.name: "Remove " + String(row.modelData.label)
                     onClicked: root.removed(row.index)
@@ -171,6 +225,7 @@ ColumnLayout {
             id: resetBtn
             objectName: "resetButton"
             text: "Back to uQ's gestures"
+            icon.name: "edit-undo"
             visible: !root.defaults
             enabled: root.idle
             onClicked: root.resetRequested()

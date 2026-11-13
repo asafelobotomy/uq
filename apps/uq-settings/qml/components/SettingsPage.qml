@@ -122,35 +122,55 @@ FocusScope {
                 font.bold: true
                 Accessible.role: Accessible.Heading
             }
-            QQC2.TabBar {
+            // The tabs: a row of buttons sized to their own icon and name. (QQC2.TabBar
+            // squeezed its buttons over each other when they carried their own contentItem.)
+            RowLayout {
                 id: bar
                 objectName: "pageTabs"
                 visible: page.shownTabs.length > 1
-                currentIndex: page.shownTabs.indexOf(page.tabList[stack.currentIndex])
+                spacing: Kirigami.Units.smallSpacing
                 Layout.leftMargin: Kirigami.Units.largeSpacing
+                Accessible.role: Accessible.PageTabList
                 Accessible.name: page.title + " tabs"
 
                 Repeater {
                     model: page.shownTabs
-                    QQC2.TabButton {
+                    QQC2.ToolButton {
+                        id: tabButton
                         required property var modelData
+                        readonly property bool current: page.tabList[stack.currentIndex] === modelData
                         objectName: "tab-" + modelData.title
+                        checkable: true
+                        checked: tabButton.current
+                        Accessible.role: Accessible.PageTab
                         Accessible.name: modelData.title
-                        width: implicitWidth
+                        leftPadding: Kirigami.Units.largeSpacing
+                        rightPadding: Kirigami.Units.largeSpacing
                         onClicked: page.show(modelData)
+                        Keys.onLeftPressed: page.step(-1)
+                        Keys.onRightPressed: page.step(1)
                         contentItem: RowLayout {
                             spacing: Kirigami.Units.smallSpacing
                             Kirigami.Icon {
-                                visible: modelData.iconName !== ""
-                                source: modelData.iconName
+                                visible: tabButton.modelData.iconName !== ""
+                                source: tabButton.modelData.iconName
                                 implicitWidth: Kirigami.Units.iconSizes.small
                                 implicitHeight: Kirigami.Units.iconSizes.small
                                 Accessible.ignored: true
                             }
                             UqLabel {
-                                text: modelData.title
-                                font.bold: parent.parent.checked
+                                text: tabButton.modelData.title
+                                font.bold: tabButton.current
                             }
+                        }
+                        // The current tab's underline.
+                        Rectangle {
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.bottom: parent.bottom
+                            height: 2
+                            visible: tabButton.current
+                            color: Kirigami.Theme.highlightColor
                         }
                     }
                 }

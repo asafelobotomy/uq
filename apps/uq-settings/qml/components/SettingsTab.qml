@@ -14,7 +14,11 @@ QQC2.ScrollView {
     /// Hide the tab's button (a tab with nothing to show on this computer).
     property bool available: true
     /// Columns at this width: two from about 1100 px.
-    readonly property int columns: tab.availableWidth >= Kirigami.Units.gridUnit * 60 ? 2 : 1
+    readonly property int columns: tab.width >= Kirigami.Units.gridUnit * 61 ? 2 : 1
+    // The width the cards are laid out in: the tab's own width less a fixed allowance for the
+    // scroll bar. Not availableWidth, which shrinks when the scroll bar appears: a page about one
+    // screen tall then re-flowed, lost its scroll bar, re-flowed back, and never settled.
+    readonly property real layoutWidth: Math.max(0, tab.width - Kirigami.Units.gridUnit)
     /// Marks this as a tab for SettingRow's search highlight (see activate).
     readonly property bool isSettingsTab: true
     /// Set by SettingsPage: show this tab.
@@ -28,18 +32,21 @@ QQC2.ScrollView {
     }
 
     contentWidth: availableWidth
-    contentHeight: grid.height + Kirigami.Units.largeSpacing * 2
+    contentHeight: grid.height + Kirigami.Units.largeSpacing * 4
     Accessible.role: Accessible.PageTab
     Accessible.name: tab.title
 
     GridLayout {
         id: grid
-        width: Math.min(tab.availableWidth - Kirigami.Units.largeSpacing * 2, Kirigami.Units.gridUnit * 96)
-        x: Math.max(Kirigami.Units.largeSpacing, (tab.availableWidth - width) / 2)
-        y: Kirigami.Units.largeSpacing
+        // The same side margin as the page's title row, so cards line up under the title.
+        width: Math.min(tab.layoutWidth - Kirigami.Units.largeSpacing * 4, Kirigami.Units.gridUnit * 96)
+        // Centred in the whole tab, so the margins either side match (the scroll bar, when
+        // there is one, sits in the right margin).
+        x: Math.max(Kirigami.Units.largeSpacing * 2, (tab.width - width) / 2)
+        y: Kirigami.Units.largeSpacing * 2
         columns: tab.columns
-        columnSpacing: Kirigami.Units.largeSpacing
-        rowSpacing: Kirigami.Units.largeSpacing
+        columnSpacing: Kirigami.Units.largeSpacing * 2
+        rowSpacing: Kirigami.Units.largeSpacing * 2
         // Equal columns: each card fills its share.
         uniformCellWidths: true
     }

@@ -203,12 +203,9 @@ SettingsPage {
                 QQC2.ButtonGroup {
                     id: clockGroup
                 }
-                QQC2.Button {
+                ChoiceButton {
                     objectName: "clock24On"
-                    contentItem: UqLabel {
-                        text: Qt.formatTime(page.now, "HH:mm")
-                        horizontalAlignment: Text.AlignHCenter
-                    }
+                    label: Qt.formatTime(page.now, "HH:mm")
                     checkable: true
                     checked: page.clock24
                     QQC2.ButtonGroup.group: clockGroup
@@ -217,12 +214,9 @@ SettingsPage {
                     QQC2.ToolTip.text: "24-hour"
                     onClicked: if (!page.clock24) dm.setClock24h(true)
                 }
-                QQC2.Button {
+                ChoiceButton {
                     objectName: "clock24Off"
-                    contentItem: UqLabel {
-                        text: Qt.formatTime(page.now, "h:mm AP")
-                        horizontalAlignment: Text.AlignHCenter
-                    }
+                    label: Qt.formatTime(page.now, "h:mm AP")
                     checkable: true
                     checked: !page.clock24
                     QQC2.ButtonGroup.group: clockGroup

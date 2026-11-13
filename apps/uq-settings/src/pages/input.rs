@@ -60,6 +60,12 @@ pub enum Op {
     RemoveDevice {
         name: String,
     },
+    /// Start a device's own setting from the mouse's pointer speed as stored now, so adding a
+    /// device changes nothing until one of its fields is changed. A device that already has a
+    /// setting is left as it is.
+    AddDevice {
+        name: String,
+    },
     /// Save one touchpad gesture (`index` -1 adds it). The whole list is written, so a default
     /// that is edited or turned off becomes part of the list.
     SaveGesture {
@@ -241,6 +247,27 @@ impl PageLogic for InputState {
                     if devices[&name].as_object().is_some_and(Map::is_empty) {
                         devices.remove(&name);
                     }
+                    Ok(())
+                })
+                .await
+            }
+            Op::AddDevice { name } => {
+                patch_section(&proxy, "input", |s| {
+                    let speed = s
+                        .get("mouse")
+                        .and_then(|m| m.get("sensitivity"))
+                        .and_then(Value::as_f64)
+                        .unwrap_or(0.0);
+                    let devices = s
+                        .entry("devices")
+                        .or_insert_with(|| Value::Object(Map::new()))
+                        .as_object_mut()
+                        .ok_or_else(|| {
+                            zbus::Error::Failure("the device settings aren't an object".into())
+                        })?;
+                    devices
+                        .entry(name)
+                        .or_insert_with(|| json!({ "sensitivity": speed }));
                     Ok(())
                 })
                 .await

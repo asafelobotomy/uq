@@ -19,10 +19,12 @@ Rectangle {
     default property alias content: body.data
 
     Layout.fillWidth: true
+    // Cards side by side are the same height, so the columns line up.
+    Layout.fillHeight: true
     Layout.alignment: Qt.AlignTop
     Layout.columnSpan: card.wide ? 2 : 1
-    implicitWidth: Math.max(body.implicitWidth, head.implicitWidth) + Kirigami.Units.largeSpacing * 2
-    implicitHeight: col.implicitHeight + Kirigami.Units.largeSpacing * 2
+    implicitWidth: Math.max(body.implicitWidth, head.implicitWidth) + Kirigami.Units.largeSpacing * 4
+    implicitHeight: col.implicitHeight + Kirigami.Units.largeSpacing * 3
 
     radius: Kirigami.Units.cornerRadius * 2
     color: Kirigami.Theme.alternateBackgroundColor
@@ -35,7 +37,10 @@ Rectangle {
     ColumnLayout {
         id: col
         anchors.fill: parent
-        anchors.margins: Kirigami.Units.largeSpacing
+        anchors.leftMargin: Kirigami.Units.largeSpacing * 2
+        anchors.rightMargin: Kirigami.Units.largeSpacing * 2
+        anchors.topMargin: Kirigami.Units.largeSpacing * 1.5
+        anchors.bottomMargin: Kirigami.Units.largeSpacing * 1.5
         spacing: Kirigami.Units.smallSpacing
 
         RowLayout {
@@ -66,10 +71,21 @@ Rectangle {
                 spacing: Kirigami.Units.smallSpacing
             }
         }
+        Kirigami.Separator {
+            visible: head.visible && card.title !== ""
+            opacity: 0.5
+            Layout.fillWidth: true
+            Layout.bottomMargin: Kirigami.Units.smallSpacing
+        }
         ColumnLayout {
             id: body
+            Layout.alignment: Qt.AlignTop
             spacing: Kirigami.Units.smallSpacing
             Layout.fillWidth: true
+        }
+        // A card stretched to its neighbour's height keeps its rows at the top.
+        Item {
+            Layout.fillHeight: true
         }
     }
 }

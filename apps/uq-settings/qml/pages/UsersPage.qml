@@ -13,7 +13,7 @@ import org.kde.kirigami as Kirigami
 import org.uq.settings
 import "../components"
 
-QQC2.ScrollView {
+SettingsPage {
     id: page
 
     readonly property var snap: {
@@ -44,10 +44,6 @@ QQC2.ScrollView {
     function display(u) {
         return u.real_name && u.real_name !== "" ? String(u.real_name) : String(u.name);
     }
-
-    Accessible.role: Accessible.Pane
-    Accessible.name: "Users"
-    contentWidth: availableWidth
 
     UsersModel {
         id: um
@@ -276,183 +272,272 @@ QQC2.ScrollView {
         }
     }
 
-    ColumnLayout {
-        width: Math.min(page.availableWidth - Kirigami.Units.largeSpacing * 2, Kirigami.Units.gridUnit * 44)
-        x: Math.max(Kirigami.Units.largeSpacing, (page.availableWidth - width) / 2)
-        spacing: Kirigami.Units.smallSpacing
-
-        Item {
-            implicitHeight: Kirigami.Units.smallSpacing
-        }
-        UqLabel {
-            text: "Users"
-            font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.5
-            font.bold: true
-            Accessible.role: Accessible.Heading
-        }
+    banners: [
         ErrorCard {
             objectName: "notAvailable"
             visible: page.service !== null
             title: "Not available"
             detail: page.service ? String(page.service.text || "") : ""
             Layout.fillWidth: true
-        }
+        },
         RuleMessage {
             objectName: "usersError"
             negative: true
             closable: false
             lines: um.error !== "" ? ["That wasn't done: " + um.error] : []
             Layout.fillWidth: true
-        }
+        },
         RuleMessage {
             id: noticeMessage
             Layout.fillWidth: true
         }
+    ]
 
-        SettingRow {
-            settingId: "user-accounts"
-            label: "People who can log in"
-            highlight: App.highlight
-            Layout.fillWidth: true
-            Layout.topMargin: Kirigami.Units.largeSpacing
+    SettingsTab {
+        title: "Users"
+        iconName: "system-users"
 
-            QQC2.Button {
-                objectName: "addUser"
-                text: "Add a user…"
-                icon.name: "list-add-user"
-                enabled: page.idle
-                onClicked: addDialog.open()
-            }
-        }
+        SettingsCard {
+            title: "People who can log in"
+            iconName: "system-users"
 
-        Repeater {
-            model: page.users
-            delegate: Kirigami.AbstractCard {
-                id: card
-                required property var modelData
-                readonly property var u: modelData
+            SettingRow {
+                settingId: "user-accounts"
+                iconName: "user-identity"
+                label: page.users.length === 1 ? "1 account" : page.users.length + " accounts"
+                highlight: App.highlight
                 Layout.fillWidth: true
 
-                contentItem: ColumnLayout {
-                    spacing: Kirigami.Units.smallSpacing
+                QQC2.Button {
+                    objectName: "addUser"
+                    text: "Add a user…"
+                    icon.name: "list-add-user"
+                    enabled: page.idle
+                    onClicked: addDialog.open()
+                }
+            }
+            SettingRow {
+                settingId: "users-auto-login"
+                iconName: "system-switch-user"
+                label: page.autoLogin.user ? "Logs in automatically as " + page.autoLogin.user : "No automatic login"
+                help: page.loaded && !page.autoLogin.greeter ? "Automatic login is set on the Login screen page, which appears when uQ is your login screen." : ""
+                highlight: App.highlight
+                Layout.fillWidth: true
 
-                    RowLayout {
-                        spacing: Kirigami.Units.largeSpacing
-                        Layout.fillWidth: true
-
-                        UqAvatar {
-                            path: card.u.icon
-                            name: page.display(card.u)
-                            Accessible.name: "Picture of " + page.display(card.u)
-                        }
-                        ColumnLayout {
-                            spacing: 0
-                            Layout.fillWidth: true
-                            UqLabel {
-                                text: page.display(card.u) + (card.u.me ? " (you)" : "")
-                                font.bold: true
-                                elide: Text.ElideRight
-                                Layout.fillWidth: true
-                            }
-                            UqLabel {
-                                text: card.u.name + " · " + (card.u.admin ? "Administrator" : "Standard user") + (card.u.locked ? " · locked" : "")
-                                opacity: 0.7
-                                elide: Text.ElideRight
-                                Layout.fillWidth: true
-                            }
-                        }
-                    }
-                    Flow {
-                        spacing: Kirigami.Units.smallSpacing
-                        Layout.fillWidth: true
-
-                        QQC2.Button {
-                            text: "Change name…"
-                            icon.name: "edit-rename"
-                            enabled: page.idle
-                            onClicked: {
-                                nameDialog.uid = card.u.uid;
-                                nameDialog.current = String(card.u.real_name || "");
-                                nameDialog.open();
-                            }
-                        }
-                        QQC2.Button {
-                            text: "Change password…"
-                            icon.name: "dialog-password"
-                            enabled: page.idle
-                            onClicked: {
-                                passwordDialog.uid = card.u.uid;
-                                passwordDialog.who = page.display(card.u);
-                                passwordDialog.mine = !!card.u.me;
-                                passwordDialog.open();
-                            }
-                        }
-                        QQC2.Button {
-                            text: "Change picture…"
-                            icon.name: "insert-image"
-                            enabled: page.idle
-                            onClicked: {
-                                avatarDialog.uid = card.u.uid;
-                                avatarDialog.open();
-                            }
-                        }
-                        QQC2.Switch {
-                            id: adminSwitch
-                            text: "Administrator"
-                            checked: !!card.u.admin
-                            enabled: page.idle && (card.u.admin ? card.u.demote_problem === "" : true)
-                            onToggled: {
-                                um.setAdmin(card.u.uid, adminSwitch.checked);
-                                adminSwitch.checked = Qt.binding(() => !!card.u.admin);
-                            }
-                        }
-                        QQC2.Button {
-                            text: "Remove…"
-                            icon.name: "list-remove-user"
-                            enabled: page.idle && card.u.remove_problem === ""
-                            onClicked: {
-                                removeDialog.uid = card.u.uid;
-                                removeDialog.userName = String(card.u.name);
-                                removeDialog.open();
-                            }
-                        }
-                    }
-                    UqLabel {
-                        visible: card.u.remove_problem !== "" && !card.u.me
-                        text: String(card.u.remove_problem)
-                        wrapMode: Text.Wrap
-                        opacity: 0.7
-                        Layout.fillWidth: true
-                    }
+                QQC2.Button {
+                    objectName: "openLoginScreen"
+                    text: "Login screen"
+                    icon.name: "go-next"
+                    visible: !!page.autoLogin.greeter
+                    Accessible.name: "Open the Login screen settings"
+                    onClicked: App.showPage("login-screen", "auto-login")
                 }
             }
         }
 
-        SettingRow {
-            settingId: "users-auto-login"
-            label: page.autoLogin.user ? "Auto-login: on for " + page.autoLogin.user : "Auto-login: off"
-            highlight: App.highlight
-            Layout.fillWidth: true
-            Layout.topMargin: Kirigami.Units.largeSpacing
+        // One card per account: the picture (click to change it), the name, and what it can do.
+        Repeater {
+            model: page.users
+            delegate: SettingsCard {
+                id: card
+                required property var modelData
+                readonly property var u: modelData
+                readonly property string who: page.display(card.u)
+                objectName: "user-" + card.u.name
+                Accessible.name: card.who
 
-            QQC2.Button {
-                objectName: "openLoginScreen"
-                text: "Login screen settings…"
-                icon.name: "go-next"
-                visible: !!page.autoLogin.greeter
-                onClicked: App.showPage("login-screen", "auto-login")
+                RowLayout {
+                    spacing: Kirigami.Units.largeSpacing
+                    Layout.fillWidth: true
+
+                    QQC2.AbstractButton {
+                        id: pictureButton
+                        objectName: "changePicture"
+                        enabled: page.idle
+                        hoverEnabled: true
+                        implicitWidth: Kirigami.Units.iconSizes.huge
+                        implicitHeight: Kirigami.Units.iconSizes.huge
+                        Accessible.role: Accessible.Button
+                        Accessible.name: "Change the picture of " + card.who
+                        QQC2.ToolTip.visible: hovered || activeFocus
+                        QQC2.ToolTip.text: "Change the picture"
+                        onClicked: {
+                            avatarDialog.uid = card.u.uid;
+                            avatarDialog.open();
+                        }
+                        contentItem: Item {
+                            UqAvatar {
+                                anchors.fill: parent
+                                path: card.u.icon
+                                name: card.who
+                                Accessible.name: "Picture of " + card.who
+                            }
+                            // A camera badge on hover or focus: the picture can be changed.
+                            Rectangle {
+                                visible: pictureButton.enabled && (pictureButton.hovered || pictureButton.activeFocus)
+                                anchors.right: parent.right
+                                anchors.bottom: parent.bottom
+                                width: Kirigami.Units.iconSizes.smallMedium + Kirigami.Units.smallSpacing * 2
+                                height: width
+                                radius: width / 2
+                                color: Kirigami.Theme.backgroundColor
+                                border.width: 1
+                                border.color: Kirigami.Theme.highlightColor
+                                Kirigami.Icon {
+                                    anchors.centerIn: parent
+                                    source: "insert-image"
+                                    implicitWidth: Kirigami.Units.iconSizes.small
+                                    implicitHeight: Kirigami.Units.iconSizes.small
+                                    Accessible.ignored: true
+                                }
+                            }
+                        }
+                    }
+                    ColumnLayout {
+                        spacing: Kirigami.Units.smallSpacing
+                        Layout.fillWidth: true
+
+                        RowLayout {
+                            spacing: Kirigami.Units.smallSpacing
+                            Layout.fillWidth: true
+                            UqLabel {
+                                objectName: "userName"
+                                text: card.who
+                                font.bold: true
+                                font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.3
+                                elide: Text.ElideRight
+                                Layout.maximumWidth: Kirigami.Units.gridUnit * 20
+                            }
+                            // "You", as a small tag.
+                            Rectangle {
+                                visible: !!card.u.me
+                                implicitWidth: youLabel.implicitWidth + Kirigami.Units.largeSpacing
+                                implicitHeight: youLabel.implicitHeight + Kirigami.Units.smallSpacing
+                                radius: height / 2
+                                color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.2)
+                                UqLabel {
+                                    id: youLabel
+                                    anchors.centerIn: parent
+                                    text: "You"
+                                    font.pointSize: Kirigami.Theme.smallFont.pointSize
+                                }
+                            }
+                            Item {
+                                Layout.fillWidth: true
+                            }
+                        }
+                        RowLayout {
+                            spacing: Kirigami.Units.smallSpacing
+                            Kirigami.Icon {
+                                source: "im-user"
+                                implicitWidth: Kirigami.Units.iconSizes.small
+                                implicitHeight: Kirigami.Units.iconSizes.small
+                                opacity: 0.7
+                                Accessible.ignored: true
+                            }
+                            UqLabel {
+                                text: String(card.u.name)
+                                opacity: 0.7
+                            }
+                            Kirigami.Icon {
+                                visible: !!card.u.locked
+                                source: "emblem-locked"
+                                implicitWidth: Kirigami.Units.iconSizes.small
+                                implicitHeight: Kirigami.Units.iconSizes.small
+                                Layout.leftMargin: Kirigami.Units.largeSpacing
+                                Accessible.ignored: true
+                            }
+                            UqLabel {
+                                visible: !!card.u.locked
+                                text: "Locked"
+                                opacity: 0.7
+                            }
+                        }
+                        RowLayout {
+                            spacing: Kirigami.Units.smallSpacing
+                            Kirigami.Icon {
+                                source: card.u.admin ? "security-high" : "user-identity"
+                                implicitWidth: Kirigami.Units.iconSizes.small
+                                implicitHeight: Kirigami.Units.iconSizes.small
+                                Accessible.ignored: true
+                            }
+                            QQC2.Switch {
+                                id: adminSwitch
+                                objectName: "adminSwitch"
+                                text: "Administrator"
+                                checked: !!card.u.admin
+                                enabled: page.idle && (card.u.admin ? card.u.demote_problem === "" : true)
+                                Accessible.description: card.who
+                                QQC2.ToolTip.visible: hovered
+                                QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+                                QQC2.ToolTip.text: "Can change system settings and other accounts"
+                                onToggled: {
+                                    um.setAdmin(card.u.uid, adminSwitch.checked);
+                                    adminSwitch.checked = Qt.binding(() => !!card.u.admin);
+                                }
+                            }
+                        }
+                    }
+                }
+                Kirigami.Separator {
+                    Layout.fillWidth: true
+                }
+                RowLayout {
+                    spacing: Kirigami.Units.smallSpacing
+                    Layout.fillWidth: true
+
+                    QQC2.ToolButton {
+                        text: "Name…"
+                        icon.name: "edit-rename"
+                        enabled: page.idle
+                        Accessible.name: "Change the name"
+                        Accessible.description: card.who
+                        onClicked: {
+                            nameDialog.uid = card.u.uid;
+                            nameDialog.current = String(card.u.real_name || "");
+                            nameDialog.open();
+                        }
+                    }
+                    QQC2.ToolButton {
+                        text: "Password…"
+                        icon.name: "dialog-password"
+                        enabled: page.idle
+                        Accessible.name: "Change the password"
+                        Accessible.description: card.who
+                        onClicked: {
+                            passwordDialog.uid = card.u.uid;
+                            passwordDialog.who = card.who;
+                            passwordDialog.mine = !!card.u.me;
+                            passwordDialog.open();
+                        }
+                    }
+                    Item {
+                        Layout.fillWidth: true
+                    }
+                    QQC2.ToolButton {
+                        text: "Remove…"
+                        icon.name: "list-remove-user"
+                        enabled: page.idle && card.u.remove_problem === ""
+                        Accessible.name: "Remove this account"
+                        Accessible.description: card.u.remove_problem !== "" ? String(card.u.remove_problem) : card.who
+                        QQC2.ToolTip.visible: hovered && card.u.remove_problem !== ""
+                        QQC2.ToolTip.text: String(card.u.remove_problem)
+                        onClicked: {
+                            removeDialog.uid = card.u.uid;
+                            removeDialog.userName = String(card.u.name);
+                            removeDialog.open();
+                        }
+                    }
+                }
+                UqLabel {
+                    visible: card.u.remove_problem !== "" && !card.u.me
+                    text: String(card.u.remove_problem)
+                    wrapMode: Text.Wrap
+                    opacity: 0.7
+                    Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.smallSpacing
+                }
             }
-        }
-        UqLabel {
-            visible: page.loaded && !page.autoLogin.greeter
-            text: "Auto-login is set on the Login screen page, which appears when uQ is your login screen."
-            wrapMode: Text.Wrap
-            opacity: 0.7
-            Layout.fillWidth: true
-            Layout.leftMargin: Kirigami.Units.largeSpacing
-        }
-        Item {
-            implicitHeight: Kirigami.Units.largeSpacing
         }
     }
 }

@@ -83,5 +83,16 @@ Item {
             compare(c.Accessible.name, "Theme <b>x</b>");
             compare(findChild(c, "themeButton").Accessible.name, "Theme <b>x</b>");
         }
+
+        function test_preview_uses_known_colours() {
+            const c = make({ id: "gruvbox", name: "Gruvbox", user: false, active: true, missing: false,
+                             swatches: ["#282828", "#343330", "#ebdbb2", "#d79921", "#98971a"] });
+            const preview = findChild(c, "preview");
+            verify(preview);
+            compare(preview.color, Qt.color("#282828"));
+            verify(c.hasColours);
+            const plain = make({ id: "forest", name: "Forest", user: false, active: false, missing: false });
+            verify(!plain.hasColours);
+        }
     }
 }

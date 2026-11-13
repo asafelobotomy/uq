@@ -77,4 +77,19 @@ TestCase {
         one.output = "*";
         compare(one.fitField.model.length, 5);
     }
+
+    function test_fit_buttons_send_the_fit() {
+        const ed = createTemporaryObject(comp, tc, { output: "*", entry: { fit: "fit" } });
+        const got = [];
+        ed.changed.connect(e => got.push(e));
+        tryCompare(ed.fitField, "currentIndex", 1);
+        const tile = findChild(ed, "fit-tile");
+        verify(tile);
+        verify(findChild(ed, "fit-fit").checked);
+        tile.clicked();
+        compare(got.length, 1);
+        compare(got[0].fit, "tile");
+        // Until uqd saves it, the saved fit stays chosen.
+        compare(ed.fitField.currentIndex, 1);
+    }
 }

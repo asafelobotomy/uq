@@ -16,6 +16,10 @@ Rectangle {
     property string iconName: ""
     /// A longer explanation, shown as a "?" tooltip after the label.
     property string help: ""
+    /// The controls take the row's whole width (a gallery, a canvas, a row of tiles) instead of
+    /// their own; give them `Layout.fillWidth`. Never size them from the card's width: the card's
+    /// width follows its contents, and the two chase each other.
+    property bool wideControls: false
     property string highlight
     readonly property bool flashing: flash.running
     default property alias content: slot.data
@@ -76,7 +80,8 @@ Rectangle {
     }
 
     implicitWidth: layout.implicitWidth + Kirigami.Units.largeSpacing * 2
-    implicitHeight: layout.implicitHeight + Kirigami.Units.smallSpacing * 2
+    // Every row at least one control tall, so a card's rows sit on an even rhythm.
+    implicitHeight: Math.max(layout.implicitHeight + Kirigami.Units.smallSpacing * 2, Kirigami.Units.gridUnit * 2.25)
     radius: Kirigami.Units.cornerRadius
     color: flashing ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g,
                               Kirigami.Theme.highlightColor.b, 0.25) : "transparent"
@@ -105,13 +110,16 @@ Rectangle {
     RowLayout {
         id: layout
         anchors.fill: parent
-        anchors.leftMargin: Kirigami.Units.largeSpacing
-        anchors.rightMargin: Kirigami.Units.largeSpacing
+        anchors.leftMargin: Kirigami.Units.smallSpacing
+        anchors.rightMargin: Kirigami.Units.smallSpacing
         spacing: Kirigami.Units.largeSpacing
 
+        // The icon column is kept on rows without an icon too, so every label in a card starts
+        // at the same place.
         Kirigami.Icon {
             objectName: "rowIcon"
-            visible: row.iconName !== ""
+            opacity: row.iconName !== "" ? 1 : 0
+            visible: !(row.wideControls && row.iconName === "")
             source: row.iconName
             implicitWidth: Kirigami.Units.iconSizes.smallMedium
             implicitHeight: Kirigami.Units.iconSizes.smallMedium
@@ -120,7 +128,9 @@ Rectangle {
         }
         ColumnLayout {
             spacing: 0
-            Layout.fillWidth: true
+            // Wide controls: the label column shows only when there is a label or a source.
+            visible: !row.wideControls || row.label !== "" || row.sourceText !== ""
+            Layout.fillWidth: !row.wideControls
 
             RowLayout {
                 spacing: Kirigami.Units.smallSpacing
@@ -128,23 +138,30 @@ Rectangle {
                 UqLabel {
                     id: labelText
                     text: row.label
-                    wrapMode: Text.Wrap
+                    readonly property real fullWidth: Math.ceil(labelMetrics.advanceWidth) + 2
+                    readonly property bool short: fullWidth <= Kirigami.Units.gridUnit * 14
+                    // A short label stays on one line (the controls give way first); a long one
+                    // may wrap down to a readable width.
+                    wrapMode: short ? Text.NoWrap : Text.Wrap
                     Layout.fillWidth: true
                     // The text's own width, measured unwrapped: a wrapped Text's implicitWidth
                     // follows its wrapped width, which squeezed short labels a letter a line.
-                    Layout.maximumWidth: Math.ceil(labelMetrics.advanceWidth(row.label)) + 2
-                    Layout.minimumWidth: Math.min(Layout.maximumWidth, Kirigami.Units.gridUnit * 6)
-                    FontMetrics {
+                    // TextMetrics (not a FontMetrics call) so it follows the font once it's set.
+                    Layout.maximumWidth: fullWidth
+                    Layout.minimumWidth: short ? fullWidth : Kirigami.Units.gridUnit * 10
+                    TextMetrics {
                         id: labelMetrics
                         font: labelText.font
+                        text: row.label
                     }
                 }
                 HelpTip {
                     objectName: "rowHelp"
                     tip: row.help
                 }
+                // Always there: without it the capped label made this row, and so the label
+                // column, stop stretching, and the controls sat just after short labels.
                 Item {
-                    visible: row.help !== ""
                     Layout.fillWidth: true
                 }
             }
@@ -194,6 +211,7 @@ Rectangle {
         RowLayout {
             id: slot
             spacing: Kirigami.Units.smallSpacing
+            Layout.fillWidth: row.wideControls
         }
     }
 }
