@@ -1,4 +1,4 @@
-// The automatic light/dark schedule: a mode box, plus time or location fields with Apply.
+// The automatic light/dark schedule: three mode buttons, plus time or location fields with Apply.
 // `schedule` is uqd's saved schedule. The editor's own state (the chosen mode, half-typed text)
 // is reloaded only when the saved schedule's content changes, never on a refresh that brings
 // the same content.
@@ -21,9 +21,9 @@ ColumnLayout {
     readonly property alias latField: lat
     readonly property alias lonField: lon
     readonly property var modes: [
-        { id: "off", name: "Off" },
-        { id: "fixed", name: "At set times" },
-        { id: "sun", name: "Sunrise and sunset" }
+        { id: "off", name: "Off", icon: "dialog-cancel", tip: "Stay on the light or dark chosen above" },
+        { id: "fixed", name: "At set times", icon: "clock", tip: "Light and dark at the times you set" },
+        { id: "sun", name: "Sunrise and sunset", icon: "weather-few-clouds", tip: "Follow the sun where you are" }
     ]
     /// `json` for SetSchedule.
     signal apply(string json)
@@ -49,59 +49,97 @@ ColumnLayout {
 
     SettingRow {
         settingId: "schedule"
+        iconName: "chronometer"
         label: "Switch automatically"
         highlight: root.highlight
         enabled: root.enabled
         Layout.fillWidth: true
-        UqComboBox {
+
+        // The modes as buttons, icon first. "Off" applies at once; the others wait for Apply.
+        QQC2.ButtonGroup {
+            id: modeGroup
+        }
+        Repeater {
             id: modeBox
             objectName: "modeBox"
-            model: root.modes.map(m => m.name)
-            currentIndex: root.modeIndex(root.mode)
-            Accessible.name: "Switch automatically"
-            onActivated: index => {
-                const id = root.modes[index].id;
-                root.mode = id;
-                if (id === "off")
-                    root.apply(JSON.stringify({ mode: "off" }));
-                // Until applied, the box shows the mode in `root.mode`.
-                modeBox.currentIndex = Qt.binding(() => root.modeIndex(root.mode));
+            model: root.modes
+            QQC2.Button {
+                required property var modelData
+                objectName: "mode-" + modelData.id
+                checkable: true
+                checked: root.mode === modelData.id
+                QQC2.ButtonGroup.group: modeGroup
+                Accessible.name: modelData.name
+                QQC2.ToolTip.visible: hovered
+                QQC2.ToolTip.text: modelData.tip
+                contentItem: RowLayout {
+                    spacing: Kirigami.Units.smallSpacing
+                    Kirigami.Icon {
+                        source: modelData.icon
+                        implicitWidth: Kirigami.Units.iconSizes.small
+                        implicitHeight: Kirigami.Units.iconSizes.small
+                        Accessible.ignored: true
+                    }
+                    UqLabel {
+                        text: modelData.name
+                    }
+                }
+                onClicked: {
+                    const id = modelData.id;
+                    root.mode = id;
+                    if (id === "off")
+                        root.apply(JSON.stringify({ mode: "off" }));
+                    // Until applied, the buttons show the mode in `root.mode`.
+                    checked = Qt.binding(() => root.mode === modelData.id);
+                }
             }
         }
     }
     SettingRow {
         objectName: "fixedTimes"
+        iconName: "clock"
         label: "Light from, dark from"
         visible: root.mode === "fixed"
         enabled: root.enabled
         Layout.fillWidth: true
+        Kirigami.Icon {
+            source: "weather-clear"
+            implicitWidth: Kirigami.Units.iconSizes.small
+            implicitHeight: Kirigami.Units.iconSizes.small
+            Accessible.ignored: true
+        }
         QQC2.TextField {
             id: lightAt
             inputMethodHints: Qt.ImhPreferNumbers
             validator: RegularExpressionValidator { regularExpression: /^([01]\d|2[0-3]):[0-5]\d$/ }
             Accessible.name: "Light from (HH:MM)"
-            Layout.preferredWidth: Kirigami.Units.gridUnit * 5
+            Layout.preferredWidth: Kirigami.Units.gridUnit * 4
+        }
+        Kirigami.Icon {
+            source: "weather-clear-night"
+            implicitWidth: Kirigami.Units.iconSizes.small
+            implicitHeight: Kirigami.Units.iconSizes.small
+            Accessible.ignored: true
         }
         QQC2.TextField {
             id: darkAt
             inputMethodHints: Qt.ImhPreferNumbers
             validator: RegularExpressionValidator { regularExpression: /^([01]\d|2[0-3]):[0-5]\d$/ }
             Accessible.name: "Dark from (HH:MM)"
-            Layout.preferredWidth: Kirigami.Units.gridUnit * 5
+            Layout.preferredWidth: Kirigami.Units.gridUnit * 4
         }
-        QQC2.Button {
+        ChoiceButton {
             Accessible.name: "Apply times"
             enabled: lightAt.acceptableInput && darkAt.acceptableInput
-            contentItem: UqLabel {
-                text: "Apply"
-                padding: Kirigami.Units.smallSpacing
-            }
+            label: "Apply"
             onClicked: root.apply(JSON.stringify({ mode: "fixed", light_at: lightAt.text + ":00", dark_at: darkAt.text + ":00" }))
         }
     }
     SettingRow {
         objectName: "sunPlace"
+        iconName: "mark-location"
         label: "Latitude, longitude"
+        help: "Where you are, to work out sunrise and sunset."
         visible: root.mode === "sun"
         enabled: root.enabled
         Layout.fillWidth: true
@@ -119,13 +157,10 @@ ColumnLayout {
             Accessible.name: "Longitude"
             Layout.preferredWidth: Kirigami.Units.gridUnit * 6
         }
-        QQC2.Button {
+        ChoiceButton {
             Accessible.name: "Apply location"
             enabled: lat.acceptableInput && lon.acceptableInput
-            contentItem: UqLabel {
-                text: "Apply"
-                padding: Kirigami.Units.smallSpacing
-            }
+            label: "Apply"
             onClicked: root.apply(JSON.stringify({ mode: "sun", lat: Number(lat.text), lon: Number(lon.text) }))
         }
     }

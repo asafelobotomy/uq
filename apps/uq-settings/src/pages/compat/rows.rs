@@ -79,6 +79,7 @@ pub(super) fn blurry_windows(
         out.push(json!({
             "title": w.title, "class": class,
             "app_id": app.map(|a| &a.id), "app_name": app.map(|a| &a.name),
+            "app_icon": app.map_or("", |a| a.icon.as_str()),
             "has_fix": app.is_some_and(|a| has_fix(&a.id)),
         }));
     }

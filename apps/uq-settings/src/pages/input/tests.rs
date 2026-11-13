@@ -152,6 +152,28 @@ async fn device_override_add_and_clear() {
 }
 
 #[tokio::test]
+async fn added_device_starts_from_the_mouse_speed() {
+    let (_r, page) = rig().await;
+    run(&page, mouse("sensitivity", json!(0.4))).await;
+    let add = || Op::AddDevice {
+        name: "logitech-mouse".into(),
+    };
+    let out = run(&page, add()).await;
+    assert_eq!(out.error, None);
+    assert_eq!(
+        out.state["input"]["devices"]["logitech-mouse"],
+        json!({"sensitivity": 0.4})
+    );
+    // Adding it again keeps what the device already has.
+    run(&page, device("logitech-mouse", "sensitivity", json!(-0.2))).await;
+    let out = run(&page, add()).await;
+    assert_eq!(
+        out.state["input"]["devices"]["logitech-mouse"]["sensitivity"],
+        -0.2
+    );
+}
+
+#[tokio::test]
 async fn rejected_verify_restores_state() {
     let (r, page) = rig().await;
     let before = run(&page, Op::Refresh).await.state;

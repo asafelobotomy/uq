@@ -51,7 +51,9 @@ ColumnLayout {
 
     SettingRow {
         settingId: "display-main"
+        iconName: "favorite"
         label: "Main display"
+        help: "Notifications, pop-ups and Spotlight open on the main display."
         highlight: root.highlight
         enabled: root.enabled
         Layout.fillWidth: true
@@ -72,13 +74,6 @@ ColumnLayout {
         }
     }
     UqLabel {
-        text: "Notifications, pop-ups and Spotlight open on the main display."
-        wrapMode: Text.Wrap
-        opacity: 0.7
-        Layout.fillWidth: true
-        Layout.leftMargin: Kirigami.Units.largeSpacing
-    }
-    UqLabel {
         id: missing
         objectName: "mainMissing"
         visible: root.mainMissing
@@ -91,6 +86,7 @@ ColumnLayout {
 
     SettingRow {
         settingId: "display-bar"
+        iconName: "view-split-top-bottom"
         label: "Show the bar on"
         highlight: root.highlight
         enabled: root.enabled

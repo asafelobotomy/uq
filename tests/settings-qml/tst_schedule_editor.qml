@@ -53,4 +53,21 @@ TestCase {
         buttons[0].clicked();
         compare(got, ['{"mode":"fixed","light_at":"07:30:00","dark_at":"19:00:00"}']);
     }
+
+    function test_mode_buttons() {
+        const ed = createTemporaryObject(comp, tc, { schedule: { mode: "fixed", light_at: "07:00:00", dark_at: "19:00:00" } });
+        const got = [];
+        ed.apply.connect(j => got.push(j));
+        const find = name => {
+            let hit = null;
+            (function walk(i) { for (const c of i.children) { if (c.objectName === name) hit = c; walk(c); } })(ed);
+            return hit;
+        };
+        verify(find("mode-fixed").checked);
+        find("mode-sun").clicked();
+        compare(ed.mode, "sun");
+        compare(got.length, 0, "Sunrise and sunset waits for Apply");
+        find("mode-off").clicked();
+        compare(got, ['{"mode":"off"}']);
+    }
 }

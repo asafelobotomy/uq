@@ -39,12 +39,14 @@ ColumnLayout {
 
     SettingRow {
         settingId: "workspace-layouts"
+        iconName: "view-grid"
         label: "Layout for each workspace"
         highlight: root.highlight
         enabled: root.enabled
         Layout.fillWidth: true
         UqLabel {
-            text: "No workspace has its own layout."
+            text: "None yet"
+            opacity: 0.7
             visible: JSON.parse(root.ruleKey).length === 0
         }
     }
@@ -55,6 +57,7 @@ ColumnLayout {
             required property string modelData
             readonly property string layout: root.workspaces[modelData] || ""
             objectName: "rule"
+            iconName: "virtual-desktops"
             label: "Workspace " + modelData
             enabled: root.enabled
             Layout.fillWidth: true
@@ -68,24 +71,30 @@ ColumnLayout {
                     currentIndex = Qt.binding(() => root.layoutNames.indexOf(rule.layout));
                 }
             }
-            QQC2.Button {
+            QQC2.ToolButton {
+                objectName: "removeButton"
                 text: "Remove"
+                icon.name: "edit-delete"
+                display: QQC2.AbstractButton.IconOnly
                 Accessible.name: "Remove the rule for workspace " + rule.modelData
+                QQC2.ToolTip.visible: hovered
+                QQC2.ToolTip.text: "Remove"
                 onClicked: root.setRule(rule.modelData, "")
             }
         }
     }
     SettingRow {
         objectName: "addRule"
-        label: "Add a workspace rule"
+        iconName: "list-add"
+        label: "Add"
         enabled: root.enabled
         Layout.fillWidth: true
         Layout.leftMargin: Kirigami.Units.largeSpacing * 2
         QQC2.TextField {
             id: selector
-            placeholderText: "Workspace, such as 3 or special:scratch"
+            placeholderText: "Workspace: 3, special:scratch"
             Accessible.name: "Workspace to add a rule for"
-            Layout.preferredWidth: Kirigami.Units.gridUnit * 14
+            Layout.preferredWidth: Kirigami.Units.gridUnit * 11
         }
         UqComboBox {
             id: newLayout
@@ -95,6 +104,7 @@ ColumnLayout {
         QQC2.Button {
             objectName: "addButton"
             text: "Add"
+            icon.name: "list-add"
             enabled: selector.text.trim() !== ""
             Accessible.name: "Add the workspace rule"
             onClicked: {

@@ -35,6 +35,13 @@ All notable changes to uQ are listed here. The format follows
 
 ### Changed
 
+- **Settings, redesigned.** Every page (except Shell, which follows the bar's own redesign) is
+  split into tabs of two-column cards that fill a 1920x1080 window. Rows lead with an icon, labels
+  are short, and longer explanations moved into "?" tooltips. Pages show rather than describe:
+  theme tiles in each theme's own colours, a live window preview for gaps and corners, layout and
+  rotation pictures, a battery gauge, power-mode tiles, a login screen preview, keyboard layouts
+  and shortcuts drawn as keycaps, sample dates and money for your formats, and app icons in
+  default apps, startup apps and rules. Search still finds every setting and opens its tab.
 - **Quick settings has tabs.** The Control Center (Super+A, or the Status island's button) is
   split into **Sound**, **Network** (Wi-Fi and Bluetooth), **Display** (brightness, theme,
   dark/light, layout), **System** (battery, power profile, Do Not Disturb, Stay awake, profiles)
@@ -57,6 +64,11 @@ All notable changes to uQ are listed here. The format follows
 
 ### Fixed
 
+- **Settings fixes:** adding a pointing device under Input → Devices no longer resets its speed
+  to 0; keyboard, mouse and touchpad rows show when `user.lua` overrides them; the Login screen
+  page's theme box is never blank; deleting a restore point asks first; the Login screen page
+  comes and goes with uQ's login screen without restarting Settings (and no longer reappears on
+  machines without it); searching for "Metered" or "Addresses and DNS" lands on a row you can see.
 - **Packaging metadata matches the PKGBUILD again.** `.SRCINFO` now lists `kcolorscheme` and
   `kconfig` (build and runtime), and the packaging test checks the whole `depends` array for
   `polkit` instead of one exact line.

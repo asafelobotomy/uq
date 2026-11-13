@@ -54,12 +54,26 @@ Item {
             Accessible.role: Accessible.Button
             Accessible.name: modelData.label
 
-            UqLabel {
+            Column {
                 anchors.centerIn: parent
                 width: parent.width - Kirigami.Units.smallSpacing * 2
-                horizontalAlignment: Text.AlignHCenter
-                elide: Text.ElideRight
-                text: box.modelData.label
+                UqLabel {
+                    width: parent.width
+                    horizontalAlignment: Text.AlignHCenter
+                    elide: Text.ElideRight
+                    font.bold: box.isSelected
+                    text: box.modelData.label
+                }
+                // The size it takes up, so a scaled screen reads as smaller.
+                UqLabel {
+                    objectName: "displaySize"
+                    visible: box.height > Kirigami.Units.gridUnit * 3
+                    width: parent.width
+                    horizontalAlignment: Text.AlignHCenter
+                    elide: Text.ElideRight
+                    opacity: 0.7
+                    text: box.modelData.rect.w + " × " + box.modelData.rect.h
+                }
             }
 
             MouseArea {
