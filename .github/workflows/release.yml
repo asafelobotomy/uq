@@ -126,6 +126,7 @@ jobs:
           # The AUR copies: packaging/ with the asset's checksum filled in, and fresh .SRCINFO.
           mkdir -p aur/uq aur/uq-hyprland-pin
           sed "s|^sha256sums=.*|sha256sums=('$sum')|" packaging/uq/PKGBUILD >aur/uq/PKGBUILD
+          cp packaging/uq/uq.install aur/uq/uq.install
           cp packaging/uq-hyprland-pin/PKGBUILD aur/uq-hyprland-pin/PKGBUILD
           chown -R builder:builder aur
           su builder -c "set -e
@@ -138,7 +139,7 @@ jobs:
             echo "Once the release is published, check the asset's checksum matches, then copy these"
             echo "into the \`uq\` and \`uq-hyprland-pin\` AUR repositories (also in the \`aur\` artifact):"
             echo
-            for f in aur/uq/PKGBUILD aur/uq/.SRCINFO aur/uq-hyprland-pin/.SRCINFO; do
+            for f in aur/uq/PKGBUILD aur/uq/.SRCINFO aur/uq/uq.install aur/uq-hyprland-pin/.SRCINFO; do
               echo "### $f"
               echo
               echo '```'
