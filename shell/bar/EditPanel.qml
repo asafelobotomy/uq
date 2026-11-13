@@ -131,7 +131,7 @@ PanelWindow {
                 spacing: Theme.gapOut
                 UqText {
                     text: "Editing the bar"
-                    font.bold: true
+                    baseBold: true
                 }
                 UqText {
                     text: "Drag an island to move it, drag its edge to resize it, click it for its settings."

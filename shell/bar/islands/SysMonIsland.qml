@@ -36,20 +36,20 @@ Island {
         }
         UqText {
             text: root.has ? T.percent(root.s.cpu) : "–"
-            font.family: Theme.fontMono
+            baseFamily: Theme.fontMono
             Layout.minimumWidth: implicitWidth
         }
         UqText {
             visible: root.size === "medium" || root.size === "large"
             text: "RAM " + (root.has ? T.percent(root.s.mem) : "–")
-            font.family: Theme.fontMono
+            baseFamily: Theme.fontMono
             color: Theme.textMuted
             Layout.minimumWidth: implicitWidth
         }
         UqText {
             visible: root.size === "large" && root.has && T.temp(root.s.temp_c) !== ""
             text: root.has ? T.temp(root.s.temp_c) : ""
-            font.family: Theme.fontMono
+            baseFamily: Theme.fontMono
             color: root.has && root.s.temp_c >= 90 ? Theme.warning : Theme.textMuted
             Layout.minimumWidth: implicitWidth
         }
@@ -73,7 +73,7 @@ Island {
             UqText {
                 text: "Processor " + (root.has ? T.percent(root.s.cpu) : "–")
                     + (root.has && T.temp(root.s.temp_c) !== "" ? " · " + T.temp(root.s.temp_c) : "")
-                font.bold: true
+                baseBold: true
             }
             GridLayout {
                 columns: 2
@@ -90,7 +90,7 @@ Island {
                         UqText {
                             text: String(index + 1)
                             color: Theme.textMuted
-                            font.family: Theme.fontMono
+                            baseFamily: Theme.fontMono
                             Layout.preferredWidth: Theme.fontSize * 2
                         }
                         // A bar for the core's load; the number beside it says the same.
@@ -108,7 +108,7 @@ Island {
                         }
                         UqText {
                             text: T.percent(modelData)
-                            font.family: Theme.fontMono
+                            baseFamily: Theme.fontMono
                             Layout.preferredWidth: Theme.fontSize * 3
                             horizontalAlignment: Text.AlignRight
                         }
@@ -118,7 +118,7 @@ Island {
             UqText {
                 text: "Memory " + (root.has ? T.percent(root.s.mem) + " · " + T.bytes(root.s.mem_used)
                     + " of " + T.bytes(root.s.mem_total) : "–")
-                font.bold: true
+                baseBold: true
             }
             MenuRow {
                 id: openMonitor

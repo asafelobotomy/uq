@@ -136,6 +136,11 @@ QtObject {
         return save(L.setSize(layout, zone, index, size, units));
     }
 
+    // Change the text style of the island at zone/index (barlayout.js setText).
+    function setText(zone, index, t) {
+        return save(L.setText(layout, zone, index, t));
+    }
+
     function setOptions(island, opts) {
         return save(L.withOptions(layout, island, opts));
     }

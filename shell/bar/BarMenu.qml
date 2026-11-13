@@ -39,7 +39,7 @@ IslandPopup {
 
         UqText {
             text: "uQ Island Menu"
-            font.bold: true
+            baseBold: true
             Layout.fillWidth: true
         }
         UqText {

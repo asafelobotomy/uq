@@ -490,7 +490,7 @@ Island {
 
             UqText {
                 text: mcol.w ? (mcol.w.title || mcol.w.cls) : ""
-                font.bold: true
+                baseBold: true
                 Layout.fillWidth: true
             }
             MenuRow {

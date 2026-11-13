@@ -37,7 +37,7 @@ Island {
         UqText {
             anchors.horizontalCenter: parent.horizontalCenter
             text: Qt.formatDateTime(clock.date, ShellPrefs.clockFormat(Settings.values.shell) === "HH:mm" ? "HH" : "h")
-            font.bold: true
+            baseBold: true
         }
         UqText {
             anchors.horizontalCenter: parent.horizontalCenter
@@ -54,7 +54,7 @@ Island {
 
         UqText {
             text: Qt.formatDateTime(clock.date, root.timeFormat)
-            font.family: root.seconds ? Theme.fontMono : Theme.fontUi
+            baseFamily: root.seconds ? Theme.fontMono : Theme.fontUi
             elide: Text.ElideNone
             Layout.minimumWidth: implicitWidth
         }
@@ -110,7 +110,7 @@ Island {
                     horizontalAlignment: Text.AlignHCenter
                     text: model.day
                     color: model.month === clock.date.getMonth() ? Theme.text : Theme.textMuted
-                    font.bold: model.day === clock.date.getDate()
+                    baseBold: model.day === clock.date.getDate()
                         && model.month === clock.date.getMonth()
                 }
             }

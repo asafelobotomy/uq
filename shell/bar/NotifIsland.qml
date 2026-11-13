@@ -112,7 +112,7 @@ Island {
                 && !(root.isIcon && root.view.dnd)
             text: "\u{1F514}"
             color: NotifBackend.available ? Theme.text : Theme.textMuted
-            font.pixelSize: Theme.fontSize + 3
+            baseSize: Theme.fontSize + 3
         }
         // noti-fi's own icon already shows the count, so no second one beside it.
         UqText {

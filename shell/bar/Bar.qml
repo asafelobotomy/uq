@@ -205,6 +205,8 @@ PanelWindow {
                 sourceComponent: bar.component(slot.islandId)
                 onLoaded: {
                     item.size = Qt.binding(function () { return L.tierOf(slot.size); });
+                    if ("textStyle" in item)
+                        item.textStyle = Qt.binding(function () { return L.textOf(bar.zones[slot.zone][slot.index]); });
                     if (item.editRequested)
                         item.editRequested.connect(function () { bar.editIsland(slot.key); });
                     if (item.menuRequested)

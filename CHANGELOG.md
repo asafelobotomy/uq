@@ -9,6 +9,11 @@ All notable changes to uQ are listed here. The format follows
 
 ### Added
 
+- **Each island's text, your way.** In edit mode, an island's settings now have a **Text**
+  section: the **font** (the theme's, its monospaced font, or any installed font, found by
+  name), **formatting** (bold, italic, all capitals) and the **text size** (70% to 150% of the
+  theme's, in steps of 10%). **Use the theme's** puts it back. Only the island itself changes;
+  its popup keeps the theme's text.
 - **Keep windows on screen.** A floating window that opens bigger than its screen, or hanging
   under the bar or off an edge, is shrunk and moved so all of it shows, on whichever screen it
   is on (any size or scale). This also happens when it turns floating, moves to another

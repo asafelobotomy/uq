@@ -37,6 +37,11 @@ const MAX_URL: usize = 512;
 /// A Custom island's width in Icon sizes: one more than Large, up to this.
 pub const MIN_CUSTOM: u32 = 7;
 pub const MAX_CUSTOM: u32 = 24;
+/// An island's text size, in percent of the theme's, in steps of [`TEXT_SIZE_STEP`].
+pub const MIN_TEXT_SIZE: u16 = 70;
+pub const MAX_TEXT_SIZE: u16 = 150;
+pub const TEXT_SIZE_STEP: u16 = 10;
+const MAX_FONT_NAME: usize = 64;
 
 pub fn known_island(id: &str) -> bool {
     ISLANDS.iter().any(|(i, _)| *i == id)
@@ -99,6 +104,90 @@ fn size_field<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Size>, D:
     }
 }
 
+/// How an island's text looks, in place of the theme's: the font, bold, italic, all capitals
+/// and the size. The default (nothing set) is the theme's text; only the island's face changes,
+/// not its popup.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct TextStyle {
+    /// A font family name, `monospace` for the theme's monospaced font, or `None` for the
+    /// theme's interface font.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub font: Option<String>,
+    #[serde(skip_serializing_if = "is_false")]
+    pub bold: bool,
+    #[serde(skip_serializing_if = "is_false")]
+    pub italic: bool,
+    /// All capitals.
+    #[serde(skip_serializing_if = "is_false")]
+    pub caps: bool,
+    /// Percent of the theme's text size ([`MIN_TEXT_SIZE`]..=[`MAX_TEXT_SIZE`], in steps of
+    /// [`TEXT_SIZE_STEP`]).
+    #[serde(skip_serializing_if = "is_hundred")]
+    pub size: u16,
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
+}
+
+fn is_hundred(n: &u16) -> bool {
+    *n == 100
+}
+
+impl Default for TextStyle {
+    fn default() -> Self {
+        Self {
+            font: None,
+            bold: false,
+            italic: false,
+            caps: false,
+            size: 100,
+        }
+    }
+}
+
+impl TextStyle {
+    pub const FIELDS: [&str; 5] = ["font", "bold", "italic", "caps", "size"];
+
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+
+    /// A font name: 1 to 64 characters, no control characters, not only spaces.
+    pub fn valid_font(f: &str) -> bool {
+        !f.trim().is_empty()
+            && f.chars().count() <= MAX_FONT_NAME
+            && !f.chars().any(char::is_control)
+    }
+
+    fn check(&self) -> Result<(), String> {
+        if let Some(f) = &self.font
+            && !Self::valid_font(f)
+        {
+            return Err(format!("invalid font name {f:?}"));
+        }
+        if !(MIN_TEXT_SIZE..=MAX_TEXT_SIZE).contains(&self.size) || self.size % TEXT_SIZE_STEP != 0
+        {
+            return Err(format!(
+                "text size {} is not {MIN_TEXT_SIZE} to {MAX_TEXT_SIZE} in steps of {TEXT_SIZE_STEP}",
+                self.size
+            ));
+        }
+        Ok(())
+    }
+
+    /// Load-time repair: a bad font is dropped, the size rounded to a step and clamped.
+    fn repaired(mut self) -> Self {
+        if self.font.as_deref().is_some_and(|f| !Self::valid_font(f)) {
+            self.font = None;
+        }
+        let step = (self.size + TEXT_SIZE_STEP / 2) / TEXT_SIZE_STEP * TEXT_SIZE_STEP;
+        self.size = step.clamp(MIN_TEXT_SIZE, MAX_TEXT_SIZE);
+        self
+    }
+}
+
 /// One island in a zone.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BarItem {
@@ -114,16 +203,28 @@ pub struct BarItem {
     /// `size = "custom"`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub units: Option<u32>,
+    /// Its text's look; `None` is the theme's. Not for separators.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<TextStyle>,
 }
 
 impl BarItem {
-    pub const FIELDS: [&str; 3] = ["id", "size", "units"];
+    pub const FIELDS: [&str; 4] = ["id", "size", "units", "text"];
 
     pub fn new(id: &str) -> Self {
         Self {
             id: id.into(),
             size: None,
             units: None,
+            text: None,
+        }
+    }
+
+    fn check_text(&self) -> Result<(), String> {
+        match &self.text {
+            Some(_) if self.id == SEPARATOR => Err("a separator has no text".into()),
+            Some(t) => t.check(),
+            None => Ok(()),
         }
     }
 
@@ -158,8 +259,14 @@ impl BarItem {
         if self.id == SEPARATOR {
             self.size = None;
             self.units = None;
+            self.text = None;
             return;
         }
+        self.text = self
+            .text
+            .take()
+            .map(TextStyle::repaired)
+            .filter(|t| !t.is_default());
         if self.size() == Size::Custom {
             self.units = Some(
                 self.units
@@ -377,6 +484,7 @@ impl BarLayout {
                 return Err(invalid(KEY, format!("unknown island {:?}", item.id)));
             }
             item.check_units()
+                .and_then(|()| item.check_text())
                 .map_err(|e| invalid(KEY, format!("island {:?}: {e}", item.id)))?;
             if item.id != SEPARATOR {
                 if seen.contains(&item.id.as_str()) {
@@ -466,6 +574,9 @@ impl BarLayout {
                 .ok_or_else(|| invalid(&key, "expected an array"))?;
             for item in arr {
                 check_known(&key, item, &BarItem::FIELDS)?;
+                if let Some(t) = item.get("text") {
+                    check_known(&format!("{key}.text"), t, &TextStyle::FIELDS)?;
+                }
                 let it: BarItem = serde_json::from_value(item.clone())
                     .map_err(|e| invalid(&key, e.to_string()))?;
                 out.zone_mut(zone).expect("known zone").push(it);
@@ -638,6 +749,22 @@ fn dedup_valid(list: &mut Vec<String>, max: usize, ok: impl Fn(&str) -> bool) {
     *list = out;
 }
 
+/// A text style from a file, field by field: a field of the wrong type is its default.
+fn lenient_text(v: &Value) -> Option<TextStyle> {
+    let o = v.as_object()?;
+    let flag = |k: &str| o.get(k).and_then(Value::as_bool).unwrap_or(false);
+    Some(TextStyle {
+        font: o.get("font").and_then(Value::as_str).map(String::from),
+        bold: flag("bold"),
+        italic: flag("italic"),
+        caps: flag("caps"),
+        size: o
+            .get("size")
+            .and_then(Value::as_u64)
+            .map_or(100, |n| n.min(u64::from(u16::MAX)) as u16),
+    })
+}
+
 /// Lenient load of `shell.bar`: anything that isn't a table loads as `None` (so the old
 /// switches decide); a table loads field by field, then is sanitised.
 pub(super) fn lenient_bar<'de, D: serde::Deserializer<'de>>(
@@ -661,7 +788,13 @@ pub(super) fn lenient_bar<'de, D: serde::Deserializer<'de>>(
                         .get("units")
                         .and_then(Value::as_u64)
                         .map(|u| u.min(u64::from(MAX_CUSTOM)) as u32);
-                    Some(BarItem { id, size, units })
+                    let text = v.get("text").and_then(lenient_text);
+                    Some(BarItem {
+                        id,
+                        size,
+                        units,
+                        text,
+                    })
                 })
                 .collect(),
             _ => Vec::new(),
@@ -946,10 +1079,59 @@ mod tests {
             id: "news".into(),
             size: Some(Size::Icon),
             units: None,
+            text: None,
         })
         .unwrap();
         assert_eq!(v, json!({"id": "news", "size": "icon"}));
         assert_eq!(island_name("system"), Some("App menu, workspaces and dock"));
+    }
+
+    #[test]
+    fn text_style() {
+        let ok = BarLayout::from_value(&json!({"start": [
+            {"id": "clock", "text": {"font": "Iosevka", "bold": true, "caps": true, "size": 130}},
+            {"id": "work", "text": {"font": "monospace", "italic": true}}
+        ]}))
+        .unwrap();
+        let t = ok.start[0].text.clone().unwrap();
+        assert_eq!(
+            (t.font.as_deref(), t.bold, t.italic, t.caps, t.size),
+            (Some("Iosevka"), true, false, true, 130)
+        );
+        assert_eq!(ok.start[1].text.as_ref().unwrap().size, 100);
+        // Only what differs from the theme is written.
+        assert_eq!(
+            serde_json::to_value(&ok.start[1]).unwrap(),
+            json!({"id": "work", "text": {"font": "monospace", "italic": true}})
+        );
+        for bad in [
+            json!({"start": [{"id": "clock", "text": {"size": 135}}]}),
+            json!({"start": [{"id": "clock", "text": {"size": 60}}]}),
+            json!({"start": [{"id": "clock", "text": {"size": 160}}]}),
+            json!({"start": [{"id": "clock", "text": {"font": ""}}]}),
+            json!({"start": [{"id": "clock", "text": {"font": "A\nB"}}]}),
+            json!({"start": [{"id": "clock", "text": {"font": "x".repeat(65)}}]}),
+            json!({"start": [{"id": "clock", "text": {"bold": "yes"}}]}),
+            json!({"start": [{"id": "clock", "text": {"colour": "red"}}]}),
+            json!({"start": [{"id": "separator", "text": {"bold": true}}]}),
+        ] {
+            assert!(BarLayout::from_value(&bad).is_err(), "{bad}");
+        }
+        // Lenient load: repaired, or dropped when nothing is left.
+        let set: Settings = serde_json::from_value(json!({"shell": {"bar": {"start": [
+            {"id": "clock", "text": {"size": 134, "font": "\u{7}", "bold": "yes"}},
+            {"id": "work", "text": {"size": 999, "italic": true}},
+            {"id": "system", "text": {"size": 100}},
+            {"id": "separator", "text": {"bold": true}}
+        ]}}}))
+        .unwrap();
+        let b = set.shell.bar.unwrap();
+        let t = b.start[0].text.clone().unwrap();
+        assert_eq!((t.font, t.bold, t.size), (None, false, 130));
+        assert_eq!(b.start[1].text.as_ref().unwrap().size, MAX_TEXT_SIZE);
+        assert_eq!(b.start[2].text, None, "the theme's look is stored as none");
+        assert_eq!(b.start[3].text, None);
+        assert!(b.validate().is_ok());
     }
 
     #[test]

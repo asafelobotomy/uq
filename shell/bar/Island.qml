@@ -18,6 +18,17 @@ Rectangle {
     // The width inside the border and padding, for the island's content.
     readonly property real room: width - Theme.gapIn * 2
     readonly property bool isIcon: size === "icon"
+    // Its text style (barlayout.js textOf: font, bold, italic, caps, size), set by the bar. Every
+    // UqText inside the island (not in its popups) draws with it.
+    property var textStyle: null
+    readonly property bool isIsland: true
+    // "" keeps each text's own font (the theme's, or its monospaced one for figures).
+    readonly property string textFamily: textStyle && textStyle.font !== null
+        ? L.fontFamily(textStyle, Theme.fontUi, Theme.fontMono) : ""
+    readonly property real textScale: textStyle ? textStyle.size / 100 : 1
+    readonly property bool textBold: !!textStyle && textStyle.bold
+    readonly property bool textItalic: !!textStyle && textStyle.italic
+    readonly property bool textCaps: !!textStyle && textStyle.caps
     // The island asks for edit mode with its own settings open (a "Change…" row in its popup).
     signal editRequested()
     // The island asks for the uQ Island Menu (an island whose own right click does something

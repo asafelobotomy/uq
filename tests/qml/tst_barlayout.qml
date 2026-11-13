@@ -80,6 +80,46 @@ TestCase {
         compare(L.toSetting(b).center, [{ id: "clock", size: "large" }]);
     }
 
+    function test_text_style() {
+        var b = sample();
+        compare(L.textOf(b.start[0]), L.TEXT_DEFAULT);
+        verify(L.isPlainText(L.textOf(b.start[0])));
+        var t = L.setText(b, "start", 1, { bold: true, size: 120 });
+        compare(t.start[1].text, { bold: true, size: 120 });
+        // Merged: one change keeps the rest.
+        var t2 = L.setText(t, "start", 1, { font: L.MONO });
+        compare(t2.start[1].text, { font: L.MONO, bold: true, size: 120 });
+        // Back to the theme's look: nothing stored.
+        compare(L.setText(t2, "start", 1, null).start[1].text, undefined);
+        compare(L.setText(t, "start", 1, { bold: false, size: 100 }).start[1].text, undefined);
+        // Kept through a size change, a move and the save.
+        var s1 = L.setSize(t2, "start", 1, "small");
+        compare(s1.start[1].text, { font: L.MONO, bold: true, size: 120 });
+        compare(L.setSize(t2, "start", 1, "custom", 8).start[1].text.size, 120);
+        compare(L.find(L.move(t2, "start", 1, -1), "work").index, 0);
+        compare(L.move(t2, "start", 1, -1).start[0].text.bold, true);
+        compare(L.toSetting(s1).start[1], { id: "work", size: "small", text: { font: L.MONO, bold: true, size: 120 } });
+        // Separators and bad places have none.
+        var sep = L.add(b, "separator", "start");
+        compare(L.setText(sep, "start", 2, { bold: true }), null);
+        compare(L.setText(b, "start", 9, { bold: true }), null);
+        // Read from settings: cleaned.
+        var lay = L.layout({ shell: { bar: { start: [
+            { id: "clock", text: { size: 134, font: "\u0007", bold: "yes", italic: true } },
+            { id: "work", text: { size: 999 } },
+            { id: "separator", text: { bold: true } }] } } });
+        compare(lay.start[0].text, { italic: true, size: 130 });
+        compare(lay.start[1].text, { size: L.TEXT_MAX });
+        compare(lay.start[2].text, undefined);
+        // Steps and fonts.
+        compare(L.stepTextSize(100, 1), 110);
+        compare(L.stepTextSize(L.TEXT_MAX, 1), null);
+        compare(L.stepTextSize(L.TEXT_MIN, -1), null);
+        compare(L.fontFamily(L.textOf({}), "Inter", "Mono"), "Inter");
+        compare(L.fontFamily(L.textOf({ text: { font: L.MONO } }), "Inter", "Mono"), "Mono");
+        compare(L.fontFamily(L.textOf({ text: { font: "Iosevka" } }), "Inter", "Mono"), "Iosevka");
+    }
+
     function test_custom_size() {
         var b = sample();
         var c = L.setSize(b, "start", 1, "custom", 9);

@@ -42,7 +42,7 @@ Island {
         UqText {
             id: layoutText
             text: (root.size === "medium" || root.size === "large") && root.keymap !== "" ? root.keymap : root.label
-            font.family: root.isIcon || root.size === "small" ? Theme.fontMono : Theme.fontUi
+            baseFamily: root.isIcon || root.size === "small" ? Theme.fontMono : Theme.fontUi
             Layout.fillWidth: true
         }
     }

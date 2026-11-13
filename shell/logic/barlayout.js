@@ -21,6 +21,15 @@ var MAX_CUSTOM = 24;
 var UNITS = { icon: 1, small: 2, medium: 4, large: 6, custom: MIN_CUSTOM };
 var SIZE_NAMES = { icon: "Icon", small: "Small", medium: "Medium", large: "Large", custom: "Custom" };
 
+// An island's text style (`text` on an item; same rules as uq_core::settings::bar::TextStyle):
+// font (a family, MONO for the theme's monospaced font, null for the theme's), bold, italic,
+// caps, and size in percent of the theme's text, TEXT_MIN to TEXT_MAX in steps of TEXT_STEP.
+var MONO = "monospace";
+var TEXT_MIN = 70;
+var TEXT_MAX = 150;
+var TEXT_STEP = 10;
+var TEXT_DEFAULT = { font: null, bold: false, italic: false, caps: false, size: 100 };
+
 // Same ids and order as uq_core::settings::bar::ISLANDS.
 var ISLANDS = [
     { id: "system", name: "App menu, workspaces and dock" },
@@ -93,6 +102,61 @@ function _cleanUnits(u) {
     return isFinite(n) ? Math.max(MIN_CUSTOM, Math.min(MAX_CUSTOM, n)) : MIN_CUSTOM;
 }
 
+function _validFont(f) {
+    return typeof f === "string" && f.trim() !== "" && f.length <= 64 && !/[\u0000-\u001f\u007f]/.test(f);
+}
+
+// A text style cleaned up (every field present), from whatever an item holds.
+function textOf(item) {
+    var t = item && item.text && typeof item.text === "object" ? item.text : {};
+    var n = Math.round(Number(t.size) / TEXT_STEP) * TEXT_STEP;
+    return {
+        font: _validFont(t.font) ? t.font : null,
+        bold: t.bold === true,
+        italic: t.italic === true,
+        caps: t.caps === true,
+        size: isFinite(n) && n > 0 ? Math.max(TEXT_MIN, Math.min(TEXT_MAX, n)) : 100
+    };
+}
+
+function isPlainText(t) {
+    return !t || (t.font === null && !t.bold && !t.italic && !t.caps && t.size === 100);
+}
+
+// What is stored for style `t`: only the fields that differ from the theme's, null for none.
+function _storedText(t) {
+    if (isPlainText(t))
+        return null;
+    var out = {};
+    if (t.font !== null) out.font = t.font;
+    if (t.bold) out.bold = true;
+    if (t.italic) out.italic = true;
+    if (t.caps) out.caps = true;
+    if (t.size !== 100) out.size = t.size;
+    return out;
+}
+
+// The font family to draw style `t` in, given the theme's interface and monospaced fonts.
+function fontFamily(t, ui, mono) {
+    if (!t || t.font === null)
+        return ui;
+    return t.font === MONO ? mono : t.font;
+}
+
+// The next text size up (dir 1) or down (-1) from `size`, or null past the ends.
+function stepTextSize(size, dir) {
+    var n = (Number(size) || 100) + dir * TEXT_STEP;
+    return n < TEXT_MIN || n > TEXT_MAX ? null : n;
+}
+
+// Copy of `item` with `extra` fields (only `text` when it is not the theme's look).
+function _withText(item, out) {
+    var t = _storedText(textOf(item));
+    if (t !== null && item.id !== SEPARATOR)
+        out.text = t;
+    return out;
+}
+
 function _cleanSize(s) {
     if (s === "compact") return "small";
     if (s === "wide") return "large";
@@ -112,8 +176,8 @@ function _items(list, seen, count) {
         seen[it.id] = true;
         count.n++;
         var size = it.id === SEPARATOR ? null : _cleanSize(it.size);
-        out.push(size === CUSTOM ? { id: it.id, size: size, units: _cleanUnits(it.units) }
-                                 : { id: it.id, size: size });
+        out.push(_withText(it, size === CUSTOM ? { id: it.id, size: size, units: _cleanUnits(it.units) }
+                                               : { id: it.id, size: size }));
     }
     return out;
 }
@@ -238,10 +302,34 @@ function setSize(bar, zone, index, size, units) {
     var out = _copy(bar);
     var old = out[zone][index], id = old.id;
     if (size === CUSTOM)
-        out[zone][index] = { id: id, size: CUSTOM,
-                             units: _cleanUnits(units !== undefined ? units : old.units) };
+        out[zone][index] = _withText(old, { id: id, size: CUSTOM,
+                             units: _cleanUnits(units !== undefined ? units : old.units) });
     else
-        out[zone][index] = { id: id, size: size === defaultSize(id) ? null : size };
+        out[zone][index] = _withText(old, { id: id, size: size === defaultSize(id) ? null : size });
+    return out;
+}
+
+// Set the text style of the item at zone/index: `t` is merged into what it has (so
+// {bold: true} changes only that); null puts back the theme's look. Null for a separator or
+// a place that doesn't exist.
+function setText(bar, zone, index, t) {
+    if (ZONES.indexOf(zone) < 0 || index < 0 || index >= bar[zone].length
+            || bar[zone][index].id === SEPARATOR)
+        return null;
+    var out = _copy(bar);
+    var old = out[zone][index], next = {};
+    for (var k in old)
+        if (k !== "text")
+            next[k] = old[k];
+    var cur = textOf(old);
+    if (t !== null)
+        for (var f in TEXT_DEFAULT)
+            if (t[f] !== undefined)
+                cur[f] = t[f];
+    var stored = t === null ? null : _storedText(textOf({ text: cur }));
+    if (stored !== null)
+        next.text = stored;
+    out[zone][index] = next;
     return out;
 }
 
@@ -300,8 +388,8 @@ function toSetting(bar) {
     var z = function (list) {
         return list.map(function (it) {
             if (it.size === CUSTOM)
-                return { id: it.id, size: CUSTOM, units: _cleanUnits(it.units) };
-            return SIZES.indexOf(it.size) >= 0 ? { id: it.id, size: it.size } : { id: it.id };
+                return _withText(it, { id: it.id, size: CUSTOM, units: _cleanUnits(it.units) });
+            return _withText(it, SIZES.indexOf(it.size) >= 0 ? { id: it.id, size: it.size } : { id: it.id });
         });
     };
     var out = { start: z(bar.start), center: z(bar.center), end: z(bar.end) };

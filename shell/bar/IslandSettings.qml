@@ -10,7 +10,7 @@ import "islands"
 
 // An island's settings, in edit mode (a left click on an island, or Enter on the selected one):
 // its size (Icon, Small, Medium, Large, or Custom: wider than Large, one Icon size at a time),
-// what it shows (the clock's seconds and date, the
+// its text (font, bold / italic / all capitals, text size), what it shows (the clock's seconds and date, the
 // weather's city, the stock symbols, the news feeds, the world clock's time zones), moving it,
 // and removing it. Changes are saved at once (BarLayout). User text (symbols, addresses, city
 // names) only ever reaches the screen through UqText.
@@ -23,6 +23,27 @@ IslandPopup {
     readonly property var item: target && BarLayout.layout[target.zone] ? BarLayout.layout[target.zone][target.index] : null
     readonly property string chosen: item ? L.sizeOf(item) : "medium"
     readonly property int chosenUnits: item ? L.unitsOf(item) : 0
+    // The island's text style, as stored (every field present).
+    readonly property var textStyle: L.textOf(item)
+    function setText(t) {
+        if (pop.target)
+            BarLayout.setText(pop.target.zone, pop.target.index, t);
+    }
+    // Installed font families matching `fontQuery` (at most 6), for the font search.
+    property string fontQuery: ""
+    property var allFonts: null
+    readonly property var fontMatches: {
+        var q = fontQuery.trim().toLowerCase();
+        if (q === "")
+            return [];
+        if (allFonts === null)
+            allFonts = Qt.fontFamilies();
+        var out = [];
+        for (var i = 0; i < allFonts.length && out.length < 6; i++)
+            if (allFonts[i].toLowerCase().indexOf(q) >= 0)
+                out.push(allFonts[i]);
+        return out;
+    }
     function stepWidth(dir) {
         if (!pop.target || !pop.item)
             return;
@@ -36,6 +57,7 @@ IslandPopup {
     function showFor(slot, t) {
         target = t;
         addError = "";
+        fontQuery = "";
         results = [];
         geoError = "";
         show(slot);
@@ -109,7 +131,7 @@ IslandPopup {
 
         UqText {
             text: L.name(pop.island)
-            font.bold: true
+            baseBold: true
             Layout.fillWidth: true
         }
 
@@ -172,6 +194,146 @@ IslandPopup {
             color: Theme.textMuted
             wrapMode: Text.WordWrap
             Layout.fillWidth: true
+        }
+
+        // --- text: font, formatting, size (the island's face; its popup keeps the theme's) ---
+        ColumnLayout {
+            visible: pop.island !== L.SEPARATOR
+            spacing: 2
+            Layout.fillWidth: true
+            Layout.topMargin: Theme.gapIn
+
+            RowLayout {
+                Layout.fillWidth: true
+                UqText {
+                    text: "Text"
+                    color: Theme.textMuted
+                    Layout.fillWidth: true
+                }
+                MenuRow {
+                    visible: !L.isPlainText(pop.textStyle)
+                    text: "Use the theme's"
+                    onActivated: pop.setText(null)
+                }
+            }
+            UqText {
+                text: "Font"
+                color: Theme.textMuted
+            }
+            Flow {
+                spacing: 2
+                Layout.fillWidth: true
+                MenuRow {
+                    text: "Theme"
+                    detail: pop.textStyle.font === null ? "✓" : ""
+                    Accessible.checkable: true
+                    Accessible.checked: pop.textStyle.font === null
+                    onActivated: pop.setText({ font: null })
+                }
+                MenuRow {
+                    text: "Monospace"
+                    detail: pop.textStyle.font === L.MONO ? "✓" : ""
+                    Accessible.checkable: true
+                    Accessible.checked: pop.textStyle.font === L.MONO
+                    onActivated: pop.setText({ font: L.MONO })
+                }
+                // A font picked from the search below.
+                MenuRow {
+                    visible: pop.textStyle.font !== null && pop.textStyle.font !== L.MONO
+                    text: pop.textStyle.font || ""
+                    detail: "✓"
+                    Accessible.checkable: true
+                    Accessible.checked: true
+                }
+            }
+            UqInput {
+                id: fontInput
+                Layout.fillWidth: true
+                maximumLength: 64
+                placeholder: "Find a font…"
+                Accessible.name: "Find a font"
+                onEdited: function (s) { pop.fontQuery = s; }
+                Keys.onDownPressed: nextItemInFocusChain(true).forceActiveFocus()
+            }
+            Repeater {
+                model: pop.fontMatches
+                delegate: MenuRow {
+                    required property string modelData
+                    text: modelData
+                    detail: pop.textStyle.font === modelData ? "✓" : ""
+                    // Each name in its own font.
+                    textItem.baseFamily: modelData
+                    Layout.fillWidth: true
+                    onActivated: pop.setText({ font: modelData })
+                }
+            }
+            UqText {
+                visible: pop.fontQuery.trim() !== "" && pop.fontMatches.length === 0
+                text: "No installed font matches"
+                color: Theme.textMuted
+            }
+
+            UqText {
+                text: "Formatting"
+                color: Theme.textMuted
+                Layout.topMargin: Theme.gapIn
+            }
+            Flow {
+                spacing: 2
+                Layout.fillWidth: true
+                MenuRow {
+                    text: "Bold"
+                    textItem.baseBold: true
+                    detail: pop.textStyle.bold ? "✓" : ""
+                    Accessible.checkable: true
+                    Accessible.checked: pop.textStyle.bold
+                    onActivated: pop.setText({ bold: !pop.textStyle.bold })
+                }
+                MenuRow {
+                    text: "Italic"
+                    textItem.font.italic: true
+                    detail: pop.textStyle.italic ? "✓" : ""
+                    Accessible.checkable: true
+                    Accessible.checked: pop.textStyle.italic
+                    onActivated: pop.setText({ italic: !pop.textStyle.italic })
+                }
+                MenuRow {
+                    text: "All capitals"
+                    detail: pop.textStyle.caps ? "✓" : ""
+                    Accessible.checkable: true
+                    Accessible.checked: pop.textStyle.caps
+                    onActivated: pop.setText({ caps: !pop.textStyle.caps })
+                }
+            }
+
+            UqText {
+                text: "Text size: " + pop.textStyle.size + "%"
+                color: Theme.textMuted
+                Layout.topMargin: Theme.gapIn
+            }
+            RowLayout {
+                spacing: 2
+                MenuRow {
+                    text: "Smaller"
+                    detail: "−"
+                    enabled: L.stepTextSize(pop.textStyle.size, -1) !== null
+                    onActivated: {
+                        var n = L.stepTextSize(pop.textStyle.size, -1);
+                        if (n !== null)
+                            pop.setText({ size: n });
+                    }
+                }
+                MenuRow {
+                    text: "Larger"
+                    detail: "+"
+                    enabled: L.stepTextSize(pop.textStyle.size, 1) !== null
+                    onActivated: {
+                        var n = L.stepTextSize(pop.textStyle.size, 1);
+                        if (n !== null)
+                            pop.setText({ size: n });
+                    }
+                }
+            }
         }
 
         // --- clock ---

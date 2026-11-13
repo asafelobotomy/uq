@@ -38,7 +38,7 @@ Island {
         UqText {
             anchors.horizontalCenter: parent.horizontalCenter
             text: root.first ? root.time(root.first).split(":")[0] : ""
-            font.bold: true
+            baseBold: true
         }
         UqText {
             anchors.horizontalCenter: parent.horizontalCenter
@@ -98,7 +98,7 @@ Island {
 
             UqText {
                 text: "World clock"
-                font.bold: true
+                baseBold: true
             }
             UqText {
                 visible: root.zones.length === 0

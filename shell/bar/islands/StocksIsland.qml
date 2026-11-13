@@ -37,7 +37,7 @@ Island {
         visible: root.isIcon
         anchors.centerIn: parent
         text: root.first && root.first.changePct !== null ? T.glyph(root.first.changePct) : "–"
-        font.pixelSize: Math.round(Theme.fontSize * 1.4)
+        baseSize: Math.round(Theme.fontSize * 1.4)
         color: root.first && T.direction(root.first.changePct) > 0 ? Theme.success
             : (root.first && T.direction(root.first.changePct) < 0 ? Theme.error : Theme.textMuted)
     }
@@ -59,21 +59,21 @@ Island {
             spacing: Theme.gapIn
             UqText {
                 text: modelData.symbol
-                font.bold: true
+                baseBold: true
                 elide: Text.ElideNone
             }
             UqText {
                 // Every real quote row (not the "Loading…" stand-in); "–" when it has no price.
                 visible: root.withPrice && modelData.name !== undefined
                 text: T.price(modelData.price)
-                font.family: Theme.fontMono
+                baseFamily: Theme.fontMono
                 elide: Text.ElideNone
                 color: root.ev && root.ev.status === "error" ? Theme.textMuted : Theme.text
             }
             UqText {
                 visible: modelData.changePct !== null
                 text: T.pct(modelData.changePct)
-                font.family: Theme.fontMono
+                baseFamily: Theme.fontMono
                 elide: Text.ElideNone
                 color: T.direction(modelData.changePct) > 0 ? Theme.success
                     : (T.direction(modelData.changePct) < 0 ? Theme.error : Theme.textMuted)
@@ -99,7 +99,7 @@ Island {
 
             UqText {
                 text: "Stocks"
-                font.bold: true
+                baseBold: true
             }
             UqText {
                 visible: root.note !== ""
@@ -131,7 +131,7 @@ Island {
                         Layout.preferredWidth: Theme.fontSize * 12
                         UqText {
                             text: qrow.modelData
-                            font.bold: true
+                            baseBold: true
                         }
                         UqText {
                             text: qrow.q === null ? "No quote yet"
@@ -148,14 +148,14 @@ Island {
                             horizontalAlignment: Text.AlignRight
                             text: qrow.q && qrow.q.price !== null
                                 ? T.price(qrow.q.price) + (qrow.q.currency ? " " + qrow.q.currency : "") : ""
-                            font.family: Theme.fontMono
+                            baseFamily: Theme.fontMono
                         }
                         UqText {
                             Layout.fillWidth: true
                             horizontalAlignment: Text.AlignRight
                             visible: qrow.q !== null && qrow.q.changePct !== null
                             text: qrow.q ? T.pct(qrow.q.changePct) : ""
-                            font.family: Theme.fontMono
+                            baseFamily: Theme.fontMono
                             color: qrow.q && T.direction(qrow.q.changePct) > 0 ? Theme.success
                                 : (qrow.q && T.direction(qrow.q.changePct) < 0 ? Theme.error : Theme.textMuted)
                         }
