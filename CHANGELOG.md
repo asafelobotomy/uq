@@ -9,6 +9,28 @@ All notable changes to uQ are listed here. The format follows
 
 ### Added
 
+- **Arrange the bar your way.** The bar now has a left, a centre and a right zone, and every
+  island can be moved between them, made compact, normal or wide, taken off or put back, with
+  separators between islands if you like. Right-click an island (or the bar between islands) to
+  move, resize, remove or add one right there, or edit the whole layout under **Settings →
+  Shell → Bar**: drag rows by their handle, or use the arrow buttons or Alt+Up/Alt+Down. Changes
+  apply at once on every screen and are kept. Your current bar carries over as it was.
+- **New islands for the bar.** Add any of these from the bar's right-click menu or Settings:
+  - **Weather**, now its own island, with today's high and low and the next hours. Only the city
+    you choose is sent to Open-Meteo, as before.
+  - **Stock ticker**: your symbols scroll by with price and day change (▲/▼ as well as colour);
+    click for a list with the day's range, and to add, remove or reorder symbols. Quotes come
+    from a free, delayed source, and only the symbols are sent.
+  - **News headlines** from the RSS or Atom feeds you pick (a few are suggested); click for the
+    latest headlines and open one in your browser with a click or Enter.
+  - **System monitor** (processor, memory and temperature, with every core in its popup),
+    **World clock** (up to four time zones), **Now playing** (track with previous, play/pause
+    and next) and **Keyboard layout** (shows and switches layouts when you have more than one).
+  - **Clock** options: seconds, and no, short or long date.
+  Scrolling text stops while the pointer is over it, while the screen is shared, and when
+  **Reduce motion** is on (then it changes every few seconds instead). Stocks and news are
+  fetched only while their island is on the bar, refresh every 5 and 15 minutes, keep the last
+  results when offline (marked with their age), and work from the keyboard in their popups.
 - **Screenshots, the Plasma way.** Print freezes the screen and opens it in satty with the crop
   tool: drag an area, mark it up (arrows, boxes, text, blur), then Enter copies and saves it to
   `~/Pictures/Screenshots`. Shift+Print takes the whole screen and Super+Print the focused window,
@@ -21,6 +43,10 @@ All notable changes to uQ are listed here. The format follows
 
 ### Changed
 
+- **Weather has its own island.** The city search and "Turn off weather" moved from the clock's
+  popup to the Weather island's; the clock's popup keeps the calendar, and offers to show the
+  weather when that island isn't on the bar. The old on/off switches for the five islands are
+  replaced by the bar editor.
 - **Quick settings has tabs.** The Control Center (Super+A, or the Status island's button) is
   split into **Sound**, **Network** (Wi-Fi and Bluetooth), **Display** (brightness, theme,
   dark/light, layout), **System** (battery, power profile, Do Not Disturb, Stay awake, profiles)

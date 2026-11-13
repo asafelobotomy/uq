@@ -1,4 +1,4 @@
-// Shell: pinned apps, launcher providers, the bar's islands and clock, the terminal, the
+// Shell: pinned apps, launcher providers, the bar's layout (islands, zones, sizes, options) and clock, the terminal, the
 // notification backend, idle timings and privacy. Everything is read from and written to uqd
 // through ShellModel; a refused change (an idle stage out of order, say) shows uqd's message and
 // the controls go back to the last good value. App names and provider names are other
@@ -22,18 +22,10 @@ QQC2.ScrollView {
     }
     readonly property var settings: snap.settings || {}
     readonly property var shell: snap.shell || {}
-    readonly property var islands: shell.islands || {}
     readonly property var apps: snap.apps || []
     readonly property var terminals: snap.terminals || []
     readonly property var knownProviders: snap.providers || []
     readonly property bool ready: App.uqdUp
-    readonly property var islandLabels: [
-        { id: "system", name: "System (volume, network, battery)" },
-        { id: "work", name: "Workspaces" },
-        { id: "time", name: "Clock" },
-        { id: "notif", name: "Notifications" },
-        { id: "status", name: "Status icons" }
-    ]
     readonly property var backendIds: ["auto", "notifi", "builtin", "swaync", "mako", "dunst"]
     readonly property var backendLabels: ({
         auto: "Automatic", notifi: "noti-fi", builtin: "uQ's built-in", swaync: "SwayNotificationCenter",
@@ -209,22 +201,20 @@ QQC2.ScrollView {
         }
         SettingRow {
             settingId: "islands"
-            label: "Islands shown in the bar"
+            label: "Islands in the bar, left to right. Right-click the bar to change it there too."
             highlight: App.highlight
             enabled: page.ready
             Layout.fillWidth: true
         }
-        Repeater {
-            model: page.islandLabels
-            SwitchRow {
-                required property var modelData
-                label: modelData.name
-                enabled: page.ready
-                value: page.islands[modelData.id] !== false
-                onChosen: v => page.setShell("islands." + modelData.id, v)
-                Layout.leftMargin: Kirigami.Units.largeSpacing * 2
-                Layout.fillWidth: true
-            }
+        BarLayoutEditor {
+            objectName: "barEditor"
+            bar: page.shell.bar || ({})
+            catalog: page.snap.islands || []
+            // Edits are intents applied to uqd's current layout, one at a time.
+            enabled: page.ready && !sm.busy
+            onEdit: e => sm.barEdit(JSON.stringify(e))
+            Layout.leftMargin: Kirigami.Units.largeSpacing * 2
+            Layout.fillWidth: true
         }
         SwitchRow {
             settingId: "clock-24h"

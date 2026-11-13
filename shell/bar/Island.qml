@@ -5,6 +5,10 @@ import "../core"
 Rectangle {
     id: root
     default property alias content: slot.data
+    // False hides the island and its slot in the bar (Bar.qml), e.g. media with no player.
+    property bool shown: true
+    // `compact`, `normal` or `wide` (shell.bar); each island decides what that means.
+    property string size: "normal"
 
     color: Theme.surface
     radius: Theme.radius

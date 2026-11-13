@@ -11,7 +11,8 @@ use serde_json::{Value, json};
 use tokio::sync::Mutex;
 use uq_core::client::DesktopProxy;
 use uq_core::launcher_providers::{self, ProviderDef};
-use uq_core::settings::{BUILTIN_PROVIDERS, Islands};
+use uq_core::settings::bar::ISLANDS;
+use uq_core::settings::{BUILTIN_PROVIDERS, BarEdit, BarLayout, Islands};
 
 use crate::desktop_entries;
 use crate::pages::runner::{ORIGIN, PageLogic, parse_json, patch_section};
@@ -69,6 +70,10 @@ pub enum Op {
     ProviderToggle {
         id: String,
         on: bool,
+    },
+    /// One edit of the bar's layout (`shell.bar`), applied to the layout as uqd has it now.
+    Bar {
+        edit: BarEdit,
     },
 }
 
@@ -255,6 +260,22 @@ impl PageLogic for ShellState {
                 })
                 .await
             }
+            Op::Bar { edit } => {
+                patch_section(&proxy, "shell", |section| {
+                    let mut bar = match section.get("bar") {
+                        Some(v) => BarLayout::from_value(v)
+                            .map_err(|e| zbus::Error::Failure(e.to_string()))?,
+                        None => BarLayout::default(),
+                    };
+                    bar.apply(&edit)
+                        .map_err(|e| zbus::Error::Failure(e.to_string()))?;
+                    let v = serde_json::to_value(&bar)
+                        .map_err(|e| zbus::Error::Failure(e.to_string()))?;
+                    section.insert("bar".into(), v);
+                    Ok(())
+                })
+                .await
+            }
             Op::SetShell { field, value } => {
                 patch_section(&proxy, "shell", |section| {
                     match field.strip_prefix("islands.") {
@@ -299,6 +320,10 @@ impl PageLogic for ShellState {
             "terminals": terminals,
             "apps": apps,
             "shell": shell,
+            "islands": ISLANDS
+                .iter()
+                .map(|(id, name)| json!({"id": id, "name": name}))
+                .collect::<Vec<_>>(),
         }))
     }
 }

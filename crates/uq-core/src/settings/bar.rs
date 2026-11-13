@@ -358,6 +358,125 @@ impl BarLayout {
     }
 }
 
+/// One edit of the bar as Settings asks for it, applied to the layout as uqd has it now. Each
+/// names the island it means (`id` at `zone`/`index`), so an edit made on an older view is
+/// refused instead of changing another island.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
+pub enum BarEdit {
+    /// Move to `to_index` of `to_zone` (counted after taking it out).
+    Move {
+        id: String,
+        zone: String,
+        index: usize,
+        to_zone: String,
+        to_index: usize,
+    },
+    /// Add at `index` of `zone`, or at its end.
+    Add {
+        id: String,
+        zone: String,
+        #[serde(default)]
+        index: Option<usize>,
+    },
+    Remove {
+        id: String,
+        zone: String,
+        index: usize,
+    },
+    Size {
+        id: String,
+        zone: String,
+        index: usize,
+        size: Size,
+    },
+    /// Replace `options.<island>`.
+    Options { island: String, value: Value },
+    /// Back to a new user's bar (options kept).
+    Reset,
+}
+
+fn stale() -> SettingError {
+    invalid("shell.bar", "the bar changed meanwhile; try again")
+}
+
+impl BarLayout {
+    fn check_at(&self, id: &str, zone: &str, index: usize) -> Result<(), SettingError> {
+        let z = self
+            .zone(zone)
+            .ok_or_else(|| invalid("shell.bar", format!("unknown zone {zone:?}")))?;
+        match z.get(index) {
+            Some(it) if it.id == id => Ok(()),
+            _ => Err(stale()),
+        }
+    }
+
+    /// Apply `edit`; on error `self` is unchanged.
+    pub fn apply(&mut self, edit: &BarEdit) -> Result<(), SettingError> {
+        let mut next = self.clone();
+        match edit {
+            BarEdit::Move {
+                id,
+                zone,
+                index,
+                to_zone,
+                to_index,
+            } => {
+                next.check_at(id, zone, *index)?;
+                if next.zone(to_zone).is_none() {
+                    return Err(invalid("shell.bar", format!("unknown zone {to_zone:?}")));
+                }
+                let item = next.zone_mut(zone).expect("checked").remove(*index);
+                let to = next.zone_mut(to_zone).expect("checked");
+                let at = (*to_index).min(to.len());
+                to.insert(at, item);
+            }
+            BarEdit::Add { id, zone, index } => {
+                let z = next
+                    .zone_mut(zone)
+                    .ok_or_else(|| invalid("shell.bar", format!("unknown zone {zone:?}")))?;
+                let at = index.unwrap_or(z.len()).min(z.len());
+                z.insert(at, BarItem::new(id));
+            }
+            BarEdit::Remove { id, zone, index } => {
+                next.check_at(id, zone, *index)?;
+                next.zone_mut(zone).expect("checked").remove(*index);
+            }
+            BarEdit::Size {
+                id,
+                zone,
+                index,
+                size,
+            } => {
+                next.check_at(id, zone, *index)?;
+                next.zone_mut(zone).expect("checked")[*index].size = *size;
+            }
+            BarEdit::Options { island, value } => {
+                let mut opts = serde_json::to_value(&next.options).expect("options serialise");
+                if !BarOptions::FIELDS.contains(&island.as_str()) {
+                    return Err(invalid(
+                        "shell.bar.options",
+                        format!("{island:?} has no options"),
+                    ));
+                }
+                opts[island.as_str()] = value.clone();
+                next.options = serde_json::from_value(opts)
+                    .map_err(|e| invalid("shell.bar.options", e.to_string()))?;
+            }
+            BarEdit::Reset => {
+                let options = std::mem::take(&mut next.options);
+                next = BarLayout {
+                    options,
+                    ..BarLayout::default()
+                };
+            }
+        }
+        next.validate()?;
+        *self = next;
+        Ok(())
+    }
+}
+
 fn check_list(
     key: &str,
     list: &[String],
@@ -598,6 +717,65 @@ mod tests {
         );
         // A fresh install has a bar from the start.
         assert_eq!(Settings::default().shell.bar, Some(BarLayout::default()));
+    }
+
+    #[test]
+    fn edits() {
+        let mut b = BarLayout::default();
+        let e = |v: serde_json::Value| -> BarEdit { serde_json::from_value(v).unwrap() };
+        b.apply(&e(
+            json!({"op": "move", "id": "clock", "zone": "end", "index": 0,
+            "to_zone": "center", "to_index": 0}),
+        ))
+        .unwrap();
+        assert_eq!(ids(&b.center), ["clock"]);
+        assert_eq!(ids(&b.end), ["notif", "status"]);
+        // Stale: notif is no longer at end[0]... it is; status at end[0] isn't.
+        let before = b.clone();
+        assert!(
+            b.apply(&e(
+                json!({"op": "remove", "id": "status", "zone": "end", "index": 0})
+            ))
+            .is_err()
+        );
+        assert_eq!(b, before, "a refused edit changes nothing");
+        b.apply(&e(
+            json!({"op": "add", "id": "stocks", "zone": "start", "index": 1}),
+        ))
+        .unwrap();
+        assert_eq!(ids(&b.start), ["system", "stocks", "work"]);
+        assert!(
+            b.apply(&e(json!({"op": "add", "id": "stocks", "zone": "end"})))
+                .is_err(),
+            "twice"
+        );
+        b.apply(&e(json!({"op": "add", "id": "separator", "zone": "end"})))
+            .unwrap();
+        assert_eq!(ids(&b.end), ["notif", "status", "separator"]);
+        b.apply(&e(
+            json!({"op": "size", "id": "stocks", "zone": "start", "index": 1, "size": "wide"}),
+        ))
+        .unwrap();
+        assert_eq!(b.start[1].size, Size::Wide);
+        b.apply(&e(
+            json!({"op": "options", "island": "stocks", "value": {"symbols": ["TSLA"]}}),
+        ))
+        .unwrap();
+        assert_eq!(b.options.stocks.symbols, ["TSLA"]);
+        for bad in [
+            json!({"op": "options", "island": "stocks", "value": {"symbols": ["bad sym"]}}),
+            json!({"op": "options", "island": "work", "value": {}}),
+            json!({"op": "options", "island": "clock", "value": {"nope": 1}}),
+            json!({"op": "add", "id": "nope", "zone": "end"}),
+            json!({"op": "add", "id": "news", "zone": "middle"}),
+            json!({"op": "move", "id": "notif", "zone": "end", "index": 0, "to_zone": "x", "to_index": 0}),
+        ] {
+            assert!(b.apply(&e(bad.clone())).is_err(), "{bad}");
+        }
+        assert!(serde_json::from_value::<BarEdit>(json!({"op": "fly"})).is_err());
+        b.apply(&BarEdit::Reset).unwrap();
+        assert_eq!(ids(&b.end), ["clock", "notif", "status"]);
+        assert_eq!(b.options.stocks.symbols, ["TSLA"], "reset keeps options");
     }
 
     #[test]

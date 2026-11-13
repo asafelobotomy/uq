@@ -384,3 +384,85 @@ async fn every_field_round_trips() {
         assert_eq!(state.pointer(pointer), Some(want), "{pointer} reads back");
     }
 }
+
+fn bar(v: Value) -> Op {
+    Op::Bar {
+        edit: serde_json::from_value(v).unwrap(),
+    }
+}
+
+fn zone_ids(v: &Value) -> Vec<String> {
+    v.as_array()
+        .unwrap()
+        .iter()
+        .map(|i| i["id"].as_str().unwrap().to_string())
+        .collect()
+}
+
+#[tokio::test]
+async fn bar_edits_apply_to_uqds_layout() {
+    let (r, page) = rig().await;
+    let out = run(&page, Op::Refresh).await;
+    assert_eq!(
+        out.state["islands"][0]["id"], "system",
+        "the island catalogue"
+    );
+    assert_eq!(
+        zone_ids(&out.state["shell"]["bar"]["end"]),
+        ["clock", "notif", "status"]
+    );
+
+    let out = run(
+        &page,
+        bar(
+            json!({"op": "move", "id": "clock", "zone": "end", "index": 0,
+                   "to_zone": "center", "to_index": 0}),
+        ),
+    )
+    .await;
+    assert_eq!(out.error, None);
+    assert_eq!(zone_ids(&out.state["shell"]["bar"]["center"]), ["clock"]);
+    assert_eq!(
+        out.state["shell"]["terminal"], "kitty.desktop",
+        "the rest is kept"
+    );
+
+    let out = run(
+        &page,
+        bar(json!({"op": "add", "id": "stocks", "zone": "end"})),
+    )
+    .await;
+    assert_eq!(out.error, None);
+    let out = run(
+        &page,
+        bar(json!({"op": "options", "island": "stocks", "value": {"symbols": ["NVDA"]}})),
+    )
+    .await;
+    assert_eq!(out.error, None);
+    {
+        let st = r.state.lock().unwrap();
+        let b = st.settings.shell.bar.as_ref().unwrap();
+        assert!(b.has("stocks"));
+        assert_eq!(b.options.stocks.symbols, ["NVDA"]);
+    }
+
+    // An edit made on an older view is refused, and nothing changes.
+    let out = run(
+        &page,
+        bar(json!({"op": "remove", "id": "clock", "zone": "end", "index": 0})),
+    )
+    .await;
+    assert!(out.error.unwrap().contains("changed"));
+    assert_eq!(zone_ids(&out.state["shell"]["bar"]["center"]), ["clock"]);
+
+    let out = run(&page, bar(json!({"op": "reset"}))).await;
+    assert_eq!(out.error, None);
+    assert_eq!(
+        zone_ids(&out.state["shell"]["bar"]["end"]),
+        ["clock", "notif", "status"]
+    );
+    assert_eq!(
+        out.state["shell"]["bar"]["options"]["stocks"]["symbols"][0],
+        "NVDA"
+    );
+}

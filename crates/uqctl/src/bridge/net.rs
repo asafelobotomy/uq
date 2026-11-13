@@ -11,7 +11,6 @@ use tokio::sync::{Mutex, Notify, mpsc, watch};
 use tokio_util::sync::CancellationToken;
 use uq_core::settings::{Location, Settings, round2};
 
-const TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_NAME_CHARS: usize = 100;
 
 #[derive(Debug, thiserror::Error)]
@@ -37,6 +36,48 @@ pub struct Weather {
     pub code: u16,
     pub is_day: bool,
     pub location_name: String,
+    /// Unix seconds of the fetch.
+    pub fetched_at: i64,
+    /// Today's (max, min) in the location's time zone.
+    pub today: Option<(f64, f64)>,
+    /// The next 12 hours from the current one: (unix time, temp, code).
+    pub hourly: Vec<(i64, f64, u16)>,
+}
+
+/// Hours shown in the forecast.
+const HOURS: usize = 12;
+
+impl Weather {
+    pub fn to_json(&self) -> Value {
+        json!({
+            "temp_c": self.temp_c,
+            "code": self.code,
+            "is_day": self.is_day,
+            "location_name": self.location_name,
+            "fetched_at": self.fetched_at,
+            "today": self.today.map(|(max, min)| json!({"max_c": max, "min_c": min})),
+            "hourly": self.hourly.iter()
+                .map(|(t, c, k)| json!({"time": t, "temp_c": c, "code": k}))
+                .collect::<Vec<_>>(),
+        })
+    }
+}
+
+/// From parallel hourly arrays: the entries from the hour containing `now`, at most 12.
+fn next_hours(
+    times: &[i64],
+    temps: &[Option<f64>],
+    codes: &[Option<u16>],
+    now: i64,
+) -> Vec<(i64, f64, u16)> {
+    times
+        .iter()
+        .zip(temps)
+        .zip(codes)
+        .filter(|((t, _), _)| **t + 3600 > now)
+        .filter_map(|((t, c), k)| Some((*t, (*c)?, (*k)?)))
+        .take(HOURS)
+        .collect()
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
@@ -69,12 +110,7 @@ impl NetClient {
     }
 
     fn build(weather: &str, geo: &str, ipinfo: &str) -> NetClient {
-        let http = reqwest::Client::builder()
-            .user_agent(concat!("uq/", env!("CARGO_PKG_VERSION")))
-            .timeout(TIMEOUT)
-            .redirect(reqwest::redirect::Policy::none())
-            .build()
-            .expect("static reqwest client config");
+        let http = super::feeds::client(reqwest::redirect::Policy::none());
         NetClient {
             http,
             weather_base: weather.into(),
@@ -148,9 +184,26 @@ impl NetClient {
 
     /// Current conditions for a location; coordinates are rounded to 2 dp before sending.
     pub async fn weather(&self, loc: &Location) -> Result<Weather, NetError> {
+        self.weather_at(loc, chrono::Utc::now().timestamp()).await
+    }
+
+    async fn weather_at(&self, loc: &Location, now: i64) -> Result<Weather, NetError> {
         #[derive(Deserialize)]
         struct Resp {
             current: Cur,
+            hourly: Option<Hourly>,
+            daily: Option<Daily>,
+        }
+        #[derive(Deserialize)]
+        struct Hourly {
+            time: Vec<i64>,
+            temperature_2m: Vec<Option<f64>>,
+            weather_code: Vec<Option<u16>>,
+        }
+        #[derive(Deserialize)]
+        struct Daily {
+            temperature_2m_max: Vec<Option<f64>>,
+            temperature_2m_min: Vec<Option<f64>>,
         }
         #[derive(Deserialize)]
         struct Cur {
@@ -167,14 +220,31 @@ impl NetClient {
                     ("latitude", &lat),
                     ("longitude", &lon),
                     ("current", "temperature_2m,weather_code,is_day"),
+                    ("hourly", "temperature_2m,weather_code"),
+                    ("daily", "temperature_2m_max,temperature_2m_min"),
+                    ("timezone", "auto"),
+                    ("timeformat", "unixtime"),
+                    ("forecast_days", "2"),
                 ],
             )
             .await?;
+        let today = r.daily.and_then(|d| {
+            Some((
+                (*d.temperature_2m_max.first()?)?,
+                (*d.temperature_2m_min.first()?)?,
+            ))
+        });
+        let hourly = r.hourly.map_or_else(Vec::new, |h| {
+            next_hours(&h.time, &h.temperature_2m, &h.weather_code, now)
+        });
         Ok(Weather {
             temp_c: r.current.temperature_2m,
             code: r.current.weather_code,
             is_day: r.current.is_day != 0,
             location_name: loc.name.clone(),
+            fetched_at: now,
+            today,
+            hourly,
         })
     }
 
@@ -197,17 +267,7 @@ impl NetClient {
     }
 }
 
-fn kind(e: &reqwest::Error) -> &'static str {
-    if e.is_timeout() {
-        "timeout"
-    } else if e.is_connect() {
-        "connect"
-    } else if e.is_decode() {
-        "decode"
-    } else {
-        "other"
-    }
-}
+use super::feeds::kind;
 
 /// Decides whether a public-IP lookup may run now.
 #[derive(Debug, Default)]
@@ -410,12 +470,7 @@ impl Net {
         let got = tokio::select! { _ = self.stop.cancelled() => return Fetch::Stopping, r = self.client.weather(loc) => r };
         match got {
             Ok(w) => {
-                let sent = self
-                    .emit(
-                        "Weather",
-                        json!({"temp_c": w.temp_c, "code": w.code, "is_day": w.is_day, "location_name": w.location_name}),
-                    )
-                    .await;
+                let sent = self.emit("Weather", w.to_json()).await;
                 if sent { Fetch::Ok } else { Fetch::Stopping }
             }
             Err(e) => {
@@ -553,14 +608,17 @@ mod tests {
             lat: 51.50735,
             lon: -0.12776,
         };
-        let w = c.weather(&loc).await.unwrap();
+        let w = c.weather_at(&loc, 1000).await.unwrap();
         assert_eq!(
             w,
             Weather {
                 temp_c: 12.5,
                 code: 3,
                 is_day: true,
-                location_name: "London".into()
+                location_name: "London".into(),
+                fetched_at: 1000,
+                today: None,
+                hourly: Vec::new(),
             }
         );
         let line = seen.lock().unwrap()[0].clone();
@@ -568,6 +626,50 @@ mod tests {
         assert!(line.contains("longitude=-0.13"), "{line}");
         assert!(!line.contains("51.50735"), "{line}");
         assert!(line.contains("current=temperature_2m"), "{line}");
+        for q in [
+            "hourly=temperature_2m%2Cweather_code",
+            "daily=temperature_2m_max%2Ctemperature_2m_min",
+            "timezone=auto",
+            "timeformat=unixtime",
+            "forecast_days=2",
+        ] {
+            assert!(line.contains(q), "{q} in {line}");
+        }
+    }
+
+    #[tokio::test]
+    async fn weather_forecast_today_and_next_hours() {
+        // 30 hours from t=0; the fetch happens at 7200 + 1800 (half past the third hour).
+        let times: Vec<i64> = (0..30).map(|h| h * 3600).collect();
+        let temps: Vec<Value> = (0..30)
+            .map(|h| if h == 5 { Value::Null } else { json!(h as f64) })
+            .collect();
+        let codes: Vec<u16> = (0..30).map(|h| h as u16).collect();
+        let body = json!({
+            "current": {"temperature_2m": 1.0, "weather_code": 2, "is_day": 0},
+            "hourly": {"time": times, "temperature_2m": temps, "weather_code": codes},
+            "daily": {"time": [0, 86400], "temperature_2m_max": [9.5, 8.0], "temperature_2m_min": [-1.5, 0.0]}
+        })
+        .to_string();
+        let (base, _) = fake(Box::leak(body.into_boxed_str())).await;
+        let c = NetClient::with_bases(&base, &base, &base);
+        let loc = Location {
+            name: "X".into(),
+            lat: 1.0,
+            lon: 2.0,
+        };
+        let w = c.weather_at(&loc, 7200 + 1800).await.unwrap();
+        assert_eq!(w.today, Some((9.5, -1.5)));
+        let hours: Vec<i64> = w.hourly.iter().map(|h| h.0 / 3600).collect();
+        // From the current hour (2), 12 entries, the one without a temperature left out.
+        assert_eq!(hours, [2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
+        let v = w.to_json();
+        assert_eq!(v["today"], json!({"max_c": 9.5, "min_c": -1.5}));
+        assert_eq!(
+            v["hourly"][0],
+            json!({"time": 7200, "temp_c": 2.0, "code": 2})
+        );
+        assert_eq!(v["fetched_at"], 9000);
     }
 
     #[tokio::test]
@@ -695,10 +797,17 @@ mod tests {
         stx.send_replace(settings(Some(("Here", 1.0)), false));
         let (e, d) = event(&mut rx).await;
         assert_eq!(e, "Weather");
-        assert_eq!(
-            d,
-            json!({"temp_c":7.0,"code":61,"is_day":false,"location_name":"Here"})
-        );
+        assert!(d["fetched_at"].is_i64());
+        for (k, v) in [
+            ("temp_c", json!(7.0)),
+            ("code", json!(61)),
+            ("is_day", json!(false)),
+            ("location_name", json!("Here")),
+            ("today", Value::Null),
+            ("hourly", json!([])),
+        ] {
+            assert_eq!(d[k], v, "{k}");
+        }
 
         // An unrelated settings change does not refetch; the interval does.
         stx.send_replace(settings(Some(("Here", 1.0)), true));

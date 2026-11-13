@@ -7,18 +7,23 @@ mod appactions;
 mod calc;
 pub(crate) mod desktop_entry;
 mod dispatch;
+mod feeds;
 pub(crate) mod launch;
 mod locknotify;
 mod logind;
 pub(crate) mod net;
+mod news;
 mod notifowner;
 mod power;
 pub mod protocol;
 mod providers;
 pub(crate) mod run;
+mod stocks;
+mod sysmon;
 pub(crate) mod uqd;
 mod welcome;
 mod widgets;
+mod worldclock;
 
 use protocol::{Inbound, MAX_LINE, Outbound, Rejected, encode, read_lines};
 use serde_json::{Value, json};
@@ -81,6 +86,8 @@ impl From<uq_core::integration::scan::Roots> for IntegrationRoots {
 struct Services {
     link: Arc<uqd::Link>,
     net: Arc<net::Net>,
+    stocks: Arc<stocks::StocksLoop>,
+    news: Arc<news::NewsLoop>,
     runs: Arc<Mutex<run::RunState>>,
     providers: Arc<providers::Providers>,
     logind: Arc<logind::Logind>,
@@ -100,7 +107,7 @@ async fn handle(s: &Services, call: &str, args: &[Value]) -> Result<Value, Strin
         "GetTheme" | "SetTheme" | "ListThemes" | "ListThemeInfo" | "GetLayouts" | "SetLayout"
         | "GetSchedule" | "SetSchedule" | "Reload" | "GetSettings" | "SetSetting"
         | "GetLaunchCounts" | "RecordLaunch" | "ListProfiles" | "ApplyProfile" | "ProfileOff"
-        | "ListOutputs" | "PickDone" => link.call(call, args).await,
+        | "ListOutputs" | "PickDone" | "SetBarLayout" => link.call(call, args).await,
         "Launch" if args.first().is_some_and(|a| a.get("app_action").is_some()) => {
             match &s.actions {
                 Some(a) => a.launch(link, args).await,
@@ -137,10 +144,23 @@ async fn handle(s: &Services, call: &str, args: &[Value]) -> Result<Value, Strin
         },
         "NetworkChanged" => match args {
             [Value::Object(o)] if o.get("vpn_active").is_some_and(Value::is_boolean) => {
+                s.stocks.network_changed();
+                s.news.network_changed();
                 s.net.network_changed(o["vpn_active"] == true).await;
                 Ok(Value::Null)
             }
             _ => Err("NetworkChanged takes {vpn_active: bool}".into()),
+        },
+        "RefreshStocks" if args.is_empty() => Ok(json!(s.stocks.refresh_now())),
+        "RefreshNews" if args.is_empty() => Ok(json!(s.news.refresh_now())),
+        "RefreshStocks" | "RefreshNews" => Err(format!("{call} takes no arguments")),
+        "OpenLink" => match args {
+            [Value::String(url)] => s.news.src.open_link(url),
+            _ => Err("OpenLink takes one string argument (the link)".into()),
+        },
+        "PreviewFeed" => match args {
+            [Value::String(url)] => s.news.src.preview(url).await,
+            _ => Err("PreviewFeed takes one string argument (the feed address)".into()),
         },
         other => Err(format!("unknown call {other}")),
     }
@@ -288,6 +308,41 @@ where
     );
     let weather = tokio::spawn(net.clone().weather_loop(net::WEATHER_EVERY));
     let privacy = tokio::spawn(net.clone().privacy_loop());
+    // The data islands: each fetches or samples only while its island is placed.
+    let cache = feeds::cache_dir();
+    let stocks = feeds::FeedLoop::new(
+        stocks::Stocks::new(),
+        out_tx.clone(),
+        link.settings_rx(),
+        stop.clone(),
+        stocks::EVERY,
+        feeds::RETRY.to_vec(),
+        cache.clone(),
+        feeds::MANUAL_GAP,
+    );
+    let news = feeds::FeedLoop::new(
+        news::News::new(),
+        out_tx.clone(),
+        link.settings_rx(),
+        stop.clone(),
+        news::EVERY,
+        feeds::RETRY.to_vec(),
+        cache,
+        feeds::MANUAL_GAP,
+    );
+    let stocks_task = tokio::spawn(stocks.clone().run());
+    let news_task = tokio::spawn(news.clone().run());
+    let sysmon_task = tokio::spawn(sysmon::SysMon::new().run(
+        out_tx.clone(),
+        link.settings_rx(),
+        stop.clone(),
+        sysmon::EVERY,
+    ));
+    let worldclock_task = tokio::spawn(worldclock::run(
+        out_tx.clone(),
+        link.settings_rx(),
+        stop.clone(),
+    ));
     let notif = tokio::spawn(watch_notif_owner(
         link.clone(),
         out_tx.clone(),
@@ -337,6 +392,8 @@ where
     let services = Services {
         link: link.clone(),
         net: net.clone(),
+        stocks: stocks.clone(),
+        news: news.clone(),
         runs: runs.clone(),
         providers: providers.clone(),
         logind: logind.clone(),
@@ -394,6 +451,10 @@ where
     watcher.abort();
     weather.abort();
     privacy.abort();
+    stocks_task.abort();
+    news_task.abort();
+    sysmon_task.abort();
+    worldclock_task.abort();
     notif.abort();
     sleep_watch.abort();
     // Dropping the receiver ends the lock-notify thread at its next event; it is never joined.
@@ -408,6 +469,8 @@ where
     }
     drop(services);
     drop(net);
+    drop(stocks);
+    drop(news);
     drop(providers);
     drop(logind);
     reader.abort();

@@ -2154,8 +2154,10 @@ name = "uqctl"
 version = "0.3.0-rc.2"
 dependencies = [
  "chrono",
+ "chrono-tz",
  "clap",
  "futures-util",
+ "quick-xml",
  "regex",
  "reqwest",
  "serde",

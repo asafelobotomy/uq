@@ -14,6 +14,12 @@ QtObject {
     property bool sharing: false        // screen sharing (Hyprland screencast), spec §2.10
     property var weather: null          // last Weather event data; null until one arrives / cleared
     property var publicIp: null
+    // The data islands' last events (shell.bar): null until one arrives, or once the island
+    // is taken off the bar.
+    property var stocks: null
+    property var news: null
+    property var sysmon: null
+    property var worldClock: null
     // Owner of org.freedesktop.Notifications (spec 2.3); known stays false until a NotifOwner event.
     property var notifOwner: ({ known: false, owner: null, name: "", self: false })
     property string configError: ""
@@ -60,6 +66,10 @@ QtObject {
         sharing = false;
         weather = null;
         publicIp = null;
+        stocks = null;
+        news = null;
+        sysmon = null;
+        worldClock = null;
         notifOwner = ({ known: false, owner: null, name: "", self: false });
         failPending("reset");
     }
@@ -182,6 +192,10 @@ QtObject {
         case "PickRequested": if (data) pickRequested(String(data.token)); break;
         case "Weather": weather = data; break;
         case "PublicIp": publicIp = data; break;
+        case "Stocks": stocks = data && typeof data === "object" ? data : null; break;
+        case "News": news = data && typeof data === "object" ? data : null; break;
+        case "SysMon": sysmon = data && typeof data === "object" ? data : null; break;
+        case "WorldClock": worldClock = Array.isArray(data) ? data : null; break;
         case "NotifOwner":
             if (data && typeof data === "object")
                 notifOwner = {

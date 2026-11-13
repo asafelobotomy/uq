@@ -358,9 +358,9 @@ Island {
             }
         }
 
-        // media
+        // media (left to the Now playing island while that is on the bar)
         Item {
-            visible: root.player !== null
+            visible: root.player !== null && !BarLayout.placed("media")
             Layout.preferredWidth: mediaRow.implicitWidth
             Layout.preferredHeight: root.cell
             RowLayout {
