@@ -208,3 +208,33 @@ overflows; tickers scroll.
 
 **Settings** keeps only a pointer: *Edit the bar* (starts edit mode) and *Reset the bar*, with
 the 24-hour clock. The list editor is gone; editing on the bar replaces it.
+
+---
+
+## Revision (2026-11-13): Open windows as tabs
+
+The Windows island (`work`, now "Open windows") is a strip of pills, one per window, like
+browser tabs. The app menu island no longer shows open apps.
+
+- **Which windows**: those on this bar's monitor and its active workspace, plus windows minimised
+  from that workspace (their `uq_ws_<n>` tag), dimmed. Not other workspaces.
+- **Pill**: app icon, elided title, ✕. Left click focuses (restores a minimised window to the
+  workspace it left); middle click closes; right click opens the window menu: Minimise/Restore,
+  Maximise, Float/Tile, Pin/Unpin the app, Move to workspace 1–10, Close, and "uQ Island Menu…"
+  (the island's own right click is taken by the pills, so the island menu is offered there).
+- **Fitting** (`work.js` `strip`): all pills share the island's width evenly (at most 5 × the
+  Icon size each); the title hides once a pill is under icon + ✕ + three characters. When even
+  icon + ✕ pills don't all fit, the strip scrolls: ‹ and › at its ends, as many pills as fit
+  between them, and "+N" listing every window; the focused window is scrolled into view. When not
+  even one pill fits (Icon size), the lead window's icon (and the count, if there is room) lists
+  them all. Nothing overlaps or is cut off.
+- **Order** (`shell.bar.options.work`: `sort`, `descending`), set in the island's edit-mode
+  settings: Last opened (default; oldest first, so new windows join on the right like tabs),
+  Last activity (the last notification whose app name or icon matches the window's class,
+  desktop id or app name), By pin (pinned apps in pin order, then the rest by opening), By system
+  usage (processor % plus memory, from the bridge's `ProcessUsage` every 5 s, only while that is
+  the order), By name (app name, then title). Each but By pin has both directions; ties keep
+  opening order.
+- **App menu island** (`system`): its dock shows pinned apps with no window open anywhere
+  (`dock.js` `launchers`); an app comes back there when its last window closes.
+- **Edit mode**: the strip is one island; its four sizes size the whole strip.

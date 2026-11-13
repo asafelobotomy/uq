@@ -18,6 +18,9 @@ Rectangle {
     readonly property bool isIcon: size === "icon"
     // The island asks for edit mode with its own settings open (a "Change…" row in its popup).
     signal editRequested()
+    // The island asks for the uQ Island Menu (an island whose own right click does something
+    // else offers it there), under `anchor`.
+    signal menuRequested(Item anchor)
 
     color: Theme.surface
     radius: Theme.radius

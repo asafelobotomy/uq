@@ -91,4 +91,16 @@ TestCase {
         compare(Dock.togglePin(pins, "extra", true), null);
         compare(Dock.togglePin(pins, "app0", true).length, 31);
     }
+
+    // The app menu island shows pinned apps with no window open; open ones are on Open windows.
+    function test_launchers_are_pinned_apps_without_windows() {
+        var es = Dock.entries(["a.desktop", "b.desktop", "c.desktop"], [
+            { address: "0x1", cls: "a", minimised: false },
+            { address: "0x2", cls: "z", minimised: false },
+            { address: "0x3", cls: "c", minimised: true }
+        ], function (cls) { return cls === "z" ? null : cls + ".desktop"; });
+        compare(Dock.launchers(es).map(function (e) { return e.id; }), ["b.desktop"]);
+        compare(Dock.launchers([]), []);
+        compare(Dock.launchers(null), []);
+    }
 }

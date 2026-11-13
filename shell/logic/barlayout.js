@@ -18,7 +18,7 @@ var SIZE_NAMES = { icon: "Icon", small: "Small", medium: "Medium", large: "Large
 // Same ids and order as uq_core::settings::bar::ISLANDS.
 var ISLANDS = [
     { id: "system", name: "App menu, workspaces and dock" },
-    { id: "work", name: "Windows" },
+    { id: "work", name: "Open windows" },
     { id: "clock", name: "Clock and calendar" },
     { id: "weather", name: "Weather" },
     { id: "notif", name: "Notifications" },

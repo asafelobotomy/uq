@@ -5,6 +5,7 @@ import "../core"
 import "../logic/barlayout.js" as L
 import "../logic/ticker.js" as T
 import "../logic/weather.js" as Weather
+import "../logic/work.js" as Work
 import "islands"
 
 // An island's settings, in edit mode (a left click on an island, or Enter on the selected one):
@@ -169,6 +170,54 @@ IslandPopup {
                     detail: (pop.opts.date || "short") === modelData.id ? "✓" : ""
                     onActivated: BarLayout.setOptions("clock", { seconds: pop.opts.seconds === true, date: modelData.id })
                 }
+            }
+        }
+
+        // --- open windows: their order ---
+        ColumnLayout {
+            readonly property string mode: Work.SORTS.indexOf(pop.opts.sort) >= 0 ? pop.opts.sort : "opened"
+            id: sortBox
+            visible: pop.island === "work"
+            spacing: 2
+            Layout.fillWidth: true
+            Layout.topMargin: Theme.gapIn
+            UqText {
+                text: "Order windows by"
+                color: Theme.textMuted
+            }
+            Repeater {
+                model: pop.island === "work" ? Work.SORTS : []
+                delegate: MenuRow {
+                    required property string modelData
+                    Layout.fillWidth: true
+                    text: Work.SORT_NAMES[modelData]
+                    detail: sortBox.mode === modelData ? "✓" : ""
+                    Accessible.checkable: true
+                    Accessible.checked: sortBox.mode === modelData
+                    onActivated: BarLayout.setOptions("work", { sort: modelData, descending: pop.opts.descending === true })
+                }
+            }
+            UqText {
+                visible: Work.sortHasOrder(sortBox.mode)
+                text: "Order"
+                color: Theme.textMuted
+            }
+            Repeater {
+                model: pop.island === "work" && Work.sortHasOrder(sortBox.mode) ? [false, true] : []
+                delegate: MenuRow {
+                    required property bool modelData
+                    Layout.fillWidth: true
+                    text: Work.ORDER_NAMES[sortBox.mode][modelData ? 1 : 0]
+                    detail: (pop.opts.descending === true) === modelData ? "✓" : ""
+                    onActivated: BarLayout.setOptions("work", { sort: sortBox.mode, descending: modelData })
+                }
+            }
+            UqText {
+                visible: sortBox.mode === "activity"
+                text: "The app that last sent a notification comes first."
+                color: Theme.textMuted
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
             }
         }
 

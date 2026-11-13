@@ -91,4 +91,103 @@ TestCase {
         compare(Work.titleWidth(100, 5), 48);
         compare(Work.titleWidth(0, 0), 512);
     }
+
+    // --- Open windows: a pill per window ---
+
+    function wins() {
+        return [
+            { address: "0xa", cls: "firefox", title: "Docs", wsId: 1, minimised: false, monitor: "DP-1", pid: 10 },
+            { address: "0xb", cls: "kitty", title: "shell", wsId: 2, minimised: false, monitor: "DP-1", pid: 11 },
+            { address: "0xc", cls: "mpv", title: "film", wsId: -99, minimised: true, minimisedFrom: 1, monitor: "DP-1", pid: 12 },
+            { address: "0xd", cls: "gimp", title: "art", wsId: 1, minimised: false, monitor: "HDMI-A-1", pid: 13 },
+            { address: "0xe", cls: "kate", title: "notes", wsId: -99, minimised: true, minimisedFrom: 2, monitor: "DP-1", pid: 14 },
+            { address: "bad!", cls: "x", title: "", wsId: 1, monitor: "DP-1" }
+        ];
+    }
+
+    function test_windows_here_are_this_workspace_and_its_minimised() {
+        var h = Work.windowsHere(wins(), "DP-1", 1, "0xa");
+        compare(h.map(function (w) { return w.address; }), ["0xa", "0xc"]);
+        verify(h[0].focused);
+        verify(h[1].minimised, "minimised from workspace 1: shown here, dimmed");
+        compare(h[0].pid, 10);
+        compare(Work.windowsHere(wins(), "DP-1", 2, "").map(function (w) { return w.address; }), ["0xb", "0xe"]);
+        compare(Work.windowsHere(wins(), "HDMI-A-1", 1, "").map(function (w) { return w.address; }), ["0xc", "0xd"],
+                "a minimised window follows the workspace it left");
+        compare(Work.windowsHere(wins(), "DP-1", undefined, ""), []);
+    }
+
+    function test_sort_orders() {
+        var list = [{ address: "0x1", cls: "zed", title: "b" }, { address: "0x2", cls: "alpha", title: "a" },
+                    { address: "0x3", cls: "mid", title: "c" }];
+        var ctx = {
+            opened: { "0x1": 2, "0x2": 0, "0x3": 1 },
+            activity: { "0x3": 500, "0x1": 100 },
+            pinIndex: { "0x3": 0, "0x1": 1 },
+            usage: { "0x1": 5, "0x2": 50, "0x3": 0.5 },
+            name: { "0x1": "Zed", "0x2": "Alpha", "0x3": "Mid" }
+        };
+        var ids = function (l) { return l.map(function (w) { return w.address; }); };
+        compare(ids(Work.sortWindows(list, "opened", false, ctx)), ["0x2", "0x3", "0x1"], "oldest first");
+        compare(ids(Work.sortWindows(list, "opened", true, ctx)), ["0x1", "0x3", "0x2"], "newest first");
+        compare(ids(Work.sortWindows(list, "activity", false, ctx)), ["0x3", "0x1", "0x2"], "most recent first, none last");
+        compare(ids(Work.sortWindows(list, "pin", false, ctx)), ["0x3", "0x1", "0x2"], "pins in pin order, then the rest");
+        compare(ids(Work.sortWindows(list, "pin", true, ctx)), ["0x3", "0x1", "0x2"], "pin has one order");
+        compare(ids(Work.sortWindows(list, "usage", false, ctx)), ["0x2", "0x1", "0x3"], "busiest first");
+        compare(ids(Work.sortWindows(list, "name", false, ctx)), ["0x2", "0x3", "0x1"]);
+        compare(ids(Work.sortWindows(list, "name", true, ctx)), ["0x1", "0x3", "0x2"]);
+        compare(ids(Work.sortWindows(list, "bogus", false, ctx)), ["0x2", "0x3", "0x1"], "unknown is opening order");
+        verify(!Work.sortHasOrder("pin") && Work.sortHasOrder("usage"));
+        compare(Work.SORTS.length, 5);
+    }
+
+    function test_notification_matches_app() {
+        verify(Work.notifMatches({ appName: "Firefox" }, { cls: "firefox", id: "", name: "" }));
+        verify(Work.notifMatches({ appName: "Thunderbird", appIcon: "org.mozilla.thunderbird" },
+                                 { cls: "thunderbird-esr", id: "org.mozilla.Thunderbird.desktop", name: "Mail" }));
+        verify(Work.notifMatches({ appName: "Mail" }, { cls: "x", id: "", name: "Mail" }));
+        verify(!Work.notifMatches({ appName: "Slack" }, { cls: "firefox", id: "firefox.desktop", name: "Firefox" }));
+        verify(!Work.notifMatches(null, { cls: "x" }));
+        verify(!Work.notifMatches({ appName: "" }, { cls: "" }));
+    }
+
+    readonly property var m: ({ minPill: 49, maxPill: 180, gap: 2, arrow: 16, chip: 32 })
+
+    function test_strip_shrinks_evenly_then_scrolls() {
+        compare(Work.strip(0, 206, m).mode, "empty");
+        var one = Work.strip(1, 206, m);
+        compare(one.mode, "pills");
+        compare(one.pillW, 180, "a lone pill stops at its widest");
+        var three = Work.strip(3, 206, m);
+        compare(three.pillW, Math.floor((206 - 4) / 3));
+        var four = Work.strip(4, 206, m);
+        compare(four.mode, "pills");
+        compare(four.pillW, 50, "down to just over icon and close");
+        var many = Work.strip(9, 206, m);
+        compare(many.mode, "scroll");
+        verify(many.shown >= 1 && many.shown < 9);
+        verify(many.shown * many.pillW + (many.shown - 1) * m.gap + 2 * (m.arrow + m.gap) + m.chip + m.gap <= 206,
+               "arrows, chip and pills fit");
+        verify(many.pillW >= m.minPill);
+        compare(Work.strip(3, 26, m).mode, "compact", "Icon size: the lead window's icon");
+        compare(Work.strip(1, 62, m).mode, "pills");
+        compare(Work.strip(2, 62, m).mode, "compact");
+        // Never wider than the strip.
+        for (var w = 20; w <= 400; w += 7)
+            for (var n = 1; n <= 12; n++) {
+                var f = Work.strip(n, w, m);
+                if (f.mode === "pills")
+                    verify(n * f.pillW + (n - 1) * m.gap <= w, n + " pills in " + w);
+                if (f.mode === "scroll")
+                    verify(f.shown * f.pillW + (f.shown - 1) * m.gap + 2 * (m.arrow + m.gap) + m.chip + m.gap <= w);
+            }
+    }
+
+    function test_scroll_offset_keeps_focus_visible() {
+        compare(Work.scrollOffset(0, 9, 3, -1), 0);
+        compare(Work.scrollOffset(20, 9, 3, -1), 6, "clamped");
+        compare(Work.scrollOffset(0, 9, 3, 5), 3, "moves just enough to show it");
+        compare(Work.scrollOffset(6, 9, 3, 1), 1);
+        compare(Work.scrollOffset(2, 9, 3, 3), 2, "already shown");
+    }
 }

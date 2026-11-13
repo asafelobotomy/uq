@@ -46,10 +46,17 @@ All notable changes to uQ are listed here. The format follows
   `~/Pictures/Screenshots`. Shift+Print takes the whole screen and Super+Print the focused window,
   both copied and saved at once. All three are on the Keyboard shortcuts page, and **Screenshot**
   is in Spotlight and the app menu. (Spectacle itself only runs on KDE's own compositor.)
-- **One button per open window in the bar.** The Work island shows each window on its screen
-  (icon and title); click one to focus it, or to bring a minimised one back. The focused one keeps
-  the window buttons and menu. With more than five windows it folds to one icon with the count,
-  and opens again when clicked.
+- **Open windows, like browser tabs.** The Open windows island has a pill for every window on
+  the workspace you're on (windows you minimised from it show dimmed): its icon, its title and a
+  close button. As more windows open the pills share the island and shrink, down to the icon and
+  close button; past that, arrows scroll the pills and **+N** lists every window. Left-click a
+  pill to focus the window (or bring it back), middle-click to close it, right-click for
+  Minimise, Maximise, Float, Pin the app, Move to workspace, Close and the uQ Island Menu. Order
+  them in the island's settings (edit mode): **Last opened** (the default, oldest first, so new
+  windows appear on the right), **Last activity** (the app that last sent a notification),
+  **By pin**, **By system usage** (processor and memory) or **By name**, each either way round.
+- **The app menu island shows pinned apps that aren't open.** Open an app and it moves to a pill
+  on Open windows; close its last window and it comes back.
 
 ### Changed
 

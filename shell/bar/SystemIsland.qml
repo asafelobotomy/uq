@@ -8,7 +8,8 @@ import "../logic/dock.js" as Dock
 import "../logic/minimise.js" as Min
 import "../logic/quickui.js" as U
 
-// App-menu button, workspaces, and the merged pinned/running dock.
+// App-menu button, workspaces, and the pinned apps that aren't open (open ones are pills on the
+// Open windows island).
 Island {
     id: root
     property var screen: null
@@ -25,7 +26,7 @@ Island {
 
     // Sizes: Icon is the app menu button; Small adds the focused workspace; Medium as many
     // workspaces as fit (the focused one always among them); Large adds each workspace's layout
-    // and, in what is left, the dock's apps.
+    // and, in what is left, the pinned apps that aren't open.
     readonly property real menuW: Math.min(cell, room)
     readonly property real wsW: size === "large" ? cell + Theme.fontSize : cell
     readonly property real wsRoom: room - menuW - Theme.gapIn
@@ -51,7 +52,9 @@ Island {
         var used = wsShown.length * (wsW + Theme.gapIn) + 1 + Theme.gapIn;
         return Math.max(0, Math.floor((wsRoom - used) / (cell + Theme.gapIn)));
     }
-    readonly property var dockShown: dockModel.slice(0, dockRoomCount)
+    // Pinned apps with no window open: an open app has its windows on the Open windows island,
+    // and comes back here when its last window closes.
+    readonly property var dockShown: Dock.launchers(dockModel).slice(0, dockRoomCount)
 
     // --- helpers ---
     function hexAddr(a) {

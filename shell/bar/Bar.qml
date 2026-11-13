@@ -205,6 +205,10 @@ PanelWindow {
                     item.size = Qt.binding(function () { return slot.size; });
                     if (item.editRequested)
                         item.editRequested.connect(function () { bar.editIsland(slot.key); });
+                    if (item.menuRequested)
+                        item.menuRequested.connect(function (a) {
+                            menu.showFor(a || slot, { zone: slot.zone, index: slot.index, id: slot.islandId, size: slot.size });
+                        });
                 }
                 opacity: bar.dragKey === slot.key ? 0.4 : 1
             }
