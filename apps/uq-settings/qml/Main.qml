@@ -150,8 +150,9 @@ Kirigami.ApplicationWindow {
 
     title: App.welcome ? "Welcome to uQ" : "uQ Settings"
     visible: true
-    width: Kirigami.Units.gridUnit * 50
-    height: Kirigami.Units.gridUnit * 34
+    // --screenshots draws at the target size, 1920x1080, so the pages are judged as they will be.
+    width: App.screenshotDir !== "" ? 1920 : Kirigami.Units.gridUnit * 50
+    height: App.screenshotDir !== "" ? 1080 : Kirigami.Units.gridUnit * 34
     minimumWidth: Kirigami.Units.gridUnit * 30
     minimumHeight: Kirigami.Units.gridUnit * 20
 

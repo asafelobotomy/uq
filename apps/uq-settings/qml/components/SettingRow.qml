@@ -12,6 +12,10 @@ Rectangle {
 
     property string settingId
     property string label
+    /// An icon before the label: what the setting is about, at a glance.
+    property string iconName: ""
+    /// A longer explanation, shown as a "?" tooltip after the label.
+    property string help: ""
     property string highlight
     readonly property bool flashing: flash.running
     default property alias content: slot.data
@@ -50,9 +54,25 @@ Rectangle {
         flash.restart();
         revealer.reveal(row, Kirigami.Units.largeSpacing);
     }
+    /// The SettingsTab this row is on, if any.
+    function tabOf() {
+        for (let p = row.parent; p; p = p.parent) {
+            if (p.isSettingsTab === true)
+                return p;
+        }
+        return null;
+    }
     function check() {
-        if (highlight !== "" && highlight === settingId)
+        if (highlight === "" || highlight !== settingId)
+            return;
+        // A search result on another tab: show that tab first, then scroll to the row.
+        const tab = tabOf();
+        if (tab && !tab.visible) {
+            tab.activate();
+            Qt.callLater(flashNow);
+        } else {
             flashNow();
+        }
     }
 
     implicitWidth: layout.implicitWidth + Kirigami.Units.largeSpacing * 2
@@ -89,14 +109,44 @@ Rectangle {
         anchors.rightMargin: Kirigami.Units.largeSpacing
         spacing: Kirigami.Units.largeSpacing
 
+        Kirigami.Icon {
+            objectName: "rowIcon"
+            visible: row.iconName !== ""
+            source: row.iconName
+            implicitWidth: Kirigami.Units.iconSizes.smallMedium
+            implicitHeight: Kirigami.Units.iconSizes.smallMedium
+            Layout.alignment: Qt.AlignVCenter
+            Accessible.ignored: true
+        }
         ColumnLayout {
             spacing: 0
             Layout.fillWidth: true
 
-            UqLabel {
-                text: row.label
-                wrapMode: Text.Wrap
+            RowLayout {
+                spacing: Kirigami.Units.smallSpacing
                 Layout.fillWidth: true
+                UqLabel {
+                    id: labelText
+                    text: row.label
+                    wrapMode: Text.Wrap
+                    Layout.fillWidth: true
+                    // The text's own width, measured unwrapped: a wrapped Text's implicitWidth
+                    // follows its wrapped width, which squeezed short labels a letter a line.
+                    Layout.maximumWidth: Math.ceil(labelMetrics.advanceWidth(row.label)) + 2
+                    Layout.minimumWidth: Math.min(Layout.maximumWidth, Kirigami.Units.gridUnit * 6)
+                    FontMetrics {
+                        id: labelMetrics
+                        font: labelText.font
+                    }
+                }
+                HelpTip {
+                    objectName: "rowHelp"
+                    tip: row.help
+                }
+                Item {
+                    visible: row.help !== ""
+                    Layout.fillWidth: true
+                }
             }
             RowLayout {
                 objectName: "sourceLine"
