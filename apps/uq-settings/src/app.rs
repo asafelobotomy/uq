@@ -69,6 +69,12 @@ pub mod qobject {
         #[qinvokable]
         fn grab_window(self: &App, path: &QString) -> bool;
 
+        /// Re-check the pages that depend on this machine (Login screen comes and goes with
+        /// uQ's login screen), keeping the plugin pages as they are. Called when the window
+        /// comes back to the front.
+        #[qinvokable]
+        fn recheck_pages(self: Pin<&mut App>);
+
         /// A `ShowPage` call arrived: the window should come to the front.
         #[qsignal]
         fn raise_requested(self: Pin<&mut App>);
@@ -83,6 +89,8 @@ use qobject::App;
 pub struct AppRust {
     /// Core pages, then the plugin pages on show (updated as pages come and go).
     entries: Vec<PageEntry>,
+    /// The plugin pages on show, to rebuild `entries` when the Login screen page comes or goes.
+    plugins: Vec<plugins::PluginPage>,
     page: QString,
     page_requested: bool,
     highlight: QString,
@@ -96,17 +104,15 @@ pub struct AppRust {
 
 impl Default for AppRust {
     fn default() -> Self {
-        let mut entries = registry::all_pages(&plugins::scan_configured());
-        registry::drop_unavailable(
-            &mut entries,
-            crate::pages::login_screen::greeter_installed(),
-        );
+        let plugins = plugins::scan_configured();
+        let entries = page_entries(&plugins);
         let first = entries.first().map_or("", |p| p.id.as_str());
         Self {
             page: QString::from(first),
             page_requested: false,
             pages_json: QString::from(&registry::pages_json(&entries)),
             entries,
+            plugins,
             highlight: QString::default(),
             uqd_up: false,
             screenshot_dir: QString::default(),
@@ -115,6 +121,16 @@ impl Default for AppRust {
             welcome_full: false,
         }
     }
+}
+
+/// Every page for this machine: the core pages, then `plugins`, without the pages it can't use.
+fn page_entries(plugins: &[plugins::PluginPage]) -> Vec<PageEntry> {
+    let mut entries = registry::all_pages(plugins);
+    registry::drop_unavailable(
+        &mut entries,
+        crate::pages::login_screen::greeter_installed(),
+    );
+    entries
 }
 
 /// `<theme_dir>/tokens.json` when it is a JSON object under 1 MiB, else `{}`.
@@ -256,8 +272,14 @@ impl App {
     /// Replace the plugin pages in the sidebar and the search. If the page on show went away,
     /// show the first page instead.
     fn set_plugins(mut self: Pin<&mut Self>, pages: &[plugins::PluginPage]) {
-        let entries = registry::all_pages(pages);
+        // Through page_entries, so the Login screen page stays out on a machine without uQ's
+        // login screen (rebuilding from all_pages alone brought it back with any plugin change).
+        let entries = page_entries(pages);
+        self.as_mut().rust_mut().get_mut().plugins = pages.to_vec();
         let json = QString::from(&registry::pages_json(&entries));
+        if json == *self.pages_json() {
+            return;
+        }
         let current = self.page().to_string();
         let first = entries.first().map(|p| p.id.clone()).unwrap_or_default();
         let gone = !entries.iter().any(|p| p.id == current);
@@ -284,6 +306,11 @@ impl App {
         self.as_mut().set_page_requested(true);
         self.as_mut().set_highlight(QString::default());
         self.set_highlight(QString::from(setting));
+    }
+
+    fn recheck_pages(self: Pin<&mut Self>) {
+        let plugins = self.rust().plugins.clone();
+        self.set_plugins(&plugins);
     }
 
     fn show_page(self: Pin<&mut Self>, page: &QString, setting: &QString) {

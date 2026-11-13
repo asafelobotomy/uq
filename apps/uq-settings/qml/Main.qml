@@ -116,6 +116,8 @@ Kirigami.ApplicationWindow {
     // Coming back to the window re-reads the page: user.lua or the live session may have changed
     // meanwhile, and the rows' sources should say so. Pages that read from uqd have `refresh()`.
     onActiveChanged: {
+        if (root.active && App.screenshotDir === "")
+            App.recheckPages();
         const page = stack.currentItem;
         if (root.active && page && typeof page.refresh === "function")
             page.refresh();
