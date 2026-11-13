@@ -26,10 +26,12 @@ All notable changes to uQ are listed here. The format follows
   on that side, on an edge shared with another screen, or while locked. On the Shell page of
   Settings, **Show the window beside this one at the screen's edges** turns it off, and **Show
   the window's title on the tab** adds the title (hidden while the screen is shared). **Show it
-  as: a slice of the window** swaps the tab for a strip of the neighbouring window itself, like
-  the edge of a half-width column: it stays at the edge while a fullscreen or maximized window
-  hides its neighbours, so every window can still be reached with a click or the wheel. While
-  the screen is shared the slice shows the app icon instead of the window.
+  as: a slice of the window** swaps the tab for a strip of the neighbouring window itself, its
+  near edge peeking in with its rounded corners and border, as the scrolling layout shows the
+  column beside the one in view. It stays at the edge while a fullscreen or maximized window
+  hides its neighbours, so every window can still be reached with a click or the wheel, and
+  its border takes the accent colour when you point at it. While the screen is shared the
+  slice shows the app icon instead of the window.
 
 ### Changed
 

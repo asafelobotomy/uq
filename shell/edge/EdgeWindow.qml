@@ -77,9 +77,9 @@ PanelWindow {
     readonly property int iconSize: Theme.fontSize * 2
     readonly property int pad: Theme.gapIn
     readonly property int titleMax: Theme.fontSize * 20
-    // The slice: as wide as the outer gap, and wider while pointed at.
-    readonly property int peekNarrow: Math.max(win.stripWidth * 2, Theme.gapOut)
-    readonly property int peekWide: Theme.gapOut * 4
+    // The slice: like the part of a half-width column the scrolling layout leaves in view, a gap
+    // and then the window's near edge, framed as Hyprland frames windows.
+    readonly property int peekWidth: Theme.gapOut * 8
 
     screen: display
     visible: edge.enabled && target !== null && span !== null
@@ -89,8 +89,9 @@ PanelWindow {
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "uq-edge"
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
-    // Respect the bar's reserved space (and take none): the bar's corners stay the bar's.
-    exclusionMode: ExclusionMode.Normal
+    // Respect the bar's reserved space (and take none): the bar's corners stay the bar's. A
+    // standing slice runs the full height instead: the fullscreen window has hidden the bar.
+    exclusionMode: win.peekStyle && win.standing ? ExclusionMode.Ignore : ExclusionMode.Normal
     exclusiveZone: 0
     anchors {
         top: true
@@ -190,7 +191,10 @@ PanelWindow {
         }
     }
 
-    // Peek style: a slice of the neighbour window, its inner edge showing, the rest off-screen.
+    // Peek style: a slice of the neighbour window, its near edge showing and the rest off-screen,
+    // as the scrolling layout shows a column beside the one in view: the gap, then the window's
+    // rounded corners and border. The whole slice takes the pointer; the gap is the desktop's
+    // background colour, as between columns.
     Rectangle {
         id: peek
         readonly property bool hovered: win.peekShown && area.containsMouse
@@ -199,43 +203,54 @@ PanelWindow {
         readonly property bool showContent: !win.sharing && shot.hasContent
 
         visible: win.peekStyle
-        width: !win.peekShown ? 0 : (hovered ? win.peekWide : win.peekNarrow)
+        color: Theme.bg
+        width: win.peekShown ? win.peekWidth : 0
         height: parent.height
         x: win.left ? 0 : parent.width - width
         clip: true
-        color: Theme.surface
-        border.color: hovered ? Theme.accent : Theme.border
-        border.width: Theme.borderWidth
         Accessible.role: Accessible.Button
         Accessible.name: "Go to " + win.targetLabel
 
-        Behavior on width {
-            enabled: !Settings.reduceMotion
-            NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
-        }
-
-        ScreencopyView {
-            id: shot
-            captureSource: win.peekShown && !win.sharing && win.targetToplevel ? win.targetToplevel.wayland : null
-            // Live only while pointed at; otherwise the frame taken when it came out.
-            live: peek.hovered
-            visible: peek.showContent
-            height: parent.height
-            width: sourceSize.height > 0 ? height * sourceSize.width / sourceSize.height : parent.width
-            // The neighbour's inner edge: the right edge of the window on the left, and so on.
-            x: win.left ? parent.width - width : 0
-        }
-        IconImage {
-            anchors.centerIn: parent
-            visible: !peek.showContent || peek.hovered
-            implicitSize: Math.min(win.iconSize, Math.max(1, peek.width - Theme.borderWidth * 2))
-            source: win.iconFor(win.target ? win.target.cls : "")
-        }
-        Rectangle {
-            anchors.fill: parent
-            color: "transparent"
+        // The window frame, sliding in from the edge; its far side (and far corners) stay
+        // off-screen, past the slice.
+        ClippingRectangle {
+            id: frame
+            readonly property int gap: Theme.gapOut
+            width: win.peekWidth - gap + radius * 2
+            y: gap
+            height: parent.height - gap * 2
+            x: win.left ? (win.peekShown ? -radius * 2 : -win.peekWidth)
+                        : (win.peekShown ? gap : win.peekWidth)
+            radius: Theme.radius
+            color: Theme.surface
             border.color: peek.hovered ? Theme.accent : Theme.border
             border.width: Theme.borderWidth
+            contentUnderBorder: true
+
+            Behavior on x {
+                enabled: !Settings.reduceMotion
+                NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+            }
+
+            ScreencopyView {
+                id: shot
+                captureSource: win.peekShown && !win.sharing && win.targetToplevel ? win.targetToplevel.wayland : null
+                // Live while pointed at; otherwise the frame taken when it came out.
+                live: peek.hovered
+                visible: peek.showContent
+                height: frame.height
+                width: sourceSize.height > 0 ? height * sourceSize.width / sourceSize.height : frame.width
+                // The near edge: the right part of the window on the left, the left part of the
+                // window on the right.
+                x: win.left ? frame.width - width : 0
+            }
+            IconImage {
+                visible: !peek.showContent
+                anchors.verticalCenter: parent.verticalCenter
+                x: win.left ? frame.width - frame.radius * 2 - width - win.pad : win.pad + frame.radius
+                implicitSize: win.iconSize
+                source: win.iconFor(win.target ? win.target.cls : "")
+            }
         }
     }
 
