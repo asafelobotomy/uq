@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # The greeter's packaged config:
-#   - /etc/uq/greetd.toml runs uq-greeter-session as `greeter` on VT 1
+#   - /etc/uq/greetd.toml runs uq-greeter-session as `greeter` on VT 1, under the uq-greeter PAM
+#     service (no keyring); logins use uq-greetd (with the keyring)
 #   - /etc/uq/greeter.toml's defaults are the default theme, dark, list shown, motion on
 #   - the greetd.service drop-in uses uQ's config while it exists and greetd's stock one otherwise
 #     (its ExecStart run with a stub greetd)
@@ -19,6 +20,16 @@ has "$p/pam/uq-greetd" 'auth       include      system-local-login'
 has "$p/pam/uq-greetd" '-auth      optional     pam_gnome_keyring.so'
 has "$p/pam/uq-greetd" '-session   optional     pam_gnome_keyring.so auto_start'
 has "$p/uq/PKGBUILD" '  install -Dm644 packaging/pam/uq-greetd "$pkgdir/etc/pam.d/uq-greetd"'
+# The greeter's own session (user `greeter`) has its own service, without the keyring: no keyring
+# daemon for `greeter`. The user sessions' service above keeps it.
+sed -n '/^\[default_session\]/,/^\[/p' "$p/greeter/greetd.toml" | grep -qx 'service = "uq-greeter"' \
+    || bad "greetd.toml's [default_session] lacks: service = \"uq-greeter\""
+has "$p/pam/uq-greeter" 'auth       include      system-local-login'
+has "$p/pam/uq-greeter" 'account    include      system-local-login'
+has "$p/pam/uq-greeter" 'session    include      system-local-login'
+grep -v '^#' "$p/pam/uq-greeter" | grep -q 'pam_gnome_keyring' && bad "pam/uq-greeter must not start a keyring"
+has "$p/uq/PKGBUILD" '  install -Dm644 packaging/pam/uq-greeter "$pkgdir/etc/pam.d/uq-greeter"'
+grep -q "^backup=(.*etc/pam.d/uq-greeter[ )]" "$p/uq/PKGBUILD" || bad "PKGBUILD backup lacks etc/pam.d/uq-greeter"
 has "$p/greeter/greetd.toml" '\[terminal\]'
 has "$p/greeter/greetd.toml" 'vt = 1'
 has "$p/greeter/greetd.toml" '\[default_session\]'

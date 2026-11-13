@@ -68,10 +68,13 @@ it says so; enable one with `run0 systemctl enable <name>.service`.
     goes through the same checks as your own layout (`uqctl greeter monitors-lua`) and becomes
     `hl.monitor` lines; if it is missing, doesn't pass, or turns every screen off, the login
     screen arranges the screens automatically. **Use automatic layout** removes it.
-- **Passwords and messages.** PAM runs inside greetd with `/etc/pam.d/greetd` (from the greetd
-  package; uQ doesn't ship or edit it). Password fields are cleared after every attempt and
-  nothing the greeter logs contains a password or a PAM message. A wrong password, a locked
-  account ("The account is locked due to 3 failed logins.") and every other PAM message are shown
+- **Passwords and messages.** PAM runs inside greetd. Logins use `/etc/pam.d/uq-greetd`
+  (`[general] service` in `/etc/uq/greetd.toml`): greetd's stack plus GNOME Keyring, so the
+  password also unlocks your keyring. The greeter's own session, as the `greeter` user, uses
+  `/etc/pam.d/uq-greeter` (`[default_session] service`): the same stack without the keyring, so
+  no keyring daemon starts for `greeter`. greetd's own `/etc/pam.d/greetd` is never edited.
+  Password fields are cleared after every attempt and nothing the greeter logs contains a
+  password or a PAM message. A wrong password, a locked account ("The account is locked due to 3 failed logins.") and every other PAM message are shown
   as plain text. When your password has expired, the greeter asks for a new one twice and checks
   they match before PAM sees them.
 
@@ -81,11 +84,11 @@ Fingerprint login is **off** at the greeter. greetd runs one PAM conversation at
 greeter can't wait for a password and a finger at once the way the lock screen does, and a
 fingerprint login can't unlock a password-protected keyring.
 
-If you want it anyway, add `pam_fprintd` to greetd's own PAM file, above its first
-`auth include` line (Arch's file includes `system-local-login`):
+If you want it anyway, add `pam_fprintd` to the login PAM file, `/etc/pam.d/uq-greetd`, above
+its first `auth include` line:
 
 ```
-# /etc/pam.d/greetd
+# /etc/pam.d/uq-greetd
 auth       required     pam_securetty.so
 auth       requisite    pam_nologin.so
 auth       sufficient   pam_fprintd.so max-tries=1 timeout=10

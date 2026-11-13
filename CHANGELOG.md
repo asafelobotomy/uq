@@ -115,6 +115,14 @@ All notable changes to uQ are listed here. The format follows
 
 ### Fixed
 
+- **The login screen no longer starts a keyring for itself.** greetd ran the greeter's own
+  session (user `greeter`) through `/etc/pam.d/uq-greetd` too, so GNOME Keyring started a daemon
+  for `greeter` that failed to create `/.local/share/keyrings` and logged "couldn't unlock the
+  login keyring". The greeter now has its own PAM service, `/etc/pam.d/uq-greeter` (greetd's
+  stack without the keyring), named by `[default_session] service = "uq-greeter"` in
+  `/etc/uq/greetd.toml`; logging in still unlocks your keyring through `uq-greetd`. An
+  `/etc/uq/greetd.toml` you changed yourself (auto-login) keeps its `.pacnew`; add
+  `service = "uq-greeter"` under its `[default_session]`.
 - **Settings fixes:** adding a pointing device under Input → Devices no longer resets its speed
   to 0; keyboard, mouse and touchpad rows show when `user.lua` overrides them; the Login screen
   page's theme box is never blank; deleting a restore point asks first; the Login screen page
