@@ -15,6 +15,7 @@ pub(crate) mod net;
 mod news;
 mod notifowner;
 mod power;
+mod procusage;
 pub mod protocol;
 mod providers;
 pub(crate) mod run;
@@ -91,6 +92,7 @@ struct Services {
     runs: Arc<Mutex<run::RunState>>,
     providers: Arc<providers::Providers>,
     logind: Arc<logind::Logind>,
+    procs: Arc<procusage::ProcUsage>,
     /// None when the bridge runs without integrations (unit tests).
     widgets: Option<Arc<widgets::Widgets>>,
     actions: Option<Arc<appactions::AppActions>>,
@@ -154,6 +156,10 @@ async fn handle(s: &Services, call: &str, args: &[Value]) -> Result<Value, Strin
         "RefreshStocks" if args.is_empty() => Ok(json!(s.stocks.refresh_now())),
         "RefreshNews" if args.is_empty() => Ok(json!(s.news.refresh_now())),
         "RefreshStocks" | "RefreshNews" => Err(format!("{call} takes no arguments")),
+        "ProcessUsage" => {
+            let pids = procusage::pids_arg(args)?;
+            Ok(s.procs.usage(&pids, std::time::Instant::now()))
+        }
         "OpenLink" => match args {
             [Value::String(url)] => s.news.src.open_link(url),
             _ => Err("OpenLink takes one string argument (the link)".into()),
@@ -397,6 +403,7 @@ where
         runs: runs.clone(),
         providers: providers.clone(),
         logind: logind.clone(),
+        procs: Arc::new(procusage::ProcUsage::new()),
         widgets,
         actions,
     };

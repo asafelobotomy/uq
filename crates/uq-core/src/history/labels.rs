@@ -31,6 +31,8 @@ pub fn label(domain: &str, key: &str) -> Option<String> {
         ("shell", "bar.options.stocks.symbols") => "Stock ticker symbols",
         ("shell", "bar.options.news.feeds") => "News feeds",
         ("shell", "bar.options.worldclock.zones") => "World clock time zones",
+        ("shell", "bar.options.work.sort") => "Open windows: order",
+        ("shell", "bar.options.work.descending") => "Open windows: reverse order",
         ("shell", "providers") => "Launcher search providers",
         ("shell", "clock_24h") => "24-hour clock",
         ("shell", "terminal") => "Terminal",

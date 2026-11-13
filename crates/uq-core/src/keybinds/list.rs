@@ -202,7 +202,7 @@ mod tests {
             json!({"spelling": "A", "label": "A", "kind": "key",
                                         "group": "letter"})
         );
-        assert_eq!(v["actions"]["shell"].as_array().unwrap().len(), 13);
+        assert_eq!(v["actions"]["shell"].as_array().unwrap().len(), 14);
         let uq = v["actions"]["uq"].as_array().unwrap();
         assert!(
             uq.iter()

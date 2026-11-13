@@ -221,6 +221,7 @@ impl Action {
                 "notif-centre" => "Opens notifications",
                 "lock" => "Locks the screen",
                 "power-menu" => "Opens the power menu",
+                "edit-bar" => "Starts or finishes editing the bar",
                 "vol-up" => "Turns the volume up",
                 "vol-down" => "Turns the volume down",
                 "mute" => "Mutes the sound",
@@ -393,6 +394,18 @@ fn app_name(app: &str) -> String {
 mod tests {
     use super::*;
     use crate::keybinds::hypr::DISPATCHERS;
+
+    /// Every shell action says what it does in its own words (none falls through to another's).
+    #[test]
+    fn every_shell_action_has_its_own_text() {
+        let texts: Vec<String> = SHELL_NAMES
+            .iter()
+            .map(|n| Action::Shell { name: (*n).into() }.text())
+            .collect();
+        for (i, t) in texts.iter().enumerate() {
+            assert!(!texts[..i].contains(t), "{} repeats {t:?}", SHELL_NAMES[i]);
+        }
+    }
 
     fn all() -> Vec<Action> {
         let s = |n: &str| Action::Shell { name: n.into() };

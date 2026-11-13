@@ -12,7 +12,7 @@ use serde_json::Value;
 /// Every island the bar knows, in the order Settings offers them, with its display name.
 pub const ISLANDS: [(&str, &str); 13] = [
     ("system", "App menu, workspaces and dock"),
-    ("work", "Windows"),
+    ("work", "Open windows"),
     ("clock", "Clock and calendar"),
     ("weather", "Weather"),
     ("notif", "Notifications"),
@@ -165,6 +165,31 @@ pub struct WorldClockOptions {
     pub zones: Vec<String>,
 }
 
+/// How the Open windows island orders its pills.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum WindowSort {
+    /// When each window opened (oldest first unless `descending`).
+    #[default]
+    Opened,
+    /// The last notification from each window's app.
+    Activity,
+    /// Pinned apps in pin order, then the rest by when they opened.
+    Pin,
+    /// Processor and memory use of each window's process.
+    Usage,
+    /// The app's name, then the title.
+    Name,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct WorkOptions {
+    pub sort: WindowSort,
+    /// Reverse the order (newest, most active, busiest or Z first). Ignored for `pin`.
+    pub descending: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct BarOptions {
@@ -172,10 +197,11 @@ pub struct BarOptions {
     pub stocks: StocksOptions,
     pub news: NewsOptions,
     pub worldclock: WorldClockOptions,
+    pub work: WorkOptions,
 }
 
 impl BarOptions {
-    pub const FIELDS: [&str; 4] = ["clock", "stocks", "news", "worldclock"];
+    pub const FIELDS: [&str; 5] = ["clock", "stocks", "news", "worldclock", "work"];
 }
 
 /// The three zones of the bar, left to right; `center` is truly centred.
@@ -605,6 +631,7 @@ pub(super) fn lenient_bar<'de, D: serde::Deserializer<'de>>(
         worldclock: WorldClockOptions {
             zones: strings(part("worldclock"), "zones").unwrap_or_default(),
         },
+        work: lenient(part("work")),
     };
     Ok(Some(
         BarLayout {
@@ -821,7 +848,7 @@ mod tests {
         assert_eq!(b.options.stocks.symbols, ["TSLA"]);
         for bad in [
             json!({"op": "options", "island": "stocks", "value": {"symbols": ["bad sym"]}}),
-            json!({"op": "options", "island": "work", "value": {}}),
+            json!({"op": "options", "island": "status", "value": {}}),
             json!({"op": "options", "island": "clock", "value": {"nope": 1}}),
             json!({"op": "add", "id": "nope", "zone": "end"}),
             json!({"op": "add", "id": "news", "zone": "middle"}),
@@ -858,6 +885,42 @@ mod tests {
         .unwrap();
         assert_eq!(v, json!({"id": "news", "size": "icon"}));
         assert_eq!(island_name("system"), Some("App menu, workspaces and dock"));
+    }
+
+    #[test]
+    fn work_sort_options() {
+        let b = BarLayout::from_value(
+            &json!({"options": {"work": {"sort": "usage", "descending": true}}}),
+        )
+        .unwrap();
+        assert_eq!(b.options.work.sort, WindowSort::Usage);
+        assert!(b.options.work.descending);
+        assert_eq!(BarOptions::default().work.sort, WindowSort::Opened);
+        for bad in [
+            json!({"options": {"work": {"sort": "random"}}}),
+            json!({"options": {"work": {"descending": "yes"}}}),
+            json!({"options": {"work": {"nope": 1}}}),
+        ] {
+            assert!(BarLayout::from_value(&bad).is_err(), "{bad}");
+        }
+        #[derive(Deserialize)]
+        struct W {
+            #[serde(deserialize_with = "lenient_bar")]
+            bar: Option<BarLayout>,
+        }
+        let w: W =
+            serde_json::from_value(json!({"bar": {"options": {"work": {"sort": "random"}}}}))
+                .unwrap();
+        assert_eq!(w.bar.unwrap().options.work, WorkOptions::default());
+        let mut b = BarLayout::default();
+        b.apply(
+            &serde_json::from_value(
+                json!({"op": "options", "island": "work", "value": {"sort": "name"}}),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(b.options.work.sort, WindowSort::Name);
     }
 
     #[test]
