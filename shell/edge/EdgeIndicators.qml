@@ -3,6 +3,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Hyprland
 import "../core"
+import "../services"
 import "../logic/edges.js" as Edges
 import "../logic/shellprefs.js" as ShellPrefs
 import "../logic/work.js" as Work
@@ -35,13 +36,20 @@ Scope {
             if (w !== null)
                 out.push(w);
         }
-        root.windows = out;
+        // Every refresh touches each window's lastIpcObject; only a real change goes on to
+        // every edge's bindings.
+        var key = JSON.stringify(out);
+        if (key !== root.windowsKey) {
+            root.windowsKey = key;
+            root.windows = out;
+        }
     }
+    property string windowsKey: ""
 
     // Ask Hyprland for fresh window positions now (an edge was reached, or a step was taken):
     // the scrolling layout moves columns without an event.
     function refresh() {
-        refreshTimer.restart();
+        HyprRefresh.request();
     }
 
     // Focus `n` (a neighbour from Edges.neighbour). Returns whether a dispatch was sent.
@@ -77,14 +85,15 @@ Scope {
     }
 
     Timer {
-        id: refreshTimer
-        interval: 40
-        onTriggered: Hyprland.refreshToplevels()
-    }
-    Timer {
         id: debounce
         interval: 30
         onTriggered: root.rebuild()
+    }
+    // Focus moved. Not the activewindowv2 event: Hyprland sends that again, for the same window,
+    // on every title change of the focused window.
+    Connections {
+        target: Hyprland
+        function onActiveToplevelChanged() { root.refresh(); }
     }
     Connections {
         target: Hyprland
@@ -94,7 +103,6 @@ Scope {
                 // The window look (border, rounding, gaps) may have changed.
                 WindowLook.soon();
                 break;
-            case "activewindowv2":
             case "openwindow":
             case "closewindow":
             case "movewindowv2":

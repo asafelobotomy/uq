@@ -56,12 +56,14 @@ impl Activity {
         (s.in_flight == 0).then(|| s.last.elapsed())
     }
 
-    /// Resolve once the helper has been idle for `limit`, checking every `poll`.
+    /// Resolve once the helper has been idle for `limit`. While idle it sleeps until the limit
+    /// would be reached (a call in between moves `last`, and the check after waking sees it);
+    /// while a call runs it checks every `poll`.
     pub async fn wait_idle(&self, limit: Duration, poll: Duration) {
         loop {
             match self.idle_for() {
                 Some(d) if d >= limit => return,
-                Some(d) => tokio::time::sleep((limit - d).min(poll)).await,
+                Some(d) => tokio::time::sleep(limit - d).await,
                 None => tokio::time::sleep(poll).await,
             }
         }

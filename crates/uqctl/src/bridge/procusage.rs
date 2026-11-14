@@ -54,6 +54,10 @@ impl ProcUsage {
         let mut last = self.last.lock().unwrap_or_else(|e| e.into_inner());
         let mut seen = HashMap::new();
         for &pid in pids.iter().take(MAX_PIDS) {
+            // Windows of one app share a process: read it once.
+            if seen.contains_key(&pid) {
+                continue;
+            }
             let Some(ticks) = self.read(pid, "stat").as_deref().and_then(parse_ticks) else {
                 continue;
             };
@@ -119,11 +123,11 @@ mod tests {
         std::fs::write(p.join("status"), "VmRSS:\t1000 kB\n").unwrap();
         let u = ProcUsage::with_root(d.path());
         let t0 = Instant::now();
-        let first = u.usage(&[1234, 99], t0);
+        let first = u.usage(&[1234, 99, 1234], t0);
         assert_eq!(
             first,
             json!({"1234": {"cpu": 0.0, "rss": 1024000}}),
-            "gone pids are left out"
+            "gone pids are left out; a repeated pid is one entry"
         );
         // 50 more ticks (0.5 s of processor) over 2 s: 25%.
         std::fs::write(p.join("stat"), STAT.replace(" 250 50 ", " 300 50 ")).unwrap();

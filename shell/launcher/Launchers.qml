@@ -7,9 +7,17 @@ import "../power"
 // their shortcuts and IPC (LauncherRoutes). Which surface is open lives in Surfaces (it also closes and wipes them
 // when Bridge.locked becomes true); nothing here keeps state of its own.
 Scope {
-    Spotlight {}
-    AppMenu {}
-    QuickSettings {}
-    PowerMenu {}
+    // Built in the background once the shell is up, not before the first bar shows (they took
+    // about an eighth of startup). Each opens from Surfaces.open, so one asked for while this
+    // is still loading opens as soon as it exists.
+    LazyLoader {
+        activeAsync: true
+        Scope {
+            Spotlight {}
+            AppMenu {}
+            QuickSettings {}
+            PowerMenu {}
+        }
+    }
     LauncherRoutes {}
 }

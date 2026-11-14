@@ -268,9 +268,11 @@ ShellRoot {
             WlrLayershell.keyboardFocus: isMain ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
 
             // The greeter decodes the wallpaper itself; nothing root-side ever does (§2.2).
+            // Only once the window has its size: a sourceSize of 0 decodes the picture at full
+            // size, and the real size then decodes it a second time.
             Image {
                 anchors.fill: parent
-                source: "file://" + G.WALLPAPER_PATH
+                source: win.width > 0 && win.height > 0 ? "file://" + G.WALLPAPER_PATH : ""
                 sourceSize.width: win.width
                 sourceSize.height: win.height
                 fillMode: Image.PreserveAspectCrop

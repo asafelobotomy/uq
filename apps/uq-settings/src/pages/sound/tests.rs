@@ -20,7 +20,7 @@ struct FakeTools {
     started: StdMutex<Vec<Vec<String>>>,
     missing: StdMutex<HashSet<String>>,
     fail: StdMutex<Option<String>>,
-    monitor: StdMutex<Option<tokio::sync::mpsc::UnboundedReceiver<()>>>,
+    monitor: StdMutex<Option<tokio::sync::mpsc::UnboundedReceiver<String>>>,
 }
 
 impl Tools for Arc<FakeTools> {
@@ -47,7 +47,7 @@ impl Tools for Arc<FakeTools> {
         Ok(())
     }
 
-    fn lines(&self, _argv: Vec<String>) -> BoxStream<'static, ()> {
+    fn lines(&self, _argv: Vec<String>) -> BoxStream<'static, String> {
         let rx = self.monitor.lock().unwrap().take().expect("one monitor");
         futures_util::stream::unfold(rx, |mut rx| async move { rx.recv().await.map(|v| (v, rx)) })
             .boxed()
@@ -263,11 +263,51 @@ async fn the_page_reads_again_when_the_graph_changes() {
         let changed = changed.clone();
         tokio::spawn(async move { page.watch(changed).await })
     };
-    tx.send(()).unwrap();
+    for line in ["[", r#"  {"id": 5, "type": "PipeWire:Interface:Node", "info": {}}"#, "]"] {
+        tx.send(line.to_string()).unwrap();
+    }
     tokio::time::timeout(std::time::Duration::from_secs(5), changed.notified())
         .await
         .expect("a change wakes the page");
     watcher.abort();
+}
+
+/// Updates are split at their closing `]` line; only those touching what the page shows count.
+#[test]
+fn monitor_updates_that_concern_the_page() {
+    let mut m = MonitorUpdates::default();
+    let mut feed = |text: &str| {
+        let mut hits = Vec::new();
+        for line in text.lines() {
+            hits.push(m.line(line));
+        }
+        hits
+    };
+    let node = "[\n  {\n    \"id\": 40,\n    \"type\": \"PipeWire:Interface:Node\",\n    \"info\": {}\n  }\n]";
+    let hits = feed(node);
+    assert_eq!(hits.last(), Some(&true), "a node change counts");
+    assert!(hits[..hits.len() - 1].iter().all(|h| !h), "only once the update is whole");
+
+    // Our own pw-dump (or wpctl) coming and going: a client, then its removal.
+    assert_eq!(
+        feed("[\n  {\"id\": 84, \"type\": \"PipeWire:Interface:Client\", \"info\": {}}\n]").last(),
+        Some(&false)
+    );
+    assert_eq!(feed("[\n  {\"id\": 84, \"info\": null}\n]").last(), Some(&false));
+
+    // A shown object's removal counts once; metadata (no `info` at all) counts too.
+    assert_eq!(feed("[\n  {\"id\": 40, \"info\": null}\n]").last(), Some(&true));
+    assert_eq!(feed("[\n  {\"id\": 40, \"info\": null}\n]").last(), Some(&false));
+    assert_eq!(
+        feed("[\n  {\"id\": 7, \"type\": \"PipeWire:Interface:Metadata\", \"metadata\": []}\n]").last(),
+        Some(&true)
+    );
+
+    // The whole graph, as the monitor prints it first.
+    assert_eq!(feed(LAPTOP).last(), Some(&true));
+
+    // Unreadable output counts, to be safe.
+    assert_eq!(feed("[\n  {oops\n]").last(), Some(&true));
 }
 
 #[test]

@@ -60,13 +60,28 @@ SettingsPage {
 
     DateTimeModel {
         id: dm
-        onStateJsonChanged: page.showNews()
+        onStateJsonChanged: {
+            // A new time zone or clock format shows at once, not at the next minute.
+            page.now = new Date();
+            page.showNews();
+        }
     }
+    // The page shows hours and minutes only: wake once a minute, just after it turns, rather
+    // than every second.
     Timer {
+        id: minuteTick
+        function tick() {
+            page.now = new Date();
+            minuteTick.interval = 60000 - page.now.getTime() % 60000 + 50;
+        }
         interval: 1000
         repeat: true
         running: page.visible
-        onTriggered: page.now = new Date()
+        onRunningChanged: {
+            if (running)
+                tick();
+        }
+        onTriggered: tick()
     }
 
     banners: [

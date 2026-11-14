@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Widgets
 import "../core"
+import "../services"
 import "../logic/dock.js" as Dock
 import "../logic/minimise.js" as Min
 import "../logic/quickui.js" as U
@@ -21,8 +22,10 @@ Island {
     property var layouts: ({})
     property var dockModel: []
     property var menuEntry: null
-    readonly property var refreshEvents: ["openwindow", "closewindow", "movewindow", "movewindowv2",
-        "windowtitle", "windowtitlev2", "changefloatingmode", "activewindowv2", "workspace", "workspacev2"]
+    // Not the title events: Quickshell sets each title from them, and the title watcher below
+    // rebuilds the dock.
+    readonly property var refreshEvents: ["openwindow", "closewindow", "movewindowv2",
+        "changefloatingmode", "workspacev2"]
 
     // Sizes: Icon is the app menu button; Small adds the focused workspace; Medium as many
     // workspaces as fit (the focused one always among them); Large adds each workspace's layout
@@ -103,8 +106,14 @@ Island {
             var d = e.id.indexOf("class:") === 0 ? null : DesktopEntries.byId(e.id);
             e.icon = d && d.icon ? d.icon : (e.id.indexOf("class:") === 0 ? e.id.substring(6).toLowerCase() : e.id);
         });
-        dockModel = es;
+        // Unchanged (most refreshes): keep the model, so the dock's delegates aren't rebuilt.
+        var key = JSON.stringify(es);
+        if (key !== dockKey) {
+            dockKey = key;
+            dockModel = es;
+        }
     }
+    property string dockKey: ""
     function refreshLayouts() {
         Bridge.call("GetLayouts", []).then(function (m) {
             // The island may be gone by now (the bar rebuilds its islands when they move).
@@ -149,20 +158,21 @@ Island {
     // Events only request a refresh; the reply arrives asynchronously and shows up as
     // lastIpcObjectChanged on the toplevels, which is what triggers the rebuild.
     Timer {
-        id: refreshTimer
-        interval: 60
-        onTriggered: Hyprland.refreshToplevels()
-    }
-    Timer {
         id: debounce
         interval: 60
         onTriggered: root.rebuildDock()
+    }
+    // Focus moved. Not the activewindowv2 event: Hyprland sends that again, for the same window,
+    // on every title change of the focused window.
+    Connections {
+        target: Hyprland
+        function onActiveToplevelChanged() { HyprRefresh.request(); }
     }
     Connections {
         target: Hyprland
         function onRawEvent(event) {
             if (root.refreshEvents.indexOf(event.name) >= 0)
-                refreshTimer.restart();
+                HyprRefresh.request();
         }
     }
     Connections {

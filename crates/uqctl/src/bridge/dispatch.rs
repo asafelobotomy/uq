@@ -467,22 +467,60 @@ fn parse_active_address(reply: &str) -> Option<String> {
 /// colours as `#AARRGGBB` (the first stop of a gradient), `layout` the default tiling layout
 /// (dwindle, master, scrolling…). An option that can't be read is left out.
 pub async fn window_look() -> Result<Value, String> {
-    let hypr = HyprSocket::from_env();
-    let mut out = serde_json::Map::new();
-    for (key, opt) in [
-        ("border", "general:border_size"),
-        ("rounding", "decoration:rounding"),
-        ("gaps_in", "general:gaps_in"),
-        ("gaps_out", "general:gaps_out"),
-        ("active_border", "general:col.active_border"),
-        ("inactive_border", "general:col.inactive_border"),
-        ("layout", "general:layout"),
-    ] {
-        let Ok(reply) = hypr.request(&format!("j/getoption {opt}")).await else {
-            continue;
+    window_look_from(&HyprSocket::from_env()).await
+}
+
+/// The options `WindowLook` reads: its key, then the Hyprland option.
+const LOOK_OPTIONS: [(&str, &str); 7] = [
+    ("border", "general:border_size"),
+    ("rounding", "decoration:rounding"),
+    ("gaps_in", "general:gaps_in"),
+    ("gaps_out", "general:gaps_out"),
+    ("active_border", "general:col.active_border"),
+    ("inactive_border", "general:col.inactive_border"),
+    ("layout", "general:layout"),
+];
+
+/// Hyprland's separator between the replies of a `[[BATCH]]` request.
+const BATCH_SEPARATOR: &str = "\n\n\n";
+
+/// The replies of one `[[BATCH]]` request, one per request in it; `None` if the count is off
+/// (an older Hyprland, or a reply that held the separator), so the caller asks one by one.
+fn split_batch(reply: &str, n: usize) -> Option<Vec<&str>> {
+    let parts: Vec<&str> = reply.split(BATCH_SEPARATOR).collect();
+    (parts.len() == n).then_some(parts)
+}
+
+/// `WindowLook` against `hypr`: every option in one `[[BATCH]]` request (one connection, one
+/// trip through Hyprland's loop instead of seven), falling back to one request per option.
+async fn window_look_from(hypr: &HyprSocket) -> Result<Value, String> {
+    let batch: Vec<String> = LOOK_OPTIONS
+        .iter()
+        .map(|(_, opt)| format!("j/getoption {opt}"))
+        .collect();
+    let batched = hypr.request(&format!("[[BATCH]]{}", batch.join(";"))).await;
+    let replies: Vec<Option<String>> =
+        match batched.as_deref().ok().and_then(|r| split_batch(r, batch.len())) {
+            Some(parts) => parts.into_iter().map(|p| Some(p.to_string())).collect(),
+            None if matches!(
+                batched,
+                Err(CompositorError::NotRunning | CompositorError::Timeout(_))
+            ) =>
+            {
+                return Err("Hyprland is not running".into());
+            }
+            None => {
+                let mut one_by_one = Vec::with_capacity(batch.len());
+                for req in &batch {
+                    one_by_one.push(hypr.request(req).await.ok());
+                }
+                one_by_one
+            }
         };
-        if let Some(v) = parse_look_option(&reply) {
-            out.insert(key.into(), v);
+    let mut out = serde_json::Map::new();
+    for ((key, _), reply) in LOOK_OPTIONS.iter().zip(replies) {
+        if let Some(v) = reply.as_deref().and_then(parse_look_option) {
+            out.insert((*key).into(), v);
         }
     }
     if out.is_empty() {
@@ -860,6 +898,83 @@ mod tests {
         assert_eq!(parse_look_option(r#"{"str": "a b"}"#), None);
         assert_eq!(parse_look_option(r#"{"css": "a b"}"#), None);
         assert_eq!(parse_look_option("not json"), None);
+    }
+
+    /// A fake request socket: answers each connection with `reply(request)` and records the
+    /// requests.
+    fn fake_hypr(
+        reply: fn(&str) -> String,
+    ) -> (
+        tempfile::TempDir,
+        HyprSocket,
+        std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+    ) {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let dir = tempfile::tempdir().unwrap();
+        let sock = dir.path().join("hypr/sig");
+        std::fs::create_dir_all(&sock).unwrap();
+        let l = tokio::net::UnixListener::bind(sock.join(".socket.sock")).unwrap();
+        let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let log = seen.clone();
+        tokio::spawn(async move {
+            while let Ok((mut s, _)) = l.accept().await {
+                let mut buf = vec![0u8; 8192];
+                let n = s.read(&mut buf).await.unwrap_or(0);
+                let req = String::from_utf8_lossy(&buf[..n]).into_owned();
+                let _ = s.write_all(reply(&req).as_bytes()).await;
+                log.lock().unwrap().push(req);
+            }
+        });
+        let h = HyprSocket::new(Some(dir.path().to_path_buf()), Some("sig".into()));
+        (dir, h, seen)
+    }
+
+    fn look_reply(opt: &str) -> String {
+        match opt {
+            "general:border_size" => r#"{"option": "general:border_size", "int": 2, "set": true }"#,
+            "general:gaps_out" => r#"{"option": "general:gaps_out", "css": "4 8", "set": true }"#,
+            "general:layout" => r#"{"option": "general:layout", "str": "scrolling", "set": true }"#,
+            _ => "no such option",
+        }
+        .to_string()
+    }
+
+    fn batch_reply(req: &str) -> String {
+        let Some(list) = req.strip_prefix("[[BATCH]]") else {
+            return "unknown request".into();
+        };
+        list.split(';')
+            .map(|r| look_reply(r.trim_start_matches("j/getoption ")))
+            .collect::<Vec<_>>()
+            .join(BATCH_SEPARATOR)
+    }
+
+    /// No batch support: one option per request.
+    fn single_reply(req: &str) -> String {
+        match req.strip_prefix("j/getoption ") {
+            Some(opt) => look_reply(opt),
+            None => "unknown request".into(),
+        }
+    }
+
+    #[tokio::test]
+    async fn window_look_in_one_batch_or_one_by_one() {
+        let want = json!({"border": 2, "gaps_out": [4, 8, 4, 8], "layout": "scrolling"});
+        let (_d, h, seen) = fake_hypr(batch_reply);
+        assert_eq!(window_look_from(&h).await.unwrap(), want);
+        assert_eq!(seen.lock().unwrap().len(), 1, "one connection");
+
+        let (_d, h, seen) = fake_hypr(single_reply);
+        assert_eq!(window_look_from(&h).await.unwrap(), want);
+        assert_eq!(seen.lock().unwrap().len(), 1 + LOOK_OPTIONS.len());
+
+        let gone = HyprSocket::new(Some("/nonexistent".into()), Some("sig".into()));
+        assert_eq!(
+            window_look_from(&gone).await.unwrap_err(),
+            "Hyprland is not running"
+        );
+        assert_eq!(split_batch("a\n\n\nb", 2), Some(vec!["a", "b"]));
+        assert_eq!(split_batch("a\n\n\nb", 3), None);
     }
 
     /// Every generated statement must load under Hyprland's Lua. CI runs this with `--ignored`.

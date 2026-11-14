@@ -93,6 +93,8 @@ pub struct AppRust {
     entries: Vec<PageEntry>,
     /// The plugin pages on show, to rebuild `entries` when the Login screen page comes or goes.
     plugins: Vec<plugins::PluginPage>,
+    /// Whether uQ's login screen was installed when `entries` was built (see `recheck_pages`).
+    greeter: bool,
     page: QString,
     page_requested: bool,
     highlight: QString,
@@ -108,7 +110,8 @@ pub struct AppRust {
 impl Default for AppRust {
     fn default() -> Self {
         let plugins = plugins::scan_configured();
-        let entries = page_entries(&plugins);
+        let greeter = crate::pages::login_screen::greeter_installed();
+        let entries = page_entries(&plugins, greeter);
         let first = entries.first().map_or("", |p| p.id.as_str());
         Self {
             page: QString::from(first),
@@ -116,6 +119,7 @@ impl Default for AppRust {
             pages_json: QString::from(&registry::pages_json(&entries)),
             entries,
             plugins,
+            greeter,
             highlight: QString::default(),
             uqd_up: false,
             screenshot_dir: QString::default(),
@@ -127,13 +131,11 @@ impl Default for AppRust {
     }
 }
 
-/// Every page for this machine: the core pages, then `plugins`, without the pages it can't use.
-fn page_entries(plugins: &[plugins::PluginPage]) -> Vec<PageEntry> {
+/// Every page for this machine: the core pages, then `plugins`, without the pages it can't use
+/// (`greeter`: whether uQ's login screen is installed).
+fn page_entries(plugins: &[plugins::PluginPage], greeter: bool) -> Vec<PageEntry> {
     let mut entries = registry::all_pages(plugins);
-    registry::drop_unavailable(
-        &mut entries,
-        crate::pages::login_screen::greeter_installed(),
-    );
+    registry::drop_unavailable(&mut entries, greeter);
     entries
 }
 
@@ -281,8 +283,11 @@ impl App {
     fn set_plugins(mut self: Pin<&mut Self>, pages: &[plugins::PluginPage]) {
         // Through page_entries, so the Login screen page stays out on a machine without uQ's
         // login screen (rebuilding from all_pages alone brought it back with any plugin change).
-        let entries = page_entries(pages);
-        self.as_mut().rust_mut().get_mut().plugins = pages.to_vec();
+        let greeter = crate::pages::login_screen::greeter_installed();
+        let entries = page_entries(pages, greeter);
+        let rust = self.as_mut().rust_mut().get_mut();
+        rust.plugins = pages.to_vec();
+        rust.greeter = greeter;
         let json = QString::from(&registry::pages_json(&entries));
         if json == *self.pages_json() {
             return;
@@ -316,6 +321,12 @@ impl App {
     }
 
     fn recheck_pages(self: Pin<&mut Self>) {
+        // Called each time the window comes to the front: only the login screen can have come
+        // or gone (plugin pages are followed as they change), so rebuild the pages (every page's
+        // search entries, then the sidebar JSON) only when it has.
+        if crate::pages::login_screen::greeter_installed() == self.rust().greeter {
+            return;
+        }
         let plugins = self.rust().plugins.clone();
         self.set_plugins(&plugins);
     }

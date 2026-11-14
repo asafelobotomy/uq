@@ -3,6 +3,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Hyprland
 import "../core"
+import "../services"
 import "../logic/columns.js" as Columns
 import "../logic/work.js" as Work
 
@@ -92,24 +93,37 @@ Scope {
         root.summaries = now.summaries;
     }
 
-    Component.onCompleted: refreshTimer.restart()
-    Timer {
-        id: refreshTimer
-        interval: 60
-        onTriggered: {
-            Hyprland.refreshWorkspaces();
-            Hyprland.refreshMonitors();
-            Hyprland.refreshToplevels();
-            lookTimer.restart();
+    // Set when this asked for fresh lists, so the settle after it looks again.
+    property bool asked: false
+    // Focus changes only need the windows; the screens (whose widths say what spans one) and
+    // workspace layouts are read again on the rarer events.
+    function refresh(all) {
+        root.asked = true;
+        HyprRefresh.request(all ? { monitors: true, workspaces: true } : null);
+    }
+    Component.onCompleted: refresh(true)
+    // lastIpcObject arrives a moment after the refresh.
+    Connections {
+        target: HyprRefresh
+        function onSettled() {
+            if (!root.asked)
+                return;
+            root.asked = false;
+            root.look();
         }
     }
-    // lastIpcObject arrives a moment after the refresh.
-    Timer {
-        id: lookTimer
-        interval: 200
-        onTriggered: root.look()
+    // A workspace switched to or from the scrolling layout.
+    Connections {
+        target: Bridge
+        function onLayoutChanged(ws, layout) { root.refresh(true); }
     }
 
+    // Focus moved. Not the activewindowv2 event: Hyprland sends that again, for the same window,
+    // on every title change of the focused window.
+    Connections {
+        target: Hyprland
+        function onActiveToplevelChanged() { root.refresh(false); }
+    }
     Connections {
         target: Hyprland
         function onRawEvent(event) {
@@ -123,12 +137,12 @@ Scope {
                     var before = root.summaries[ws] || { count: 0, active: "", activeFull: false };
                     root.opened = root.opened.concat([{ address: a, ws: ws, before: before }]);
                 }
-                refreshTimer.restart();
+                root.refresh(true);
             } else if (n === "closewindow" || n === "movewindowv2" || n === "changefloatingmode") {
                 root.shrank = true;
-                refreshTimer.restart();
-            } else if (n === "activewindowv2" || n === "workspacev2" || n === "configreloaded") {
-                refreshTimer.restart();
+                root.refresh(true);
+            } else if (n === "workspacev2" || n === "configreloaded" || n === "monitoraddedv2") {
+                root.refresh(true);
             }
         }
     }
