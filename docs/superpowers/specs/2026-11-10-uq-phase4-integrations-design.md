@@ -134,6 +134,7 @@ timeout_ms = 3000
 |---|---|---|
 | `WidgetCall` | widget id, method, args (JSON array) | result as JSON, or an error |
 | `WidgetGet` | widget id | all listed properties as a JSON object |
+| `WidgetShown` | widget id, bool | `null`; whether any of the widget's slots is on screen. While none is, its properties aren't followed (no `WidgetProps`); when one is again, every listed property is sent. Unmentioned widgets count as shown |
 | `WidgetRun` | widget id, command id, args (array of strings) | `{code, output}` (output parsed per `output`) |
 
 | Event | Data |

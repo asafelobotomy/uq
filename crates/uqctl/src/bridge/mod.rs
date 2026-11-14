@@ -21,6 +21,7 @@ pub mod protocol;
 mod providers;
 pub(crate) mod run;
 mod stocks;
+pub(crate) mod stdio;
 mod sysmon;
 pub(crate) mod uqd;
 mod welcome;
@@ -125,6 +126,7 @@ async fn handle(s: &Services, call: &str, args: &[Value]) -> Result<Value, Strin
         "Search" => s.providers.search(link, runs, args).await,
         "Activate" => s.providers.activate(link, runs, args).await,
         "LauncherOpened" => s.providers.launcher_opened(link, args).await,
+        "WidgetShown" => s.widgets.as_ref().ok_or(NO_INTEGRATIONS)?.set_shown(args),
         "WidgetCall" | "WidgetGet" | "WidgetRun" => {
             let w = s.widgets.as_ref().ok_or(NO_INTEGRATIONS)?;
             match call {
@@ -215,6 +217,8 @@ async fn write_loop<W: AsyncWrite + Unpin>(mut w: W, mut rx: mpsc::Receiver<Outb
             break;
         }
     }
+    // Everything handed over is written (ThreadStdout writes on its own thread).
+    let _ = w.shutdown().await;
 }
 
 /// Run the bridge on the real buses. `roots`: where integrations are read from.

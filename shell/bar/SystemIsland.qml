@@ -84,9 +84,20 @@ Island {
         out.sort(function (a, b) { return a.id - b.id; });
         return out;
     }
+    // Looked up once per class (each dock rebuild asks for every window): emptied when the
+    // installed apps change.
+    property var idCache: ({})
     function lookupId(cls) {
+        if (cls in idCache)
+            return idCache[cls];
         var d = DesktopEntries.heuristicLookup(cls);
-        return d ? d.id : null;
+        var id = d ? d.id : null;
+        idCache[cls] = id;
+        return id;
+    }
+    Connections {
+        target: DesktopEntries.applications
+        function onValuesChanged() { root.idCache = {}; root.rebuildDock(); }
     }
     function rebuildDock() {
         var tls = [], vals = Hyprland.toplevels.values;

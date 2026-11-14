@@ -272,6 +272,7 @@ async fn a_watched_signal_is_reported_once_quiet() {
             member: "Changed".into(),
             path: Some("/org/uq/Test1".into()),
             sender: Some(NAME.into()),
+            properties: Vec::new(),
         }],
     };
     let mut w = start(
@@ -299,6 +300,68 @@ async fn a_watched_signal_is_reported_once_quiet() {
     }
     assert!(changed(&mut w, 3000).await, "the signal arrived");
     assert!(!changed(&mut w, 400).await, "a burst is one report");
+}
+
+/// A `PropertiesChanged` match narrowed by `properties`: other properties don't re-run it.
+#[tokio::test]
+async fn a_watched_property_change_counts_only_for_the_named_properties() {
+    use std::collections::HashMap;
+    use uq_core::integration::command_watch::{SignalMatch, WatchSpec, start};
+    use uq_core::integration::manifest::Bus;
+    use zbus::zvariant::Value as ZValue;
+
+    let bus = private_bus();
+    let svc = serve(&bus).await;
+    let c = connect(&bus).await;
+    let spec = WatchSpec {
+        files: Vec::new(),
+        signals: vec![SignalMatch {
+            bus: Bus::Session,
+            interface: "org.freedesktop.DBus.Properties".into(),
+            member: "PropertiesChanged".into(),
+            path: Some("/org/uq/Test1".into()),
+            sender: Some(NAME.into()),
+            properties: vec!["State".into()],
+        }],
+    };
+    let mut w = start(
+        &spec,
+        std::path::Path::new("/"),
+        Some(&c),
+        None,
+        Duration::from_millis(150),
+    )
+    .await
+    .unwrap();
+    let emit = |prop: &'static str, invalidated: bool| {
+        let svc = svc.clone();
+        async move {
+            let mut changed: HashMap<&str, ZValue<'_>> = HashMap::new();
+            let mut gone: Vec<&str> = Vec::new();
+            if invalidated {
+                gone.push(prop);
+            } else {
+                changed.insert(prop, ZValue::from(1u32));
+            }
+            svc.emit_signal(
+                None::<&str>,
+                "/org/uq/Test1",
+                "org.freedesktop.DBus.Properties",
+                "PropertiesChanged",
+                &(NAME, changed, gone),
+            )
+            .await
+            .unwrap()
+        }
+    };
+    for _ in 0..3 {
+        emit("Samples", false).await;
+    }
+    assert!(!changed(&mut w, 400).await, "another property");
+    emit("State", false).await;
+    assert!(changed(&mut w, 3000).await, "the named property changed");
+    emit("State", true).await;
+    assert!(changed(&mut w, 3000).await, "the named property was invalidated");
 }
 
 async fn changed(w: &mut uq_core::integration::command_watch::Watch, within_ms: u64) -> bool {

@@ -124,7 +124,7 @@ impl Default for AppRust {
             uqd_up: false,
             screenshot_dir: QString::default(),
             screenshot_size: QString::default(),
-            theme_json: QString::from(&read_tokens()),
+            theme_json: QString::from(&startup_tokens()),
             welcome: false,
             welcome_full: false,
         }
@@ -152,11 +152,28 @@ fn read_tokens() -> String {
         .unwrap_or_else(|| "{}".into())
 }
 
+/// The tokens `theme_look` read before the window was made, for `App` to take instead of
+/// reading the file a second time at startup.
+static STARTUP_TOKENS: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+/// The tokens for a new `App`: the startup read if it hasn't been taken yet, else the file.
+fn startup_tokens() -> String {
+    STARTUP_TOKENS
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .take()
+        .unwrap_or_else(read_tokens)
+}
+
 /// The look the app takes from the current theme: the KDE colour scheme uqd renders next to
-/// `tokens.json`, and the tokens' icon theme, interface font and size.
+/// `tokens.json`, and the tokens' icon theme, interface font and size. The tokens read here
+/// are kept for `App` (a theme change in between is a `ThemeChanged`, which reads them again).
 pub fn theme_look() -> crate::window::ffi::UqsLook {
     let dir = uq_core::paths::Paths::from_env().theme_dir;
-    look_from(&read_tokens(), &dir)
+    let tokens = read_tokens();
+    let look = look_from(&tokens, &dir);
+    *STARTUP_TOKENS.lock().unwrap_or_else(|e| e.into_inner()) = Some(tokens);
+    look
 }
 
 fn look_from(tokens: &str, theme_dir: &std::path::Path) -> crate::window::ffi::UqsLook {

@@ -171,3 +171,90 @@ function parseDunstCount(out) {
 function parseDunstPaused(out) {
     return typeof out === "string" && out.trim() === "true";
 }
+
+// --- change events (gdbus monitor) ---
+// Which of a daemon's states arrive as D-Bus change signals, so its adapter can stop polling them:
+// { dnd, count }, both false when unknown. Everything here parses untrusted `gdbus` output.
+
+var MAX_MONITOR_LINE = 4096;
+var NO_EVENTS = { dnd: false, count: false };
+
+// `[major, minor, patch]` from a version string such as "1.13.2 (2026-03-18)" or
+// "v1.13.1-12-gabc123" (git describe); null when there is none.
+function parseVersion(s) {
+    if (typeof s !== "string")
+        return null;
+    var m = /^\s*v?(\d{1,4})\.(\d{1,4})(?:\.(\d{1,4}))?/.exec(s);
+    if (!m)
+        return null;
+    return [parseInt(m[1], 10), parseInt(m[2], 10), m[3] === undefined ? 0 : parseInt(m[3], 10)];
+}
+
+function versionAtLeast(v, min) {
+    if (!v)
+        return false;
+    for (var i = 0; i < 3; i++) {
+        if (v[i] !== min[i])
+            return v[i] > min[i];
+    }
+    return true;
+}
+
+// `gdbus call ... org.freedesktop.Notifications.GetServerInformation` prints
+// ('name', 'vendor', 'version', 'spec'); {name, vendor, version} or null.
+function parseServerInfo(out) {
+    if (typeof out !== "string" || out.length > MAX_MONITOR_LINE)
+        return null;
+    var m = /^\('([^'\\]*)', '([^'\\]*)', '([^'\\]*)', '([^'\\]*)'\)\s*$/.exec(out.trim());
+    if (!m)
+        return null;
+    return { name: m[1], vendor: m[2], version: m[3] };
+}
+
+// dunst emits PropertiesChanged on org.dunstproject.cmd0 for displayedLength / historyLength /
+// waitingLength since 1.10.0 (queues_update) and for paused / pauseLevel since 1.13.1 (set
+// through D-Bus or SIGUSR1/2). Older builds change silently, so they stay polled.
+function dunstEvents(serverInfo) {
+    var info = parseServerInfo(serverInfo);
+    if (!info || info.name !== "dunst")
+        return NO_EVENTS;
+    var v = parseVersion(info.version);
+    return { dnd: versionAtLeast(v, [1, 13, 1]), count: versionAtLeast(v, [1, 10, 0]) };
+}
+
+// mako reports version 0.0.0, so it is probed by introspecting /fr/emersion/Mako: the Modes
+// property (mako 1.10.0) and the Notifications property (1.11.0) each came with a
+// PropertiesChanged (invalidation) on every change.
+function makoEvents(introspection) {
+    if (typeof introspection !== "string" || introspection.length > 65536)
+        return NO_EVENTS;
+    var m = /<interface name="fr\.emersion\.Mako">([\s\S]*?)<\/interface>/.exec(introspection);
+    if (!m)
+        return NO_EVENTS;
+    return {
+        dnd: /<property name="Modes" type="as"/.test(m[1]),
+        count: /<property name="Notifications" type="aa\{sv\}"/.test(m[1])
+    };
+}
+
+// One `gdbus monitor --dest <name> --object-path <path>` line: "owner" when the daemon (re)took
+// the name (the subscription is in place), "lost" when it dropped it, "change" for a
+// PropertiesChanged of `iface` on `path`, else null. gdbus only shows signals from the name's
+// current owner, so other clients cannot fake these.
+function monitorLine(line, name, path, iface) {
+    if (typeof line !== "string" || line.length > MAX_MONITOR_LINE)
+        return null;
+    if (line === "The name " + name + " does not have an owner")
+        return "lost";
+    if (line.indexOf("The name " + name + " is owned by ") === 0)
+        return "owner";
+    if (line.indexOf(path + ": org.freedesktop.DBus.Properties.PropertiesChanged ('" + iface + "',") === 0)
+        return "change";
+    return null;
+}
+
+// What the 5 s poll still has to read: the parts that no live monitor reports.
+function pollNeeds(events, live) {
+    var e = events || NO_EVENTS;
+    return { dnd: !(live && e.dnd === true), count: !(live && e.count === true) };
+}

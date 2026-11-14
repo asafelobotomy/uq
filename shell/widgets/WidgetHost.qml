@@ -15,6 +15,8 @@ Item {
     property int max: W.BAR_MAX
     property int cell: 26
     property int spacing: Theme.gapIn
+    // False while the bar or panel holding these slots isn't showing.
+    property bool onScreen: true
     // Bar: the widgets to list under "…"; set from outside to host them elsewhere.
     property var widgets: kind === "bar" ? W.barLayout(registry.list, max).shown
                                          : W.inSlot(registry.list, "quick")
@@ -101,6 +103,7 @@ Item {
                 cell: host.cell
                 registry: host.registry
                 bridge: host.bridge
+                onScreen: host.onScreen
                 width: host.kind === "bar" ? host.cell : grid.width
                 widget: ({ id: wid, name: name, qmlUrl: qmlUrl })
                 onLoadedChanged: host.recount()

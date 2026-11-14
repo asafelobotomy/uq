@@ -100,9 +100,21 @@ Island {
         HyprRefresh.request();
     }
 
+    // The app for a window class, looked up once per class (every sort and tab asks): emptied
+    // when the installed apps change.
+    property var appCache: ({})
     function appOf(cls) {
+        var hit = appCache[cls];
+        if (hit !== undefined)
+            return hit;
         var d = cls ? DesktopEntries.heuristicLookup(cls) : null;
-        return { cls: cls, id: d ? String(d.id) : "", name: d && d.name ? String(d.name) : cls, icon: d && d.icon ? d.icon : "" };
+        hit = { cls: cls, id: d ? String(d.id) : "", name: d && d.name ? String(d.name) : cls, icon: d && d.icon ? d.icon : "" };
+        appCache[cls] = hit;
+        return hit;
+    }
+    Connections {
+        target: DesktopEntries.applications
+        function onValuesChanged() { root.appCache = {}; }
     }
     readonly property var here: Work.windowsHere(windows, monitorName, wsId, focusedAddr)
     readonly property var ordered: {
@@ -223,8 +235,8 @@ Island {
     function iconFor(cls) {
         if (cls === "")
             return Quickshell.iconPath("application-x-executable");
-        var d = DesktopEntries.heuristicLookup(cls);
-        var name = d && d.icon ? d.icon : cls.toLowerCase();
+        var a = root.appOf(cls);
+        var name = a.icon ? a.icon : cls.toLowerCase();
         return Quickshell.iconPath(name, true) || Quickshell.iconPath("application-x-executable");
     }
     function togglePin(w) {

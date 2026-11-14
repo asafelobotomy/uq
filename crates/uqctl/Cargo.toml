@@ -22,6 +22,7 @@ tokio-util = "0.7"
 reqwest.workspace = true
 wayland-client = "0.31"
 wayland-scanner = "0.31"
+libc = "0.2"
 
 [dev-dependencies]
 uqd = { path = "../uqd", features = ["fake"] }

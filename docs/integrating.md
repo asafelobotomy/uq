@@ -188,6 +188,7 @@ The root item gets one property, `ctx` (declare `property var ctx`). It is set b
 | `ctx.Theme` (also `ctx.theme`) | the design tokens: `accent`, `text`, `textMuted`, `surface`, `overlay`, `radius`, `fontUi`, `fontSize`… |
 | `ctx.UqText`, `ctx.UqInput` | Components for the shell's plain-text label and single-line input. Use them through a `Loader` (`sourceComponent: ctx.UqText`) or `createObject` |
 | `ctx.slot` | `"bar"` or `"quick"` |
+| `ctx.view.shown` | `true` while the slot is on screen (a bar slot on a showing bar, a quick tile while quick settings is open). Pause polling and sampling while it is `false`, and refresh when it turns `true`. While no slot of a widget is shown, `ctx.dbus.props` isn't kept current; the latest values arrive (through `onProps`) when one is shown again. Signals always arrive. Older uQ has no `ctx.view`: treat a missing one as shown |
 | `ctx.dbus.call(method, args, cb)` | a listed method; `cb({value})` or `cb({error})`. No outputs is `null`, one is the value, several are a list |
 | `ctx.dbus.get(cb)` | every listed property as one object: `cb({value: {...}})` or `cb({error})`; also fills `ctx.dbus.props` |
 | `ctx.dbus.props` | the listed properties, kept current from `PropertiesChanged` (at most 4 updates a second) |

@@ -550,7 +550,17 @@ async fn main() -> ExitCode {
                 integrations::roots_under(r).into()
             });
         // Long-lived: no timeout; ends on stdin EOF.
-        return bridge::run(tokio::io::stdin(), tokio::io::stdout(), roots).await;
+        // stdin and stdout each on one thread of their own, not tokio's blocking pool.
+        return match (
+            bridge::stdio::ThreadStdin::spawn(),
+            bridge::stdio::ThreadStdout::spawn(),
+        ) {
+            (Ok(stdin), Ok(stdout)) => bridge::run(stdin, stdout, roots).await,
+            (Err(e), _) | (_, Err(e)) => {
+                eprintln!("uqctl bridge: cannot start the stdio threads: {e}");
+                ExitCode::FAILURE
+            }
+        };
     }
     // uqd waits at most ~12 s on Hyprland (verify + reload); never hang a keybind forever.
     let res = tokio::time::timeout(std::time::Duration::from_secs(15), run(cli.cmd))

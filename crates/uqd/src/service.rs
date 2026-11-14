@@ -21,7 +21,7 @@ use uq_core::lua::{
 use uq_core::paths::Paths;
 use uq_core::profile::{ActiveProfile, ProfileStore, holds, load_active};
 use uq_core::render::{RenderedFiles, kvantum_base, render};
-use uq_core::schedule::{Schedule, last_event, variant_at};
+use uq_core::schedule::{Schedule, last_event, next_event, variant_at};
 use uq_core::settings::{
     SECTION_DOMAINS, Settings, Strategy, plan, provenance, renders_config, renders_section,
     set_rule, valid_pinned_id,
@@ -121,6 +121,8 @@ pub struct Desktop {
     last_launch_save: Option<Instant>,
     launch_dirty: bool,
     launch_saves: u32,
+    /// After a failed launch-count write: not before this again.
+    launch_retry_at: Option<Instant>,
     journal: Journal,
     pub(crate) restore: RestoreStore,
     /// Ids of the journal entries the latest `persist` appended; empty when it journalled nothing.
@@ -217,6 +219,8 @@ const MAX_LAUNCH_COUNT: u32 = 10_000;
 const MAX_LAUNCH_IDS: usize = 2048;
 /// Launch counts hit the disk at most this often.
 const LAUNCH_SAVE_INTERVAL: Duration = Duration::from_secs(30);
+/// How long a failed launch-count write waits before it is tried again.
+const LAUNCH_RETRY: Duration = Duration::from_secs(60);
 
 /// Whether `<id>` (or `<id>.desktop`) exists under an `applications/` folder of `data_dirs`.
 pub fn desktop_file_installed(id: &str, data_dirs: &[PathBuf]) -> bool {
@@ -273,6 +277,7 @@ impl Desktop {
             last_launch_save: None,
             launch_dirty: false,
             launch_saves: 0,
+            launch_retry_at: None,
             journal,
             restore,
             last_entry_ids: Vec::new(),
@@ -479,16 +484,23 @@ impl Desktop {
             .send(Event::LaunchCountsChanged(self.state.launch_counts.clone()));
     }
 
-    /// Write dirty launch counts if the last write is at least 30 s old. Called on the tick.
+    /// Write dirty launch counts if the last write is at least 30 s old (and a failed write at
+    /// least 60 s). Called when `launch_flush_due` comes.
     pub fn flush_launch_counts_at(&mut self, now: Instant) {
-        if !self.launch_dirty
-            || self
-                .last_launch_save
-                .is_some_and(|t| now.saturating_duration_since(t) < LAUNCH_SAVE_INTERVAL)
-        {
+        if self.launch_flush_due(now).is_none_or(|due| now < due) {
             return;
         }
         self.save_launch_counts(now);
+    }
+
+    /// When dirty launch counts may next be written (`now` if they may be now); `None` while
+    /// there is nothing to write.
+    pub fn launch_flush_due(&self, now: Instant) -> Option<Instant> {
+        if !self.launch_dirty {
+            return None;
+        }
+        let after_save = self.last_launch_save.map(|t| t + LAUNCH_SAVE_INTERVAL);
+        Some(after_save.max(self.launch_retry_at).unwrap_or(now))
     }
 
     pub fn flush_launch_counts(&mut self) {
@@ -501,11 +513,13 @@ impl Desktop {
             Ok(()) => {
                 self.launch_dirty = false;
                 self.last_launch_save = Some(now);
+                self.launch_retry_at = None;
                 self.launch_saves += 1;
             }
             Err(e) => {
-                // Stay dirty; the next tick retries.
+                // Stay dirty; tried again after LAUNCH_RETRY.
                 tracing::warn!("saving launch counts: {e}");
+                self.launch_retry_at = Some(now + LAUNCH_RETRY);
             }
         }
     }
@@ -627,7 +641,8 @@ impl Desktop {
 
     /// Apply a scheduled transition that is newer than the last one applied. Returns whether the
     /// variant switched. A manual variant change therefore holds until the next boundary.
-    /// Called every minute, so suspend/resume and clock changes are caught on the next tick.
+    /// Called at `next_schedule_event` (a wall-clock timer, so suspend/resume and clock changes
+    /// are caught at once) and after any desktop event.
     /// While the active profile sets the variant nothing happens and the mark stays, so the first
     /// tick after Back to normal switches as usual.
     pub async fn tick_schedule_at<Tz: TimeZone>(
@@ -656,6 +671,16 @@ impl Desktop {
                 .await
                 .map(|()| true)
         }
+    }
+
+    /// When `tick_schedule_at` next has something to do: the next scheduled transition after
+    /// `now`. `None` while the schedule is off or the active profile holds the variant (ending
+    /// the profile is an event, after which this is asked again).
+    pub fn next_schedule_event<Tz: TimeZone>(&self, now: DateTime<Tz>) -> Option<DateTime<Utc>> {
+        if self.profile_holds_variant() {
+            return None;
+        }
+        next_event(&self.state.schedule, &now).map(|at| at.with_timezone(&Utc))
     }
 
     /// Re-render every file from current state and re-theme the session.
@@ -1789,6 +1814,9 @@ mod tests {
             "nothing due at 13:00"
         );
         assert!(drain(&mut r.events).is_empty());
+        // The wake-up is the 19:00 boundary, and at that time the switch is due.
+        let next = r.desktop.next_schedule_event(at(13)).unwrap();
+        assert_eq!(next, at(19).with_timezone(&Utc));
         assert!(
             r.desktop.tick_schedule_at(at(20)).await.unwrap(),
             "dark due at 20:00"
@@ -1799,6 +1827,7 @@ mod tests {
     #[tokio::test]
     async fn schedule_tick_off_does_nothing() {
         let mut r = rig();
+        assert_eq!(r.desktop.next_schedule_event(chrono::Utc::now()), None);
         assert!(
             !r.desktop
                 .tick_schedule_at(chrono::Utc::now())
@@ -2022,7 +2051,12 @@ mod tests {
         let evs = drain(&mut r.events);
         assert_eq!(evs.len(), 2);
         assert!(matches!(&evs[1], Event::LaunchCountsChanged(c) if c.get("a.desktop") == Some(&2)));
-        // Too early: the tick flush does nothing. After 30 s it writes the dirty count.
+        // Too early: the flush does nothing. After 30 s it writes the dirty count.
+        assert_eq!(
+            r.desktop.launch_flush_due(t0 + Duration::from_secs(10)),
+            Some(t0 + Duration::from_secs(30)),
+            "due 30 s after the first save"
+        );
         r.desktop
             .flush_launch_counts_at(t0 + Duration::from_secs(10));
         assert_eq!(r.desktop.launch_saves(), 1);
@@ -2038,6 +2072,11 @@ mod tests {
         r.desktop
             .flush_launch_counts_at(t0 + Duration::from_secs(90));
         assert_eq!(r.desktop.launch_saves(), 2, "clean state is not rewritten");
+        assert_eq!(
+            r.desktop.launch_flush_due(t0 + Duration::from_secs(90)),
+            None,
+            "nothing to wait for"
+        );
     }
 
     #[tokio::test]

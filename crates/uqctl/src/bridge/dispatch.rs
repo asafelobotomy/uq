@@ -221,7 +221,7 @@ impl Action {
         })
     }
 
-    /// The `return hl.dispatch(…)` statements, in order; each is sent as its own `eval`.
+    /// The `return hl.dispatch(…)` statements, in order; `script` runs them as its steps.
     pub fn to_lua(&self) -> Vec<String> {
         let win = |a: &str| lua_string(&format!("address:{a}"));
         let d = |inner: String| format!("return hl.dispatch({inner})");
@@ -309,14 +309,6 @@ fn column_lua(address: &str, full: bool, fs: i64) -> Vec<String> {
     }
 }
 
-/// The focused window's fullscreen state from Hyprland's `j/activewindow` reply.
-fn parse_active_fullscreen(reply: &str) -> Option<i64> {
-    serde_json::from_str::<Value>(reply)
-        .ok()?
-        .get("fullscreen")?
-        .as_i64()
-}
-
 fn move_lua(address: &str, ws: &WsTarget) -> String {
     let ws = match ws {
         WsTarget::Id(n) => n.to_string(),
@@ -326,21 +318,6 @@ fn move_lua(address: &str, ws: &WsTarget) -> String {
         "return hl.dispatch(hl.dsp.window.move({{ workspace = {ws}, follow = false, window = {} }}))",
         lua_string(&format!("address:{address}"))
     )
-}
-
-/// Move the pointer to global layout coordinates `(x, y)`.
-fn cursor_move_lua(x: i64, y: i64) -> String {
-    format!("return hl.dispatch(hl.dsp.cursor.move({{ x = {x}, y = {y} }}))")
-}
-
-/// The pointer position from Hyprland's `j/cursorpos` reply (`{"x": …, "y": …}`).
-fn parse_cursorpos(reply: &str) -> Option<(i64, i64)> {
-    let v: Value = serde_json::from_str(reply).ok()?;
-    let n = |k: &str| {
-        let f = v.get(k)?.as_f64()?;
-        f.is_finite().then(|| f.round() as i64)
-    };
-    Some((n("x")?, n("y")?))
 }
 
 fn tag_lua(address: &str, tag: &str) -> String {
@@ -359,11 +336,34 @@ fn eval_err(e: CompositorError) -> String {
     }
 }
 
-/// Send every statement; stop at the first one Hyprland rejects. With `keep_pointer` the pointer
-/// never moves: Hyprland's warp to the focused window is switched off (`cursor:no_warps`) just
-/// for the focus and switched back after. When that option can't be read or set, the pointer is
-/// read first and moved back afterwards instead (best effort: a failed read just skips it).
-pub async fn run(hypr: &HyprSocket, action: &Action) -> Result<(), String> {
+/// What the script raises when a step is rejected: Hyprland replies `error: ` and this, then
+/// the step's own `level: message` (the same text a lone `eval` of that step replies with).
+const STEP_FAILED: &str = "uq-step:";
+
+/// Lua shared by every script: `fail(r)` turns an `hl.dispatch` result into nil (done) or the
+/// `level: message` Hyprland would report for it (`{ok = false, level, error, code}`).
+const PRELUDE: &str = r#"local function fail(r)
+  if type(r) ~= "table" or (r.ok ~= false and r.error == nil) then return nil end
+  return tostring(r.level or "error") .. ": " .. tostring(r.error or "dispatch failed")
+end
+"#;
+
+/// `stmt` (`return hl.dispatch(…)`) as a step of `run` in `script`: stop at a rejection.
+fn step(out: &mut String, stmt: &str) {
+    let call = stmt.strip_prefix("return ").unwrap_or(stmt);
+    out.push_str(&format!(
+        "  do local m = fail({call}); if m then return m end end\n"
+    ));
+}
+
+/// The whole action as one Lua chunk for one `eval`: run the steps in order and stop at the
+/// first one Hyprland rejects. With `keep_pointer` (and for ColumnWidth) the pointer never
+/// moves: Hyprland's warp to the focused window is switched off (`cursor:no_warps`) just for
+/// the steps and always switched back, even when a step failed or raised. When that option
+/// can't be read or set, the pointer position is read first and moved back afterwards instead
+/// (best effort). ColumnWidth reads the focused window's fullscreen state after focusing it and
+/// branches on it (`column_lua`); with `keep_focus` the window focused before gets focus back.
+fn script(action: &Action) -> String {
     let keep = matches!(
         action,
         Action::FocusWindow {
@@ -371,94 +371,95 @@ pub async fn run(hypr: &HyprSocket, action: &Action) -> Result<(), String> {
             ..
         } | Action::ColumnWidth { .. }
     );
-    // The window to give focus back to afterwards (ColumnWidth with keep_focus).
-    let refocus = match action {
-        Action::ColumnWidth {
-            address,
-            keep_focus: true,
-            ..
-        } => hypr
-            .request("j/activewindow")
-            .await
-            .ok()
-            .and_then(|r| parse_active_address(&r))
-            .filter(|a| a != address),
-        _ => None,
-    };
-    // Some(true): no_warps was off and is now on, to be switched back.
-    let mut unwarp = None;
-    let mut restore = None;
-    if keep {
-        let warps = hypr
-            .request("j/getoption cursor:no_warps")
-            .await
-            .ok()
-            .and_then(|r| parse_option_bool(&r))
-            .map(|no_warps| !no_warps);
-        match warps {
-            Some(false) => unwarp = Some(false),
-            Some(true) if hypr.eval(&no_warps_lua(true)).await.is_ok() => unwarp = Some(true),
-            _ => {
-                restore = hypr
-                    .request("j/cursorpos")
-                    .await
-                    .ok()
-                    .and_then(|r| parse_cursorpos(&r));
-            }
-        }
-    }
-    let mut result = Ok(());
-    for lua in action.to_lua() {
-        if let Err(e) = hypr.eval(&lua).await {
-            result = Err(eval_err(e));
-            break;
-        }
-    }
-    let mut after = Vec::new();
-    if let (Ok(()), Action::ColumnWidth { address, full, .. }) = (&result, action) {
-        // Now focused: its state decides what Full or Half takes.
-        let fs = hypr
-            .request("j/activewindow")
-            .await
-            .ok()
-            .and_then(|r| parse_active_fullscreen(&r))
-            .unwrap_or(0);
-        after = column_lua(address, *full, fs);
-    }
-    if let Some(a) = &refocus {
-        after.push(format!(
-            "return hl.dispatch(hl.dsp.focus({{ window = {} }}))",
-            lua_string(&format!("address:{a}"))
+    let mut s = String::from(PRELUDE);
+    s.push_str("local unwarp, pos, back = false, nil, nil\n");
+    if let Action::ColumnWidth {
+        address,
+        keep_focus: true,
+        ..
+    } = action
+    {
+        s.push_str(&format!(
+            "do local ok, w = pcall(hl.get_active_window)\n  \
+             if ok and w and w.address and w.address ~= {} then back = w.address end end\n",
+            lua_string(address)
         ));
     }
-    for lua in after {
-        if result.is_err() {
-            break;
+    if keep {
+        s.push_str(
+            r#"do local got, nw = pcall(hl.get_config, "cursor:no_warps")
+  if got and nw == false and pcall(hl.config, { cursor = { no_warps = true } }) then
+    unwarp = true
+  elseif not (got and nw == true) then
+    local ok, p = pcall(hl.get_cursor_pos)
+    if ok and type(p) == "table" and tonumber(p.x) and tonumber(p.y) then pos = p end
+  end
+end
+"#,
+        );
+    }
+    s.push_str("local function run()\n");
+    for stmt in action.to_lua() {
+        step(&mut s, &stmt);
+    }
+    if let Action::ColumnWidth { address, full, .. } = action {
+        // Now focused: its state decides what Full or Half takes. Unreadable counts as 0.
+        s.push_str(
+            "  local ok, w = pcall(hl.get_active_window)\n  \
+             local fs = ok and w and tonumber(w.fullscreen) or 0\n",
+        );
+        for (cond, fs) in [("if fs == 1 then", 1), ("elseif fs == 2 then", 2), ("else", 0)] {
+            s.push_str(&format!("  {cond}\n"));
+            for stmt in column_lua(address, *full, fs) {
+                s.push_str("  ");
+                step(&mut s, &stmt);
+            }
         }
-        if let Err(e) = hypr.eval(&lua).await {
-            result = Err(eval_err(e));
-        }
+        s.push_str("  end\n");
     }
-    if unwarp == Some(true) {
-        // Back as it was even when the focus failed.
-        hypr.eval(&no_warps_lua(false)).await.map_err(eval_err)?;
-    }
-    result?;
-    if let Some((x, y)) = restore {
-        hypr.eval(&cursor_move_lua(x, y)).await.map_err(eval_err)?;
-    }
-    Ok(())
+    s.push_str(
+        r#"  if back then
+    do local m = fail(hl.dispatch(hl.dsp.focus({ window = "address:" .. back }))); if m then return m end end
+  end
+end
+local ran, res = pcall(run)
+if unwarp then
+  local ok, e = pcall(hl.config, { cursor = { no_warps = false } })
+  if not ok then error(tostring(e), 0) end
+end
+if not ran then error(tostring(res), 0) end
+"#,
+    );
+    s.push_str(&format!(
+        "if res then error({} .. res, 0) end\n",
+        lua_string(STEP_FAILED)
+    ));
+    s.push_str(&format!(
+        r#"if pos then
+  local function round(v) if v < 0 then return -math.floor(-v + 0.5) end return math.floor(v + 0.5) end
+  local m = fail(hl.dispatch(hl.dsp.cursor.move({{ x = round(pos.x), y = round(pos.y) }})))
+  if m then error({} .. m, 0) end
+end
+"#,
+        lua_string(STEP_FAILED)
+    ));
+    s
 }
 
-fn no_warps_lua(on: bool) -> String {
-    format!("hl.config({{ cursor = {{ no_warps = {on} }} }})")
+/// The error for a rejected script: a rejected step reads as Hyprland's own reply for it.
+fn script_err(e: CompositorError) -> String {
+    match e {
+        CompositorError::Rejected(msg) => match msg.strip_prefix("error: ") {
+            Some(m) if m.starts_with(STEP_FAILED) => m[STEP_FAILED.len()..].to_string(),
+            _ => msg,
+        },
+        e => eval_err(e),
+    }
 }
 
-/// The focused window's address from Hyprland's `j/activewindow` reply (`{}` when none is).
-fn parse_active_address(reply: &str) -> Option<String> {
-    let v: Value = serde_json::from_str(reply).ok()?;
-    let a = v.get("address")?.as_str()?;
-    valid_address(a).then(|| a.to_string())
+/// Run `action` in one `eval` (see `script`).
+pub async fn run(hypr: &HyprSocket, action: &Action) -> Result<(), String> {
+    hypr.eval(&script(action)).await.map_err(script_err)
 }
 
 /// The bridge's `WindowLook` call: how Hyprland draws windows right now, so the shell can draw
@@ -565,14 +566,6 @@ fn parse_look_option(reply: &str) -> Option<Value> {
     let hex = first.strip_prefix("0x").unwrap_or(first);
     (hex.len() == 8 && hex.bytes().all(|b| b.is_ascii_hexdigit()))
         .then(|| Value::from(format!("#{}", hex.to_ascii_lowercase())))
-}
-
-/// The value of a bool option from `j/getoption`.
-fn parse_option_bool(reply: &str) -> Option<bool> {
-    serde_json::from_str::<Value>(reply)
-        .ok()?
-        .get("bool")?
-        .as_bool()
 }
 
 /// The bridge's `Dispatch` call: `[name, {args…}]`.
@@ -730,23 +723,6 @@ mod tests {
         assert!(
             Action::from_call("focus_window", &json!({"address": A, "keep_pointer": 1})).is_err()
         );
-        assert_eq!(
-            cursor_move_lua(-12, 340),
-            "return hl.dispatch(hl.dsp.cursor.move({ x = -12, y = 340 }))"
-        );
-        assert_eq!(parse_cursorpos(r#"{"x": 0, "y": 250}"#), Some((0, 250)));
-        assert_eq!(parse_cursorpos(r#"{"x": 10.6, "y": -3.2}"#), Some((11, -3)));
-        assert_eq!(parse_cursorpos(r#"{"x": 1}"#), None);
-        assert_eq!(parse_cursorpos("0, 250"), None);
-        assert_eq!(
-            no_warps_lua(true),
-            "hl.config({ cursor = { no_warps = true } })"
-        );
-        assert_eq!(
-            parse_option_bool(r#"{"option": "cursor:no_warps", "bool": false, "set": true }"#),
-            Some(false)
-        );
-        assert_eq!(parse_option_bool(r#"{"option": "x", "int": 1}"#), None);
     }
 
     #[test]
@@ -833,8 +809,6 @@ mod tests {
             column_lua(A, true, 2).is_empty() && column_lua(A, false, 2).is_empty(),
             "fullscreen left alone"
         );
-        assert_eq!(parse_active_fullscreen(r#"{"fullscreen": 1}"#), Some(1));
-        assert_eq!(parse_active_fullscreen("{}"), None);
         let a = Action::from_call(
             "column_width",
             &json!({"address": A, "width": "full", "keep_focus": true}),
@@ -859,13 +833,85 @@ mod tests {
     }
 
     #[test]
-    fn active_address() {
-        assert_eq!(
-            parse_active_address(r#"{"address": "0x55d0c0ffee", "class": "x"}"#).as_deref(),
-            Some(A)
+    fn one_script_per_action() {
+        let w = r#""address:0x55d0c0ffee""#;
+        let plain = Action::from_call("close", &json!({"address": A})).unwrap();
+        let s = script(&plain);
+        assert!(s.contains(&format!(
+            "do local m = fail(hl.dispatch(hl.dsp.window.close({{ window = {w} }}))); if m then return m end end"
+        )));
+        assert!(!s.contains("hl.get_config"), "no pointer keeping");
+        assert!(!s.contains("get_cursor_pos"));
+        // Steps keep their order.
+        let s = script(&Action::from_call("minimise", &json!({"address": A, "from_ws": 4})).unwrap());
+        assert!(s.find("uq_ws_4").unwrap() < s.find("special:minimized").unwrap());
+        // keep_pointer: no_warps switched on, and back after the steps whatever they did.
+        let s = script(
+            &Action::from_call("focus_window", &json!({"address": A, "keep_pointer": true}))
+                .unwrap(),
         );
-        assert_eq!(parse_active_address("{}"), None);
-        assert_eq!(parse_active_address(r#"{"address": "nope"}"#), None);
+        let on = s.find("no_warps = true").unwrap();
+        let run = s.find("pcall(run)").unwrap();
+        let off = s.find("no_warps = false").unwrap();
+        let raise = s.find("if not ran then").unwrap();
+        assert!(on < run && run < off && off < raise);
+        assert!(s.contains("hl.get_cursor_pos") && s.contains("hl.dsp.cursor.move"));
+        // ColumnWidth: every fullscreen state gets `column_lua`'s steps, then the refocus.
+        let s = script(
+            &Action::from_call(
+                "column_width",
+                &json!({"address": A, "width": "half", "keep_focus": true}),
+            )
+            .unwrap(),
+        );
+        assert!(s.contains("if fs == 1 then") && s.contains("elseif fs == 2 then"));
+        assert_eq!(s.matches("colresize 0.5").count(), 2, "fs 1 and fs 0");
+        assert!(s.contains(r#"w.address ~= "0x55d0c0ffee""#));
+    }
+
+    #[test]
+    fn rejected_step_reads_as_hyprland_reply() {
+        let step = CompositorError::Rejected(
+            "error: uq-step:warning: =[C]:-1: hl.focus: window not found".into(),
+        );
+        assert_eq!(script_err(step), "warning: =[C]:-1: hl.focus: window not found");
+        let lua = CompositorError::Rejected("error: [string \"x\"]:1: boom".into());
+        assert_eq!(script_err(lua), "error: [string \"x\"]:1: boom");
+        assert_eq!(script_err(CompositorError::NotRunning), "Hyprland is not running");
+    }
+
+    /// Against the live compositor, on a window that doesn't exist (nothing real is touched):
+    /// the reply is what the per-statement `eval` gave, and `cursor:no_warps` is as before.
+    #[tokio::test]
+    #[ignore = "needs a running Hyprland session"]
+    async fn script_against_live_hyprland() {
+        if std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE").is_none() {
+            return;
+        }
+        let hypr = HyprSocket::from_env();
+        let no_warps = || async {
+            let r = hypr.request("j/getoption cursor:no_warps").await.unwrap();
+            serde_json::from_str::<Value>(&r).unwrap()["bool"].clone()
+        };
+        let before = no_warps().await;
+        let gone = "0x1";
+        let single = hypr
+            .eval(&format!(
+                "return hl.dispatch(hl.dsp.focus({{ window = {} }}))",
+                lua_string(&format!("address:{gone}"))
+            ))
+            .await
+            .map_err(eval_err)
+            .unwrap_err();
+        for keep_pointer in [false, true] {
+            let a = Action::from_call(
+                "focus_window",
+                &json!({"address": gone, "keep_pointer": keep_pointer}),
+            )
+            .unwrap();
+            assert_eq!(run(&hypr, &a).await.unwrap_err(), single);
+            assert_eq!(no_warps().await, before);
+        }
     }
 
     #[test]
@@ -1002,27 +1048,27 @@ mod tests {
                 json!({"address": A, "x": -20, "y": 72, "w": 800, "h": 600}),
             ),
         ];
-        let mut body = format!(
-            "hl.on(\"hyprland.start\", function() {} end)\n",
-            cursor_move_lua(0, 250)
+        let mut body = String::new();
+        let mut actions: Vec<Action> = all
+            .iter()
+            .map(|(name, args)| Action::from_call(name, args).unwrap())
+            .collect();
+        actions.push(
+            Action::from_call("focus_window", &json!({"address": A, "keep_pointer": true}))
+                .unwrap(),
         );
-        for on in [true, false] {
+        actions.push(
+            Action::from_call(
+                "column_width",
+                &json!({"address": A, "width": "half", "keep_focus": true}),
+            )
+            .unwrap(),
+        );
+        for a in &actions {
             body.push_str(&format!(
-                "hl.on(\"hyprland.start\", function() {} end)\n",
-                no_warps_lua(on)
+                "hl.on(\"hyprland.start\", function()\n{}end)\n",
+                script(a)
             ));
-        }
-        for stmt in column_lua(A, false, 1) {
-            body.push_str(&format!(
-                "hl.on(\"hyprland.start\", function() {stmt} end)\n"
-            ));
-        }
-        for (name, args) in &all {
-            for stmt in Action::from_call(name, args).unwrap().to_lua() {
-                body.push_str(&format!(
-                    "hl.on(\"hyprland.start\", function() {stmt} end)\n"
-                ));
-            }
         }
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join("user.lua");

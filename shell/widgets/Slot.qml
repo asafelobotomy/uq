@@ -16,6 +16,9 @@ Item {
     // The cell size: the bar's 1-cell icon, or a quick-settings row.
     property int cell: 26
     property int rowHeight: 32
+    // False while the bar or panel holding this slot isn't showing (an Item in a hidden window
+    // still counts as visible).
+    property bool onScreen: true
 
     readonly property bool loaded: loader.status === Loader.Ready && loader.item !== null
     // An unloaded slot takes no room.
@@ -42,6 +45,7 @@ Item {
         slot: slot.kind
         registry: slot.registry
         bridge: slot.bridge
+        shown: slot.loaded && slot.visible && slot.onScreen
         onFailed: function (reason) { slot.fail(reason); }
         onPopupRequested: function (open) { slot.popupRequested(open); }
     }

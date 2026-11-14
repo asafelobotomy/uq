@@ -291,6 +291,7 @@ PanelWindow {
                         AppsGroup {
                             id: apps
                             Layout.fillWidth: true
+                            onScreen: root.shown
                         }
                     }
                 }
