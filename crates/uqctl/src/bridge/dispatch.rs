@@ -83,6 +83,22 @@ pub enum Action {
     },
     /// Give a floating window this size and put its top-left corner here (layout coordinates,
     /// as Hyprland reports `at`): the shell's "keep windows on screen".
+    /// Give windows these sizes where they are, in this order, in one go: a tiled one's column
+    /// width (scrolling) or share of its column's height. The shell's resize grips give two
+    /// neighbours sizes that add up to what they had, so only the gap between them moves.
+    Resize {
+        windows: Vec<(String, i64, i64)>,
+    },
+    /// Set scrolling layout columns to these widths (fractions of the screen, as `colresize`
+    /// takes them), in this order, then scroll the layout so window `pin` has its left edge at
+    /// `x` again: the shell's resize grips move only the gap between two columns, keeping their
+    /// outer edges where they were. `colresize` acts on the focused column, so each window is
+    /// focused in turn (the pointer stays put) and the window focused before gets focus back.
+    Columns {
+        /// Each window and its column's width in ten-thousandths of the screen.
+        widths: Vec<(String, u32)>,
+        pin: Option<(String, i64)>,
+    },
     Place {
         address: String,
         x: i64,
@@ -192,6 +208,41 @@ impl Action {
                 address: address(a)?,
                 to_ws: ws_id(a, "to_ws")?,
             },
+            "resize" => Action::Resize {
+                windows: match a.get("windows").and_then(Value::as_array) {
+                    Some(list) if (1..=4).contains(&list.len()) => list
+                        .iter()
+                        .map(|w| {
+                            Ok((
+                                address(w)?,
+                                int_in(w, "w", 1, 32_768)?,
+                                int_in(w, "h", 1, 32_768)?,
+                            ))
+                        })
+                        .collect::<Result<_, String>>()?,
+                    _ => return Err("windows must list 1 to 4 {address, w, h}".into()),
+                },
+            },
+            "columns" => Action::Columns {
+                widths: match a.get("windows").and_then(Value::as_array) {
+                    Some(list) if (1..=4).contains(&list.len()) => list
+                        .iter()
+                        .map(|w| {
+                            let f = w
+                                .get("fraction")
+                                .and_then(Value::as_f64)
+                                .filter(|f| (0.05..=1.0).contains(f))
+                                .ok_or("fraction must be from 0.05 to 1")?;
+                            Ok((address(w)?, (f * 10_000.0).round() as u32))
+                        })
+                        .collect::<Result<_, String>>()?,
+                    _ => return Err("windows must list 1 to 4 {address, fraction}".into()),
+                },
+                pin: match a.get("pin") {
+                    None => None,
+                    Some(p) => Some((address(p)?, int_in(p, "x", -65_536, 65_536)?)),
+                },
+            },
             "place" => Action::Place {
                 address: address(a)?,
                 x: int_in(a, "x", -65_536, 65_536)?,
@@ -260,6 +311,27 @@ impl Action {
                 tag_lua(address, &format!("+uq_ws_{from_ws}")),
                 move_lua(address, &WsTarget::Special("minimized".into())),
             ],
+            Action::Resize { windows } => windows
+                .iter()
+                .map(|(address, w, h)| {
+                    d(format!(
+                        "hl.dsp.window.resize({{ x = {w}, y = {h}, window = {} }})",
+                        win(address)
+                    ))
+                })
+                .collect(),
+            Action::Columns { widths, .. } => widths
+                .iter()
+                .flat_map(|(address, f)| {
+                    [
+                        d(format!("hl.dsp.focus({{ window = {} }})", win(address))),
+                        d(format!(
+                            "hl.dsp.layout({})",
+                            lua_string(&format!("colresize {}.{:04}", f / 10_000, f % 10_000))
+                        )),
+                    ]
+                })
+                .collect(),
             Action::Place {
                 address,
                 x,
@@ -370,9 +442,16 @@ fn script(action: &Action) -> String {
             keep_pointer: true,
             ..
         } | Action::ColumnWidth { .. }
+            | Action::Columns { .. }
     );
     let mut s = String::from(PRELUDE);
     s.push_str("local unwarp, pos, back = false, nil, nil\n");
+    if let Action::Columns { .. } = action {
+        s.push_str(
+            "do local ok, w = pcall(hl.get_active_window)\n  \
+             if ok and w and w.address then back = w.address end end\n",
+        );
+    }
     if let Action::ColumnWidth {
         address,
         keep_focus: true,
@@ -401,6 +480,21 @@ end
     s.push_str("local function run()\n");
     for stmt in action.to_lua() {
         step(&mut s, &stmt);
+    }
+    if let Action::Columns {
+        pin: Some((address, x)),
+        ..
+    } = action
+    {
+        // Scroll the layout so the pinned window's left edge is back where it was.
+        s.push_str(&format!(
+            "  do local ok, w = pcall(hl.get_window, {})\n    \
+             local dx = ok and w and w.at and ({x} - w.at.x) or 0\n    \
+             if dx >= 1 or dx <= -1 then\n      \
+             local m = fail(hl.dispatch(hl.dsp.layout(\"move \" .. math.floor(dx + 0.5)))); if m then return m end\n    \
+             end\n  end\n",
+            lua_string(&format!("address:{address}"))
+        ));
     }
     if let Action::ColumnWidth { address, full, .. } = action {
         // Now focused: its state decides what Full or Half takes. Unreadable counts as 0.
@@ -788,6 +882,65 @@ mod tests {
     }
 
     #[test]
+    fn resize() {
+        let w = r#""address:0x55d0c0ffee""#;
+        const B: &str = "0x55d0c0ffef";
+        let b = r#""address:0x55d0c0ffef""#;
+        assert_eq!(
+            lua(
+                "resize",
+                json!({"windows": [{"address": B, "w": 300, "h": 400}, {"address": A, "w": 600, "h": 400}]})
+            ),
+            [
+                format!(
+                    "return hl.dispatch(hl.dsp.window.resize({{ x = 300, y = 400, window = {b} }}))"
+                ),
+                format!(
+                    "return hl.dispatch(hl.dsp.window.resize({{ x = 600, y = 400, window = {w} }}))"
+                ),
+            ],
+            "in the order given"
+        );
+        for bad in [
+            json!({"windows": [{"address": A, "w": 0, "h": 400}]}),
+            json!({"windows": [{"address": A, "w": 600}]}),
+            json!({"windows": []}),
+            json!({"address": A, "w": 600, "h": 400}),
+        ] {
+            assert!(Action::from_call("resize", &bad).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn columns() {
+        const B: &str = "0x55d0c0ffef";
+        let a = Action::from_call(
+            "columns",
+            &json!({"windows": [{"address": A, "fraction": 0.6}, {"address": B, "fraction": 0.4}],
+                    "pin": {"address": A, "x": 16}}),
+        )
+        .unwrap();
+        let lua = a.to_lua();
+        assert_eq!(lua.len(), 4, "focus and colresize for each");
+        assert!(lua[1].contains("colresize 0.6000"), "{}", lua[1]);
+        assert!(lua[3].contains("colresize 0.4000"), "{}", lua[3]);
+        let s = script(&a);
+        assert!(
+            s.contains("pcall(hl.get_window, \"address:0x55d0c0ffee\")") && s.contains("16 - w.at.x"),
+            "{s}"
+        );
+        assert!(s.contains("back = w.address"), "focus goes back");
+        for bad in [
+            json!({"windows": [{"address": A, "fraction": 1.5}]}),
+            json!({"windows": [{"address": A}]}),
+            json!({"windows": []}),
+            json!({"windows": [{"address": A, "fraction": 0.5}], "pin": {"address": A}}),
+        ] {
+            assert!(Action::from_call("columns", &bad).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
     fn column_width() {
         let w = r#""address:0x55d0c0ffee""#;
         assert_eq!(
@@ -1056,6 +1209,14 @@ mod tests {
             ("dpms", json!({"on": true})),
             ("dpms", json!({"on": false})),
             ("column_width", json!({"address": A, "width": "full"})),
+            (
+                "resize",
+                json!({"windows": [{"address": A, "w": 600, "h": 400}]}),
+            ),
+            (
+                "columns",
+                json!({"windows": [{"address": A, "fraction": 0.5}], "pin": {"address": A, "x": 16}}),
+            ),
             ("column_width", json!({"address": A, "width": "half"})),
             (
                 "place",

@@ -15,6 +15,10 @@ All notable changes to uQ are listed here. The format follows
   pointer; Medium shows both; Large adds the title. The focused window's tab grows to Medium.
   A window opened from a Full window gets a screen of its own right after it; one opened from a
   Half window opens Half beside it; the last window left on a workspace becomes Full.
+- **Resize windows by dragging the gap between them.** Between two columns, the gap moves and
+  only the gap: one column widens by what the other gives up, and their outer edges stay put.
+  Between two windows stacked in a column, the upper one's height changes and the lower one gets
+  the rest. A small grip and a resize cursor show in the gap under the pointer.
 - **Fill the rest.** An island can grow into the bar's empty space beside its zone (edit mode →
   the island's settings → **Fill the rest**). Open windows does unless you turn it off; the
   centre zone stays centred.

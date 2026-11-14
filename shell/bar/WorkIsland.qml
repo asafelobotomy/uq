@@ -42,7 +42,32 @@ Island {
         var m = root.screen ? Hyprland.monitorFor(root.screen) : null;
         return m && m.activeWorkspace ? m.activeWorkspace.id : -1;
     }
-    readonly property string focusedAddr: Hyprland.activeToplevel ? (Work.normAddr(Hyprland.activeToplevel.address) || "") : ""
+    // The focused window, once focus has held for a moment: resizing a column (ResizeGrips, the
+    // bridge's `columns`) focuses each column in turn and gives focus back within a few
+    // milliseconds, and those flips mustn't move the highlight or regrow the tabs. Followed
+    // through activeToplevel, not the activewindowv2 event: Hyprland sends that again, for the
+    // same window, on every title change of the focused window.
+    function activeAddr() {
+        return Hyprland.activeToplevel ? (Work.normAddr(Hyprland.activeToplevel.address) || "") : "";
+    }
+    // Set by focusSettle only (not a binding, which would follow every flip at once).
+    property string focusedAddr: ""
+    Timer {
+        id: focusSettle
+        interval: 60
+        onTriggered: {
+            var a = root.activeAddr();
+            if (a === root.focusedAddr)
+                return;
+            root.focusedAddr = a;
+            // Focus moved: the scrolling layout may have moved the columns too.
+            root.refresh();
+        }
+    }
+    Connections {
+        target: Hyprland
+        function onActiveToplevelChanged() { focusSettle.restart(); }
+    }
 
     // Every open window, as logic/work.js reads them; rebuilt when Hyprland's list changes.
     property var windows: []
@@ -92,7 +117,7 @@ Island {
         }
     }
     property string windowsKey: ""
-    Component.onCompleted: { rebuild(); refresh(); }
+    Component.onCompleted: { focusedAddr = activeAddr(); rebuild(); refresh(); }
     // Set when this asked for fresh windows, so the settle after it rebuilds.
     property bool asked: false
     function refresh() {
@@ -166,6 +191,20 @@ Island {
     }
     property int offset: 0
     readonly property int start: fit.mode === "scroll" ? Work.scrollOffset(offset, ordered.length, fit.shown, -1) : 0
+    // What the strip's tabs draw: each window by address, and the addresses in order, the
+    // latter replaced only when it really changes.
+    readonly property var tabInfo: {
+        var m = {};
+        for (var i = 0; i < shownWindows.length; i++)
+            m[shownWindows[i].address] = shownWindows[i];
+        return m;
+    }
+    property var tabKeys: []
+    onShownWindowsChanged: {
+        var keys = shownWindows.map(function (w) { return w.address; });
+        if (JSON.stringify(keys) !== JSON.stringify(tabKeys))
+            tabKeys = keys;
+    }
     readonly property var shownWindows: fit.mode === "pills" ? ordered
         : (fit.mode === "scroll" ? ordered.slice(start, start + fit.shown) : [])
     // A window out of view got focus (from the "+N" list, a key or a click on screen): centre
@@ -266,12 +305,6 @@ Island {
     Connections {
         target: Hyprland.toplevels
         function onValuesChanged() { root.rebuild(); }
-    }
-    // Focus moved. Not the activewindowv2 event: Hyprland sends that again, for the same window,
-    // on every title change of the focused window.
-    Connections {
-        target: Hyprland
-        function onActiveToplevelChanged() { root.refresh(); }
     }
     Connections {
         target: Hyprland
@@ -452,25 +485,29 @@ Island {
         }
 
         Repeater {
-            model: root.shownWindows
+            // The windows' addresses: replaced only when windows come, go or change places, so
+            // tabs aren't rebuilt (and their widths re-animated) every time a window moves.
+            model: root.tabKeys
             delegate: Rectangle {
                 id: pill
                 required property var modelData
-                readonly property real tabW: modelData.focused ? root.fit.focusW : root.fit.pillW
+                // This tab's window, as last read.
+                readonly property var win: root.tabInfo[modelData] || ({ address: modelData, title: "", cls: "" })
+                readonly property real tabW: win.focused ? root.fit.focusW : root.fit.pillW
                 readonly property string tier: Work.tabTier(tabW, root.tiers)
-                readonly property bool full: root.isFull(modelData)
-                readonly property string name: modelData.title || modelData.cls
+                readonly property bool full: root.isFull(win)
+                readonly property string name: win.title || win.cls
                 Layout.preferredWidth: tabW
                 Layout.fillHeight: true
                 radius: Theme.radius - 2
-                color: modelData.focused ? Theme.surfaceAlt : (pillHover.hovered ? Theme.overlay : "transparent")
-                border.color: modelData.focused ? Theme.accent : "transparent"
-                border.width: modelData.focused ? 1 : 0
-                opacity: modelData.minimised ? 0.55 : 1
+                color: win.focused ? Theme.surfaceAlt : (pillHover.hovered ? Theme.overlay : "transparent")
+                border.color: win.focused ? Theme.accent : "transparent"
+                border.width: win.focused ? 1 : 0
+                opacity: win.minimised ? 0.55 : 1
                 Accessible.role: Accessible.PageTab
-                Accessible.name: name + (modelData.minimised ? ", minimised" : "")
-                    + (modelData.focused ? ", focused" : "") + (full ? ", full width" : "")
-                Accessible.onPressAction: root.choose(modelData)
+                Accessible.name: name + (win.minimised ? ", minimised" : "")
+                    + (win.focused ? ", focused" : "") + (full ? ", full width" : "")
+                Accessible.onPressAction: root.choose(win)
                 Behavior on Layout.preferredWidth {
                     enabled: !Settings.reduceMotion
                     NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
@@ -485,11 +522,11 @@ Island {
                     acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
                     onClicked: function (m) {
                         if (m.button === Qt.MiddleButton)
-                            root.act(pill.modelData, "close");
+                            root.act(pill.win, "close");
                         else if (m.button === Qt.RightButton)
-                            root.openMenu(pill, pill.modelData);
+                            root.openMenu(pill, pill.win);
                         else
-                            root.choose(pill.modelData);
+                            root.choose(pill.win);
                     }
                 }
                 RowLayout {
@@ -510,7 +547,7 @@ Island {
                             implicitSize: root.iconSize
                             backer.sourceSize.width: root.iconSize * root.dpr
                             backer.sourceSize.height: root.iconSize * root.dpr
-                            source: root.iconFor(pill.modelData.cls)
+                            source: root.iconFor(pill.win.cls)
                         }
                         Rectangle {
                             anchors.fill: parent
@@ -529,14 +566,14 @@ Island {
                             hoverEnabled: true
                             Accessible.role: Accessible.Button
                             Accessible.name: "Close " + pill.name
-                            onClicked: root.act(pill.modelData, "close")
+                            onClicked: root.act(pill.win, "close")
                         }
                     }
                     UqText {
                         visible: pill.tier === "large"
                         Layout.fillWidth: true
                         text: pill.name
-                        color: pill.modelData.focused ? Theme.text : Theme.textMuted
+                        color: pill.win.focused ? Theme.text : Theme.textMuted
                     }
                     Item {
                         visible: pill.tier === "small" || pill.tier === "medium"
@@ -544,32 +581,32 @@ Island {
                     }
                     // Small: whichever the window isn't, under the pointer (its place is kept).
                     TabButton {
-                        visible: pill.tier === "small" && !pill.modelData.minimised
+                        visible: pill.tier === "small" && !pill.win.minimised
                         opacity: pillHover.hovered ? 1 : 0
                         enabled: pillHover.hovered
                         glyph: pill.full ? "◧" : "□"
                         label: (pill.full ? "Half width: " : "Full width: ") + pill.name
-                        onPressed: root.setFull(pill.modelData, !pill.full)
+                        onPressed: root.setFull(pill.win, !pill.full)
                     }
                     TabButton {
-                        visible: (pill.tier === "medium" || pill.tier === "large") && !pill.modelData.minimised
+                        visible: (pill.tier === "medium" || pill.tier === "large") && !pill.win.minimised
                         glyph: "◧"
                         label: "Half width: " + pill.name
                         on: !pill.full
-                        onPressed: root.setFull(pill.modelData, false)
+                        onPressed: root.setFull(pill.win, false)
                     }
                     TabButton {
-                        visible: (pill.tier === "medium" || pill.tier === "large") && !pill.modelData.minimised
+                        visible: (pill.tier === "medium" || pill.tier === "large") && !pill.win.minimised
                         glyph: "□"
                         label: "Full width: " + pill.name
                         on: pill.full
-                        onPressed: root.setFull(pill.modelData, true)
+                        onPressed: root.setFull(pill.win, true)
                     }
                     TabButton {
                         visible: pill.tier !== "icon"
                         glyph: "✕"
                         label: "Close " + pill.name
-                        onPressed: root.act(pill.modelData, "close")
+                        onPressed: root.act(pill.win, "close")
                     }
                 }
             }
