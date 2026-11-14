@@ -114,6 +114,15 @@ pub fn last_event<Tz: TimeZone>(
     events(s, now).into_iter().rev().find(|(at, _)| at <= now)
 }
 
+/// The next scheduled transition strictly after `now` (what `last_event` will return once that
+/// time has come); `None` when the schedule is off or has none in the next two days.
+pub fn next_event<Tz: TimeZone>(s: &Schedule, now: &DateTime<Tz>) -> Option<DateTime<Tz>> {
+    events(s, now)
+        .into_iter()
+        .find(|(at, _)| at > now)
+        .map(|(at, _)| at)
+}
+
 /// The next time the schedule changes variant, and the variant it changes to.
 pub fn next_transition<Tz: TimeZone>(
     s: &Schedule,
@@ -147,6 +156,21 @@ mod tests {
         let now = Utc.with_ymd_and_hms(2027, 1, 1, 12, 0, 0).unwrap();
         assert_eq!(variant_at(&Schedule::Off, &now), None);
         assert_eq!(next_transition(&Schedule::Off, &now), None);
+    }
+
+    #[test]
+    fn next_event_is_the_next_boundary() {
+        let now = London.with_ymd_and_hms(2027, 1, 10, 20, 0, 0).unwrap();
+        let at = next_event(&fixed(), &now).unwrap();
+        assert_eq!(at, London.with_ymd_and_hms(2027, 1, 11, 7, 0, 0).unwrap());
+        // Once it has come, it is the last event.
+        assert_eq!(last_event(&fixed(), &at).map(|e| e.0), Some(at));
+        // Exactly on a boundary: the one after.
+        assert_eq!(
+            next_event(&fixed(), &at),
+            Some(London.with_ymd_and_hms(2027, 1, 11, 19, 0, 0).unwrap())
+        );
+        assert_eq!(next_event(&Schedule::Off, &now), None);
     }
 
     #[test]

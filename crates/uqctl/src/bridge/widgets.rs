@@ -19,7 +19,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, watch};
 use tokio::task::AbortHandle;
 use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
@@ -226,6 +226,19 @@ struct Inner {
     subs: HashMap<String, (SubKey, AbortHandle)>,
     /// Owner watches started, per bus.
     watching: HashSet<Bus>,
+    /// Whether any of the widget's slots is on screen (`WidgetShown`), per widget; a widget the
+    /// shell hasn't mentioned counts as shown. While it isn't, its property subscription is
+    /// dropped: no `WidgetProps` (signals still go through).
+    shown: HashMap<String, watch::Sender<bool>>,
+}
+
+impl Inner {
+    fn shown_rx(&mut self, id: &str) -> watch::Receiver<bool> {
+        self.shown
+            .entry(id.to_string())
+            .or_insert_with(|| watch::channel(true).0)
+            .subscribe()
+    }
 }
 
 pub(crate) struct Widgets {
@@ -464,10 +477,11 @@ impl Widgets {
                 continue;
             };
             let (tx, stop, wid, k) = (self.tx.clone(), self.stop.clone(), id.clone(), key.clone());
+            let shown = lock(&self.inner).shown_rx(&id);
             let task = tokio::spawn(async move {
                 tokio::select! {
                     _ = stop.cancelled() => {}
-                    _ = signal_loop(tx, conn, wid, k) => {}
+                    _ = signal_loop(tx, conn, wid, k, shown) => {}
                 }
             });
             let mut inner = lock(&self.inner);
@@ -578,6 +592,21 @@ impl Widgets {
             .ok_or("the bus is not reachable")?;
         let auto_start = m.requires.bus_name.is_none() && activatable(&conn, &spec.name).await;
         Ok((spec, conn, auto_start))
+    }
+
+    /// `WidgetShown [id, shown]`: whether any of the widget's slots is on screen. While none
+    /// is, its properties aren't followed; when one is again, the current values are sent.
+    pub(crate) fn set_shown(&self, args: &[Value]) -> Result<Value, String> {
+        let [Value::String(id), Value::Bool(on)] = args else {
+            return Err("WidgetShown takes a widget id and true or false".into());
+        };
+        let mut inner = lock(&self.inner);
+        let tx = inner
+            .shown
+            .entry(id.clone())
+            .or_insert_with(|| watch::channel(true).0);
+        tx.send_if_modified(|v| std::mem::replace(v, *on) != *on);
+        Ok(Value::Null)
     }
 
     /// `WidgetCall [id, method, args]`.
@@ -756,11 +785,14 @@ async fn next_msg(s: &mut Option<MessageStream>) -> Option<zbus::Result<zbus::Me
 
 /// Forward a widget's listed signals as `WidgetSignal` and its listed properties as
 /// `WidgetProps`, at most [`PROPS_EVERY`]. Only messages from the name's current owner count.
+/// Properties are followed only while `shown` (see [`Widgets::set_shown`]); coming back on
+/// screen re-reads them all, so the shell catches up at once.
 async fn signal_loop(
     tx: mpsc::Sender<Outbound>,
     conn: zbus::Connection,
     widget: String,
     key: SubKey,
+    mut shown: watch::Receiver<bool>,
 ) {
     let spec = &key.spec;
     let open = |props: bool| {
@@ -770,10 +802,14 @@ async fn signal_loop(
             MessageStream::for_match_rule(r, &conn, Some(64)).await.ok()
         }
     };
-    let mut props = if spec.properties.is_empty() {
-        None
-    } else {
+    let want_props = !spec.properties.is_empty();
+    let mut on = *shown.borrow_and_update();
+    // The sender went away (the bridge is stopping): stop listening for changes.
+    let mut shown_closed = false;
+    let mut props = if want_props && on {
         open(true).await
+    } else {
+        None
     };
     let mut sigs = if spec.signals.is_empty() {
         None
@@ -793,7 +829,39 @@ async fn signal_loop(
                 _ => std::future::pending().await,
             }
         };
+        let shown_changed = async {
+            if shown_closed {
+                std::future::pending::<bool>().await
+            } else {
+                shown.changed().await.is_ok()
+            }
+        };
         tokio::select! {
+            ok = shown_changed => {
+                if !ok {
+                    shown_closed = true;
+                    continue;
+                }
+                let now = *shown.borrow_and_update();
+                if now == on || !want_props {
+                    on = now;
+                    continue;
+                }
+                on = now;
+                if !on {
+                    // Unsubscribe; what was waiting is re-read when it comes back.
+                    props = None;
+                    pending.clear();
+                    continue;
+                }
+                props = open(true).await;
+                if let Ok(Value::Object(all)) =
+                    dbus_json::get_properties(&conn, &target(spec), &spec.properties, false).await
+                {
+                    pending.extend(all);
+                    last = None;
+                }
+            }
             m = next_msg(&mut props) => {
                 let Some(Ok(m)) = m else { props = None; continue };
                 if m.header().sender().map(|s| s.as_str()) != Some(key.owner.as_str()) {
@@ -863,7 +931,8 @@ async fn signal_loop(
                 }
             }
         }
-        if props.is_none() && sigs.is_none() && pending.is_empty() {
+        // Nothing left to follow, unless properties are only paused while off screen.
+        if props.is_none() && sigs.is_none() && pending.is_empty() && (on || !want_props) {
             return;
         }
     }

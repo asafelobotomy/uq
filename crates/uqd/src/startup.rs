@@ -217,11 +217,40 @@ impl Desktop {
         self.sync_autostart_copies();
     }
 
-    /// The 60 s check (R15, R18, F37): overrides follow their source files, a browser
-    /// installed since gets its flags file, and the session variables file and the hidden
-    /// autostart copies are brought in line again, so a failed write is retried and a change
-    /// in the folders alone is picked up. A file that already says the same isn't rewritten,
-    /// and a failure that persists is logged once, not every minute.
+    /// Whether the last sync left a failure behind (a file that couldn't be written or an
+    /// override that couldn't be made), which `refresh_files` should try again.
+    pub fn files_failing(&self) -> bool {
+        let f = &self.files;
+        f.env_file.is_some()
+            || f.autostart.is_some()
+            || f.browsers
+                .iter()
+                .any(|(_, b)| matches!(b, BrowserFile::Error(_)))
+            || f.overrides
+                .values()
+                .any(|o| matches!(o, OverrideState::Error(_)))
+    }
+
+    /// The folders whose changes `refresh_files` and `refresh_themes` follow, as
+    /// `(with_subdirs, flat)`. With sub-directories: the applications folders (launcher files,
+    /// installed browsers) and the user's themes. Flat: the autostart folders, the session
+    /// variables folder and `$XDG_CONFIG_HOME` itself (the browsers' flags files live there,
+    /// beside the busy per-app folders that must not be watched).
+    pub fn watched_dirs(&self) -> (Vec<PathBuf>, Vec<PathBuf>) {
+        let st = &self.paths.startup;
+        let mut nested = st.app_dirs();
+        nested.push(self.paths.user_themes_dir.clone());
+        let mut flat = vec![st.config_home.clone(), st.config_home.join("environment.d")];
+        flat.push(st.user_autostart());
+        flat.extend(st.system_autostart());
+        (nested, flat)
+    }
+
+    /// The check after a change in `watched_dirs`, or a minute after a failure (R15, R18, F37):
+    /// overrides follow their source files, a browser installed since gets its flags file, and
+    /// the session variables file and the hidden autostart copies are brought in line again, so
+    /// a failed write is retried and a change in the folders alone is picked up. A file that
+    /// already says the same isn't rewritten, and a failure that persists is logged once.
     pub fn refresh_files(&mut self) {
         self.sync_override_files(&[]);
         self.sync_flag_files();

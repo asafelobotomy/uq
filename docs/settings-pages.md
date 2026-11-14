@@ -214,7 +214,10 @@ signals = [
   appears. Nothing is read. Files under `/proc` and `/sys` never report changes.
 - `signals`: at most 8, each a match on `bus` (`"session"`, the default, or `"system"`),
   `interface` and `member`, and optionally `path` and `sender` (a well-known name). Give `path`
-  and `sender` when you can, so only your service's signal counts.
+  and `sender` when you can, so only your service's signal counts. A match on
+  `org.freedesktop.DBus.Properties` `PropertiesChanged` may also give `properties` (at most 16
+  names): only a change to, or invalidation of, one of them counts, so a fast-changing property
+  you don't show doesn't re-run the read. Settings before 0.3.0 reject a page that uses it.
 - Changes are debounced: a burst re-runs the command once, half a second after it goes quiet.
   One run at a time: a change while it runs makes one more run afterwards.
 - At most 8 watches per page at once. If a watch can't start (its bus isn't there, say), the page

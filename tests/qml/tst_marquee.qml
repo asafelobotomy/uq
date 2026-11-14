@@ -6,6 +6,8 @@ import "../../shell/bar/islands"
 // The marquee scrolls only when its items don't fit, and never with reduced motion, while
 // hovered or while the screen is shared; then it steps through the items instead.
 TestCase {
+    // Visible, so the marquee runs: a hidden one stands still.
+    visible: true
     name: "marquee"
     width: 400
     height: 100
@@ -52,5 +54,15 @@ TestCase {
         tryVerify(function () { return m.stepIndex > 0; }, 1000);
         m.model = [60, 60];
         compare(m.stepIndex, 0, "a new model starts over");
+    }
+
+    function test_hidden_marquee_stands_still() {
+        var m = createTemporaryObject(maker, this, { model: [60, 60, 60], reduceMotion: true, sharing: false, stepMs: 50 });
+        verify(m.stepping);
+        m.visible = false;
+        wait(300);
+        compare(m.stepIndex, 0, "no steps while hidden");
+        m.visible = true;
+        tryVerify(function () { return m.stepIndex > 0; }, 1000);
     }
 }

@@ -1,7 +1,7 @@
 //! Processor and memory use of the windows' processes, for the Open windows island's "By system
 //! usage" order: `ProcessUsage([pid, …])` → `{"<pid>": {"cpu": %, "rss": bytes}}`. Processor use
 //! is over the time since the previous call (0 on the first); memory is the resident set. Only
-//! /proc is read; at most 64 pids per call; a pid that is gone is left out.
+//! /proc is read (`stat` and `statm`); at most 64 pids per call; a pid that is gone is left out.
 
 use serde_json::{Map, Value, json};
 use std::collections::HashMap;
@@ -26,11 +26,22 @@ pub fn parse_ticks(stat: &str) -> Option<u64> {
     Some(f.get(11)?.parse::<u64>().ok()? + f.get(12)?.parse::<u64>().ok()?)
 }
 
-/// VmRSS from /proc/<pid>/status, in bytes.
-pub fn parse_rss(status: &str) -> Option<u64> {
-    let line = status.lines().find(|l| l.starts_with("VmRSS:"))?;
-    let kb: u64 = line.split_whitespace().nth(1)?.parse().ok()?;
-    Some(kb * 1024)
+/// The resident set from /proc/<pid>/statm (`size resident shared …`, in pages), in bytes.
+/// The same counters as `VmRSS` in /proc/<pid>/status (anon + file + shmem), from a file the
+/// kernel formats in a fraction of the time.
+pub fn parse_rss(statm: &str, page: u64) -> Option<u64> {
+    let pages: u64 = statm.split_whitespace().nth(1)?.parse().ok()?;
+    Some(pages * page)
+}
+
+/// The system's page size in bytes.
+fn page_size() -> u64 {
+    static PAGE: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
+    *PAGE.get_or_init(|| {
+        // SAFETY: sysconf only reads a system constant.
+        let n = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
+        u64::try_from(n).ok().filter(|&n| n > 0).unwrap_or(4096)
+    })
 }
 
 impl ProcUsage {
@@ -54,13 +65,17 @@ impl ProcUsage {
         let mut last = self.last.lock().unwrap_or_else(|e| e.into_inner());
         let mut seen = HashMap::new();
         for &pid in pids.iter().take(MAX_PIDS) {
+            // Windows of one app share a process: read it once.
+            if seen.contains_key(&pid) {
+                continue;
+            }
             let Some(ticks) = self.read(pid, "stat").as_deref().and_then(parse_ticks) else {
                 continue;
             };
             let rss = self
-                .read(pid, "status")
+                .read(pid, "statm")
                 .as_deref()
-                .and_then(parse_rss)
+                .and_then(|m| parse_rss(m, page_size()))
                 .unwrap_or(0);
             let cpu = match last.get(&pid) {
                 Some(&(t0, at)) if now > at && ticks >= t0 => {
@@ -104,10 +119,34 @@ mod tests {
         assert_eq!(parse_ticks(STAT), Some(300));
         assert_eq!(parse_ticks("garbage"), None);
         assert_eq!(
-            parse_rss("Name:\tx\nVmRSS:\t  2048 kB\n"),
-            Some(2048 * 1024)
+            parse_rss("12000 512 300 10 0 900 0\n", 4096),
+            Some(512 * 4096)
         );
-        assert_eq!(parse_rss("Name:\tx\n"), None);
+        assert_eq!(parse_rss("12000\n", 4096), None);
+        assert_eq!(parse_rss("", 4096), None);
+    }
+
+    /// statm's resident pages and status's VmRSS are the same number (a quiet child process,
+    /// so nothing allocates between the two reads).
+    #[test]
+    fn statm_matches_vmrss() {
+        let mut child = std::process::Command::new("sleep")
+            .arg("5")
+            .spawn()
+            .unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        let pid = child.id();
+        let status = std::fs::read_to_string(format!("/proc/{pid}/status")).unwrap();
+        let statm = std::fs::read_to_string(format!("/proc/{pid}/statm")).unwrap();
+        let _ = child.kill();
+        let _ = child.wait();
+        let vmrss_kb: u64 = status
+            .lines()
+            .find(|l| l.starts_with("VmRSS:"))
+            .and_then(|l| l.split_whitespace().nth(1))
+            .and_then(|n| n.parse().ok())
+            .unwrap();
+        assert_eq!(parse_rss(&statm, page_size()), Some(vmrss_kb * 1024));
     }
 
     #[test]
@@ -116,14 +155,14 @@ mod tests {
         let p = d.path().join("1234");
         std::fs::create_dir_all(&p).unwrap();
         std::fs::write(p.join("stat"), STAT).unwrap();
-        std::fs::write(p.join("status"), "VmRSS:\t1000 kB\n").unwrap();
+        std::fs::write(p.join("statm"), "5000 250 100 10 0 400 0\n").unwrap();
         let u = ProcUsage::with_root(d.path());
         let t0 = Instant::now();
-        let first = u.usage(&[1234, 99], t0);
+        let first = u.usage(&[1234, 99, 1234], t0);
         assert_eq!(
             first,
-            json!({"1234": {"cpu": 0.0, "rss": 1024000}}),
-            "gone pids are left out"
+            json!({"1234": {"cpu": 0.0, "rss": 250 * page_size()}}),
+            "gone pids are left out; a repeated pid is one entry"
         );
         // 50 more ticks (0.5 s of processor) over 2 s: 25%.
         std::fs::write(p.join("stat"), STAT.replace(" 250 50 ", " 300 50 ")).unwrap();

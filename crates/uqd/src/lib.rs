@@ -21,6 +21,7 @@ pub mod service;
 mod startup;
 pub mod system;
 mod themes;
+pub mod walltimer;
 mod welcome;
 pub mod xrandr;
 

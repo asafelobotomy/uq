@@ -169,18 +169,37 @@ fn scan_logged() -> Vec<Found> {
     pages
 }
 
+/// The scan `watch` made at startup, for `scan_configured` to take instead of scanning again.
+static STARTUP: Mutex<Option<Vec<Found>>> = Mutex::new(None);
+
 /// The pages to show at startup: those that wait for no bus name. Pages that do are added by
-/// [`watch`] once their name is seen to have an owner.
+/// [`watch`] once their name is seen to have an owner. Uses the scan `watch` already made, if
+/// it ran first (it does, except for screenshots).
 pub fn scan_configured() -> Vec<PluginPage> {
-    set_shown(shown(&scan_logged(), |_, _| false))
+    let found = STARTUP
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .take()
+        .unwrap_or_else(scan_logged);
+    set_shown(shown(&found, |_, _| false))
 }
 
 /// Follow the plugin directory (inotify, debounced 1 s; Phase 4 spec §2.3) and the bus names
 /// pages wait for, and post the pages to show whenever they change. Runs on `handle`; without
-/// inotify it logs once and the list stays as it was at startup.
+/// inotify it logs once and the list stays as it was at startup. The directory is watched
+/// first and then scanned once, here; that scan also serves `scan_configured`.
 pub fn watch(handle: &tokio::runtime::Handle, post: impl Fn(Vec<PluginPage>) + Send + 'static) {
+    let changes = {
+        let _rt = handle.enter();
+        watch_dirs(vec![absolute(dir())], DEBOUNCE)
+    };
+    let first = scan_logged();
+    *STARTUP.lock().unwrap_or_else(|e| e.into_inner()) = Some(first.clone());
+    // What `scan_configured` shows: no post unless the bus names change it.
+    let mut last = Some(shown(&first, |_, _| false));
+    let mut first = Some(first);
     handle.spawn(async move {
-        let mut changes = match watch_dirs(vec![absolute(dir())], DEBOUNCE) {
+        let mut changes = match changes {
             Ok(rx) => rx,
             Err(e) => {
                 eprintln!(
@@ -192,9 +211,8 @@ pub fn watch(handle: &tokio::runtime::Handle, post: impl Fn(Vec<PluginPage>) + S
         };
         let (owner_tx, mut owner_rx) = tokio::sync::mpsc::channel::<()>(1);
         let mut owners = Owners::default();
-        let mut last: Option<Vec<Found>> = None;
         loop {
-            let found = scan_logged();
+            let found = first.take().unwrap_or_else(scan_logged);
             owners.follow(&found, &owner_tx).await;
             let now = owners.filter(&found).await;
             if last.as_ref() != Some(&now) {
@@ -585,7 +603,14 @@ mod tests {
                 .expect("no update within 10 s")
                 .unwrap()
         }
-        assert!(next(&mut rx).await.is_empty(), "nothing installed yet");
+        // The startup scan is the one `scan_configured` shows; it isn't posted again.
+        assert!(scan_configured().is_empty(), "nothing installed yet");
+        assert!(
+            tokio::time::timeout(std::time::Duration::from_millis(300), rx.recv())
+                .await
+                .is_err(),
+            "no post at startup"
+        );
 
         // The directory itself doesn't exist yet: installing the first page creates it.
         let staged = tempfile::tempdir().unwrap();

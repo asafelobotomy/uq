@@ -92,8 +92,14 @@ Island {
     Connections {
         target: Hyprland
         function onRawEvent(event) {
+            // One event per keyboard on a switch: read the devices once, after the last.
             if (event.name === "activelayout")
-                root.refresh();
+                layoutSettle.restart();
         }
+    }
+    Timer {
+        id: layoutSettle
+        interval: 100
+        onTriggered: root.refresh()
     }
 }

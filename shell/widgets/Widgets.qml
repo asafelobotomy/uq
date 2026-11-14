@@ -27,6 +27,32 @@ QtObject {
     readonly property var quick: W.inSlot(list, "quick")
     readonly property var actions: W.appActions(bridge ? bridge.appActions : [])
 
+    // How many slots of each widget are on screen, and what the bridge was last told: while
+    // none is, the bridge drops the widget's D-Bus subscription (no WidgetProps), and sends the
+    // current values when one is again. The bridge takes an unreported widget as shown.
+    property var shownCount: ({})
+    property var reported: ({})
+    function slotShown(id, on) {
+        var c = Object.assign({}, shownCount);
+        c[id] = Math.max(0, (c[id] || 0) + (on ? 1 : -1));
+        shownCount = c;
+        Qt.callLater(syncShown);
+    }
+    function syncShown() {
+        if (!bridge || !bridge.connected)
+            return;
+        var r = Object.assign({}, reported), ids = list.map(function (w) { return w.id; });
+        for (var i = 0; i < ids.length; i++) {
+            var id = ids[i], want = (shownCount[id] || 0) > 0;
+            if ((r[id] === undefined ? true : r[id]) === want)
+                continue;
+            r[id] = want;
+            bridge.call("WidgetShown", [id, want]).catch(function () {});
+        }
+        reported = r;
+    }
+    onListChanged: Qt.callLater(syncShown)
+
     property var failures: W.failures()
     // Every failure reason logged so far, newest last (for tests and debugging).
     property var log: []
@@ -87,5 +113,10 @@ QtObject {
         target: root.bridge
         ignoreUnknownSignals: true
         function onEvent(name, data) { root.handle(name, data); }
+        // A new bridge takes every widget as shown again.
+        function onConnectedChanged() {
+            root.reported = {};
+            Qt.callLater(root.syncShown);
+        }
     }
 }

@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Widgets
 import "../core"
+import "../services"
 import "../notif"
 import "islands"
 import "../logic/minimise.js" as Min
@@ -81,14 +82,39 @@ Island {
                 scrolling: !!wo && wo.tiledLayout === "scrolling"
             });
         }
-        openedSeq = seq;
-        windows = out;
+        // Unchanged (a refresh after a focus change often is): keep the lists, so the tabs and
+        // everything sorted from them aren't recomputed.
+        var key = JSON.stringify(out);
+        if (key !== windowsKey) {
+            windowsKey = key;
+            openedSeq = seq;
+            windows = out;
+        }
     }
-    Component.onCompleted: { rebuild(); refreshTimer.restart(); }
+    property string windowsKey: ""
+    Component.onCompleted: { rebuild(); refresh(); }
+    // Set when this asked for fresh windows, so the settle after it rebuilds.
+    property bool asked: false
+    function refresh() {
+        root.asked = true;
+        HyprRefresh.request();
+    }
 
+    // The app for a window class, looked up once per class (every sort and tab asks): emptied
+    // when the installed apps change.
+    property var appCache: ({})
     function appOf(cls) {
+        var hit = appCache[cls];
+        if (hit !== undefined)
+            return hit;
         var d = cls ? DesktopEntries.heuristicLookup(cls) : null;
-        return { cls: cls, id: d ? String(d.id) : "", name: d && d.name ? String(d.name) : cls, icon: d && d.icon ? d.icon : "" };
+        hit = { cls: cls, id: d ? String(d.id) : "", name: d && d.name ? String(d.name) : cls, icon: d && d.icon ? d.icon : "" };
+        appCache[cls] = hit;
+        return hit;
+    }
+    Connections {
+        target: DesktopEntries.applications
+        function onValuesChanged() { root.appCache = {}; }
     }
     readonly property var here: Work.windowsHere(windows, monitorName, wsId, focusedAddr)
     readonly property var ordered: {
@@ -204,13 +230,13 @@ Island {
         else if (full !== root.isFull(w))
             root.act(w, "fullscreen", { mode: "maximized" });
         // The scrolling layout resizes columns without an event.
-        refreshTimer.restart();
+        root.refresh();
     }
     function iconFor(cls) {
         if (cls === "")
             return Quickshell.iconPath("application-x-executable");
-        var d = DesktopEntries.heuristicLookup(cls);
-        var name = d && d.icon ? d.icon : cls.toLowerCase();
+        var a = root.appOf(cls);
+        var name = a.icon ? a.icon : cls.toLowerCase();
         return Quickshell.iconPath(name, true) || Quickshell.iconPath("application-x-executable");
     }
     function togglePin(w) {
@@ -241,29 +267,38 @@ Island {
         target: Hyprland.toplevels
         function onValuesChanged() { root.rebuild(); }
     }
+    // Focus moved. Not the activewindowv2 event: Hyprland sends that again, for the same window,
+    // on every title change of the focused window.
+    Connections {
+        target: Hyprland
+        function onActiveToplevelChanged() { root.refresh(); }
+    }
     Connections {
         target: Hyprland
         function onRawEvent(event) {
-            if (event.name === "activewindowv2" || event.name === "windowtitlev2"
-                    || event.name === "changefloatingmode" || event.name === "pin"
+            if (event.name === "changefloatingmode" || event.name === "pin"
                     || event.name === "openwindow" || event.name === "closewindow"
                     || event.name === "movewindowv2" || event.name === "workspacev2")
-                refreshTimer.restart();
+                root.refresh();
+            // Quickshell sets the title itself from this event: no need to ask Hyprland again.
+            else if (event.name === "windowtitlev2")
+                titleTimer.restart();
         }
     }
     Timer {
-        id: refreshTimer
-        interval: 60
-        onTriggered: {
-            Hyprland.refreshToplevels();
-            rebuildTimer.restart();
-        }
+        id: titleTimer
+        interval: 100
+        onTriggered: root.rebuild()
     }
     // lastIpcObject (the class, tags, pid) arrives a moment after the refresh.
-    Timer {
-        id: rebuildTimer
-        interval: 120
-        onTriggered: root.rebuild()
+    Connections {
+        target: HyprRefresh
+        function onSettled() {
+            if (!root.asked)
+                return;
+            root.asked = false;
+            root.rebuild();
+        }
     }
     // "Last activity": every new notification, matched to its app's windows.
     Connections {

@@ -31,8 +31,8 @@ pub trait Tools: Send + Sync + 'static {
     /// Run `argv` without waiting for it (the test sound); it is stopped after
     /// [`PLAY_TIMEOUT`].
     fn start(&self, argv: Vec<String>) -> Result<(), ToolError>;
-    /// One item each time `argv`'s output gets a line (`pw-dump --monitor`); ends with it.
-    fn lines(&self, argv: Vec<String>) -> BoxStream<'static, ()>;
+    /// Each line of `argv`'s output as it comes (`pw-dump --monitor`); ends with it.
+    fn lines(&self, argv: Vec<String>) -> BoxStream<'static, String>;
 }
 
 /// The real programs.
@@ -103,7 +103,7 @@ impl Tools for System {
         Ok(())
     }
 
-    fn lines(&self, argv: Vec<String>) -> BoxStream<'static, ()> {
+    fn lines(&self, argv: Vec<String>) -> BoxStream<'static, String> {
         let Ok(mut child) = command(&argv)
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
@@ -117,7 +117,7 @@ impl Tools for System {
         let lines = BufReader::new(out).lines();
         futures_util::stream::unfold((lines, child), |(mut lines, child)| async move {
             match lines.next_line().await {
-                Ok(Some(_)) => Some(((), (lines, child))),
+                Ok(Some(line)) => Some((line, (lines, child))),
                 _ => None,
             }
         })
@@ -161,8 +161,8 @@ mod tests {
     #[tokio::test]
     async fn lines_follow_the_output() {
         let mut s = System.lines(argv(&["printf", "a\\nb\\n"]));
-        assert_eq!(s.next().await, Some(()));
-        assert_eq!(s.next().await, Some(()));
+        assert_eq!(s.next().await.as_deref(), Some("a"));
+        assert_eq!(s.next().await.as_deref(), Some("b"));
         assert_eq!(s.next().await, None);
         assert!(
             System

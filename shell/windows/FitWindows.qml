@@ -3,6 +3,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Hyprland
 import "../core"
+import "../services"
 import "../logic/fit.js" as Fit
 import "../logic/shellprefs.js" as ShellPrefs
 
@@ -28,7 +29,7 @@ Scope {
         root.pending[addr] = true;
         if (opened)
             root.late[addr] = true;
-        refreshTimer.restart();
+        HyprRefresh.request({ monitors: true });
         if (opened)
             lateTimer.restart();
     }
@@ -54,20 +55,13 @@ Scope {
         }
     }
 
-    Timer {
-        id: refreshTimer
-        interval: 60
-        onTriggered: {
-            Hyprland.refreshMonitors();
-            Hyprland.refreshToplevels();
-            checkTimer.restart();
-        }
-    }
-    Timer {
-        id: checkTimer
-        interval: 200
-        onTriggered: {
+    // Hyprland's lists are fresh a moment after the refresh.
+    Connections {
+        target: HyprRefresh
+        function onSettled() {
             var which = root.pending;
+            if (Object.keys(which).length === 0)
+                return;
             root.pending = {};
             root.check(which);
         }
@@ -80,7 +74,7 @@ Scope {
             root.late = {};
             for (var k in which)
                 root.pending[k] = true;
-            refreshTimer.restart();
+            HyprRefresh.request({ monitors: true });
         }
     }
 

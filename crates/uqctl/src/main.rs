@@ -238,7 +238,7 @@ fn schedule_json(cmd: &ScheduleCmd) -> Result<String, String> {
     serde_json::to_string(&s).map_err(|e| e.to_string())
 }
 
-/// A Hyprland workspace selector for `hyprctl -j activeworkspace` output: the numeric id for
+/// A Hyprland workspace selector for the `j/activeworkspace` reply: the numeric id for
 /// normal workspaces, otherwise `special:…` or `name:<name>` (a bare name never matches a rule).
 fn active_workspace_selector(json: &str) -> Result<String, String> {
     let v: serde_json::Value =
@@ -256,18 +256,14 @@ fn active_workspace_selector(json: &str) -> Result<String, String> {
     })
 }
 
-fn current_workspace() -> Result<String, String> {
-    let out = std::process::Command::new("hyprctl")
-        .args(["-j", "activeworkspace"])
-        .output()
-        .map_err(|e| format!("running hyprctl: {e}"))?;
-    if !out.status.success() {
-        return Err(format!(
-            "hyprctl failed: {}",
-            String::from_utf8_lossy(&out.stderr).trim()
-        ));
-    }
-    active_workspace_selector(&String::from_utf8_lossy(&out.stdout))
+/// Asked on Hyprland's request socket directly (what `hyprctl -j activeworkspace` does), so a
+/// layout keybind doesn't start a `hyprctl` process each time.
+async fn current_workspace() -> Result<String, String> {
+    let reply = uqd::hypr::HyprSocket::from_env()
+        .request("j/activeworkspace")
+        .await
+        .map_err(|e| format!("asking Hyprland for the active workspace: {e}"))?;
+    active_workspace_selector(&reply)
 }
 
 fn describe(err: zbus::Error) -> String {
@@ -311,7 +307,7 @@ async fn run(cmd: Cmd) -> Result<(), String> {
             cmd: LayoutCmd::Set { workspace, layout },
         } => {
             let workspace = if workspace == "current" {
-                current_workspace()?
+                current_workspace().await?
             } else {
                 workspace
             };
@@ -554,7 +550,17 @@ async fn main() -> ExitCode {
                 integrations::roots_under(r).into()
             });
         // Long-lived: no timeout; ends on stdin EOF.
-        return bridge::run(tokio::io::stdin(), tokio::io::stdout(), roots).await;
+        // stdin and stdout each on one thread of their own, not tokio's blocking pool.
+        return match (
+            bridge::stdio::ThreadStdin::spawn(),
+            bridge::stdio::ThreadStdout::spawn(),
+        ) {
+            (Ok(stdin), Ok(stdout)) => bridge::run(stdin, stdout, roots).await,
+            (Err(e), _) | (_, Err(e)) => {
+                eprintln!("uqctl bridge: cannot start the stdio threads: {e}");
+                ExitCode::FAILURE
+            }
+        };
     }
     // uqd waits at most ~12 s on Hyprland (verify + reload); never hang a keybind forever.
     let res = tokio::time::timeout(std::time::Duration::from_secs(15), run(cli.cmd))

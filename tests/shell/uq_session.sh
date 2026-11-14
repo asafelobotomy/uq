@@ -77,20 +77,24 @@ rm -rf "$home/.local"
 env -i HOME="$home" XDG_STATE_HOME="$tmp/state" PATH="$tmp/bin:/usr/bin:/bin" CALLS="$tmp/calls" UQCTL_FAIL=1 "$script"
 grep -q 'uqctl setup exited 1' "$tmp/state/uq/session.log" 2>/dev/null || { echo "FAIL: XDG_STATE_HOME ignored"; fail=1; }
 
-# 6. uqctl missing entirely: logged, session still starts.
-mkdir -p "$tmp/bin2"
-cp "$tmp/bin/start-hyprland" "$tmp/bin2/"
-rm -rf "$home/.config" "$home/.local"
-: > "$tmp/calls"
-env -i HOME="$home" PATH="$tmp/bin2:/usr/bin:/bin" CALLS="$tmp/calls" "$script"
-grep -q '^start-hyprland ' "$tmp/calls" || { echo "FAIL: missing uqctl kept the session from starting"; fail=1; }
-grep -q 'uqctl setup exited' "$home/.local/state/uq/session.log" 2>/dev/null || { echo "FAIL: missing uqctl not logged"; fail=1; }
-
-# 7. No start-hyprland: plain Hyprland. A PATH of only the tools the script needs.
+# A PATH of only the tools the script needs (cases 6 and 7), so an installed /usr/bin/uqctl
+# or start-hyprland can't stand in for a missing one.
 mkdir -p "$tmp/min"
 for t in bash sh grep mkdir date wc tail mv head cat; do
     p=$(command -v "$t") && ln -sf "$p" "$tmp/min/$t"
 done
+
+# 6. uqctl missing entirely: logged, session still starts.
+mkdir -p "$tmp/bin2"
+cp -P "$tmp/min/"* "$tmp/bin2/"
+cp "$tmp/bin/start-hyprland" "$tmp/bin2/"
+rm -rf "$home/.config" "$home/.local"
+: > "$tmp/calls"
+env -i HOME="$home" PATH="$tmp/bin2" CALLS="$tmp/calls" "$tmp/bin2/bash" "$script"
+grep -q '^start-hyprland ' "$tmp/calls" || { echo "FAIL: missing uqctl kept the session from starting"; fail=1; }
+grep -q 'uqctl setup exited' "$home/.local/state/uq/session.log" 2>/dev/null || { echo "FAIL: missing uqctl not logged"; fail=1; }
+
+# 7. No start-hyprland: plain Hyprland.
 cp "$tmp/bin/Hyprland" "$tmp/bin/uqctl" "$tmp/min/"
 rm -rf "$home/.config" "$home/.local"
 : > "$tmp/calls"

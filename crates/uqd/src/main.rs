@@ -1,9 +1,11 @@
 //! uqd: owns uQ's desktop state and serves `org.uq.Desktop1` on the session bus.
 
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant, SystemTime};
 use tokio::signal::unix::{SignalKind, signal};
+use tokio::sync::{broadcast, mpsc};
 use tracing_subscriber::EnvFilter;
+use uq_core::integration::watch::{DEBOUNCE, watch_dirs, watch_dirs_flat};
 use uq_core::paths::Paths;
 use uqd::autostart::AutostartConfig;
 use uqd::compositor::{HyprSocket, Hyprland};
@@ -11,9 +13,52 @@ use uqd::dbus::serve_with;
 use uqd::hypr_events;
 use uqd::notify::SessionNotifier;
 use uqd::power::SystemPowerProfiles;
+use uqd::service::Event;
 use uqd::service::{Desktop, desktop_file_installed, xdg_data_dirs};
 use uqd::system::GSettings;
+use uqd::walltimer::{Wake, WallTimer};
 use uqd::xrandr::SystemXrandr;
+
+/// How long a failed file sync waits before `refresh_files` tries again.
+const FILES_RETRY: Duration = Duration::from_secs(60);
+/// The check when a watch couldn't be set up (what every check was before).
+const POLL: Duration = Duration::from_secs(60);
+/// The check with every watch up: only for changes inotify can't see.
+const SAFETY: Duration = Duration::from_secs(3600);
+
+/// The next burst from a folder watch; never, once there is none. A watch that ends is dropped,
+/// so the loop falls back to `POLL`.
+async fn changed(rx: &mut Option<mpsc::Receiver<()>>) {
+    match rx {
+        Some(r) => {
+            if r.recv().await.is_none() {
+                tracing::warn!("a folder watch ended; checking every minute");
+                *rx = None;
+            }
+        }
+        None => std::future::pending().await,
+    }
+}
+
+/// The wall clock reaching `at` (or being set); never without a timer.
+async fn wait_wall(wall: &mut Option<WallTimer>, at: Option<SystemTime>) -> std::io::Result<Wake> {
+    match wall {
+        Some(t) => t.wait(at).await,
+        None => std::future::pending().await,
+    }
+}
+
+/// The next desktop event of any kind (missed ones count too).
+async fn desktop_event(rx: &mut Option<broadcast::Receiver<Event>>) {
+    match rx {
+        Some(r) => {
+            if let Err(broadcast::error::RecvError::Closed) = r.recv().await {
+                *rx = None;
+            }
+        }
+        None => std::future::pending().await,
+    }
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -58,19 +103,86 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let mut term = signal(SignalKind::terminate())?;
-    let mut tick = tokio::time::interval(Duration::from_secs(60));
+    // Nothing here runs on a fixed tick: each part sleeps until its own next deadline or is
+    // woken by what it depends on.
+    // - Startup files and the user's themes: inotify on the folders they are made from
+    //   (`watched_dirs`), plus a retry a minute after a failed write.
+    // - The dark/light schedule: a wall-clock timer at the next boundary (it survives suspend
+    //   and reports clock changes), any desktop event (a new schedule, a profile that held the
+    //   variant ending), and `/etc` for a new time zone (`/etc/localtime` is replaced).
+    // - Launch counts: only while there are unsaved ones, when the 30 s throttle allows.
+    // A watch that can't be set up falls back to the old once-a-minute check; with all of them
+    // up, an hourly check stays as a net for what inotify can't see (a network home folder).
+    let (nested, mut flat) = shared.lock().await.watched_dirs();
+    if std::env::var_os("TZ").is_none() {
+        flat.push("/etc".into());
+    }
+    let watch = |r: std::io::Result<mpsc::Receiver<()>>| {
+        r.map_err(|e| tracing::warn!("watching folders: {e}; checking every minute"))
+            .ok()
+    };
+    let mut nested_rx = watch(watch_dirs(nested, DEBOUNCE));
+    let mut flat_rx = watch(watch_dirs_flat(flat, DEBOUNCE));
+    let mut wall = WallTimer::new()
+        .map_err(|e| tracing::warn!("wall-clock timer: {e}; checking every minute"))
+        .ok();
+    let mut events = Some(shared.lock().await.subscribe());
+    let mut last_poll = Instant::now();
+    let mut last_files = Instant::now();
     loop {
+        let now = Instant::now();
+        let (launch_due, failing, next_boundary) = {
+            let d = shared.lock().await;
+            (
+                d.launch_flush_due(now),
+                d.files_failing(),
+                d.next_schedule_event(chrono::Local::now()),
+            )
+        };
+        let watching = nested_rx.is_some() && flat_rx.is_some() && wall.is_some();
+        let poll_at = last_poll + if watching { SAFETY } else { POLL };
+        let retry_at = failing.then(|| last_files + FILES_RETRY);
+        let wake_at = [Some(poll_at), launch_due, retry_at]
+            .into_iter()
+            .flatten()
+            .min()
+            .unwrap_or(poll_at);
+        let (mut files, mut schedule) = (false, false);
         tokio::select! {
-            _ = tick.tick() => {
-                shared.lock().await.flush_launch_counts();
-                shared.lock().await.refresh_files();
-                shared.lock().await.refresh_themes();
-                if let Err(e) = shared.lock().await.tick_schedule_at(chrono::Local::now()).await {
-                    tracing::warn!("scheduled theme change failed: {e}");
+            () = tokio::time::sleep_until(wake_at.into()) => {}
+            w = wait_wall(&mut wall, next_boundary.map(SystemTime::from)) => {
+                if let Err(e) = w {
+                    tracing::warn!("wall-clock timer: {e}; checking every minute");
+                    wall = None;
                 }
+                schedule = true;
             }
+            () = changed(&mut nested_rx) => files = true,
+            () = changed(&mut flat_rx) => files = true,
+            () = desktop_event(&mut events) => schedule = true,
             _ = tokio::signal::ctrl_c() => break,
             _ = term.recv() => break,
+        }
+        let now = Instant::now();
+        if now >= poll_at {
+            last_poll = now;
+            (files, schedule) = (true, true);
+        }
+        if retry_at.is_some_and(|t| now >= t) {
+            files = true;
+        }
+        let mut d = shared.lock().await;
+        // Writes only when due.
+        d.flush_launch_counts_at(now);
+        if files {
+            last_files = now;
+            d.refresh_files();
+            d.refresh_themes();
+        }
+        if (files || schedule)
+            && let Err(e) = d.tick_schedule_at(chrono::Local::now()).await
+        {
+            tracing::warn!("scheduled theme change failed: {e}");
         }
     }
     shared
