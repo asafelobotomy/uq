@@ -7,6 +7,8 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0-rc.3] - 2026-11-14
+
 ### Added
 
 - **A Tray island for other apps' icons.** Other apps' tray icons (Steam, Discord, password
