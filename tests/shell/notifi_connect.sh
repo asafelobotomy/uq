@@ -59,7 +59,9 @@ ShellRoot {
 }
 QML
 
-env -u HYPRLAND_INSTANCE_SIGNATURE -u WAYLAND_DISPLAY QT_QPA_PLATFORM=offscreen \
+# No platform theme: a desktop's (gnome, kde) would look for the session bus this run hides
+# and log its own "No such file" about it.
+env -u HYPRLAND_INSTANCE_SIGNATURE -u WAYLAND_DISPLAY -u QT_QPA_PLATFORMTHEME QT_QPA_PLATFORM=offscreen \
     XDG_RUNTIME_DIR="$tmp/run" DBUS_SESSION_BUS_ADDRESS="unix:path=$tmp/nobus" \
     timeout 20 "$qs_bin" -p "$tmp/cfg/shell.qml" --no-duplicate > "$tmp/out" 2>&1 &
 qs_pid=$!
@@ -87,7 +89,7 @@ n=$(grep -c '"method":"subscribe"' "$tmp/log" 2>/dev/null); n=${n:-0}
 [ "$n" -ge 2 ] || { echo "FAIL: subscribed $n times, want 2 (connect, then reconnect)"; fail=1; }
 [ "$(grep -c 'AVAILABLE true' "$tmp/out")" -ge 2 ] || { echo "FAIL: not available again after the daemon came back"; fail=1; }
 # Quiet while the socket was missing: no warning about it before the daemon first appeared.
-if grep -E 'notifd\.sock|Read of|Not a file|No such file' "$tmp/out-first"; then
+if grep -v 'qt\.qpa\.' "$tmp/out-first" | grep -E 'notifd\.sock|Read of|Not a file|No such file'; then
     echo "FAIL: noisy while the socket was missing"; fail=1
 fi
 [ "$fail" = 0 ] || show
