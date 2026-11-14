@@ -77,6 +77,10 @@ ShellRoot {
     // Floating windows kept inside their screen, never cut off (shell.fit_windows).
     FitWindows {}
 
+    // Screens in the scrolling layout: a window opened from a Full column gets a Full screen of
+    // its own after it, one opened from a Half column is Half, and a lone window is Full.
+    ColumnPolicy {}
+
     // The full-screen "click a window" overlay for the rules editor's Pick a window.
     PickOverlay {}
 

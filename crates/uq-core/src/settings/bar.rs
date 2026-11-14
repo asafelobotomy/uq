@@ -330,8 +330,11 @@ pub struct WorldClockOptions {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum WindowSort {
-    /// When each window opened (oldest first unless `descending`).
+    /// Where the windows sit on screen: left to right, as the scrolling layout's columns run.
+    /// Minimised windows keep their place. One order (`descending` is ignored).
     #[default]
+    Screen,
+    /// When each window opened (oldest first unless `descending`).
     Opened,
     /// The last notification from each window's app.
     Activity,
@@ -347,7 +350,8 @@ pub enum WindowSort {
 #[serde(default, deny_unknown_fields)]
 pub struct WorkOptions {
     pub sort: WindowSort,
-    /// Reverse the order (newest, most active, busiest or Z first). Ignored for `pin`.
+    /// Reverse the order (newest, most active, busiest or Z first). Ignored for `screen` and
+    /// `pin`.
     pub descending: bool,
 }
 
@@ -1217,7 +1221,9 @@ mod tests {
         .unwrap();
         assert_eq!(b.options.work.sort, WindowSort::Usage);
         assert!(b.options.work.descending);
-        assert_eq!(BarOptions::default().work.sort, WindowSort::Opened);
+        assert_eq!(BarOptions::default().work.sort, WindowSort::Screen);
+        let s = BarLayout::from_value(&json!({"options": {"work": {"sort": "screen"}}})).unwrap();
+        assert_eq!(s.options.work.sort, WindowSort::Screen);
         for bad in [
             json!({"options": {"work": {"sort": "random"}}}),
             json!({"options": {"work": {"descending": "yes"}}}),

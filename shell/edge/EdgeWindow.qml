@@ -12,7 +12,8 @@ import "../logic/edges.js" as Edges
 // is, so it gets no indicator), and only on the part of the edge no other screen touches.
 // Hidden, it is a transparent strip Theme.borderWidth wide that takes pointer input only there
 // and never keyboard focus; reaching it brings in the near edge of a window frame, as if that
-// window sat just off screen (at the neighbour's own height when it is in this layout), and
+// window sat just off screen (at the neighbour's own top and height, framed with the live window
+// look: Hyprland's border width, rounding, gaps and border colours, see core/WindowLook), and
 // slides out a tab at the pointer's height with the neighbour's app icon (and its workspace
 // number when it is on another workspace). With shell.edge_titles the tab shows the window's title too, except while the
 // screen is shared. With shell.edge_style "peek" there is no tab: a slice of the neighbour
@@ -82,6 +83,30 @@ PanelWindow {
     // The slice: like the part of a half-width column the scrolling layout leaves in view, a gap
     // and then the window's near edge, framed as Hyprland frames windows.
     readonly property int peekWidth: Theme.gapOut * 8
+    // Where this surface's top sits on the screen, in global layout pixels: below the space the
+    // bar reserves (Hyprland's `reserved`, [left, top, right, bottom]) unless it ignores it.
+    readonly property real layerTop: {
+        var d = win.display, sp = win.span, top = (d ? d.y : 0) + (sp ? sp.top : 0);
+        if (exclusionMode === ExclusionMode.Ignore)
+            return top;
+        var o = win.monitor ? win.monitor.lastIpcObject : null;
+        var r = o && o.reserved && o.reserved.length >= 2 ? Number(o.reserved[1]) || 0 : 0;
+        return top + Math.max(0, r - (sp ? sp.top : 0));
+    }
+    // The neighbour's frame (its border included) top and bottom on this surface: where the
+    // window really is, or inside the screen's gaps when its size isn't known.
+    readonly property real frameTop: {
+        var t = win.target, b = WindowLook.border;
+        if (t && t.h > 0)
+            return Math.max(0, Math.min(t.y - b - win.layerTop, win.height - WindowLook.gapBottom - b * 2));
+        return WindowLook.gapTop;
+    }
+    readonly property real frameBottom: {
+        var t = win.target, b = WindowLook.border;
+        if (t && t.h > 0)
+            return Math.max(frameTop + b * 2, Math.min(t.y + t.h + b - win.layerTop, win.height));
+        return win.height - WindowLook.gapBottom;
+    }
     // Tab style: how much of the off-screen window's frame comes into view.
     readonly property int sliverWidth: Theme.gapIn * 2
 
@@ -157,38 +182,24 @@ PanelWindow {
     }
 
     // Tab style, while out: the near edge of the neighbour's frame, as if the window sat just
-    // past the edge of the screen. It spans the neighbour's own height when that window is in
-    // this layout, and the screen's (inside the gaps) for another workspace's window.
+    // past the edge of the screen, drawn as Hyprland draws window frames (WindowLook) at the
+    // neighbour's own top and height.
     Rectangle {
         id: sliver
         visible: !win.peekStyle
-        readonly property real fromY: {
-            var t = win.target, d = win.display, sp = win.span;
-            var off = (d ? d.y : 0) + (sp ? sp.top : 0);
-            if (t && t.workspace === 0 && t.h > 0)
-                return Math.max(Theme.gapOut, Math.min(t.y - off, win.height - Theme.gapOut * 2));
-            return Theme.gapOut;
-        }
-        readonly property real toY: {
-            var t = win.target, d = win.display, sp = win.span;
-            var off = (d ? d.y : 0) + (sp ? sp.top : 0);
-            if (t && t.workspace === 0 && t.h > 0)
-                return Math.max(fromY + Theme.gapOut, Math.min(t.y + t.h - off, win.height - Theme.gapOut));
-            return win.height - Theme.gapOut;
-        }
         readonly property bool hovered: win.revealed && area.containsMouse && !tab.hovered
             && area.mouseY >= y && area.mouseY < y + height
             && (win.left ? area.mouseX < win.sliverWidth : area.mouseX >= win.width - win.sliverWidth)
-        y: fromY
-        height: toY - fromY
+        y: win.frameTop
+        height: win.frameBottom - win.frameTop
         // The far side (and far corners) stay off-screen.
         width: win.sliverWidth + radius * 2
         x: win.left ? (win.revealed ? win.sliverWidth - width : -width)
                     : (win.revealed ? parent.width - win.sliverWidth : parent.width)
-        radius: Theme.radius
+        radius: WindowLook.frameRadius
         color: hovered ? Theme.overlay : Theme.surface
-        border.color: hovered || tab.hovered ? Theme.accent : Theme.border
-        border.width: Theme.borderWidth
+        border.color: hovered || tab.hovered ? WindowLook.activeBorder : WindowLook.inactiveBorder
+        border.width: WindowLook.border
         Behavior on x {
             enabled: !Settings.reduceMotion
             NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
@@ -261,16 +272,17 @@ PanelWindow {
         // off-screen, past the slice.
         ClippingRectangle {
             id: frame
-            readonly property int gap: Theme.gapOut
+            // The gap between columns, as Hyprland leaves it.
+            readonly property int gap: WindowLook.gapsIn
             width: win.peekWidth - gap + radius * 2
-            y: gap
-            height: parent.height - gap * 2
+            y: win.frameTop
+            height: win.frameBottom - win.frameTop
             x: win.left ? (win.peekShown ? -radius * 2 : -win.peekWidth)
                         : (win.peekShown ? gap : win.peekWidth)
-            radius: Theme.radius
+            radius: WindowLook.frameRadius
             color: Theme.surface
-            border.color: peek.hovered ? Theme.accent : Theme.border
-            border.width: Theme.borderWidth
+            border.color: peek.hovered ? WindowLook.activeBorder : WindowLook.inactiveBorder
+            border.width: WindowLook.border
             contentUnderBorder: true
 
             Behavior on x {

@@ -10,14 +10,20 @@ import "../logic/minimise.js" as Min
 import "../logic/work.js" as Work
 import "../logic/dock.js" as Dock
 
-// Open windows (`work`): one pill per window on this screen's current workspace, like browser
-// tabs: its app's icon, its title (untrusted, elided) and a close button. Windows minimised from
-// this workspace show here too, dimmed. As windows open the pills share the island evenly and
-// shrink, down to the icon and close button; past that, arrows scroll the strip and "+N" lists
-// every window. When not even one pill fits (Icon size), the lead window's icon lists them all.
-// Left click focuses a window (or brings a minimised one back), middle click closes it, right
-// click opens its menu (minimise, maximise, float, pin the app, move it, close it, and the uQ
-// Island Menu). The order is the island's setting (shell.bar.options.work, chosen in edit mode).
+// Open windows (`work`): one tab per window on this screen's current workspace, like browser
+// tabs, in the order the windows sit on screen (left to right, as the scrolling layout's columns
+// run; the island's setting shell.bar.options.work can pick another order in edit mode). Windows
+// minimised from this workspace keep their place, dimmed. The focused window's tab grows to
+// Medium and the others share what is left. What a tab shows depends on its width (Work.tabTier):
+// Icon, the app icon, which turns into a close button under the pointer; Small, the icon, Full or
+// Half (whichever the window isn't, under the pointer) and close; Medium, the icon, Half, Full and
+// close; Large, Medium plus the title (untrusted, elided). Full makes the window's column the
+// screen's width and Half half of it (outside the scrolling layout, Full maximizes and Half puts
+// it back). Past the narrowest tabs, arrows scroll the strip and "+N" lists every window; when a
+// window out of view gets focus the strip centres on it. When not even one tab fits, the lead
+// window's icon lists them all. Left click focuses a window (or brings a minimised one back),
+// middle click closes it, right click opens its menu (minimise, full or half width, float, pin
+// the app, move it, close it, and the uQ Island Menu).
 Island {
     id: root
     property var screen: null
@@ -25,7 +31,7 @@ Island {
     readonly property int iconSize: 20
     readonly property int cell: 26
     readonly property var opts: BarLayout.options.work || ({})
-    readonly property string sortMode: Work.SORTS.indexOf(opts.sort) >= 0 ? opts.sort : "opened"
+    readonly property string sortMode: Work.SORTS.indexOf(opts.sort) >= 0 ? opts.sort : Work.DEFAULT_SORT
 
     readonly property string monitorName: {
         var m = root.screen ? Hyprland.monitorFor(root.screen) : null;
@@ -51,6 +57,7 @@ Island {
         var out = [], vals = Hyprland.toplevels.values, seq = Object.assign({}, openedSeq);
         for (var i = 0; i < vals.length; i++) {
             var t = vals[i], o = t.lastIpcObject || ({});
+            var wo = t.workspace && t.workspace.lastIpcObject ? t.workspace.lastIpcObject : null;
             var a = Work.normAddr(t.address);
             if (a !== null && seq[a] === undefined)
                 seq[a] = nextSeq++;
@@ -63,7 +70,15 @@ Island {
                 minimised: minimised,
                 minimisedFrom: minimised ? Min.wsFromTags(o.tags) : null,
                 monitor: t.monitor ? t.monitor.name : "",
-                pid: typeof o.pid === "number" ? o.pid : 0
+                pid: typeof o.pid === "number" ? o.pid : 0,
+                x: o.at ? Number(o.at[0]) || 0 : 0,
+                y: o.at ? Number(o.at[1]) || 0 : 0,
+                w: o.size ? Number(o.size[0]) || 0 : 0,
+                h: o.size ? Number(o.size[1]) || 0 : 0,
+                floating: o.floating === true,
+                fullscreen: typeof o.fullscreen === "number" ? o.fullscreen : 0,
+                full: Work.spansScreen(o, t.monitor ? t.monitor.lastIpcObject : null),
+                scrolling: !!wo && wo.tiledLayout === "scrolling"
             });
         }
         openedSeq = seq;
@@ -77,7 +92,7 @@ Island {
     }
     readonly property var here: Work.windowsHere(windows, monitorName, wsId, focusedAddr)
     readonly property var ordered: {
-        var ctx = { opened: openedSeq, activity: {}, pinIndex: {}, usage: {}, name: {} };
+        var ctx = { opened: openedSeq, activity: {}, pinIndex: {}, usage: {}, name: {}, lastOrder: memo.order };
         var pins = Settings.values.pinned || [];
         for (var i = 0; i < here.length; i++) {
             var w = here[i], app = appOf(w.cls);
@@ -97,14 +112,26 @@ Island {
         return Work.sortWindows(here, sortMode, opts.descending === true, ctx);
     }
 
+    // The order last shown, for "Screen order" to keep minimised windows in their place. Held
+    // inside an object so updating it doesn't re-run `ordered`.
+    readonly property var memo: ({ order: [] })
+    onOrderedChanged: memo.order = ordered.map(function (w) { return w.address; })
+
     // --- the strip ---
     readonly property real closeW: Theme.fontSize + Theme.gapIn
+    // The narrowest width of each tab size (Work.tabTier): the icon with its margins, then a
+    // button more each step, then room for a short title.
+    readonly property real tabPad: 6
+    readonly property var tiers: ({
+        small: tabPad * 2 + iconSize + Theme.gapIn + closeW * 2 + 2,
+        medium: tabPad * 2 + iconSize + Theme.gapIn + closeW * 3 + 4,
+        large: tabPad * 2 + iconSize + Theme.gapIn * 2 + closeW * 3 + 4 + Theme.fontSize * 4
+    })
     readonly property var metrics: ({
-        minPill: 8 + iconSize + Theme.gapIn + closeW, maxPill: BarLayout.unit * 5, gap: 2,
+        minPill: tabPad * 2 + iconSize, maxPill: BarLayout.unit * 5, gap: 2, medium: tiers.medium,
         arrow: Theme.fontSize + Theme.gapIn, chip: Theme.fontSize * 2 + Theme.gapIn * 2
     })
-    readonly property var fit: Work.strip(ordered.length, room, metrics)
-    readonly property bool showTitles: fit.pillW >= metrics.minPill + Theme.fontSize * 3
+    readonly property var fit: Work.strip(ordered.length, room, metrics, focusedIndex)
     readonly property int focusedIndex: {
         for (var i = 0; i < ordered.length; i++)
             if (ordered[i].focused)
@@ -115,7 +142,16 @@ Island {
     readonly property int start: fit.mode === "scroll" ? Work.scrollOffset(offset, ordered.length, fit.shown, -1) : 0
     readonly property var shownWindows: fit.mode === "pills" ? ordered
         : (fit.mode === "scroll" ? ordered.slice(start, start + fit.shown) : [])
-    onFocusedIndexChanged: if (fit.mode === "scroll") offset = Work.scrollOffset(offset, ordered.length, fit.shown, focusedIndex)
+    // A window out of view got focus (from the "+N" list, a key or a click on screen): centre
+    // the strip on it, so its neighbours on screen show beside it.
+    function keepFocusShown() {
+        if (!fit || fit.mode !== "scroll" || focusedIndex < 0)
+            return;
+        if (focusedIndex < start || focusedIndex >= start + fit.shown)
+            offset = Work.centreOffset(ordered.length, fit.shown, focusedIndex);
+    }
+    onFocusedIndexChanged: keepFocusShown()
+    onFitChanged: keepFocusShown()
     readonly property var lead: focusedIndex >= 0 ? ordered[focusedIndex] : (ordered.length > 0 ? ordered[0] : null)
 
     Accessible.role: Accessible.PageTabList
@@ -146,6 +182,29 @@ Island {
         var d = Work.buildDispatch(name, { addr: w.address, ws: root.wsId }, args);
         if (d !== null)
             Bridge.call("Dispatch", d);
+    }
+    // A tiled window in the scrolling layout, sized by its column (not real fullscreen, 2).
+    function inColumn(w) {
+        return w.scrolling && !w.floating && w.fullscreen !== 2;
+    }
+    // Full: the window spans its screen. In the scrolling layout that is a maximized column
+    // (Hyprland's own Full: fullscreen 1) or one as wide as the screen; elsewhere, maximized or
+    // fullscreen.
+    function isFull(w) {
+        return root.inColumn(w) ? (w.fullscreen === 1 || w.full === true) : w.fullscreen > 0;
+    }
+    // Make the window Full (the screen's width) or Half (half of it). Outside the scrolling
+    // layout, Full maximizes and Half puts a maximized window back.
+    function setFull(w, full) {
+        if (w.minimised)
+            return;
+        if (root.inColumn(w))
+            Bridge.call("Dispatch", ["column_width", { address: w.address, width: full ? "full" : "half" }])
+                .catch(function (e) { console.warn("uq: window width: " + e); });
+        else if (full !== root.isFull(w))
+            root.act(w, "fullscreen", { mode: "maximized" });
+        // The scrolling layout resizes columns without an event.
+        refreshTimer.restart();
     }
     function iconFor(cls) {
         if (cls === "")
@@ -233,6 +292,35 @@ Island {
                 if (root && u && typeof u === "object")
                     root.usageByPid = u;
             }).catch(function () {});
+        }
+    }
+
+    // A tab's small round button (close, Full, Half).
+    component TabButton: Rectangle {
+        id: tb
+        property string glyph: ""
+        property string label: ""
+        // The window is already this way (Full on a Full window): drawn as on.
+        property bool on: false
+        signal pressed()
+        Layout.preferredWidth: root.closeW
+        Layout.preferredHeight: root.closeW
+        radius: width / 2
+        color: tbMouse.containsMouse ? Theme.overlay : "transparent"
+        Accessible.role: Accessible.Button
+        Accessible.name: label
+        Accessible.onPressAction: tb.pressed()
+        UqText {
+            anchors.centerIn: parent
+            text: tb.glyph
+            // The way the window is now (Full or Half) in the accent colour.
+            color: tb.on ? Theme.accent : (tbMouse.containsMouse ? Theme.text : Theme.textMuted)
+        }
+        MouseArea {
+            id: tbMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            onClicked: tb.pressed()
         }
     }
 
@@ -333,22 +421,32 @@ Island {
             delegate: Rectangle {
                 id: pill
                 required property var modelData
-                Layout.preferredWidth: root.fit.pillW
+                readonly property real tabW: modelData.focused ? root.fit.focusW : root.fit.pillW
+                readonly property string tier: Work.tabTier(tabW, root.tiers)
+                readonly property bool full: root.isFull(modelData)
+                readonly property string name: modelData.title || modelData.cls
+                Layout.preferredWidth: tabW
                 Layout.fillHeight: true
                 radius: Theme.radius - 2
-                color: modelData.focused ? Theme.surfaceAlt : (pillMouse.containsMouse ? Theme.overlay : "transparent")
+                color: modelData.focused ? Theme.surfaceAlt : (pillHover.hovered ? Theme.overlay : "transparent")
                 border.color: modelData.focused ? Theme.accent : "transparent"
                 border.width: modelData.focused ? 1 : 0
                 opacity: modelData.minimised ? 0.55 : 1
                 Accessible.role: Accessible.PageTab
-                Accessible.name: (modelData.title || modelData.cls) + (modelData.minimised ? ", minimised" : "")
-                    + (modelData.focused ? ", focused" : "")
+                Accessible.name: name + (modelData.minimised ? ", minimised" : "")
+                    + (modelData.focused ? ", focused" : "") + (full ? ", full width" : "")
                 Accessible.onPressAction: root.choose(modelData)
+                Behavior on Layout.preferredWidth {
+                    enabled: !Settings.reduceMotion
+                    NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
+                }
 
+                HoverHandler {
+                    id: pillHover
+                }
                 MouseArea {
                     id: pillMouse
                     anchors.fill: parent
-                    hoverEnabled: true
                     acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
                     onClicked: function (m) {
                         if (m.button === Qt.MiddleButton)
@@ -361,45 +459,82 @@ Island {
                 }
                 RowLayout {
                     anchors.fill: parent
-                    anchors.leftMargin: 4
-                    anchors.rightMargin: 2
+                    anchors.leftMargin: pill.tier === "icon" ? 0 : root.tabPad
+                    anchors.rightMargin: pill.tier === "icon" ? 0 : 2
                     spacing: Theme.gapIn
-                    IconImage {
-                        implicitSize: root.iconSize
+                    // Icon size: the icon, centred, turns into the close button under the pointer.
+                    Item {
                         Layout.preferredWidth: root.iconSize
                         Layout.preferredHeight: root.iconSize
-                        backer.sourceSize.width: root.iconSize * root.dpr
-                        backer.sourceSize.height: root.iconSize * root.dpr
-                        source: root.iconFor(pill.modelData.cls)
+                        Layout.alignment: Qt.AlignVCenter | (pill.tier === "icon" ? Qt.AlignHCenter : Qt.AlignLeft)
+                        Layout.fillWidth: pill.tier === "icon"
+                        Layout.maximumWidth: root.iconSize
+                        IconImage {
+                            anchors.fill: parent
+                            visible: !(pill.tier === "icon" && iconClose.containsMouse)
+                            implicitSize: root.iconSize
+                            backer.sourceSize.width: root.iconSize * root.dpr
+                            backer.sourceSize.height: root.iconSize * root.dpr
+                            source: root.iconFor(pill.modelData.cls)
+                        }
+                        Rectangle {
+                            anchors.fill: parent
+                            visible: pill.tier === "icon" && iconClose.containsMouse
+                            radius: width / 2
+                            color: Theme.overlay
+                            UqText {
+                                anchors.centerIn: parent
+                                text: "✕"
+                            }
+                        }
+                        MouseArea {
+                            id: iconClose
+                            anchors.fill: parent
+                            enabled: pill.tier === "icon"
+                            hoverEnabled: true
+                            Accessible.role: Accessible.Button
+                            Accessible.name: "Close " + pill.name
+                            onClicked: root.act(pill.modelData, "close")
+                        }
                     }
                     UqText {
-                        visible: root.showTitles
+                        visible: pill.tier === "large"
                         Layout.fillWidth: true
-                        text: pill.modelData.title || pill.modelData.cls
+                        text: pill.name
                         color: pill.modelData.focused ? Theme.text : Theme.textMuted
                     }
                     Item {
-                        visible: !root.showTitles
+                        visible: pill.tier === "small" || pill.tier === "medium"
                         Layout.fillWidth: true
                     }
-                    Rectangle {
-                        Layout.preferredWidth: root.closeW
-                        Layout.preferredHeight: root.closeW
-                        radius: width / 2
-                        color: closeMouse.containsMouse ? Theme.overlay : "transparent"
-                        Accessible.role: Accessible.Button
-                        Accessible.name: "Close " + (pill.modelData.title || pill.modelData.cls)
-                        UqText {
-                            anchors.centerIn: parent
-                            text: "✕"
-                            color: closeMouse.containsMouse ? Theme.text : Theme.textMuted
-                        }
-                        MouseArea {
-                            id: closeMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            onClicked: root.act(pill.modelData, "close")
-                        }
+                    // Small: whichever the window isn't, under the pointer (its place is kept).
+                    TabButton {
+                        visible: pill.tier === "small" && !pill.modelData.minimised
+                        opacity: pillHover.hovered ? 1 : 0
+                        enabled: pillHover.hovered
+                        glyph: pill.full ? "◧" : "□"
+                        label: (pill.full ? "Half width: " : "Full width: ") + pill.name
+                        onPressed: root.setFull(pill.modelData, !pill.full)
+                    }
+                    TabButton {
+                        visible: (pill.tier === "medium" || pill.tier === "large") && !pill.modelData.minimised
+                        glyph: "◧"
+                        label: "Half width: " + pill.name
+                        on: !pill.full
+                        onPressed: root.setFull(pill.modelData, false)
+                    }
+                    TabButton {
+                        visible: (pill.tier === "medium" || pill.tier === "large") && !pill.modelData.minimised
+                        glyph: "□"
+                        label: "Full width: " + pill.name
+                        on: pill.full
+                        onPressed: root.setFull(pill.modelData, true)
+                    }
+                    TabButton {
+                        visible: pill.tier !== "icon"
+                        glyph: "✕"
+                        label: "Close " + pill.name
+                        onPressed: root.act(pill.modelData, "close")
                     }
                 }
             }
@@ -509,8 +644,8 @@ Island {
             MenuRow {
                 visible: mcol.w !== null && !mcol.w.minimised
                 Layout.fillWidth: true
-                text: "Maximise"
-                onActivated: { root.act(mcol.w, "fullscreen", { mode: "maximized" }); mcol.done(); }
+                text: mcol.w && root.isFull(mcol.w) ? "Half width" : "Full width"
+                onActivated: { root.setFull(mcol.w, !root.isFull(mcol.w)); mcol.done(); }
             }
             MenuRow {
                 visible: mcol.w !== null && !mcol.w.minimised

@@ -134,6 +134,8 @@ async fn handle(s: &Services, call: &str, args: &[Value]) -> Result<Value, Strin
             }
         }
         "Dispatch" => dispatch::dispatch(args).await,
+        "WindowLook" if args.is_empty() => dispatch::window_look().await,
+        "WindowLook" => Err("WindowLook takes no arguments".into()),
         "DefaultApps" => defaultapps::default_apps(link, args),
         "Power" => power::power(args).await,
         "Lock" => logind::lock(args).await,

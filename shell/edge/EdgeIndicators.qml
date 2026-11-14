@@ -90,6 +90,10 @@ Scope {
         target: Hyprland
         function onRawEvent(event) {
             switch (event.name) {
+            case "configreloaded":
+                // The window look (border, rounding, gaps) may have changed.
+                WindowLook.soon();
+                break;
             case "activewindowv2":
             case "openwindow":
             case "closewindow":

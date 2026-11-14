@@ -369,7 +369,7 @@ IslandPopup {
 
         // --- open windows: their order ---
         ColumnLayout {
-            readonly property string mode: Work.SORTS.indexOf(pop.opts.sort) >= 0 ? pop.opts.sort : "opened"
+            readonly property string mode: Work.SORTS.indexOf(pop.opts.sort) >= 0 ? pop.opts.sort : Work.DEFAULT_SORT
             id: sortBox
             visible: pop.island === "work"
             spacing: 2

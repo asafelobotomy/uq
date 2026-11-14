@@ -93,6 +93,17 @@ pub enum Action {
     Dpms {
         on: bool,
     },
+    /// Make the scrolling layout column holding this window Full (the screen's width) or Half.
+    /// The scrolling layout treats a full-width column as maximized and remembers the width to
+    /// go back to, so Full is Hyprland's maximize and Half turns that off and then sets the
+    /// column to half (`colresize`, which acts on the focused window's column). The window is
+    /// focused first (without moving the pointer) and its state read then (`column_lua`); with
+    /// `keep_focus` the window that had focus gets it back afterwards.
+    ColumnWidth {
+        address: String,
+        full: bool,
+        keep_focus: bool,
+    },
 }
 
 fn address(o: &Value) -> Result<String, String> {
@@ -194,6 +205,18 @@ impl Action {
                     .and_then(Value::as_bool)
                     .ok_or("on must be a boolean")?,
             },
+            "column_width" => Action::ColumnWidth {
+                address: address(a)?,
+                full: match a.get("width").and_then(Value::as_str) {
+                    Some("full") => true,
+                    Some("half") => false,
+                    _ => return Err("width must be \"full\" or \"half\"".into()),
+                },
+                keep_focus: match a.get("keep_focus") {
+                    None => false,
+                    Some(v) => v.as_bool().ok_or("keep_focus must be a boolean")?,
+                },
+            },
             other => return Err(format!("unknown action {other}")),
         })
     }
@@ -257,12 +280,41 @@ impl Action {
                 move_lua(address, &WsTarget::Id(*to_ws)),
                 tag_lua(address, &format!("-uq_ws_{to_ws}")),
             ],
+            // The rest depends on the window's state once focused: see `run` and `column_lua`.
+            Action::ColumnWidth { address, .. } => {
+                vec![d(format!("hl.dsp.focus({{ window = {} }})", win(address)))]
+            }
             Action::Dpms { on } => vec![d(format!(
                 "hl.dsp.dpms({{ action = {} }})",
                 lua_string(if *on { "on" } else { "off" })
             ))],
         }
     }
+}
+
+/// The rest of `ColumnWidth` for the (focused) window `address`, given its Hyprland fullscreen
+/// state `fs` (0 none, 1 maximized, 2 fullscreen). Full: maximize it unless it already is. Half:
+/// un-maximize it, then make its column half the screen. A fullscreen window is left alone.
+fn column_lua(address: &str, full: bool, fs: i64) -> Vec<String> {
+    let maximize = format!(
+        "return hl.dispatch(hl.dsp.window.fullscreen({{ mode = \"maximized\", window = {} }}))",
+        lua_string(&format!("address:{address}"))
+    );
+    let half = "return hl.dispatch(hl.dsp.layout(\"colresize 0.5\"))".to_string();
+    match (full, fs) {
+        (_, 2) | (true, 1) => vec![],
+        (true, _) => vec![maximize],
+        (false, 1) => vec![maximize, half],
+        (false, _) => vec![half],
+    }
+}
+
+/// The focused window's fullscreen state from Hyprland's `j/activewindow` reply.
+fn parse_active_fullscreen(reply: &str) -> Option<i64> {
+    serde_json::from_str::<Value>(reply)
+        .ok()?
+        .get("fullscreen")?
+        .as_i64()
 }
 
 fn move_lua(address: &str, ws: &WsTarget) -> String {
@@ -317,8 +369,22 @@ pub async fn run(hypr: &HyprSocket, action: &Action) -> Result<(), String> {
         Action::FocusWindow {
             keep_pointer: true,
             ..
-        }
+        } | Action::ColumnWidth { .. }
     );
+    // The window to give focus back to afterwards (ColumnWidth with keep_focus).
+    let refocus = match action {
+        Action::ColumnWidth {
+            address,
+            keep_focus: true,
+            ..
+        } => hypr
+            .request("j/activewindow")
+            .await
+            .ok()
+            .and_then(|r| parse_active_address(&r))
+            .filter(|a| a != address),
+        _ => None,
+    };
     // Some(true): no_warps was off and is now on, to be switched back.
     let mut unwarp = None;
     let mut restore = None;
@@ -348,6 +414,31 @@ pub async fn run(hypr: &HyprSocket, action: &Action) -> Result<(), String> {
             break;
         }
     }
+    let mut after = Vec::new();
+    if let (Ok(()), Action::ColumnWidth { address, full, .. }) = (&result, action) {
+        // Now focused: its state decides what Full or Half takes.
+        let fs = hypr
+            .request("j/activewindow")
+            .await
+            .ok()
+            .and_then(|r| parse_active_fullscreen(&r))
+            .unwrap_or(0);
+        after = column_lua(address, *full, fs);
+    }
+    if let Some(a) = &refocus {
+        after.push(format!(
+            "return hl.dispatch(hl.dsp.focus({{ window = {} }}))",
+            lua_string(&format!("address:{a}"))
+        ));
+    }
+    for lua in after {
+        if result.is_err() {
+            break;
+        }
+        if let Err(e) = hypr.eval(&lua).await {
+            result = Err(eval_err(e));
+        }
+    }
     if unwarp == Some(true) {
         // Back as it was even when the focus failed.
         hypr.eval(&no_warps_lua(false)).await.map_err(eval_err)?;
@@ -361,6 +452,69 @@ pub async fn run(hypr: &HyprSocket, action: &Action) -> Result<(), String> {
 
 fn no_warps_lua(on: bool) -> String {
     format!("hl.config({{ cursor = {{ no_warps = {on} }} }})")
+}
+
+/// The focused window's address from Hyprland's `j/activewindow` reply (`{}` when none is).
+fn parse_active_address(reply: &str) -> Option<String> {
+    let v: Value = serde_json::from_str(reply).ok()?;
+    let a = v.get("address")?.as_str()?;
+    valid_address(a).then(|| a.to_string())
+}
+
+/// The bridge's `WindowLook` call: how Hyprland draws windows right now, so the shell can draw
+/// shapes that match them (the screen-edge indicator's window frame). `{border, rounding,
+/// gaps_in, gaps_out: [top, right, bottom, left], active_border, inactive_border}`, the colours
+/// as `#AARRGGBB` (the first stop of a gradient). An option that can't be read is left out.
+pub async fn window_look() -> Result<Value, String> {
+    let hypr = HyprSocket::from_env();
+    let mut out = serde_json::Map::new();
+    for (key, opt) in [
+        ("border", "general:border_size"),
+        ("rounding", "decoration:rounding"),
+        ("gaps_in", "general:gaps_in"),
+        ("gaps_out", "general:gaps_out"),
+        ("active_border", "general:col.active_border"),
+        ("inactive_border", "general:col.inactive_border"),
+    ] {
+        let Ok(reply) = hypr.request(&format!("j/getoption {opt}")).await else {
+            continue;
+        };
+        if let Some(v) = parse_look_option(&reply) {
+            out.insert(key.into(), v);
+        }
+    }
+    if out.is_empty() {
+        return Err("Hyprland is not running".into());
+    }
+    Ok(Value::Object(out))
+}
+
+/// One `j/getoption` reply as `WindowLook` gives it: an int; a CSS box (`"4 4 4 4"`, one to four
+/// values as in CSS) as `[top, right, bottom, left]`; a gradient's first colour as `#AARRGGBB`.
+fn parse_look_option(reply: &str) -> Option<Value> {
+    let v: Value = serde_json::from_str(reply).ok()?;
+    if let Some(n) = v.get("int").and_then(Value::as_i64) {
+        return Some(Value::from(n.clamp(0, 1000)));
+    }
+    if let Some(css) = v.get("css").and_then(Value::as_str) {
+        let n: Vec<i64> = css
+            .split_whitespace()
+            .map(|p| p.parse::<i64>().ok().map(|x| x.clamp(0, 1000)))
+            .collect::<Option<_>>()?;
+        let b = match n.as_slice() {
+            [a] => [*a, *a, *a, *a],
+            [a, b] => [*a, *b, *a, *b],
+            [a, b, c] => [*a, *b, *c, *b],
+            [a, b, c, d] => [*a, *b, *c, *d],
+            _ => return None,
+        };
+        return Some(Value::from(b.to_vec()));
+    }
+    let g = v.get("gradient").and_then(Value::as_str)?;
+    let first = g.split_whitespace().next()?;
+    let hex = first.strip_prefix("0x").unwrap_or(first);
+    (hex.len() == 8 && hex.bytes().all(|b| b.is_ascii_hexdigit()))
+        .then(|| Value::from(format!("#{}", hex.to_ascii_lowercase())))
 }
 
 /// The value of a bool option from `j/getoption`.
@@ -600,6 +754,97 @@ mod tests {
         assert!(Action::from_call("dpms", &json!({"on": "yes"})).is_err());
     }
 
+    #[test]
+    fn column_width() {
+        let w = r#""address:0x55d0c0ffee""#;
+        assert_eq!(
+            lua("column_width", json!({"address": A, "width": "full"})),
+            [format!(
+                "return hl.dispatch(hl.dsp.focus({{ window = {w} }}))"
+            )]
+        );
+        let max = format!(
+            "return hl.dispatch(hl.dsp.window.fullscreen({{ mode = \"maximized\", window = {w} }}))"
+        );
+        let half = "return hl.dispatch(hl.dsp.layout(\"colresize 0.5\"))".to_string();
+        assert_eq!(
+            column_lua(A, true, 0),
+            std::slice::from_ref(&max),
+            "Full: maximize"
+        );
+        assert!(column_lua(A, true, 1).is_empty(), "already Full");
+        assert_eq!(
+            column_lua(A, false, 1),
+            [max, half.clone()],
+            "Half: un-maximize, then half"
+        );
+        assert_eq!(column_lua(A, false, 0), [half]);
+        assert!(
+            column_lua(A, true, 2).is_empty() && column_lua(A, false, 2).is_empty(),
+            "fullscreen left alone"
+        );
+        assert_eq!(parse_active_fullscreen(r#"{"fullscreen": 1}"#), Some(1));
+        assert_eq!(parse_active_fullscreen("{}"), None);
+        let a = Action::from_call(
+            "column_width",
+            &json!({"address": A, "width": "full", "keep_focus": true}),
+        )
+        .unwrap();
+        assert!(matches!(
+            a,
+            Action::ColumnWidth {
+                keep_focus: true,
+                ..
+            }
+        ));
+        assert!(Action::from_call("column_width", &json!({"address": A, "width": 1})).is_err());
+        assert!(Action::from_call("column_width", &json!({"address": A})).is_err());
+        assert!(
+            Action::from_call(
+                "column_width",
+                &json!({"address": A, "width": "full", "keep_focus": "yes"})
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn active_address() {
+        assert_eq!(
+            parse_active_address(r#"{"address": "0x55d0c0ffee", "class": "x"}"#).as_deref(),
+            Some(A)
+        );
+        assert_eq!(parse_active_address("{}"), None);
+        assert_eq!(parse_active_address(r#"{"address": "nope"}"#), None);
+    }
+
+    #[test]
+    fn look_options() {
+        assert_eq!(
+            parse_look_option(r#"{"option": "general:border_size", "int": 4, "set": true}"#),
+            Some(json!(4))
+        );
+        assert_eq!(
+            parse_look_option(r#"{"option": "general:gaps_out", "css": "4 4 4 4", "set": true}"#),
+            Some(json!([4, 4, 4, 4]))
+        );
+        assert_eq!(
+            parse_look_option(r#"{"css": "10 20"}"#),
+            Some(json!([10, 20, 10, 20]))
+        );
+        assert_eq!(
+            parse_look_option(r#"{"gradient": "aa625e51 0deg"}"#),
+            Some(json!("#aa625e51"))
+        );
+        assert_eq!(
+            parse_look_option(r#"{"gradient": "ffD79921 ff000000 45deg"}"#),
+            Some(json!("#ffd79921"))
+        );
+        assert_eq!(parse_look_option(r#"{"gradient": "red"}"#), None);
+        assert_eq!(parse_look_option(r#"{"css": "a b"}"#), None);
+        assert_eq!(parse_look_option("not json"), None);
+    }
+
     /// Every generated statement must load under Hyprland's Lua. CI runs this with `--ignored`.
     #[test]
     #[ignore = "needs Hyprland; CI runs it with --ignored"]
@@ -618,6 +863,8 @@ mod tests {
             ("restore", json!({"address": A, "to_ws": 4})),
             ("dpms", json!({"on": true})),
             ("dpms", json!({"on": false})),
+            ("column_width", json!({"address": A, "width": "full"})),
+            ("column_width", json!({"address": A, "width": "half"})),
             (
                 "place",
                 json!({"address": A, "x": -20, "y": 72, "w": 800, "h": 600}),
@@ -631,6 +878,11 @@ mod tests {
             body.push_str(&format!(
                 "hl.on(\"hyprland.start\", function() {} end)\n",
                 no_warps_lua(on)
+            ));
+        }
+        for stmt in column_lua(A, false, 1) {
+            body.push_str(&format!(
+                "hl.on(\"hyprland.start\", function() {stmt} end)\n"
             ));
         }
         for (name, args) in &all {
