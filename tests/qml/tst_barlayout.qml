@@ -5,7 +5,7 @@ import "../../shell/logic/barlayout.js" as L
 TestCase {
     name: "barlayout"
 
-    readonly property var m: ({ unit: 36, gap: 5, zoneGap: 12, sep: 12 })
+    readonly property var m: ({ unit: 36, gap: 5 })
 
     function ids(list) {
         return list.map(function (i) { return i.id; });
@@ -141,16 +141,19 @@ TestCase {
         compare(lay.start[0].units, L.MAX_CUSTOM);
         compare(lay.start[1], { id: "clock", size: "small" });
         compare(lay.start[2], { id: "separator", size: null });
-        // Drawn at its width while there is room; stepped down an Icon size at a time.
+        // Drawn at its width while there is room; stepped down an Icon size at a time when the
+        // columns run out.
         var f = L.fit(c, 1900, m);
         compare(f.sizes["start:1"], "custom");
         compare(f.units["start:1"], 9);
-        compare(L.place(c, f, 1900, m)["start:1"].w, 9 * m.unit);
-        var need = f.width;
-        var g = L.fit(c, need - m.unit, m);
+        var pw = L.place(c, f, 1900, m)["start:1"].w;
+        verify(Math.abs(pw - 9 * m.unit) <= f.grid.pitch / 2, "about nine Icon sizes wide: " + pw);
+        function cols(n) { return n * (m.unit + m.gap) - m.gap; }
+        compare(L.fit(c, cols(f.cols), m).units["start:1"], 9, "exactly enough columns");
+        var g = L.fit(c, cols(f.cols - 1), m);
         compare(g.sizes["start:1"], "custom");
         compare(g.units["start:1"], 8);
-        var h = L.fit(c, need - m.unit * 3, m);
+        var h = L.fit(c, cols(f.cols - 3), m);
         compare(h.sizes["start:1"], "large");
     }
 
@@ -185,16 +188,92 @@ TestCase {
         for (var k in tiny.sizes)
             if (!tiny.hidden[k] && k !== "end:1")
                 compare(tiny.sizes[k], "icon", k);
-        verify(tiny.hidden["end:1"], "the separator goes first");
+        verify(!tiny.hidden["end:1"], "a separator takes no columns, so it is never left out");
         verify(!tiny.hidden["end:2"], "status stays longest");
     }
 
     function test_centre_moves_aside_rather_than_overlap() {
         var b = { start: [{ id: "system" }, { id: "work" }], center: [{ id: "clock" }], end: [], options: {} };
-        var p = L.place(b, L.fit(b, 1400, m), 1400, m);
-        compare(p["center:0"].x, Math.round((1400 - 144) / 2), "centred when there's room");
+        var f = L.fit(b, 1400, m);
+        var p = L.place(b, f, 1400, m);
+        var span = f.units["center:0"];
+        compare(p["center:0"].x, L.colX(Math.round((f.grid.cols - span) / 2), f.grid), "centred on the grid when there's room");
+        verify(Math.abs(p["center:0"].x + p["center:0"].w / 2 - 700) <= f.grid.pitch, "about the middle");
         p = L.place(b, L.fit(b, 700, m), 700, m);
-        verify(p["center:0"].x >= p["start:1"].x + p["start:1"].w + m.zoneGap, "moved right of the left zone");
+        compare(p["center:0"].x, p["start:1"].x + p["start:1"].w + m.gap, "moved right of the left zone, one gap away");
+    }
+
+    // The grid spans every bar exactly, from a small laptop to a 4K screen at 1x, with columns
+    // close to the unit (Icon islands stay square); a full bar of islands meets both ends, with
+    // the same gap everywhere.
+    function test_grid_spans_any_screen() {
+        var screens = [1280, 1366, 1440, 1600, 1920, 2560, 3440, 3840];
+        var gaps = [0, 5, 8, 16];
+        for (var s = 0; s < screens.length; s++)
+            for (var q = 0; q < gaps.length; q++) {
+                var mm = { unit: 36, gap: gaps[q] };
+                var w = screens[s] - 24;
+                var gr = L.grid(w, mm);
+                compare(L.spanWidth(gr.cols, gr, mm), w, "columns span " + w + " exactly");
+                verify(Math.abs(gr.pitch - mm.gap - mm.unit) <= (mm.unit + mm.gap) / 2 / gr.cols + 1,
+                       "columns near the unit at " + w + ": " + (gr.pitch - mm.gap));
+                // Fill every column: a Large island at each end, Icon islands between.
+                var big = L.colsFor(6, gr, mm), left = gr.cols - 2 * big;
+                var start = [{ id: "system", size: "large" }], end = [{ id: "status", size: "large" }];
+                var bar = { start: start, center: [], end: end, options: {} };
+                compare(L.colsFor(1, gr, mm), 1, "an Icon island is one column");
+                for (var i = 0; i < left; i++)
+                    start.push({ id: "notif", size: "icon" });
+                var f = L.fit(bar, w, mm);
+                compare(f.hiddenCount, 0);
+                compare(f.cols, gr.cols, "every column used at " + w);
+                var p = L.place(bar, f, w, mm);
+                var boxes = Object.keys(p).map(function (k) { return p[k]; }).sort(function (a, c) { return a.x - c.x; });
+                compare(boxes[0].x, 0);
+                compare(boxes[boxes.length - 1].x + boxes[boxes.length - 1].w, w, "meets the right end at " + w);
+                for (var j = 1; j < boxes.length; j++)
+                    compare(boxes[j].x - (boxes[j - 1].x + boxes[j - 1].w), mm.gap, "one gap between islands at " + w);
+            }
+    }
+
+    function test_separator_stands_in_the_gap() {
+        var b = sample();
+        var f = L.fit(b, 1900, m);
+        var p = L.place(b, f, 1900, m);
+        compare(p["end:1"].w, m.gap);
+        compare(p["end:1"].x, p["end:0"].x + p["end:0"].w, "right after notif");
+        compare(p["end:2"].x, p["end:1"].x + p["end:1"].w, "status right after it");
+        var edge = { start: [{ id: "separator" }, { id: "system" }], center: [], end: [], options: {} };
+        compare(L.place(edge, L.fit(edge, 900, m), 900, m)["start:0"].w, 0, "no gap to stand in at a zone's end");
+    }
+
+    function test_resize_snaps_to_columns() {
+        var mm = { unit: 36, gap: 16 }, gr = L.grid(1896, mm);
+        compare(L.sizeForWidth(L.unitWidth(14, gr, mm) + 4, gr, mm), { size: "custom", units: 14 });
+        compare(L.sizeForWidth(L.unitWidth(4, gr, mm), gr, mm), { size: "medium", units: null });
+    }
+
+    // With wide gaps (16px, as between windows), sizes keep about the width they were given:
+    // a 14-unit island about 14 × 36px, not 14 columns and their gaps.
+    function test_sizes_keep_their_width_on_a_coarse_grid() {
+        var mm = { unit: 36, gap: 16 };
+        var screens = [1280, 1920, 2560, 3840];
+        for (var s = 0; s < screens.length; s++) {
+            var gr = L.grid(screens[s] - 24, mm);
+            var units = [1, 2, 4, 6, 7, 10, 14, 24];
+            for (var i = 0; i < units.length; i++) {
+                var w = L.unitWidth(units[i], gr, mm);
+                verify(Math.abs(w - units[i] * mm.unit) <= gr.pitch / 2 + 1, units[i] + " units at " + screens[s] + ": " + w);
+            }
+        }
+        // Your bar at 1920 (system, work 14, clock and weather Large, tray 7, notif, status) fits whole.
+        var bar = { start: [{ id: "system" }, { id: "separator" }, { id: "work", size: "custom", units: 14 }],
+                    center: [{ id: "clock", size: "large" }, { id: "weather", size: "large" }],
+                    end: [{ id: "tray", size: "custom", units: 7 }, { id: "separator" }, { id: "notif", size: "icon" }, { id: "status" }],
+                    options: {} };
+        var f = L.fit(bar, 1896, mm);
+        compare(f.hiddenCount, 0);
+        compare(f.units["start:2"], 14, "nothing stepped down");
     }
 
     function test_drop_points_and_drop_edits() {

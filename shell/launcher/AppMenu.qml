@@ -34,7 +34,7 @@ PanelWindow {
     readonly property int columns: 4
     // Where the bar puts its islands when there's no anchor (IPC / keybind): Bar.qml's top margin
     // plus its island height.
-    readonly property int barBottom: Theme.gapOut + 36
+    readonly property int barBottom: WindowLook.gapTop + BarLayout.unit
 
     // --- state (all cleared by wipe()) ---
     property string query: ""
@@ -89,11 +89,11 @@ PanelWindow {
     function place() {
         var a = Surfaces.anchor;
         var sw = screen ? screen.width : 1280;
-        var x = Theme.gapOut, y = barBottom;
+        var x = WindowLook.edgeLeft, y = barBottom;
         if (a && typeof a.mapToItem === "function") {
             var p = a.mapToItem(null, 0, a.height);
-            x = Theme.gapOut + Math.round(p.x) - Theme.gapIn;
-            y = Theme.gapOut + Math.round(p.y);
+            x = WindowLook.edgeLeft + Math.round(p.x) - Theme.gapIn;
+            y = WindowLook.gapTop + Math.round(p.y);
         }
         placeX = Math.max(0, Math.min(x, sw - menuWidth));
         placeY = y + Theme.gapIn;

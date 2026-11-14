@@ -463,8 +463,9 @@ fn parse_active_address(reply: &str) -> Option<String> {
 
 /// The bridge's `WindowLook` call: how Hyprland draws windows right now, so the shell can draw
 /// shapes that match them (the screen-edge indicator's window frame). `{border, rounding,
-/// gaps_in, gaps_out: [top, right, bottom, left], active_border, inactive_border}`, the colours
-/// as `#AARRGGBB` (the first stop of a gradient). An option that can't be read is left out.
+/// gaps_in, gaps_out: [top, right, bottom, left], active_border, inactive_border, layout}`, the
+/// colours as `#AARRGGBB` (the first stop of a gradient), `layout` the default tiling layout
+/// (dwindle, master, scrolling…). An option that can't be read is left out.
 pub async fn window_look() -> Result<Value, String> {
     let hypr = HyprSocket::from_env();
     let mut out = serde_json::Map::new();
@@ -475,6 +476,7 @@ pub async fn window_look() -> Result<Value, String> {
         ("gaps_out", "general:gaps_out"),
         ("active_border", "general:col.active_border"),
         ("inactive_border", "general:col.inactive_border"),
+        ("layout", "general:layout"),
     ] {
         let Ok(reply) = hypr.request(&format!("j/getoption {opt}")).await else {
             continue;
@@ -490,7 +492,8 @@ pub async fn window_look() -> Result<Value, String> {
 }
 
 /// One `j/getoption` reply as `WindowLook` gives it: an int; a CSS box (`"4 4 4 4"`, one to four
-/// values as in CSS) as `[top, right, bottom, left]`; a gradient's first colour as `#AARRGGBB`.
+/// values as in CSS) as `[top, right, bottom, left]`; a short word (a layout name); a gradient's
+/// first colour as `#AARRGGBB`.
 fn parse_look_option(reply: &str) -> Option<Value> {
     let v: Value = serde_json::from_str(reply).ok()?;
     if let Some(n) = v.get("int").and_then(Value::as_i64) {
@@ -509,6 +512,15 @@ fn parse_look_option(reply: &str) -> Option<Value> {
             _ => return None,
         };
         return Some(Value::from(b.to_vec()));
+    }
+    if let Some(name) = v.get("str").and_then(Value::as_str) {
+        // A layout name: short and plain.
+        return (!name.is_empty()
+            && name.len() <= 32
+            && name
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-'))
+        .then(|| Value::from(name));
     }
     let g = v.get("gradient").and_then(Value::as_str)?;
     let first = g.split_whitespace().next()?;
@@ -841,6 +853,11 @@ mod tests {
             Some(json!("#ffd79921"))
         );
         assert_eq!(parse_look_option(r#"{"gradient": "red"}"#), None);
+        assert_eq!(
+            parse_look_option(r#"{"option": "general:layout", "str": "scrolling"}"#),
+            Some(json!("scrolling"))
+        );
+        assert_eq!(parse_look_option(r#"{"str": "a b"}"#), None);
         assert_eq!(parse_look_option(r#"{"css": "a b"}"#), None);
         assert_eq!(parse_look_option("not json"), None);
     }

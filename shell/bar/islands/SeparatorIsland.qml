@@ -2,7 +2,8 @@ import QtQuick
 import "../../core"
 
 // A thin rule between islands (`separator`); any number may be placed. Not an island itself:
-// no panel, just the theme's border colour at its border width, and no sizes.
+// no panel, just the theme's border colour at its border width, and no sizes. It takes no room
+// on the bar's grid: the bar puts it in the gap between its two neighbours (barlayout.js place).
 Item {
     id: root
     property string size: "small"

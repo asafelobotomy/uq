@@ -18,11 +18,19 @@ QtObject {
     property var gapsOut: [Theme.gapOut, Theme.gapOut, Theme.gapOut, Theme.gapOut]
     property color activeBorder: Theme.accent
     property color inactiveBorder: Theme.border
+    // Hyprland's default tiling layout (general:layout).
+    property string layout: ""
 
     readonly property int gapTop: gapsOut[0]
     readonly property int gapRight: gapsOut[1]
     readonly property int gapBottom: gapsOut[2]
     readonly property int gapLeft: gapsOut[3]
+    // The space Hyprland leaves between two windows side by side: each window's gaps_in.
+    readonly property int windowGap: gapsIn * 2
+    // How far window frames sit from the screen's left and right edges: gaps_out, plus the
+    // column's own gaps_in in the scrolling layout.
+    readonly property int edgeLeft: gapLeft + (layout === "scrolling" ? gapsIn : 0)
+    readonly property int edgeRight: gapRight + (layout === "scrolling" ? gapsIn : 0)
     // The outer corner radius of a window's frame: Hyprland rounds the border around the
     // window's own rounding.
     readonly property int frameRadius: rounding > 0 ? rounding + border : 0
@@ -42,6 +50,8 @@ QtObject {
             root.activeBorder = o.active_border;
         if (typeof o.inactive_border === "string" && /^#[0-9a-f]{8}$/.test(o.inactive_border))
             root.inactiveBorder = o.inactive_border;
+        if (typeof o.layout === "string")
+            root.layout = o.layout;
         root.known = true;
     }
 

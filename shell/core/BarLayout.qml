@@ -18,12 +18,11 @@ QtObject {
     property var activePopup: null
 
     // Sizes: the Icon size is a square island as tall as the bar; the other sizes are multiples
-    // of it (barlayout.js UNITS).
+    // of it (barlayout.js UNITS), laid on a grid of columns about this wide that spans each
+    // screen's bar exactly (barlayout.js grid). Islands are as far apart as windows are
+    // (WindowLook.windowGap), so the bar fits together with the windows below it.
     readonly property int unit: 36
-    readonly property var metrics: ({
-        unit: unit, gap: Theme.gapIn, zoneGap: Theme.gapOut,
-        sep: Theme.borderWidth + Theme.gapIn * 2
-    })
+    readonly property var metrics: ({ unit: unit, gap: WindowLook.windowGap })
 
     // --- edit mode ---
     // While on, islands can be dragged, resized and set up; their own clicks are off. Every

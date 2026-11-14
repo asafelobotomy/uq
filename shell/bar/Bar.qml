@@ -48,9 +48,12 @@ PanelWindow {
 
     WlrLayershell.namespace: "uq-bar"
     anchors { top: true; left: true; right: true }
-    margins { top: Theme.gapOut; left: Theme.gapOut; right: Theme.gapOut }
+    // Spaced as windows are (WindowLook): the bar's ends line up with the window frames below
+    // it, and as much space is left between the bar and the windows as between two windows.
+    // Hyprland adds the top margin to the reserved space itself, and gaps_out under it.
+    margins { top: WindowLook.gapTop; left: WindowLook.edgeLeft; right: WindowLook.edgeRight }
     implicitHeight: islandHeight
-    exclusiveZone: islandHeight + Theme.gapOut
+    exclusiveZone: islandHeight + Math.max(0, WindowLook.windowGap - WindowLook.gapTop)
     color: "transparent"
 
     // Stay awake (quick settings): blocks every idle stage while on. One per bar; any one held
@@ -282,10 +285,11 @@ PanelWindow {
                         }
                         onPositionChanged: function (m) {
                             var dx = mapToItem(null, m.x, 0).x - startX;
-                            bar.resizeW = Math.max(BarLayout.unit, Math.min(BarLayout.unit * L.MAX_CUSTOM, slot.width + dx));
+                            bar.resizeW = Math.max(L.unitWidth(1, bar.fitted.grid, bar.metrics),
+                                Math.min(L.unitWidth(L.MAX_CUSTOM, bar.fitted.grid, bar.metrics), slot.width + dx));
                         }
                         onReleased: {
-                            var s = L.sizeForWidth(bar.resizeW, BarLayout.unit);
+                            var s = L.sizeForWidth(bar.resizeW, bar.fitted.grid, bar.metrics);
                             bar.resizeKey = "";
                             BarLayout.selected = slot.key;
                             if (!L.sameSize(bar.zones[slot.zone][slot.index], s))
@@ -298,11 +302,11 @@ PanelWindow {
             // Resizing: the size it will snap to, drawn over the bar.
             Rectangle {
                 id: snapBox
-                readonly property var snap: L.sizeForWidth(bar.resizeW, BarLayout.unit)
+                readonly property var snap: L.sizeForWidth(bar.resizeW, bar.fitted.grid, bar.metrics)
                 visible: bar.resizeKey === slot.key
                 z: 20
                 x: 0
-                width: (snap.size === L.CUSTOM ? snap.units : L.UNITS[snap.size]) * BarLayout.unit
+                width: L.unitWidth(snap.size === L.CUSTOM ? snap.units : L.UNITS[snap.size], bar.fitted.grid, bar.metrics)
                 height: parent.height
                 radius: Theme.radius
                 color: "transparent"
