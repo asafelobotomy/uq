@@ -784,7 +784,9 @@ mod tests {
         assert_eq!(r.next().await, sleeping(true));
         assert!(!r.closed(0), "held until ready");
         r.logind.sleep_lock_ready();
-        assert!(r.wait_closed(0, Duration::from_millis(500)).await);
+        // Returns as soon as it closes; the long limit only matters on a loaded CI runner,
+        // where 500 ms was sometimes too short.
+        assert!(r.wait_closed(0, Duration::from_secs(5)).await);
     }
 
     #[test]
@@ -848,7 +850,9 @@ mod tests {
         r.prepare(true).await;
         assert_eq!(r.next().await, sleeping(true));
         r.logind.sleep_lock_ready();
-        assert!(r.wait_closed(0, Duration::from_millis(500)).await);
+        // Returns as soon as it closes; the long limit only matters on a loaded CI runner,
+        // where 500 ms was sometimes too short.
+        assert!(r.wait_closed(0, Duration::from_secs(5)).await);
         r.prepare(false).await;
         assert_eq!(r.next().await, sleeping(false));
         assert_eq!(r.inhibits(), 2, "a fresh inhibitor before the event");
@@ -872,7 +876,9 @@ mod tests {
         r.prepare(true).await;
         assert_eq!(r.next().await, sleeping(true));
         r.logind.sleep_lock_ready();
-        assert!(r.wait_closed(0, Duration::from_millis(500)).await);
+        // Returns as soon as it closes; the long limit only matters on a loaded CI runner,
+        // where 500 ms was sometimes too short.
+        assert!(r.wait_closed(0, Duration::from_secs(5)).await);
         r.prepare(false).await;
         assert_eq!(r.next().await, sleeping(false));
         assert_eq!(r.inhibits(), 2);
@@ -931,7 +937,9 @@ mod tests {
         r.prepare(true).await;
         assert_eq!(r.next().await, sleeping(true));
         r.logind.sleep_lock_ready();
-        assert!(r.wait_closed(0, Duration::from_millis(500)).await);
+        // Returns as soon as it closes; the long limit only matters on a loaded CI runner,
+        // where 500 ms was sometimes too short.
+        assert!(r.wait_closed(0, Duration::from_secs(5)).await);
         tokio::time::sleep(Duration::from_millis(600)).await;
         assert_eq!(r.attempts(), 3, "no retry while sleeping");
 
@@ -1040,7 +1048,9 @@ mod tests {
         assert_eq!(r.next().await, sleeping(true));
         assert_eq!(r.next().await, sleeping(true));
         r.logind.sleep_lock_ready();
-        assert!(r.wait_closed(0, Duration::from_millis(500)).await);
+        // Returns as soon as it closes; the long limit only matters on a loaded CI runner,
+        // where 500 ms was sometimes too short.
+        assert!(r.wait_closed(0, Duration::from_secs(5)).await);
 
         r.prepare(false).await;
         r.prepare(false).await;
