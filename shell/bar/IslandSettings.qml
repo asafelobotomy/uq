@@ -10,6 +10,7 @@ import "islands"
 
 // An island's settings, in edit mode (a left click on an island, or Enter on the selected one):
 // its size (Icon, Small, Medium, Large, or Custom: wider than Large, one Icon size at a time),
+// whether it fills the bar's empty space beside its zone ("Fill the rest"),
 // its text (font, bold / italic / all capitals, text size), what it shows (the clock's seconds and date, the
 // weather's city, the stock symbols, the news feeds, the world clock's time zones), moving it,
 // and removing it. Changes are saved at once (BarLayout). User text (symbols, addresses, city
@@ -177,6 +178,17 @@ IslandPopup {
                 enabled: pop.chosenUnits < L.MAX_CUSTOM
                 onActivated: pop.stepWidth(1)
             }
+        }
+        // Fill the rest: it grows into the empty space beside its zone (Open windows does unless
+        // turned off).
+        MenuRow {
+            visible: pop.island !== L.SEPARATOR
+            Layout.fillWidth: true
+            text: "Fill the rest"
+            detail: L.fillOf(pop.item) ? "✓" : ""
+            Accessible.checkable: true
+            Accessible.checked: L.fillOf(pop.item)
+            onActivated: if (pop.target) BarLayout.setFill(pop.target.zone, pop.target.index, !L.fillOf(pop.item))
         }
         QtObject {
             id: firstSize
@@ -369,7 +381,7 @@ IslandPopup {
 
         // --- open windows: their order ---
         ColumnLayout {
-            readonly property string mode: Work.SORTS.indexOf(pop.opts.sort) >= 0 ? pop.opts.sort : "opened"
+            readonly property string mode: Work.SORTS.indexOf(pop.opts.sort) >= 0 ? pop.opts.sort : Work.DEFAULT_SORT
             id: sortBox
             visible: pop.island === "work"
             spacing: 2

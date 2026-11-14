@@ -138,7 +138,9 @@ TestCase {
         compare(ids(Work.sortWindows(list, "name", true, ctx)), ["0x1", "0x3", "0x2"]);
         compare(ids(Work.sortWindows(list, "bogus", false, ctx)), ["0x2", "0x3", "0x1"], "unknown is opening order");
         verify(!Work.sortHasOrder("pin") && Work.sortHasOrder("usage"));
-        compare(Work.SORTS.length, 5);
+        compare(Work.SORTS.length, 6);
+        compare(Work.DEFAULT_SORT, "screen");
+        verify(!Work.sortHasOrder("screen"));
     }
 
     function test_notification_matches_app() {
@@ -181,6 +183,87 @@ TestCase {
                 if (f.mode === "scroll")
                     verify(f.shown * f.pillW + (f.shown - 1) * m.gap + 2 * (m.arrow + m.gap) + m.chip + m.gap <= w);
             }
+    }
+
+    function test_screen_order() {
+        var ids = function (l) { return l.map(function (w) { return w.address; }); };
+        var list = [
+            { address: "0x1", title: "", x: 900, y: 0 },
+            { address: "0x2", title: "", x: -500, y: 0 },
+            { address: "0x3", title: "", x: 900, y: -300 },
+            { address: "0x4", title: "", x: 2000, y: 0 }
+        ];
+        compare(ids(Work.sortWindows(list, "screen", false, {})), ["0x2", "0x3", "0x1", "0x4"],
+                "left to right, top to bottom in a column");
+        compare(ids(Work.sortWindows(list, "screen", true, {})), ["0x2", "0x3", "0x1", "0x4"], "one order");
+        // 0x3 is minimised: it keeps its place after 0x2, where it was last shown.
+        var mins = [
+            { address: "0x1", title: "", x: 900 },
+            { address: "0x2", title: "", x: -500 },
+            { address: "0x3", title: "", minimised: true },
+            { address: "0x4", title: "", x: 1500 },
+            { address: "0x5", title: "", minimised: true }
+        ];
+        compare(ids(Work.screenOrder(mins, ["0x2", "0x3", "0x1", "0x4"])), ["0x2", "0x3", "0x1", "0x4", "0x5"],
+                "minimised windows keep their slot; one never shown goes last");
+        compare(ids(Work.screenOrder(mins, ["0x3", "0x2"])), ["0x3", "0x2", "0x1", "0x4", "0x5"], "first stays first");
+        compare(ids(Work.screenOrder(mins, ["0x2", "0x3", "0x5", "0x1"])), ["0x2", "0x3", "0x5", "0x1", "0x4"],
+                "two minimised in a row stay in order");
+    }
+
+    readonly property var mt: ({ minPill: 28, maxPill: 180, gap: 2, arrow: 16, chip: 32, medium: 80 })
+
+    function test_strip_focused_tab_is_medium() {
+        var all = Work.strip(5, 206, mt, 2);
+        compare(all.mode, "pills");
+        compare(all.focusW, 80, "the focused tab grows to Medium");
+        compare(all.pillW, Math.floor((206 - 80 - 4 * 2) / 4), "the others share the rest");
+        var roomy = Work.strip(2, 400, mt, 0);
+        compare(roomy.focusW, roomy.pillW, "already Medium or wider: all even");
+        var tight = Work.strip(6, 6 * 28 + 5 * 2 + 20, mt, 0);
+        compare(tight.mode, "pills", "all icons still fit: the focused tab takes what is left");
+        compare(tight.pillW, 28);
+        compare(tight.focusW, 48);
+        var many = Work.strip(20, 300, mt, 7);
+        compare(many.mode, "scroll");
+        compare(many.focusW, 80);
+        verify(many.shown >= 2);
+        verify(many.focusW + (many.shown - 1) * (many.pillW + mt.gap) + 2 * (mt.arrow + mt.gap) + mt.chip + mt.gap <= 300);
+        verify(many.pillW >= mt.minPill);
+        compare(Work.strip(3, 20, mt, 0).mode, "compact");
+        for (var w = 20; w <= 400; w += 7)
+            for (var n = 1; n <= 12; n++)
+                for (var f = 0; f < n; f += 3) {
+                    var s = Work.strip(n, w, mt, f);
+                    if (s.mode === "pills")
+                        verify(s.focusW + (n - 1) * (s.pillW + mt.gap) <= w, n + " pills in " + w);
+                    if (s.mode === "scroll")
+                        verify(s.focusW + (s.shown - 1) * (s.pillW + mt.gap) + 2 * (mt.arrow + mt.gap) + mt.chip + mt.gap <= w);
+                }
+    }
+
+    function test_spans_screen() {
+        var mon = { width: 3840, scale: 2, reserved: [0, 60, 0, 0] };
+        verify(Work.spansScreen({ size: [1912, 1004] }, mon), "a Full column");
+        verify(!Work.spansScreen({ size: [932, 1004] }, mon), "a Half column");
+        verify(Work.spansScreen({ size: [1300, 1004] }, { width: 1920, scale: 1, reserved: [400, 0, 0, 0] }), "reserved space is left out");
+        verify(!Work.spansScreen({}, mon));
+        verify(!Work.spansScreen({ size: [1912, 10] }, null));
+    }
+
+    function test_tab_tier() {
+        var t = { small: 60, medium: 80, large: 130 };
+        compare(Work.tabTier(28, t), "icon");
+        compare(Work.tabTier(60, t), "small");
+        compare(Work.tabTier(100, t), "medium");
+        compare(Work.tabTier(130, t), "large");
+    }
+
+    function test_centre_offset() {
+        compare(Work.centreOffset(9, 3, 5), 4);
+        compare(Work.centreOffset(9, 3, 0), 0);
+        compare(Work.centreOffset(9, 3, 8), 6, "clamped");
+        compare(Work.centreOffset(9, 4, 5), 4);
     }
 
     function test_scroll_offset_keeps_focus_visible() {

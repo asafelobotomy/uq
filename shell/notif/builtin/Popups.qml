@@ -15,7 +15,7 @@ PanelWindow {
 
     readonly property int panelWidth: 380
     // Where the bar puts its islands: Bar.qml's top margin plus its island height.
-    readonly property int barBottom: Theme.gapOut + 36
+    readonly property int barBottom: WindowLook.gapTop + BarLayout.unit
 
     function screenFor(monitor) {
         if (!monitor)
@@ -40,7 +40,7 @@ PanelWindow {
     anchors.top: true
     anchors.right: true
     margins.top: barBottom + Theme.gapIn
-    margins.right: Theme.gapOut
+    margins.right: WindowLook.edgeRight
     implicitWidth: panelWidth
     implicitHeight: Math.max(1, column.implicitHeight)
     mask: Region { item: column }

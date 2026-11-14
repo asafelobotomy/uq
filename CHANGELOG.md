@@ -7,6 +7,33 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Full and Half windows.** In the scrolling layout, Open windows tabs have **Full** (the
+  screen's width) and **Half** buttons, as the tab's width allows: an Icon-size tab turns into a
+  close button under the pointer; Small shows Full or Half (whichever the window isn't) under the
+  pointer; Medium shows both; Large adds the title. The focused window's tab grows to Medium.
+  A window opened from a Full window gets a screen of its own right after it; one opened from a
+  Half window opens Half beside it; the last window left on a workspace becomes Full.
+- **Fill the rest.** An island can grow into the bar's empty space beside its zone (edit mode →
+  the island's settings → **Fill the rest**). Open windows does unless you turn it off; the
+  centre zone stays centred.
+
+### Changed
+
+- **Open windows follows the screen.** Tabs are in the order windows sit on screen (the new
+  default order, **Screen order**); a minimised window keeps its place, dimmed. Choosing a
+  window from **+N** centres the strip on it.
+- **The bar fits every screen exactly.** Islands sit on a grid that spans each screen's bar,
+  from a laptop to 4K, and keep about the width of their size. They are as far apart as windows
+  are, and the bar lines up with the windows below it, following Settings → Look. A separator
+  leaves a little more room between its neighbours.
+
+### Fixed
+
+- The screen-edge indicator's window frame matches real windows (their top, height, border,
+  rounding and colours) instead of sitting lower and shorter.
+
 ## [0.3.0-rc.3] - 2026-11-14
 
 ### Added

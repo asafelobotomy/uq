@@ -22,7 +22,7 @@ PanelWindow {
     property bool open: false
     default property alias body: inline.data
     // Where the bar puts its islands: Bar.qml's top margin plus its island height.
-    readonly property int barBottom: Theme.gapOut + 36
+    readonly property int barBottom: WindowLook.gapTop + BarLayout.unit
 
     function show(item, component, context) {
         anchorItem = item;
@@ -40,13 +40,13 @@ PanelWindow {
     }
 
     // Left edge under the island, kept on screen. The island's scene position is in its bar
-    // window, which sits at Bar.qml's left margin.
+    // window, which sits at Bar.qml's left margin (WindowLook.edgeLeft).
     function place() {
         if (!anchorItem)
             return;
         var p = anchorItem.mapToItem(null, 0, 0);
         var sw = screen ? screen.width : 1280;
-        var x = Theme.gapOut + Math.round(p.x);
+        var x = WindowLook.edgeLeft + Math.round(p.x);
         placeX = Math.max(Theme.gapOut, Math.min(x, sw - implicitWidth - Theme.gapOut));
     }
 

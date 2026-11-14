@@ -208,10 +208,19 @@ pub struct BarItem {
     /// Its text's look; `None` is the theme's. Not for separators.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub text: Option<TextStyle>,
+    /// It grows to fill the bar's empty space beside its zone; `None` is the island's default
+    /// ([`default_fill`]: only Open windows). Not for separators.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill: Option<bool>,
+}
+
+/// Whether an island fills the empty space beside its zone when its item doesn't say.
+pub fn default_fill(id: &str) -> bool {
+    id == "work"
 }
 
 impl BarItem {
-    pub const FIELDS: [&str; 4] = ["id", "size", "units", "text"];
+    pub const FIELDS: [&str; 5] = ["id", "size", "units", "text", "fill"];
 
     pub fn new(id: &str) -> Self {
         Self {
@@ -219,6 +228,7 @@ impl BarItem {
             size: None,
             units: None,
             text: None,
+            fill: None,
         }
     }
 
@@ -228,6 +238,18 @@ impl BarItem {
             Some(t) => t.check(),
             None => Ok(()),
         }
+    }
+
+    fn check_fill(&self) -> Result<(), String> {
+        match self.fill {
+            Some(_) if self.id == SEPARATOR => Err("a separator doesn't fill".into()),
+            _ => Ok(()),
+        }
+    }
+
+    /// Whether it fills the empty space beside its zone.
+    pub fn fills(&self) -> bool {
+        self.id != SEPARATOR && self.fill.unwrap_or_else(|| default_fill(&self.id))
     }
 
     /// The size it is drawn at, before the bar steps it down to fit.
@@ -262,7 +284,12 @@ impl BarItem {
             self.size = None;
             self.units = None;
             self.text = None;
+            self.fill = None;
             return;
+        }
+        // The island's own default is stored as "not set".
+        if self.fill == Some(default_fill(&self.id)) {
+            self.fill = None;
         }
         self.text = self
             .text
@@ -330,8 +357,11 @@ pub struct WorldClockOptions {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum WindowSort {
-    /// When each window opened (oldest first unless `descending`).
+    /// Where the windows sit on screen: left to right, as the scrolling layout's columns run.
+    /// Minimised windows keep their place. One order (`descending` is ignored).
     #[default]
+    Screen,
+    /// When each window opened (oldest first unless `descending`).
     Opened,
     /// The last notification from each window's app.
     Activity,
@@ -347,7 +377,8 @@ pub enum WindowSort {
 #[serde(default, deny_unknown_fields)]
 pub struct WorkOptions {
     pub sort: WindowSort,
-    /// Reverse the order (newest, most active, busiest or Z first). Ignored for `pin`.
+    /// Reverse the order (newest, most active, busiest or Z first). Ignored for `screen` and
+    /// `pin`.
     pub descending: bool,
 }
 
@@ -495,6 +526,7 @@ impl BarLayout {
             }
             item.check_units()
                 .and_then(|()| item.check_text())
+                .and_then(|()| item.check_fill())
                 .map_err(|e| invalid(KEY, format!("island {:?}: {e}", item.id)))?;
             if item.id != SEPARATOR {
                 if seen.contains(&item.id.as_str()) {
@@ -799,11 +831,13 @@ pub(super) fn lenient_bar<'de, D: serde::Deserializer<'de>>(
                         .and_then(Value::as_u64)
                         .map(|u| u.min(u64::from(MAX_CUSTOM)) as u32);
                     let text = v.get("text").and_then(lenient_text);
+                    let fill = v.get("fill").and_then(Value::as_bool);
                     Some(BarItem {
                         id,
                         size,
                         units,
                         text,
+                        fill,
                     })
                 })
                 .collect(),
@@ -1091,10 +1125,35 @@ mod tests {
             size: Some(Size::Icon),
             units: None,
             text: None,
+            fill: None,
         })
         .unwrap();
         assert_eq!(v, json!({"id": "news", "size": "icon"}));
         assert_eq!(island_name("system"), Some("App menu, workspaces and dock"));
+    }
+
+    #[test]
+    fn fill() {
+        let b = BarLayout::from_value(&json!({"start": [
+            {"id": "work"}, {"id": "clock", "fill": true}, {"id": "status", "fill": false}
+        ]}))
+        .unwrap();
+        assert!(b.start[0].fills(), "Open windows fills by default");
+        assert!(b.start[1].fills());
+        assert!(!b.start[2].fills());
+        let off =
+            BarLayout::from_value(&json!({"start": [{"id": "work", "fill": false}]})).unwrap();
+        assert!(!off.start[0].fills());
+        assert!(
+            BarLayout::from_value(&json!({"start": [{"id": "separator", "fill": true}]})).is_err(),
+            "a separator doesn't fill"
+        );
+        assert!(BarLayout::from_value(&json!({"start": [{"id": "work", "fill": "yes"}]})).is_err());
+        assert_eq!(
+            serde_json::to_value(BarItem::new("clock")).unwrap(),
+            json!({"id": "clock"}),
+            "not set is not written"
+        );
     }
 
     #[test]
@@ -1217,7 +1276,9 @@ mod tests {
         .unwrap();
         assert_eq!(b.options.work.sort, WindowSort::Usage);
         assert!(b.options.work.descending);
-        assert_eq!(BarOptions::default().work.sort, WindowSort::Opened);
+        assert_eq!(BarOptions::default().work.sort, WindowSort::Screen);
+        let s = BarLayout::from_value(&json!({"options": {"work": {"sort": "screen"}}})).unwrap();
+        assert_eq!(s.options.work.sort, WindowSort::Screen);
         for bad in [
             json!({"options": {"work": {"sort": "random"}}}),
             json!({"options": {"work": {"descending": "yes"}}}),

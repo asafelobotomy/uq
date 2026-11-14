@@ -27,7 +27,7 @@ PanelWindow {
     readonly property int panelWidth: 380
     readonly property int maxHeight: Math.round((screen ? screen.height : 1080) * 0.7)
     // Where the bar puts its islands: Bar.qml's top margin plus its island height.
-    readonly property int barBottom: Theme.gapOut + 36
+    readonly property int barBottom: WindowLook.gapTop + BarLayout.unit
 
     // The tab the user picked; `tab` is what shows (the first tab while the picked one is hidden).
     property string selectedTab: "sound"
@@ -72,11 +72,11 @@ PanelWindow {
     function place() {
         var a = Surfaces.anchor;
         var sw = screen ? screen.width : 1280;
-        var x = sw - panelWidth - Theme.gapOut, y = barBottom;
+        var x = sw - panelWidth - WindowLook.edgeRight, y = barBottom;
         if (a && typeof a.mapToItem === "function") {
             var p = a.mapToItem(null, a.width, a.height);
-            x = Theme.gapOut + Math.round(p.x) + Theme.gapIn - panelWidth;
-            y = Theme.gapOut + Math.round(p.y);
+            x = WindowLook.edgeLeft + Math.round(p.x) + Theme.gapIn - panelWidth;
+            y = WindowLook.gapTop + Math.round(p.y);
         }
         placeX = Math.max(0, Math.min(x, sw - panelWidth));
         placeY = y + Theme.gapIn;
