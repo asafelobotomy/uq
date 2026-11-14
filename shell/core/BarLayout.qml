@@ -131,8 +131,14 @@ QtObject {
         return at !== null ? add(id, at.zone, at.index) : add(id, "end");
     }
 
-    function setSize(zone, index, size) {
-        return save(L.setSize(layout, zone, index, size));
+    // `units` only for a Custom size (its width in Icon sizes).
+    function setSize(zone, index, size, units) {
+        return save(L.setSize(layout, zone, index, size, units));
+    }
+
+    // Change the text style of the island at zone/index (barlayout.js setText).
+    function setText(zone, index, t) {
+        return save(L.setText(layout, zone, index, t));
     }
 
     function setOptions(island, opts) {
@@ -144,7 +150,7 @@ QtObject {
         selected = "";
         return save({
             start: [{ id: "system" }, { id: "work" }], center: [],
-            end: [{ id: "clock" }, { id: "notif" }, { id: "status" }],
+            end: [{ id: "clock" }, { id: "notif" }, { id: "tray" }, { id: "status" }],
             options: layout.options
         });
     }

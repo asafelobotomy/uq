@@ -246,6 +246,20 @@ QQC2.ScrollView {
             Layout.leftMargin: Kirigami.Units.largeSpacing * 2
             Layout.fillWidth: true
         }
+        UqLabel {
+            text: "Windows"
+            font.bold: true
+            Layout.topMargin: Kirigami.Units.largeSpacing
+        }
+        SwitchRow {
+            settingId: "fit-windows"
+            label: "Keep windows on screen: move a window back inside, or shrink it, when part of it would be cut off"
+            highlight: App.highlight
+            enabled: page.ready
+            value: page.shell.fit_windows !== false
+            onChosen: v => page.setShell("fit_windows", v)
+            Layout.fillWidth: true
+        }
 
         SettingRow {
             settingId: "reset-bar"

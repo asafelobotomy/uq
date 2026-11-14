@@ -14,6 +14,7 @@ import "power"
 import "pick"
 import "wallpaper"
 import "edge"
+import "windows"
 import "desktop"
 
 ShellRoot {
@@ -72,6 +73,9 @@ ShellRoot {
 
     // The screen-edge tabs for the window or workspace beside this one (shell.edge_indicators).
     EdgeIndicators {}
+
+    // Floating windows kept inside their screen, never cut off (shell.fit_windows).
+    FitWindows {}
 
     // The full-screen "click a window" overlay for the rules editor's Pick a window.
     PickOverlay {}

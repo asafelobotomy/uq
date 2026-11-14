@@ -56,9 +56,9 @@ PanelWindow {
         var it = BarLayout.layout[c.zone][c.index];
         if (it.id === L.SEPARATOR)
             return;
-        var s = L.stepSize(L.sizeOf(it), dir);
+        var s = L.stepSize(L.sizeOf(it), dir, it.units);
         if (s !== null)
-            BarLayout.setSize(c.zone, c.index, s);
+            BarLayout.setSize(c.zone, c.index, s.size, s.units);
     }
     function addIsland() {
         var c = current();
@@ -131,7 +131,7 @@ PanelWindow {
                 spacing: Theme.gapOut
                 UqText {
                     text: "Editing the bar"
-                    font.bold: true
+                    baseBold: true
                 }
                 UqText {
                     text: "Drag an island to move it, drag its edge to resize it, click it for its settings."

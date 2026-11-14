@@ -7,8 +7,32 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0-rc.3] - 2026-11-14
+
 ### Added
 
+- **A Tray island for other apps' icons.** Other apps' tray icons (Steam, Discord, password
+  managers…) can have an island of their own, apart from uQ's Status island (network, sound,
+  battery, quick settings). It shows as many icons as fit its size and a **+N** button listing
+  the rest; clicks, menus, the wheel and tooltips work as before. While it is on the bar, Status
+  shows no tray icons. A new user's bar has it before Status; on your own bar, add **Tray icons
+  of other apps** from **Add an Island** (until then Status keeps showing them).
+- **Each island's text, your way.** In edit mode, an island's settings now have a **Text**
+  section: the **font** (the theme's, its monospaced font, or any installed font, found by
+  name), **formatting** (bold, italic, all capitals) and the **text size** (70% to 150% of the
+  theme's, in steps of 10%). **Use the theme's** puts it back. Only the island itself changes;
+  its popup keeps the theme's text.
+- **Keep windows on screen.** A floating window that opens bigger than its screen, or hanging
+  under the bar or off an edge, is shrunk and moved so all of it shows, on whichever screen it
+  is on (any size or scale). This also happens when it turns floating, moves to another
+  workspace, or screens are added or rearranged. A window you drag part-way off screen yourself
+  stays where you put it. On by default; Settings → Shell → Windows → **Keep windows on
+  screen**.
+- **Custom island size.** Drag an island's edge past Large and it becomes **Custom**, growing
+  one Icon size at a time (up to 24 wide); drag it back in to shrink it, step by step, back to
+  Large. + and − in edit mode and **Narrower**/**Wider** in the island's settings do the same.
+  A Custom island shows what it shows at Large, with more room, and still steps down to fit a
+  small screen.
 - **Edit the bar on the bar.** Right-click any island for the **uQ Island Menu**: **Edit
   Islands**, **Add an Island** and **Remove**. In edit mode (also Super+Alt+B, or **Edit the bar**
   in Settings → Shell) drag islands between the left, centre and right of the bar, drag an
@@ -82,6 +106,19 @@ All notable changes to uQ are listed here. The format follows
 
 ### Changed
 
+- **No second count beside noti-fi's bell.** With noti-fi, the Notifications island shows only
+  noti-fi's icon, which already carries the count, not a number beside it.
+- **Screen-edge indicators only point at windows out of view.** A window already wholly on
+  screen gets no indicator (click it where it is); one partly or wholly off screen, behind a
+  fullscreen window, or on another workspace still does.
+- **The screen-edge indicator looks like a window just off screen.** Reaching the edge brings in
+  the near edge of a window frame (at that window's own height when it is in this layout) in
+  place of the thin line, with the app tab beside it as before.
+- **Settings fits small windows.** In a narrow window the page list becomes a column of icons
+  (names in tooltips), a page's tabs move under its title and wrap, a setting's controls go under
+  its label when they don't fit beside it, and cards that span two columns stack instead of
+  overlapping. The login screen preview and the clock on Date and time shrink or wrap to fit.
+  Nothing is cut off at the smallest window size.
 - **Weather has its own island.** The city is chosen in edit mode (or from the Weather island's
   popup), and the clock's popup keeps the calendar. The old on/off switches for the five islands
   in Settings are replaced by edit mode on the bar, and the Windows island lists the windows it
@@ -115,6 +152,10 @@ All notable changes to uQ are listed here. The format follows
 
 ### Fixed
 
+- **Choosing a window in Open windows no longer moves the pointer.** The pointer stays where it
+  is; a window out of view (a scrolled-away column) is scrolled into view. The screen-edge
+  indicators no longer move the pointer for a moment either: Hyprland's pointer warp is now
+  switched off for the focus instead of the pointer being put back afterwards.
 - **The login screen no longer starts a keyring for itself.** greetd ran the greeter's own
   session (user `greeter`) through `/etc/pam.d/uq-greetd` too, so GNOME Keyring started a daemon
   for `greeter` that failed to create `/.local/share/keyrings` and logged "couldn't unlock the

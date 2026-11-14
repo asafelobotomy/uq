@@ -41,6 +41,8 @@ pub mod qobject {
         #[qproperty(QString, theme_json)]
         /// `--screenshots <dir>`: QML visits each page, saves it here, then quits.
         #[qproperty(QString, screenshot_dir)]
+        /// `--shot-size WxH` with `--screenshots`: the window size; "" for 1920x1080.
+        #[qproperty(QString, screenshot_size)]
         /// Welcome (Phase 5 spec §5.1) is on show in place of the pages: `--welcome`,
         /// `ShowPage("welcome", "")` or Settings → About → Show Welcome.
         #[qproperty(bool, welcome)]
@@ -97,6 +99,7 @@ pub struct AppRust {
     uqd_up: bool,
     pages_json: QString,
     screenshot_dir: QString,
+    screenshot_size: QString,
     theme_json: QString,
     welcome: bool,
     welcome_full: bool,
@@ -116,6 +119,7 @@ impl Default for AppRust {
             highlight: QString::default(),
             uqd_up: false,
             screenshot_dir: QString::default(),
+            screenshot_size: QString::default(),
             theme_json: QString::from(&read_tokens()),
             welcome: false,
             welcome_full: false,
@@ -179,6 +183,8 @@ pub enum Event {
     },
     UqdUp(bool),
     ScreenshotDir(String),
+    /// `--shot-size WxH`.
+    ScreenshotSize(String),
     /// The plugin pages to show changed (one was installed or removed, or the bus name it
     /// waits for came or went).
     Plugins(Vec<plugins::PluginPage>),
@@ -259,6 +265,7 @@ impl App {
             }
             Event::UqdUp(up) => self.set_uqd_up(up),
             Event::ScreenshotDir(dir) => self.set_screenshot_dir(QString::from(&dir)),
+            Event::ScreenshotSize(s) => self.set_screenshot_size(QString::from(&s)),
             Event::Plugins(pages) => self.set_plugins(&pages),
             Event::ThemeChanged => {
                 let tokens = read_tokens();
