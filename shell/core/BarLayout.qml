@@ -136,6 +136,11 @@ QtObject {
     }
 
     // Change the text style of the island at zone/index (barlayout.js setText).
+    // Turn "Fill the rest" on or off for the island at zone/index (barlayout.js fillOf).
+    function setFill(zone, index, on) {
+        return save(L.setFill(layout, zone, index, on));
+    }
+
     function setText(zone, index, t) {
         return save(L.setText(layout, zone, index, t));
     }

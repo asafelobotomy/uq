@@ -141,19 +141,21 @@ TestCase {
         compare(lay.start[0].units, L.MAX_CUSTOM);
         compare(lay.start[1], { id: "clock", size: "small" });
         compare(lay.start[2], { id: "separator", size: null });
-        // Drawn at its width while there is room; stepped down an Icon size at a time when the
-        // columns run out.
+        // Drawn at its width while there is room (not filling); stepped down an Icon size at a
+        // time when the cells run out.
+        c = L.setFill(c, "start", 1, false);
         var f = L.fit(c, 1900, m);
         compare(f.sizes["start:1"], "custom");
         compare(f.units["start:1"], 9);
         var pw = L.place(c, f, 1900, m)["start:1"].w;
         verify(Math.abs(pw - 9 * m.unit) <= f.grid.pitch / 2, "about nine Icon sizes wide: " + pw);
-        function cols(n) { return n * (m.unit + m.gap) - m.gap; }
+        // A bar exactly n cells wide.
+        function cols(n) { return n * (m.unit + m.gap) / L.CELLS - m.gap; }
         compare(L.fit(c, cols(f.cols), m).units["start:1"], 9, "exactly enough columns");
         var g = L.fit(c, cols(f.cols - 1), m);
         compare(g.sizes["start:1"], "custom");
         compare(g.units["start:1"], 8);
-        var h = L.fit(c, cols(f.cols - 3), m);
+        var h = L.fit(c, cols(f.cols - (L.colsFor(9, f.grid, m) - L.colsFor(6, f.grid, m))), m);
         compare(h.sizes["start:1"], "large");
     }
 
@@ -188,7 +190,7 @@ TestCase {
         for (var k in tiny.sizes)
             if (!tiny.hidden[k] && k !== "end:1")
                 compare(tiny.sizes[k], "icon", k);
-        verify(!tiny.hidden["end:1"], "a separator takes no columns, so it is never left out");
+        verify(tiny.hidden["end:1"], "the separator goes first");
         verify(!tiny.hidden["end:2"], "status stays longest");
     }
 
@@ -196,7 +198,7 @@ TestCase {
         var b = { start: [{ id: "system" }, { id: "work" }], center: [{ id: "clock" }], end: [], options: {} };
         var f = L.fit(b, 1400, m);
         var p = L.place(b, f, 1400, m);
-        var span = f.units["center:0"];
+        var span = L.colsFor(f.units["center:0"], f.grid, m);
         compare(p["center:0"].x, L.colX(Math.round((f.grid.cols - span) / 2), f.grid), "centred on the grid when there's room");
         verify(Math.abs(p["center:0"].x + p["center:0"].w / 2 - 700) <= f.grid.pitch, "about the middle");
         p = L.place(b, L.fit(b, 700, m), 700, m);
@@ -215,18 +217,14 @@ TestCase {
                 var w = screens[s] - 24;
                 var gr = L.grid(w, mm);
                 compare(L.spanWidth(gr.cols, gr, mm), w, "columns span " + w + " exactly");
-                verify(Math.abs(gr.pitch - mm.gap - mm.unit) <= (mm.unit + mm.gap) / 2 / gr.cols + 1,
-                       "columns near the unit at " + w + ": " + (gr.pitch - mm.gap));
-                // Fill every column: a Large island at each end, Icon islands between.
-                var big = L.colsFor(6, gr, mm), left = gr.cols - 2 * big;
-                var start = [{ id: "system", size: "large" }], end = [{ id: "status", size: "large" }];
-                var bar = { start: start, center: [], end: end, options: {} };
-                compare(L.colsFor(1, gr, mm), 1, "an Icon island is one column");
-                for (var i = 0; i < left; i++)
-                    start.push({ id: "notif", size: "icon" });
+                verify(Math.abs(gr.pitch * L.CELLS - mm.gap - mm.unit) <= 1, "an Icon step is CELLS cells at " + w);
+                compare(L.colsFor(1, gr, mm), L.CELLS, "an Icon island is CELLS cells");
+                verify(Math.abs(L.unitWidth(1, gr, mm) - mm.unit) <= 1, "and stays square at " + w);
+                // Open windows fills what Large islands at each end leave.
+                var bar = { start: [{ id: "system", size: "large" }, { id: "work" }], center: [],
+                            end: [{ id: "status", size: "large" }], options: {} };
                 var f = L.fit(bar, w, mm);
                 compare(f.hiddenCount, 0);
-                compare(f.cols, gr.cols, "every column used at " + w);
                 var p = L.place(bar, f, w, mm);
                 var boxes = Object.keys(p).map(function (k) { return p[k]; }).sort(function (a, c) { return a.x - c.x; });
                 compare(boxes[0].x, 0);
@@ -240,11 +238,43 @@ TestCase {
         var b = sample();
         var f = L.fit(b, 1900, m);
         var p = L.place(b, f, 1900, m);
-        compare(p["end:1"].w, m.gap);
         compare(p["end:1"].x, p["end:0"].x + p["end:0"].w, "right after notif");
         compare(p["end:2"].x, p["end:1"].x + p["end:1"].w, "status right after it");
+        verify(Math.abs(p["end:1"].w - (f.grid.pitch + m.gap)) <= 1, "a cell and two gaps between them: " + p["end:1"].w);
         var edge = { start: [{ id: "separator" }, { id: "system" }], center: [], end: [], options: {} };
         compare(L.place(edge, L.fit(edge, 900, m), 900, m)["start:0"].w, 0, "no gap to stand in at a zone's end");
+    }
+
+    // Empty space beside a zone goes to the islands there that fill; the centre stays centred.
+    function test_fill() {
+        var mm = { unit: 36, gap: 16 }, W = 1896;
+        var b = { start: [{ id: "system" }, { id: "work" }], center: [{ id: "clock", size: "large" }],
+                  end: [{ id: "status" }], options: {} };
+        compare(L.fillOf(b.start[1]), true, "Open windows fills by default");
+        compare(L.fillOf(b.start[0]), false);
+        var f = L.fit(b, W, mm), p = L.place(b, f, W, mm);
+        compare(p["start:1"].x + p["start:1"].w + mm.gap, p["center:0"].x, "work reaches the clock");
+        verify(Math.abs(p["center:0"].x + p["center:0"].w / 2 - W / 2) <= f.grid.pitch, "clock still centred");
+        verify(p["end:0"].x > p["center:0"].x + p["center:0"].w + mm.gap, "the right side stays empty");
+        // The right zone's filler takes its side.
+        var b2 = L.setFill(b, "end", 0, true);
+        compare(b2.end[0].fill, true);
+        var p2 = L.place(b2, L.fit(b2, W, mm), W, mm);
+        compare(p2["center:0"].x + p2["center:0"].w + mm.gap, p2["end:0"].x, "status reaches the clock");
+        compare(p2["end:0"].x + p2["end:0"].w, W);
+        // A centre filler takes both sides when nobody else does.
+        var b3 = L.setFill(L.setFill(b, "start", 1, false), "center", 0, true);
+        compare(b3.start[1].fill, false, "turning the default off is stored");
+        compare(L.setFill(b3, "start", 1, true).start[1].fill, undefined, "the default is not stored");
+        var p3 = L.place(b3, L.fit(b3, W, mm), W, mm);
+        compare(p3["center:0"].x, p3["start:1"].x + p3["start:1"].w + mm.gap);
+        compare(p3["center:0"].x + p3["center:0"].w + mm.gap, p3["end:0"].x);
+        // No centre zone: the left filler takes the one gap.
+        var b4 = { start: [{ id: "work" }], center: [], end: [{ id: "clock" }], options: {} };
+        var p4 = L.place(b4, L.fit(b4, W, mm), W, mm);
+        compare(p4["start:0"].x + p4["start:0"].w + mm.gap, p4["end:0"].x);
+        compare(L.setFill(b, "start", 9, true), null);
+        compare(L.toSetting(b2).end[0], { id: "status", fill: true }, "stored for uqd");
     }
 
     function test_resize_snaps_to_columns() {

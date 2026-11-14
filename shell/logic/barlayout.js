@@ -150,11 +150,44 @@ function stepTextSize(size, dir) {
     return n < TEXT_MIN || n > TEXT_MAX ? null : n;
 }
 
-// Copy of `item` with `extra` fields (only `text` when it is not the theme's look).
+// Copy of `item`'s own settings onto `out`: `text` when it is not the theme's look, and `fill`
+// when it is not the island's default (see fillOf).
 function _withText(item, out) {
     var t = _storedText(textOf(item));
     if (t !== null && item.id !== SEPARATOR)
         out.text = t;
+    if (item.id !== SEPARATOR && typeof item.fill === "boolean" && item.fill !== defaultFill(item.id))
+        out.fill = item.fill;
+    return out;
+}
+
+// Whether an island fills the bar's empty space beside its zone when its item doesn't say:
+// only Open windows (same as uq_core::settings::bar::default_fill).
+function defaultFill(id) {
+    return id === "work";
+}
+
+// Whether `item` fills the empty space beside its zone (place()).
+function fillOf(item) {
+    if (!item || item.id === SEPARATOR)
+        return false;
+    return typeof item.fill === "boolean" ? item.fill : defaultFill(item.id);
+}
+
+// Turn filling on or off for the item at zone/index. Null for a separator or a place that
+// doesn't exist.
+function setFill(bar, zone, index, on) {
+    if (ZONES.indexOf(zone) < 0 || index < 0 || index >= bar[zone].length
+            || bar[zone][index].id === SEPARATOR)
+        return null;
+    var out = _copy(bar);
+    var old = out[zone][index], next = {};
+    for (var k in old)
+        if (k !== "fill")
+            next[k] = old[k];
+    if (on !== defaultFill(old.id))
+        next.fill = on === true;
+    out[zone][index] = next;
     return out;
 }
 
@@ -421,18 +454,20 @@ function withOptions(bar, island, opts) {
 
 // --- fitting a screen ---
 //
-// The bar is a grid of equal columns that spans its width exactly, whatever the screen: each
-// column about `m.unit` wide (the bar's height, so an Icon island stays square), with `m.gap`
-// between columns. An island of N units (N Icon sizes, N × m.unit) takes the whole number of
-// columns, gaps between them included, nearest that width (colsFor), so it keeps about the width
-// it was given while islands meet the bar's ends and each other on the grid, and any space left
-// over is whole columns. A wider screen gets more columns, not wider ones. A separator takes no
-// columns: it is drawn in the gap between its neighbours. metrics: {unit, gap}.
+// The bar is a grid of equal cells that spans its width exactly, whatever the screen: CELLS
+// cells to an Icon island and the gap after it (m.unit + m.gap), so an Icon island is exactly
+// CELLS cells and stays square. An island of N units (N Icon sizes, N × m.unit) takes the whole
+// number of cells nearest that width (colsFor), gaps inside it included, so every size is drawn
+// within half a cell of its width while islands meet the bar's ends and each other on the grid.
+// A wider screen gets more cells, not wider ones. A separator takes one cell, with a gap on each
+// side. Empty space beside a zone goes to the islands there that fill (fillOf), or stays as whole
+// cells. metrics: {unit, gap}.
+var CELLS = 4;
 
-// The grid on a bar `width` wide: {cols, pitch} where pitch is a column plus one gap.
+// The grid on a bar `width` wide: {cols, pitch} where pitch is a cell's step (cols cells).
 function grid(width, m) {
     var g = m.gap || 0;
-    var cols = Math.max(1, Math.round((width + g) / (m.unit + g)));
+    var cols = Math.max(CELLS, Math.round((width + g) * CELLS / (m.unit + g)));
     return { cols: cols, pitch: (width + g) / cols };
 }
 
@@ -459,7 +494,7 @@ function unitWidth(units, gr, m) {
 }
 
 function _colsOf(id, units, gr, m) {
-    return id === SEPARATOR ? 0 : colsFor(units, gr, m);
+    return id === SEPARATOR ? 1 : colsFor(units, gr, m);
 }
 
 function _rank(id) {
@@ -508,8 +543,7 @@ function fit(bar, width, m) {
         }
         var drop = null;
         for (var b = items.length - 1; b >= 0; b--) {
-            // A separator takes no columns, so leaving one out frees nothing.
-            if (items[b].hidden || items[b].id === SEPARATOR)
+            if (items[b].hidden)
                 continue;
             if (drop === null || _rank(items[b].id) < _rank(drop.id))
                 drop = items[b];
@@ -532,43 +566,80 @@ function fit(bar, width, m) {
 }
 
 // Where each shown island goes: {key: {x, w, size, units}}, on the grid (see above). The left
-// zone from the first column, the right zone ending at the last, the centre zone centred unless
-// that would run into a neighbour, in which case it moves just enough. A separator stands in the
-// gap before the island after it (w is the gap); at a zone's end, or next to another separator,
-// it has no gap of its own and is given no width. With a fitted layout nothing overlaps.
+// zone from the first cell, the right zone ending at the last, the centre zone centred unless
+// that would run into a neighbour, in which case it moves just enough. Then the empty cells on
+// each side of the centre zone go to the islands that fill (fillOf): those between the left
+// zone and the centre to the left zone's, else the centre's; those between the centre and the
+// right zone to the right zone's, else the centre's (with no centre zone, the one gap goes to
+// the left zone's, else the right's). Fillers share their side evenly, the first ones getting
+// any odd cell. A separator stands between its neighbours: its slot runs from one island's end
+// to the next one's start, and it has no width at a zone's end or next to another separator.
+// With a fitted layout nothing overlaps.
 function place(bar, fitted, width, m) {
     var out = {}, gr = fitted.grid || grid(width, m), g = m.gap || 0;
     function row(zone) {
-        var list = bar[zone], cells = [], col = 0;
+        var list = bar[zone], cells = [];
         for (var i = 0; i < list.length; i++) {
             var k = key(zone, i);
             if (fitted.hidden[k])
                 continue;
             var u = fitted.units && fitted.units[k] !== undefined ? fitted.units[k] : UNITS[fitted.sizes[k]];
-            var span = _colsOf(list[i].id, u, gr, m);
-            cells.push({ k: k, col: col, span: span, sep: list[i].id === SEPARATOR, size: fitted.sizes[k], units: u });
-            col += span;
+            cells.push({ k: k, span: _colsOf(list[i].id, u, gr, m), sep: list[i].id === SEPARATOR,
+                         fill: fillOf(list[i]), size: fitted.sizes[k], units: u });
         }
-        return { cells: cells, span: col };
+        return cells;
+    }
+    function spanOf(cells) {
+        var n = 0;
+        for (var i = 0; i < cells.length; i++)
+            n += cells[i].span;
+        return n;
+    }
+    function fillers(cells) {
+        return cells.filter(function (c) { return c.fill; });
+    }
+    // Share `n` cells among `who`.
+    function share(who, n) {
+        for (var i = 0; i < who.length; i++)
+            who[i].span += Math.floor(n / who.length) + (i < n % who.length ? 1 : 0);
     }
     var s = row("start"), c = row("center"), e = row("end");
-    var lo = s.span, hi = gr.cols - e.span - c.span;
-    var cc = Math.max(lo, Math.min(Math.round((gr.cols - c.span) / 2), hi));
-    var parts = [[s, 0], [c, cc], [e, gr.cols - e.span]];
+    var ss = spanOf(s), cs = spanOf(c), es = spanOf(e);
+    var lo = ss, hi = gr.cols - es - cs;
+    var cc = Math.max(lo, Math.min(Math.round((gr.cols - cs) / 2), hi));
+    var fs = fillers(s), fc = fillers(c), fe = fillers(e);
+    if (c.length === 0) {
+        var gap = gr.cols - ss - es;
+        share(fs.length > 0 ? fs : fe, gap);
+    } else {
+        var left = cc - ss, right = gr.cols - es - cc - cs;
+        if (fs.length > 0)
+            share(fs, left);
+        else if (fc.length > 0) {
+            share(fc, left);
+            cc -= left;
+        }
+        if (fe.length > 0)
+            share(fe, right);
+        else if (fc.length > 0)
+            share(fc, right);
+    }
+    var parts = [[s, 0], [c, cc], [e, gr.cols - spanOf(e)]];
     for (var p = 0; p < parts.length; p++) {
-        var cells = parts[p][0].cells, start = parts[p][1];
+        var cells = parts[p][0], at = parts[p][1];
         for (var j = 0; j < cells.length; j++) {
-            var it = cells[j], at = start + it.col;
+            var it = cells[j];
             if (!it.sep) {
-                // From its first column to its last, so rounding never opens or closes a gap.
+                // From its first cell to its last, so rounding never opens or closes a gap.
                 var x0 = colX(at, gr);
                 out[it.k] = { x: x0, w: colX(at + it.span, gr) - g - x0, size: it.size, units: it.units };
-                continue;
+            } else {
+                var between = j > 0 && j < cells.length - 1 && !cells[j - 1].sep && !cells[j + 1].sep;
+                var sx = colX(at, gr) - g;
+                out[it.k] = between ? { x: sx, w: colX(at + it.span, gr) - sx, size: it.size, units: it.units }
+                                    : { x: Math.max(0, Math.min(colX(at, gr), width)), w: 0, size: it.size, units: it.units };
             }
-            var between = j > 0 && j < cells.length - 1 && !cells[j - 1].sep && !cells[j + 1].sep;
-            var x = colX(at, gr) - g;
-            out[it.k] = { x: between ? x : Math.max(0, Math.min(x, width)), w: between ? g : 0,
-                          size: it.size, units: it.units };
+            at += it.span;
         }
     }
     return out;
