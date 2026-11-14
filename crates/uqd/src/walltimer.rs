@@ -32,10 +32,7 @@ impl WallTimer {
     pub fn new() -> std::io::Result<WallTimer> {
         // SAFETY: plain syscall; the result is checked before it is used as a descriptor.
         let raw = unsafe {
-            libc::timerfd_create(
-                libc::CLOCK_REALTIME,
-                libc::TFD_NONBLOCK | libc::TFD_CLOEXEC,
-            )
+            libc::timerfd_create(libc::CLOCK_REALTIME, libc::TFD_NONBLOCK | libc::TFD_CLOEXEC)
         };
         if raw < 0 {
             return Err(std::io::Error::last_os_error());

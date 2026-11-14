@@ -102,9 +102,21 @@ pub fn decode_line(line: &[u8]) -> Result<Inbound, FrameError> {
 #[derive(Serialize)]
 #[serde(untagged)]
 enum Wire<'a> {
-    Ok { id: u64, ok: &'a Value, v: u64 },
-    Err { err: &'a str, id: u64, v: u64 },
-    Event { data: &'a Value, event: &'a str, v: u64 },
+    Ok {
+        id: u64,
+        ok: &'a Value,
+        v: u64,
+    },
+    Err {
+        err: &'a str,
+        id: u64,
+        v: u64,
+    },
+    Event {
+        data: &'a Value,
+        event: &'a str,
+        v: u64,
+    },
 }
 
 pub fn encode(msg: &Outbound) -> Vec<u8> {
@@ -225,15 +237,24 @@ mod tests {
         let data = json!({"b": [1, 2.5, "x\n"], "a": {"z": null, "y": true}});
         let cases = [
             (
-                Outbound::Ok { id: 3, ok: data.clone() },
+                Outbound::Ok {
+                    id: 3,
+                    ok: data.clone(),
+                },
                 json!({"v": VERSION, "id": 3, "ok": data}),
             ),
             (
-                Outbound::Err { id: 4, err: "bad \"thing\"".into() },
+                Outbound::Err {
+                    id: 4,
+                    err: "bad \"thing\"".into(),
+                },
                 json!({"v": VERSION, "id": 4, "err": "bad \"thing\""}),
             ),
             (
-                Outbound::Event { event: "Hello".into(), data: data.clone() },
+                Outbound::Event {
+                    event: "Hello".into(),
+                    data: data.clone(),
+                },
                 json!({"v": VERSION, "event": "Hello", "data": data}),
             ),
         ];

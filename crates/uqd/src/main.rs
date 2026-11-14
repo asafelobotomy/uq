@@ -2,10 +2,10 @@
 
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
-use tokio::sync::{broadcast, mpsc};
-use uq_core::integration::watch::{DEBOUNCE, watch_dirs, watch_dirs_flat};
 use tokio::signal::unix::{SignalKind, signal};
+use tokio::sync::{broadcast, mpsc};
 use tracing_subscriber::EnvFilter;
+use uq_core::integration::watch::{DEBOUNCE, watch_dirs, watch_dirs_flat};
 use uq_core::paths::Paths;
 use uqd::autostart::AutostartConfig;
 use uqd::compositor::{HyprSocket, Hyprland};
@@ -13,8 +13,8 @@ use uqd::dbus::serve_with;
 use uqd::hypr_events;
 use uqd::notify::SessionNotifier;
 use uqd::power::SystemPowerProfiles;
-use uqd::service::{Desktop, desktop_file_installed, xdg_data_dirs};
 use uqd::service::Event;
+use uqd::service::{Desktop, desktop_file_installed, xdg_data_dirs};
 use uqd::system::GSettings;
 use uqd::walltimer::{Wake, WallTimer};
 use uqd::xrandr::SystemXrandr;
@@ -41,10 +41,7 @@ async fn changed(rx: &mut Option<mpsc::Receiver<()>>) {
 }
 
 /// The wall clock reaching `at` (or being set); never without a timer.
-async fn wait_wall(
-    wall: &mut Option<WallTimer>,
-    at: Option<SystemTime>,
-) -> std::io::Result<Wake> {
+async fn wait_wall(wall: &mut Option<WallTimer>, at: Option<SystemTime>) -> std::io::Result<Wake> {
     match wall {
         Some(t) => t.wait(at).await,
         None => std::future::pending().await,

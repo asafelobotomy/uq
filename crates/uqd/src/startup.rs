@@ -223,8 +223,12 @@ impl Desktop {
         let f = &self.files;
         f.env_file.is_some()
             || f.autostart.is_some()
-            || f.browsers.iter().any(|(_, b)| matches!(b, BrowserFile::Error(_)))
-            || f.overrides.values().any(|o| matches!(o, OverrideState::Error(_)))
+            || f.browsers
+                .iter()
+                .any(|(_, b)| matches!(b, BrowserFile::Error(_)))
+            || f.overrides
+                .values()
+                .any(|o| matches!(o, OverrideState::Error(_)))
     }
 
     /// The folders whose changes `refresh_files` and `refresh_themes` follow, as

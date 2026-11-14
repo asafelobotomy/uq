@@ -148,10 +148,7 @@ impl AsyncWrite for ThreadStdout {
         Poll::Ready(Ok(()))
     }
 
-    fn poll_shutdown(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<std::io::Result<()>> {
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         ready!(self.as_mut().poll_flush(cx))?;
         self.tx.close();
         // Ok or Err (thread gone): either way it has stopped writing.
@@ -185,12 +182,17 @@ mod tests {
         let sink = Sink::default();
         let mut out = ThreadStdout::spawn_to(sink.clone()).unwrap();
         for i in 0..100 {
-            out.write_all(format!("line {i}\n").as_bytes()).await.unwrap();
+            out.write_all(format!("line {i}\n").as_bytes())
+                .await
+                .unwrap();
             out.flush().await.unwrap();
         }
         out.shutdown().await.unwrap();
         let want: String = (0..100).map(|i| format!("line {i}\n")).collect();
-        assert_eq!(String::from_utf8(sink.0.lock().unwrap().clone()).unwrap(), want);
+        assert_eq!(
+            String::from_utf8(sink.0.lock().unwrap().clone()).unwrap(),
+            want
+        );
         assert_eq!(*sink.1.lock().unwrap(), 100, "one flush per line");
     }
 

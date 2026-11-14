@@ -263,7 +263,11 @@ async fn the_page_reads_again_when_the_graph_changes() {
         let changed = changed.clone();
         tokio::spawn(async move { page.watch(changed).await })
     };
-    for line in ["[", r#"  {"id": 5, "type": "PipeWire:Interface:Node", "info": {}}"#, "]"] {
+    for line in [
+        "[",
+        r#"  {"id": 5, "type": "PipeWire:Interface:Node", "info": {}}"#,
+        "]",
+    ] {
         tx.send(line.to_string()).unwrap();
     }
     tokio::time::timeout(std::time::Duration::from_secs(5), changed.notified())
@@ -286,20 +290,33 @@ fn monitor_updates_that_concern_the_page() {
     let node = "[\n  {\n    \"id\": 40,\n    \"type\": \"PipeWire:Interface:Node\",\n    \"info\": {}\n  }\n]";
     let hits = feed(node);
     assert_eq!(hits.last(), Some(&true), "a node change counts");
-    assert!(hits[..hits.len() - 1].iter().all(|h| !h), "only once the update is whole");
+    assert!(
+        hits[..hits.len() - 1].iter().all(|h| !h),
+        "only once the update is whole"
+    );
 
     // Our own pw-dump (or wpctl) coming and going: a client, then its removal.
     assert_eq!(
         feed("[\n  {\"id\": 84, \"type\": \"PipeWire:Interface:Client\", \"info\": {}}\n]").last(),
         Some(&false)
     );
-    assert_eq!(feed("[\n  {\"id\": 84, \"info\": null}\n]").last(), Some(&false));
+    assert_eq!(
+        feed("[\n  {\"id\": 84, \"info\": null}\n]").last(),
+        Some(&false)
+    );
 
     // A shown object's removal counts once; metadata (no `info` at all) counts too.
-    assert_eq!(feed("[\n  {\"id\": 40, \"info\": null}\n]").last(), Some(&true));
-    assert_eq!(feed("[\n  {\"id\": 40, \"info\": null}\n]").last(), Some(&false));
     assert_eq!(
-        feed("[\n  {\"id\": 7, \"type\": \"PipeWire:Interface:Metadata\", \"metadata\": []}\n]").last(),
+        feed("[\n  {\"id\": 40, \"info\": null}\n]").last(),
+        Some(&true)
+    );
+    assert_eq!(
+        feed("[\n  {\"id\": 40, \"info\": null}\n]").last(),
+        Some(&false)
+    );
+    assert_eq!(
+        feed("[\n  {\"id\": 7, \"type\": \"PipeWire:Interface:Metadata\", \"metadata\": []}\n]")
+            .last(),
         Some(&true)
     );
 

@@ -196,9 +196,15 @@ mod tests {
         let debounce = Duration::from_millis(150);
         let mut rx = watch_dirs_flat(vec![d.path().to_path_buf()], debounce).unwrap();
         std::fs::write(d.path().join("app/state"), "x").unwrap();
-        assert!(!changed(&mut rx, Duration::from_millis(500)).await, "inside a sub-folder");
+        assert!(
+            !changed(&mut rx, Duration::from_millis(500)).await,
+            "inside a sub-folder"
+        );
         std::fs::write(d.path().join("x-flags.conf"), "x").unwrap();
-        assert!(changed(&mut rx, Duration::from_secs(3)).await, "its own entry");
+        assert!(
+            changed(&mut rx, Duration::from_secs(3)).await,
+            "its own entry"
+        );
         assert_eq!(
             watch_paths_with(&[d.path().to_path_buf()], false),
             [d.path().to_path_buf()]

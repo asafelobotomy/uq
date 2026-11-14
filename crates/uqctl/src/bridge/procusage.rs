@@ -130,7 +130,10 @@ mod tests {
     /// so nothing allocates between the two reads).
     #[test]
     fn statm_matches_vmrss() {
-        let mut child = std::process::Command::new("sleep").arg("5").spawn().unwrap();
+        let mut child = std::process::Command::new("sleep")
+            .arg("5")
+            .spawn()
+            .unwrap();
         std::thread::sleep(std::time::Duration::from_millis(100));
         let pid = child.id();
         let status = std::fs::read_to_string(format!("/proc/{pid}/status")).unwrap();

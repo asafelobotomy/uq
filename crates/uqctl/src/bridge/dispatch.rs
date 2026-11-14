@@ -408,7 +408,11 @@ end
             "  local ok, w = pcall(hl.get_active_window)\n  \
              local fs = ok and w and tonumber(w.fullscreen) or 0\n",
         );
-        for (cond, fs) in [("if fs == 1 then", 1), ("elseif fs == 2 then", 2), ("else", 0)] {
+        for (cond, fs) in [
+            ("if fs == 1 then", 1),
+            ("elseif fs == 2 then", 2),
+            ("else", 0),
+        ] {
             s.push_str(&format!("  {cond}\n"));
             for stmt in column_lua(address, *full, fs) {
                 s.push_str("  ");
@@ -500,24 +504,27 @@ async fn window_look_from(hypr: &HyprSocket) -> Result<Value, String> {
         .map(|(_, opt)| format!("j/getoption {opt}"))
         .collect();
     let batched = hypr.request(&format!("[[BATCH]]{}", batch.join(";"))).await;
-    let replies: Vec<Option<String>> =
-        match batched.as_deref().ok().and_then(|r| split_batch(r, batch.len())) {
-            Some(parts) => parts.into_iter().map(|p| Some(p.to_string())).collect(),
-            None if matches!(
-                batched,
-                Err(CompositorError::NotRunning | CompositorError::Timeout(_))
-            ) =>
-            {
-                return Err("Hyprland is not running".into());
+    let replies: Vec<Option<String>> = match batched
+        .as_deref()
+        .ok()
+        .and_then(|r| split_batch(r, batch.len()))
+    {
+        Some(parts) => parts.into_iter().map(|p| Some(p.to_string())).collect(),
+        None if matches!(
+            batched,
+            Err(CompositorError::NotRunning | CompositorError::Timeout(_))
+        ) =>
+        {
+            return Err("Hyprland is not running".into());
+        }
+        None => {
+            let mut one_by_one = Vec::with_capacity(batch.len());
+            for req in &batch {
+                one_by_one.push(hypr.request(req).await.ok());
             }
-            None => {
-                let mut one_by_one = Vec::with_capacity(batch.len());
-                for req in &batch {
-                    one_by_one.push(hypr.request(req).await.ok());
-                }
-                one_by_one
-            }
-        };
+            one_by_one
+        }
+    };
     let mut out = serde_json::Map::new();
     for ((key, _), reply) in LOOK_OPTIONS.iter().zip(replies) {
         if let Some(v) = reply.as_deref().and_then(parse_look_option) {
@@ -843,7 +850,8 @@ mod tests {
         assert!(!s.contains("hl.get_config"), "no pointer keeping");
         assert!(!s.contains("get_cursor_pos"));
         // Steps keep their order.
-        let s = script(&Action::from_call("minimise", &json!({"address": A, "from_ws": 4})).unwrap());
+        let s =
+            script(&Action::from_call("minimise", &json!({"address": A, "from_ws": 4})).unwrap());
         assert!(s.find("uq_ws_4").unwrap() < s.find("special:minimized").unwrap());
         // keep_pointer: no_warps switched on, and back after the steps whatever they did.
         let s = script(
@@ -874,10 +882,16 @@ mod tests {
         let step = CompositorError::Rejected(
             "error: uq-step:warning: =[C]:-1: hl.focus: window not found".into(),
         );
-        assert_eq!(script_err(step), "warning: =[C]:-1: hl.focus: window not found");
+        assert_eq!(
+            script_err(step),
+            "warning: =[C]:-1: hl.focus: window not found"
+        );
         let lua = CompositorError::Rejected("error: [string \"x\"]:1: boom".into());
         assert_eq!(script_err(lua), "error: [string \"x\"]:1: boom");
-        assert_eq!(script_err(CompositorError::NotRunning), "Hyprland is not running");
+        assert_eq!(
+            script_err(CompositorError::NotRunning),
+            "Hyprland is not running"
+        );
     }
 
     /// Against the live compositor, on a window that doesn't exist (nothing real is touched):

@@ -361,7 +361,10 @@ async fn a_watched_property_change_counts_only_for_the_named_properties() {
     emit("State", false).await;
     assert!(changed(&mut w, 3000).await, "the named property changed");
     emit("State", true).await;
-    assert!(changed(&mut w, 3000).await, "the named property was invalidated");
+    assert!(
+        changed(&mut w, 3000).await,
+        "the named property was invalidated"
+    );
 }
 
 async fn changed(w: &mut uq_core::integration::command_watch::Watch, within_ms: u64) -> bool {
