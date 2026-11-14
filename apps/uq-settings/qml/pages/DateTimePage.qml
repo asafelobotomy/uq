@@ -108,8 +108,10 @@ SettingsPage {
                     font.weight: Font.Light
                     Accessible.name: "The time is " + Qt.formatTime(page.now, page.clock24 ? "HH:mm" : "h:mm AP")
                 }
+                // Takes what is left beside the time and wraps in it (a narrow window).
                 ColumnLayout {
                     spacing: 0
+                    Layout.fillWidth: true
                     UqLabel {
                         visible: !page.clock24
                         text: Qt.formatTime(page.now, "AP")
@@ -118,9 +120,12 @@ SettingsPage {
                     UqLabel {
                         text: Qt.formatDate(page.now, "dddd d MMMM yyyy")
                         font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.4
+                        wrapMode: Text.Wrap
+                        Layout.fillWidth: true
                     }
-                    RowLayout {
+                    Flow {
                         spacing: Kirigami.Units.smallSpacing
+                        Layout.fillWidth: true
                         Kirigami.Icon {
                             source: "globe"
                             implicitWidth: Kirigami.Units.iconSizes.small
@@ -132,12 +137,17 @@ SettingsPage {
                             text: page.city(page.td.timezone) || "Unknown time zone"
                             opacity: 0.8
                         }
+                        Item {
+                            visible: syncIcon.visible
+                            width: Kirigami.Units.largeSpacing - Kirigami.Units.smallSpacing
+                            height: 1
+                        }
                         Kirigami.Icon {
+                            id: syncIcon
                             visible: page.ready && !!page.td.ntp
                             source: page.td.synced ? "emblem-checked" : "chronometer"
                             implicitWidth: Kirigami.Units.iconSizes.small
                             implicitHeight: Kirigami.Units.iconSizes.small
-                            Layout.leftMargin: Kirigami.Units.largeSpacing
                             Accessible.ignored: true
                         }
                         UqLabel {
@@ -147,9 +157,6 @@ SettingsPage {
                             opacity: 0.8
                         }
                     }
-                }
-                Item {
-                    Layout.fillWidth: true
                 }
             }
         }

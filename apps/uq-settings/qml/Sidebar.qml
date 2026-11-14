@@ -1,5 +1,7 @@
 // The page list, grouped under category headings. A category with no pages has no heading,
-// since headings come from the pages themselves. Arrow keys move, Enter or Space opens.
+// since headings come from the pages themselves. Arrow keys move, Enter or Space opens. In a
+// narrow window (`compact`) it is a column of icons: each page's name in its tooltip, and a thin
+// rule between categories in place of their headings.
 import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
@@ -13,6 +15,15 @@ QQC2.ScrollView {
     property var pages: []
     /// The id of the page on show.
     property string current
+    /// Icons only, for a narrow window.
+    property bool compact: false
+    /// The width it wants: room for the names, or for an icon.
+    readonly property real wantedWidth: compact
+        ? Kirigami.Units.iconSizes.smallMedium + Kirigami.Units.largeSpacing * 4
+        : Kirigami.Units.gridUnit * 12
+
+    // Compact: no scroll bar eating the narrow column (the wheel and the keys still scroll).
+    QQC2.ScrollBar.vertical.policy: compact ? QQC2.ScrollBar.AlwaysOff : QQC2.ScrollBar.AsNeeded
     readonly property ListModel pageModel: ListModel {}
     signal chosen(string pageId)
 
@@ -53,16 +64,32 @@ QQC2.ScrollView {
         Keys.onSpacePressed: sidebar.openCurrent()
 
         section.property: "categoryName"
-        section.delegate: UqLabel {
+        section.delegate: Item {
+            id: heading
             required property string section
             width: ListView.view.width
-            topPadding: Kirigami.Units.largeSpacing
-            bottomPadding: Kirigami.Units.smallSpacing
-            leftPadding: Kirigami.Units.largeSpacing
-            text: section
-            font.bold: true
-            opacity: 0.7
+            implicitHeight: sidebar.compact ? Kirigami.Units.largeSpacing * 2 : headingText.implicitHeight
             Accessible.role: Accessible.Heading
+            Accessible.name: heading.section
+
+            UqLabel {
+                id: headingText
+                visible: !sidebar.compact
+                width: parent.width
+                topPadding: Kirigami.Units.largeSpacing
+                bottomPadding: Kirigami.Units.smallSpacing
+                leftPadding: Kirigami.Units.largeSpacing
+                text: heading.section
+                font.bold: true
+                opacity: 0.7
+                elide: Text.ElideRight
+                Accessible.ignored: true
+            }
+            Kirigami.Separator {
+                visible: sidebar.compact
+                anchors.centerIn: parent
+                width: parent.width - Kirigami.Units.largeSpacing * 2
+            }
         }
 
         delegate: QQC2.ItemDelegate {
@@ -82,6 +109,9 @@ QQC2.ScrollView {
                 list.currentIndex = index;
                 sidebar.chosen(pageId);
             }
+            QQC2.ToolTip.visible: sidebar.compact && item.hovered
+            QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+            QQC2.ToolTip.text: item.name
 
             contentItem: RowLayout {
                 spacing: Kirigami.Units.smallSpacing
@@ -89,9 +119,13 @@ QQC2.ScrollView {
                     source: item.iconName
                     implicitWidth: Kirigami.Units.iconSizes.smallMedium
                     implicitHeight: Kirigami.Units.iconSizes.smallMedium
+                    Layout.alignment: sidebar.compact ? Qt.AlignHCenter : Qt.AlignLeft
+                    Layout.preferredWidth: implicitWidth
+                    Layout.preferredHeight: implicitHeight
                     Accessible.ignored: true
                 }
                 UqLabel {
+                    visible: !sidebar.compact
                     text: item.name
                     elide: Text.ElideRight
                     highlighted: item.highlighted || item.down
