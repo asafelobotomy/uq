@@ -301,6 +301,61 @@ function notifMatches(note, app) {
     return false;
 }
 
+// --- windows that want attention (a dot on their tab's icon) ---
+// A notification backend's `latest` ({appName, appIcon, summary}) is re-sent with every state
+// update, and falls back to an older one when the newest is dismissed: neither is a new
+// notification. seen: {keys (the recent ones, newest last), count} from the last call, or null.
+// Returns {fresh (a new notification arrived), seen (to pass next time)}.
+var SEEN_KEYS = 20;
+function noteArrived(seen, latest, count) {
+    var s = seen && Array.isArray(seen.keys) ? seen : { keys: [], count: 0 };
+    var c = typeof count === "number" ? count : 0;
+    if (!latest)
+        return { fresh: false, seen: { keys: s.keys, count: c } };
+    // Without a summary (hidden while the screen is shared or captured, or never sent) the text
+    // can't tell one notification from another: only a rise in the count says it is new. It
+    // isn't remembered, so the full one coming back isn't new either.
+    if (typeof latest.summary !== "string" || latest.summary === "")
+        return { fresh: c > s.count, seen: { keys: s.keys, count: c } };
+    var key = [latest.appName, latest.appIcon, latest.summary].map(function (x) { return typeof x === "string" ? x : ""; }).join("\u0001");
+    var last = s.keys.length > 0 ? s.keys[s.keys.length - 1] : null;
+    // The same as last time is new only when the count rose (the same text again); one seen a
+    // little earlier is the newest dismissed.
+    var fresh = key === last ? c > s.count : s.keys.indexOf(key) < 0;
+    var keys = s.keys.filter(function (k) { return k !== key; });
+    keys.push(key);
+    return { fresh: fresh, seen: { keys: keys.slice(-SEEN_KEYS), count: c } };
+}
+
+// The alerts (address → true) with `addrs` added, leaving out the focused window (it is already
+// being looked at); the same object when nothing changes.
+function withAlerts(alerts, addrs, focused) {
+    var out = null, f = normAddr(focused);
+    for (var i = 0; i < (addrs || []).length; i++) {
+        var a = normAddr(addrs[i]);
+        if (a === null || a === f || (out || alerts)[a] === true)
+            continue;
+        out = out || Object.assign({}, alerts);
+        out[a] = true;
+    }
+    return out || alerts;
+}
+
+// The alerts kept: those of windows still open (`live`, addresses) that aren't focused; the same
+// object when nothing changes.
+function keepAlerts(alerts, live, focused) {
+    var f = normAddr(focused), open = {}, out = {}, dropped = false;
+    for (var i = 0; i < (live || []).length; i++)
+        open[normAddr(live[i])] = true;
+    for (var a in alerts) {
+        if (a !== f && open[a] === true)
+            out[a] = true;
+        else
+            dropped = true;
+    }
+    return dropped ? out : alerts;
+}
+
 // How `n` pills fit a strip `width` wide. m: {minPill (the narrowest tab: Icon), maxPill, gap,
 // arrow (a scroll arrow), chip (the "+N" button), medium (optional: a Medium tab's width)}. With
 // `focus` (the focused pill's index, -1 for none) and m.medium, the focused pill grows to Medium

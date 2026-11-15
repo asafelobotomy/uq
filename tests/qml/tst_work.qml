@@ -310,4 +310,42 @@ TestCase {
         compare(Work.closeAction("ask", true), "close");
         compare(Work.CLOSES.length, 3);
     }
+
+    function test_note_arrived() {
+        var a = { appName: "Chat", appIcon: "", summary: "Hi" }, b = { appName: "Mail", appIcon: "", summary: "New" };
+        var r = Work.noteArrived(null, a, 1);
+        verify(r.fresh, "first one");
+        r = Work.noteArrived(r.seen, { appName: "Chat", appIcon: "", summary: "Hi" }, 1);
+        verify(!r.fresh, "the same one re-sent");
+        r = Work.noteArrived(r.seen, b, 2);
+        verify(r.fresh);
+        r = Work.noteArrived(r.seen, a, 1);
+        verify(!r.fresh, "the newest dismissed: the older one again");
+        r = Work.noteArrived(r.seen, a, 2);
+        verify(r.fresh, "the same text again, with the count up");
+        r = Work.noteArrived(r.seen, null, 0);
+        verify(!r.fresh);
+        r = Work.noteArrived(r.seen, b, 0);
+        verify(!r.fresh, "still remembered after the list emptied");
+        r = Work.noteArrived(r.seen, { appName: "Mail", appIcon: "", summary: "" }, 0);
+        verify(!r.fresh, "the summary hidden while sharing: the same one");
+        r = Work.noteArrived(r.seen, b, 0);
+        verify(!r.fresh, "and shown again");
+        r = Work.noteArrived(r.seen, { appName: "Chat", appIcon: "", summary: "" }, 1);
+        verify(r.fresh, "no summary, but the count rose");
+    }
+
+    function test_alerts() {
+        var none = {};
+        var one = Work.withAlerts(none, ["55d0aa", "0xbeef"], "0xbeef");
+        compare(Object.keys(one), ["0x55d0aa"], "the focused window gets none");
+        verify(Work.withAlerts(one, ["0x55d0aa"], "") === one, "unchanged: the same object");
+        verify(Work.withAlerts(one, ["nope"], "") === one, "bad addresses ignored");
+        var two = Work.withAlerts(one, ["0x1"], "");
+        compare(Object.keys(two).length, 2);
+        compare(Object.keys(one).length, 1, "not changed in place");
+        verify(Work.keepAlerts(two, ["0x55d0aa", "0x1"], "") === two);
+        compare(Object.keys(Work.keepAlerts(two, ["0x55d0aa", "0x1"], "0x1")), ["0x55d0aa"], "focus clears it");
+        compare(Object.keys(Work.keepAlerts(two, ["0x1"], "")), ["0x1"], "a closed window's goes");
+    }
 }

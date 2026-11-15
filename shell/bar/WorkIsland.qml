@@ -24,7 +24,9 @@ import "../logic/dock.js" as Dock
 // window out of view gets focus the strip centres on it. When not even one tab fits, the lead
 // window's icon lists them all. Left click focuses a window (or brings a minimised one back),
 // middle click closes it, right click opens its menu (minimise, full or half width, float, pin
-// the app, move it, close it, and the uQ Island Menu).
+// the app, move it, close it, and the uQ Island Menu). A window that wants attention (Hyprland
+// marks it urgent, or its app sends a notification) gets a dot in the accent colour on its tab's
+// icon until it is focused.
 Island {
     id: root
     property var screen: null
@@ -62,6 +64,7 @@ Island {
             if (a === root.focusedAddr)
                 return;
             root.focusedAddr = a;
+            root.pruneAlerts();
             // Focus moved: the scrolling layout may have moved the columns too.
             root.refresh();
         }
@@ -116,10 +119,51 @@ Island {
             windowsKey = key;
             openedSeq = seq;
             windows = out;
+            pruneAlerts();
         }
     }
     property string windowsKey: ""
-    Component.onCompleted: { focusedAddr = activeAddr(); rebuild(); refresh(); }
+    Component.onCompleted: {
+        focusedAddr = activeAddr();
+        noteSeen = Work.noteArrived(null, NotifBackend.latest, NotifBackend.count).seen;
+        rebuild();
+        refresh();
+    }
+
+    // Windows that want attention, address → true: a dot on their tab's icon until focused.
+    property var alerts: ({})
+    // The notifications already seen (Work.noteArrived), so only new ones mark windows.
+    property var noteSeen: null
+    function pruneAlerts() {
+        alerts = Work.keepAlerts(alerts, windows.map(function (w) { return w.address; }), focusedAddr);
+    }
+    function alertFor(addr) {
+        alerts = Work.withAlerts(alerts, [addr], activeAddr());
+    }
+    // A new notification marks its app's windows, on every workspace, unless that app is the one
+    // in use (its window is focused).
+    function checkNote() {
+        var l = NotifBackend.latest;
+        var r = Work.noteArrived(noteSeen, l, NotifBackend.count);
+        noteSeen = r.seen;
+        if (!r.fresh)
+            return;
+        var f = activeAddr(), hits = [];
+        for (var i = 0; i < windows.length; i++) {
+            var w = windows[i];
+            if (!Work.notifMatches(l, appOf(w.cls)))
+                continue;
+            if (Work.normAddr(w.address) === f)
+                return;
+            hits.push(w.address);
+        }
+        alerts = Work.withAlerts(alerts, hits, f);
+    }
+    readonly property bool alertHere: ordered.some(function (w) { return root.alerts[w.address] === true; })
+    // A window out of view in the scrolled strip wants attention: a dot on "+N".
+    readonly property bool alertHidden: fit.mode === "scroll" && ordered.some(function (w, i) {
+        return root.alerts[w.address] === true && (i < root.start || i >= root.start + root.fit.shown);
+    })
     // Set when this asked for fresh windows, so the settle after it rebuilds.
     property bool asked: false
     function refresh() {
@@ -392,6 +436,9 @@ Island {
             // Quickshell sets the title itself from this event: no need to ask Hyprland again.
             else if (event.name === "windowtitlev2")
                 titleTimer.restart();
+            // A window asked for attention (urgency hint, or an activation request not honoured).
+            else if (event.name === "urgent")
+                root.alertFor(String(event.data));
         }
     }
     Timer {
@@ -422,6 +469,13 @@ Island {
             root.notes = n;
         }
     }
+    // A new notification: once latest and count have both been updated.
+    Connections {
+        target: NotifBackend
+        ignoreUnknownSignals: true
+        function onLatestChanged() { Qt.callLater(root.checkNote); }
+        function onCountChanged() { Qt.callLater(root.checkNote); }
+    }
     // "By system usage": the windows' processes, every 5 s while that is the order.
     Timer {
         interval: 5000
@@ -449,9 +503,8 @@ Island {
         // The window is already this way (Full on a Full window): drawn as on.
         property bool on: false
         signal pressed()
-        Layout.preferredWidth: root.closeW
-        Layout.preferredHeight: root.closeW
-        Layout.alignment: Qt.AlignVCenter
+        implicitWidth: root.closeW
+        implicitHeight: root.closeW
         radius: width / 2
         color: tbMouse.containsMouse ? Theme.overlay : "transparent"
         Accessible.role: Accessible.Button
@@ -501,6 +554,24 @@ Island {
             hoverEnabled: true
             onClicked: tb.pressed()
         }
+    }
+
+    // The dot on a window's icon when it wants attention: the theme's accent, ringed in the
+    // island's colour so it stands off any icon. Sits on its parent's top right corner.
+    component AlertDot: Rectangle {
+        property bool shown: false
+        visible: shown
+        width: Math.round(root.iconSize * 0.45)
+        height: width
+        radius: width / 2
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.rightMargin: -Math.round(width / 4)
+        anchors.topMargin: -Math.round(width / 4)
+        color: Theme.accent
+        border.width: Math.max(1, Math.round(width / 5))
+        border.color: Theme.surface
+        z: 1
     }
 
     component Arrow: Rectangle {
@@ -565,6 +636,7 @@ Island {
                     anchors.verticalCenter: parent.verticalCenter
                     implicitSize: root.iconSize
                     source: root.lead ? root.iconFor(root.lead.cls) : ""
+                    AlertDot { shown: root.alertHere }
                 }
                 UqText {
                     anchors.verticalCenter: parent.verticalCenter
@@ -631,8 +703,10 @@ Island {
                 border.width: win.focused ? 1 : 0
                 opacity: win.minimised ? 0.55 : 1
                 Accessible.role: Accessible.PageTab
+                readonly property bool alert: root.alerts[modelData] === true
                 Accessible.name: name + (win.minimised ? ", minimised" : "")
                     + (win.focused ? ", focused" : "") + (full ? ", full width" : "")
+                    + (alert ? ", wants attention" : "")
                 Accessible.onPressAction: root.choose(win)
                 Behavior on Layout.preferredWidth {
                     enabled: !Settings.reduceMotion
@@ -746,6 +820,9 @@ Island {
                             backer.sourceSize.height: root.iconSize * root.dpr
                             source: root.iconFor(pill.win.cls)
                         }
+                        AlertDot {
+                            shown: pill.alert && !(pill.tier === "icon" && iconClose.containsMouse)
+                        }
                         Rectangle {
                             anchors.fill: parent
                             visible: pill.tier === "icon" && iconClose.containsMouse
@@ -772,39 +849,51 @@ Island {
                         text: pill.name
                         color: pill.win.focused ? Theme.text : Theme.textMuted
                     }
+                    // The buttons, kept together at the right end, 2 px apart: the widths in
+                    // root.tiers allow one gap between the icon (or title) and this group, and
+                    // 2 px between buttons, so a tab at its narrowest still holds them all.
                     Item {
-                        visible: pill.tier === "small" || pill.tier === "medium"
-                        Layout.fillWidth: true
-                    }
-                    // Small: whichever the window isn't, under the pointer (its place is kept).
-                    TabButton {
-                        visible: pill.tier === "small" && !pill.win.minimised
-                        opacity: pillHover.hovered ? 1 : 0
-                        enabled: pillHover.hovered
-                        mark: pill.full ? "half" : "full"
-                        label: (pill.full ? "Half width: " : "Full width: ") + pill.name
-                        onPressed: root.setFull(pill.win, !pill.full)
-                    }
-                    TabButton {
-                        visible: (pill.tier === "medium" || pill.tier === "large") && !pill.win.minimised
-                        mark: "half"
-                        label: "Half width: " + pill.name
-                        on: !pill.full
-                        onPressed: root.setFull(pill.win, false)
-                    }
-                    TabButton {
-                        visible: (pill.tier === "medium" || pill.tier === "large") && !pill.win.minimised
-                        mark: "full"
-                        label: "Full width: " + pill.name
-                        on: pill.full
-                        onPressed: root.setFull(pill.win, true)
-                    }
-                    TabButton {
-                        id: closeButton
                         visible: pill.tier !== "icon"
-                        mark: "close"
-                        label: root.closeLabel(pill.win)
-                        onPressed: root.closePressed(closeButton, pill.win)
+                        Layout.fillWidth: pill.tier !== "large"
+                        Layout.fillHeight: true
+                        Layout.preferredWidth: buttonRow.implicitWidth
+                        Layout.minimumWidth: buttonRow.implicitWidth
+                        Row {
+                            id: buttonRow
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            spacing: 2
+                            // Small: whichever the window isn't, under the pointer (its place is kept).
+                            TabButton {
+                                visible: pill.tier === "small" && !pill.win.minimised
+                                opacity: pillHover.hovered ? 1 : 0
+                                enabled: pillHover.hovered
+                                mark: pill.full ? "half" : "full"
+                                label: (pill.full ? "Half width: " : "Full width: ") + pill.name
+                                onPressed: root.setFull(pill.win, !pill.full)
+                            }
+                            TabButton {
+                                visible: (pill.tier === "medium" || pill.tier === "large") && !pill.win.minimised
+                                mark: "half"
+                                label: "Half width: " + pill.name
+                                on: !pill.full
+                                onPressed: root.setFull(pill.win, false)
+                            }
+                            TabButton {
+                                visible: (pill.tier === "medium" || pill.tier === "large") && !pill.win.minimised
+                                mark: "full"
+                                label: "Full width: " + pill.name
+                                on: pill.full
+                                onPressed: root.setFull(pill.win, true)
+                            }
+                            TabButton {
+                                id: closeButton
+                                visible: pill.tier !== "icon"
+                                mark: "close"
+                                label: root.closeLabel(pill.win)
+                                onPressed: root.closePressed(closeButton, pill.win)
+                            }
+                        }
                     }
                 }
             }
@@ -826,12 +915,18 @@ Island {
             radius: Theme.radius - 2
             color: moreMouse.containsMouse ? Theme.surfaceAlt : "transparent"
             Accessible.role: Accessible.Button
-            Accessible.name: (root.ordered.length - root.fit.shown) + " more windows; list them all"
+            Accessible.name: (root.ordered.length - root.fit.shown) + " more windows"
+                + (root.alertHidden ? ", one wants attention" : "") + "; list them all"
             UqText {
                 anchors.centerIn: parent
                 text: "+" + (root.ordered.length - root.fit.shown)
                 color: Theme.textMuted
                 elide: Text.ElideNone
+            }
+            AlertDot {
+                shown: root.alertHidden
+                anchors.rightMargin: 1
+                anchors.topMargin: 1
             }
             MouseArea {
                 id: moreMouse
@@ -867,7 +962,9 @@ Island {
                     required property int index
                     Layout.fillWidth: true
                     text: modelData.title || modelData.cls
-                    detail: modelData.focused ? "Focused" : (modelData.minimised ? "Minimised" : "")
+                    detail: modelData.focused ? "Focused"
+                        : (root.alerts[modelData.address] === true ? "Wants attention"
+                        : (modelData.minimised ? "Minimised" : ""))
                     onActivated: {
                         root.choose(modelData);
                         listPopup.hide();

@@ -7,6 +7,8 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0-rc.4] - 2026-11-15
+
 ### Added
 
 - **Full and Half windows.** In the scrolling layout, Open windows tabs have **Full** (the
@@ -43,6 +45,11 @@ All notable changes to uQ are listed here. The format follows
 - **Fill the rest.** An island can grow into the bar's empty space beside its zone (edit mode →
   the island's settings → **Fill the rest**). Open windows does unless you turn it off; the
   centre zone stays centred.
+- **Windows that want attention get a dot.** When a window's app sends a notification, or the
+  window asks for attention (Hyprland marks it urgent), its Open windows tab gets a dot in the
+  theme's accent colour on the app icon until you focus the window. A window scrolled out of the
+  strip marks **+N** instead, and the window list says **Wants attention**. Notifications from
+  the app you are using mark nothing.
 
 ### Changed
 
@@ -58,6 +65,8 @@ All notable changes to uQ are listed here. The format follows
 
 - The screen-edge indicator's window frame matches real windows (their top, height, border,
   rounding and colours) instead of sitting lower and shorter.
+- An Open windows tab's close button no longer pokes out past the tab's frame when the tab is
+  at its narrowest Medium width.
 
 ## [0.3.0-rc.3] - 2026-11-14
 
