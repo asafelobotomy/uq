@@ -42,6 +42,12 @@ impl Group {
     }
 }
 
+/// The terminal shortcut's command: kitty in a scope of its own in `app.slice`, like the
+/// launcher's apps, so a scheduler sees it as an app rather than part of Hyprland. Hyprland runs
+/// it through `sh -c`, which hands its pid on to systemd-run and then kitty, so `$$` is kitty's
+/// own pid: unique while the scope lives. config/hypr/base.lua repeats it.
+pub const TERMINAL: &str = "systemd-run --user --scope --quiet --collect --slice=app.slice --unit=app-uq-kitty-$$ -- kitty";
+
 /// A default's dispatcher, as `'static` text.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DefaultAction {
@@ -93,7 +99,7 @@ static DEFAULTS: [Default; 60] = [
         label: "Open a terminal",
         group: Group::AppsAndDesktop,
         combo: Some("SUPER + Return"),
-        action: DefaultAction::Exec("kitty"),
+        action: DefaultAction::Exec(TERMINAL),
         locked: false,
         repeating: false,
         release: false,
@@ -764,6 +770,18 @@ mod tests {
     }
 
     #[test]
+    fn the_terminal_runs_in_its_own_app_scope() {
+        let t = defaults().iter().find(|d| d.id == "uq.terminal").unwrap();
+        assert_eq!(t.action, DefaultAction::Exec(TERMINAL));
+        assert!(
+            TERMINAL.starts_with("systemd-run --user --scope "),
+            "{TERMINAL}"
+        );
+        assert!(TERMINAL.contains(" --slice=app.slice ") && TERMINAL.ends_with(" -- kitty"));
+        assert!(base_lua().contains(&format!("local terminal = \"{TERMINAL}\"")));
+    }
+
+    #[test]
     fn table_has_60_rows_59_bound() {
         assert_eq!(defaults().len(), 60);
         assert_eq!(defaults().iter().filter(|d| d.combo.is_some()).count(), 59);
@@ -813,7 +831,7 @@ mod tests {
     #[test]
     fn lua_forms_match_base_lua_text() {
         let base = base_lua();
-        assert!(base.contains("local terminal = \"kitty\""));
+        assert!(base.contains(&format!("local terminal = \"{TERMINAL}\"")));
         for d in defaults().iter().filter(|d| d.combo.is_some()) {
             let lua = d.action.lua();
             let (loop_row, text) = match d.id.split_once("uq.ws.") {

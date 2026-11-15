@@ -41,27 +41,30 @@ pub struct News {
     /// Every link in the last `News` event; `OpenLink` opens only these.
     links: Mutex<HashSet<String>>,
     opener: &'static str,
+    /// Open links in a scope of their own in `app.slice` (off in tests, which use a fake opener).
+    scoped: bool,
 }
 
 pub type NewsLoop = FeedLoop<News>;
 
 impl News {
     pub fn new() -> News {
-        News::build(false, "xdg-open")
+        News::build(false, "xdg-open", true)
     }
 
     /// Accepts http feed URLs and opens links with `opener` instead of xdg-open.
     #[cfg(test)]
     pub fn for_tests(opener: &'static str) -> News {
-        News::build(true, opener)
+        News::build(true, opener, false)
     }
 
-    fn build(allow_http: bool, opener: &'static str) -> News {
+    fn build(allow_http: bool, opener: &'static str, scoped: bool) -> News {
         News {
             http: feeds::client(feeds::https_redirects()),
             allow_http,
             links: Mutex::new(HashSet::new()),
             opener,
+            scoped,
         }
     }
 
@@ -103,14 +106,32 @@ impl News {
         if !known || !(url.starts_with("https://") || url.starts_with("http://")) {
             return Err("not a link from the news feed".into());
         }
-        let mut child = tokio::process::Command::new(self.opener)
-            .arg(url)
-            .stdin(std::process::Stdio::null())
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .process_group(0)
-            .spawn()
-            .map_err(|e| format!("could not start {} ({})", self.opener, e.kind()))?;
+        // In a scope of its own, so a browser it starts is an app, not part of the shell's
+        // service (which scdr treats as the desktop). Without systemd-run, directly.
+        let plain = [self.opener.to_string(), url.to_string()];
+        let scoped = self.scoped.then(|| {
+            uq_core::desktop_entry::scope_argv(
+                "link",
+                &plain,
+                uq_core::desktop_entry::random_suffix(),
+            )
+        });
+        let start = |argv: &[String]| {
+            tokio::process::Command::new(&argv[0])
+                .args(&argv[1..])
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .process_group(0)
+                .spawn()
+        };
+        let spawned = match scoped.as_deref().map(start) {
+            Some(Err(e)) if e.kind() == std::io::ErrorKind::NotFound => start(&plain),
+            Some(r) => r,
+            None => start(&plain),
+        };
+        let mut child =
+            spawned.map_err(|e| format!("could not start {} ({})", self.opener, e.kind()))?;
         // Reap it whenever it ends, so it never lingers as a zombie.
         tokio::spawn(async move {
             let _ = child.wait().await;

@@ -71,3 +71,18 @@ function suspendAllowed(ctx) {
 function action(stage) {
     return ACTIONS.hasOwnProperty(stage) ? ACTIONS[stage] : null;
 }
+
+// When the session counts as idle for logind's IdleHint (read by schedulers such as scdr): the
+// first of dim, lock and screens off that is set, in seconds, or the lock's default when none
+// is. Suspend and the locked-screen stage don't count: they come after one of these, or
+// behind a lock logind already knows about.
+var HINT_FALLBACK = DEFAULTS.lock;
+function hintTimeout(st) {
+    var t = st || DEFAULTS, best = null;
+    ["dim", "lock", "screenOff"].forEach(function (k) {
+        var v = t[k];
+        if (typeof v === "number" && v > 0 && (best === null || v < best))
+            best = v;
+    });
+    return best === null ? HINT_FALLBACK : best;
+}

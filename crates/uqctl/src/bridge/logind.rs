@@ -10,6 +10,8 @@
 //!
 //! `hint_loop` forwards the latest lock state from the relay in `mod.rs` to `SetLockedHint`,
 //! off the relay's path, so a logind that stops answering never delays a `LockState` event.
+//! The shell's idle state (`IdleHint`) goes to `SetIdleHint` the same way, so schedulers such as
+//! scdr, which read the session's hints, know when nobody is at the desktop.
 
 use super::protocol::Outbound;
 use futures_util::StreamExt;
@@ -168,14 +170,23 @@ impl Logind {
     pub async fn set_locked_hint(&self, locked: bool) {
         let session = self.session.borrow().clone();
         if let Some((conn, path)) = session {
-            self.send_hint(&conn, &path, locked).await;
+            self.send_bool(&conn, &path, "SetLockedHint", locked).await;
         }
     }
 
     /// Send the latest state in `hints` to `SetLockedHint`: once the session is found, then on
     /// every change. A slow call only delays this loop; states that arrive meanwhile collapse
     /// into the latest. Ends when the sender is dropped.
-    pub async fn hint_loop(self: Arc<Self>, mut hints: watch::Receiver<Option<bool>>) {
+    pub async fn hint_loop(self: Arc<Self>, hints: watch::Receiver<Option<bool>>) {
+        self.bool_hint_loop("SetLockedHint", hints).await;
+    }
+
+    /// The same for the shell's idle state and `SetIdleHint`.
+    pub async fn idle_loop(self: Arc<Self>, hints: watch::Receiver<Option<bool>>) {
+        self.bool_hint_loop("SetIdleHint", hints).await;
+    }
+
+    async fn bool_hint_loop(&self, method: &'static str, mut hints: watch::Receiver<Option<bool>>) {
         let mut session = self.session.subscribe();
         let Ok(s) = session.wait_for(Option::is_some).await.map(|s| s.clone()) else {
             return;
@@ -186,7 +197,7 @@ impl Logind {
                 return;
             };
             if let Some(locked) = locked {
-                self.send_hint(&conn, &path, locked).await;
+                self.send_bool(&conn, &path, method, locked).await;
             }
             if hints.changed().await.is_err() {
                 return;
@@ -194,9 +205,9 @@ impl Logind {
         }
     }
 
-    async fn send_hint(&self, conn: &Connection, path: &OwnedObjectPath, locked: bool) {
+    async fn send_bool(&self, conn: &Connection, path: &OwnedObjectPath, method: &str, on: bool) {
         let r = conn
-            .call_method(Some(DEST), path, Some(SESSION), "SetLockedHint", &(locked,))
+            .call_method(Some(DEST), path, Some(SESSION), method, &(on,))
             .await;
         match r {
             Ok(_) => {
@@ -204,7 +215,7 @@ impl Logind {
             }
             Err(e) => {
                 self.hint_fail.fail(format_args!(
-                    "SetLockedHint failed ({e}); will try on the next change"
+                    "{method} failed ({e}); will try on the next change"
                 ));
             }
         }

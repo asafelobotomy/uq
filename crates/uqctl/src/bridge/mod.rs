@@ -94,6 +94,8 @@ struct Services {
     runs: Arc<Mutex<run::RunState>>,
     providers: Arc<providers::Providers>,
     logind: Arc<logind::Logind>,
+    /// The shell's idle state, for logind's `SetIdleHint` (`Logind::idle_loop`).
+    idle: Arc<watch::Sender<Option<bool>>>,
     procs: Arc<procusage::ProcUsage>,
     /// None when the bridge runs without integrations (unit tests).
     widgets: Option<Arc<widgets::Widgets>>,
@@ -146,6 +148,13 @@ async fn handle(s: &Services, call: &str, args: &[Value]) -> Result<Value, Strin
             Ok(Value::Null)
         }
         "SleepLockReady" => Err("SleepLockReady takes no arguments".into()),
+        "IdleHint" => match args {
+            [Value::Bool(idle)] => {
+                s.idle.send_replace(Some(*idle));
+                Ok(Value::Null)
+            }
+            _ => Err("IdleHint takes one boolean argument".into()),
+        },
         "GeocodeCity" => match args {
             [Value::String(name)] => s.net.geocode(name).await,
             _ => Err("GeocodeCity takes one string argument (the city name)".into()),
@@ -370,6 +379,8 @@ where
     );
     let (hint_tx, hint_rx) = watch::channel(None);
     let hint_task = tokio::spawn(logind.clone().hint_loop(hint_rx));
+    let (idle_tx, idle_rx) = watch::channel(None);
+    let idle_task = tokio::spawn(logind.clone().idle_loop(idle_rx));
     let lock_relay = tokio::spawn(relay_locks(locks, known_lock, hint_tx, out_tx.clone()));
 
     let runs = Arc::new(Mutex::new(run::RunState::default()));
@@ -411,6 +422,7 @@ where
         runs: runs.clone(),
         providers: providers.clone(),
         logind: logind.clone(),
+        idle: Arc::new(idle_tx),
         procs: Arc::new(procusage::ProcUsage::new()),
         widgets,
         actions,
@@ -476,6 +488,7 @@ where
     lock_relay.abort();
     // It may be stuck in a SetLockedHint call that logind never answers.
     hint_task.abort();
+    idle_task.abort();
     if let Some(t) = widget_task {
         t.abort();
     }
@@ -638,6 +651,35 @@ mod tests {
         assert_eq!(
             next(&mut out).await,
             json!({"v":1,"id":4,"err":"unknown call Nope"})
+        );
+        drop(in_w);
+        let _ = task.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn idle_hint_answers_without_logind() {
+        let (mut in_w, in_r) = duplex(4096);
+        let (out_w, out_r) = duplex(4096);
+        let task = tokio::spawn(run_with_bus(
+            in_r,
+            out_w,
+            Some(NO_BUS),
+            Some(NO_BUS),
+            no_locks(),
+            None,
+        ));
+        let mut out = BufReader::new(out_r);
+        let _hello = next(&mut out).await;
+        in_w.write_all(b"{\"v\":1,\"id\":1,\"call\":\"IdleHint\",\"args\":[true]}\n")
+            .await
+            .unwrap();
+        assert_eq!(next(&mut out).await, json!({"v":1,"id":1,"ok":null}));
+        in_w.write_all(b"{\"v\":1,\"id\":2,\"call\":\"IdleHint\",\"args\":[\"yes\"]}\n")
+            .await
+            .unwrap();
+        assert_eq!(
+            next(&mut out).await,
+            json!({"v":1,"id":2,"err":"IdleHint takes one boolean argument"})
         );
         drop(in_w);
         let _ = task.await.unwrap();

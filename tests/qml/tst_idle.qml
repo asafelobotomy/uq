@@ -100,4 +100,14 @@ TestCase {
         compare(I.action("suspend"), "suspend");
         compare(I.action("bogus"), null);
     }
+
+    function test_hint_timeout() {
+        compare(I.hintTimeout(I.stages({})), 240, "the dim default comes first");
+        compare(I.hintTimeout(I.stages({ dim: null })), 300, "then the lock");
+        compare(I.hintTimeout(I.stages({ dim: 600, lock: 120 })), 120, "whichever is first");
+        compare(I.hintTimeout(I.stages({ dim: null, lock: null, screen_off: 90 })), 90);
+        compare(I.hintTimeout(I.stages({ dim: null, lock: null, screen_off: null })), 300,
+                "none set: the lock's default");
+        compare(I.hintTimeout(undefined), 240);
+    }
 }

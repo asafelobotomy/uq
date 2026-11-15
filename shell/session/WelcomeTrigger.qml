@@ -3,8 +3,8 @@ import Quickshell
 import "../core"
 import "../logic/welcome.js" as W
 
-// Starts Welcome (`uq-settings --welcome`) once, when uqd says it is due and no installer is
-// holding it back; logic/welcome.js has the rules.
+// Starts Welcome (`uqctl welcome`, which opens it in Settings) once, when uqd says it is due and
+// no installer is holding it back; logic/welcome.js has the rules.
 QtObject {
     id: root
 
@@ -13,7 +13,9 @@ QtObject {
     function act(r) {
         root.state = r.state;
         if (r.action === "start") {
-            Quickshell.execDetached(["uq-settings", "--welcome"]);
+            // Through uqctl, so Settings runs in a scope of its own in app.slice, not in the shell's
+            // service; it shows Welcome on a running Settings too.
+            Quickshell.execDetached(["uqctl", "welcome"]);
         } else if (r.action === "wait") {
             grace.restart();
         } else if (r.action === "ask") {

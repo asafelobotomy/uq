@@ -30,8 +30,19 @@ pub(crate) async fn open(
     }
 }
 
-/// Start the app in its own process group, so it outlives uqctl, with no stdio. Never waited on.
+/// Start the app in a scope of its own in `app.slice` (as the launcher's apps run, so it is
+/// neither part of the shell's service nor of Hyprland), in its own process group, so it
+/// outlives uqctl, with no stdio. Never waited on. Without systemd-run it starts directly.
 pub(crate) fn spawn_detached(argv: &[String]) -> std::io::Result<()> {
+    let scoped =
+        uq_core::desktop_entry::scope_argv(APP, argv, uq_core::desktop_entry::random_suffix());
+    match start(&scoped) {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => start(argv),
+        r => r,
+    }
+}
+
+fn start(argv: &[String]) -> std::io::Result<()> {
     Command::new(&argv[0])
         .args(&argv[1..])
         .stdin(Stdio::null())

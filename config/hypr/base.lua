@@ -7,7 +7,8 @@
 --
 -- Adapted from Hyprland's example config (BSD-3-Clause, Copyright (c) 2022-2026, vaxerski).
 
-local terminal = "kitty"
+-- In a scope of its own in app.slice, as the launcher's apps run (keybinds/defaults.rs TERMINAL).
+local terminal = "systemd-run --user --scope --quiet --collect --slice=app.slice --unit=app-uq-kitty-$$ -- kitty"
 local mainMod  = "SUPER"
 
 ------------------

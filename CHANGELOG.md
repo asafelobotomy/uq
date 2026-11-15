@@ -7,6 +7,23 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0-rc.6] - 2026-11-15
+
+### Added
+
+- **uQ tells logind when you are away.** After the first idle stage you have set (dim, lock
+  or screens off; five minutes when none is), the session's idle hint is set, and cleared on
+  your next input. Stay awake and other inhibitors hold it off. Schedulers such as scdr read it.
+
+### Changed
+
+- **Every app runs as an app.** The terminal shortcut (SUPER + Return), Settings opened from the
+  bar or desktop menu, Welcome, and the browser a news link opens now run in a scope of their
+  own in `app.slice`, as the launcher's apps always have. Before, they ran inside Hyprland's
+  session or the shell's own service, so a scheduler such as scdr couldn't tell them apart from
+  the desktop: focusing the terminal gave it no boost and dropped the boost from the app you
+  left.
+
 ## [0.3.0-rc.5] - 2026-11-15
 
 ### Fixed

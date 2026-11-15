@@ -207,6 +207,27 @@ fn groups_with_exec_lists_groups() {
 }
 
 #[test]
+fn scope_argv_runs_the_app_in_its_own_app_slice_scope() {
+    assert_eq!(
+        scope_argv("uq-settings", &v(&["uq-settings", "--page", "a b"]), 0xab),
+        v(&[
+            "systemd-run",
+            "--user",
+            "--scope",
+            "--quiet",
+            "--collect",
+            "--slice=app.slice",
+            "--unit=app-uq-uq-settings-000000ab",
+            "--",
+            "uq-settings",
+            "--page",
+            "a b",
+        ])
+    );
+    assert!(scope_argv("a.b/c", &v(&["x"]), 1)[6].starts_with("--unit=app-uq-a_b_c-"));
+}
+
+#[test]
 fn unit_id_matches_old_scope_names() {
     assert_eq!(unit_id("org.mozilla.firefox"), "org_mozilla_firefox");
     let long = "x".repeat(100);

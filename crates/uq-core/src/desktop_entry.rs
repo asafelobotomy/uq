@@ -478,6 +478,26 @@ pub fn unit_id(app_id: &str) -> String {
         .collect()
 }
 
+/// The argv that runs `argv` in a transient user scope of its own, `app-uq-<id>-<rand>.scope`
+/// in `app.slice`, as the launcher's apps run: there, a scheduler such as scdr counts it as an
+/// app (its focus boost, its weight under load) rather than as part of whatever started it.
+pub fn scope_argv(app_id: &str, argv: &[String], rand: u32) -> Vec<String> {
+    let mut out: Vec<String> = [
+        "systemd-run",
+        "--user",
+        "--scope",
+        "--quiet",
+        "--collect",
+        "--slice=app.slice",
+    ]
+    .map(String::from)
+    .into();
+    out.push(format!("--unit=app-uq-{}-{rand:08x}", unit_id(app_id)));
+    out.push("--".into());
+    out.extend(argv.iter().cloned());
+    out
+}
+
 /// A small non-cryptographic value: it only keeps scope names apart.
 pub fn random_suffix() -> u32 {
     use std::sync::atomic::{AtomicU32, Ordering};

@@ -186,7 +186,7 @@ impl Action {
                 layout,
                 media,
             } => match name.as_str() {
-                "terminal" => exec("kitty"),
+                "terminal" => exec(super::defaults::TERMINAL),
                 "exit" => exec(
                     "command -v hyprshutdown >/dev/null 2>&1 && hyprshutdown || hyprctl dispatch 'hl.dsp.exit()'",
                 ),

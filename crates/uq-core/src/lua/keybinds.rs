@@ -102,7 +102,7 @@ mod tests {
         );
         assert_eq!(
             l[3],
-            "hl.bind(\"SUPER + Return\", hl.dsp.exec_cmd(\"kitty\"), { description = \"uq:uq.terminal\" })"
+            "hl.bind(\"SUPER + Return\", hl.dsp.exec_cmd(\"systemd-run --user --scope --quiet --collect --slice=app.slice --unit=app-uq-kitty-$$ -- kitty\"), { description = \"uq:uq.terminal\" })"
         );
         assert_eq!(out.matches("hl.bind(").count(), 60);
         assert!(!out.contains("uq.profile.next"));

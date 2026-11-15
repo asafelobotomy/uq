@@ -13,6 +13,8 @@ import "../logic/idle.js" as I
 // disabled. Screens come back on through Hyprland's *_enables_dpms options. Suspend counts from
 // the last input (the monitor runs on battery alone) and only fires behind a secure lock.
 // Each monitor goes through a Rearm, so a changed timeout is applied (see Rearm.qml).
+// A sixth monitor tells logind when nobody is at the desktop (IdleHint, through the bridge), at
+// the first idle stage that is set (idle.js hintTimeout); inhibitors hold it off like the rest.
 Scope {
     id: root
 
@@ -118,5 +120,30 @@ Scope {
 
     Dim {
         shown: dimMon.enabled && dimMon.isIdle
+    }
+
+    Rearm {
+        id: hintArm
+        want: true
+        timeout: I.hintTimeout(root.stages)
+    }
+
+    IdleMonitor {
+        id: hintMon
+        enabled: hintArm.armed
+        timeout: hintArm.timeout
+        respectInhibitors: true
+    }
+
+    readonly property bool idleNow: hintMon.enabled && hintMon.isIdle
+    function sendIdle() {
+        if (Bridge.connected)
+            Bridge.call("IdleHint", [root.idleNow]).catch(function () {});
+    }
+    onIdleNowChanged: sendIdle()
+    // A new bridge (the shell or bridge restarted) starts from the current state.
+    Connections {
+        target: Bridge
+        function onConnectedChanged() { root.sendIdle(); }
     }
 }
