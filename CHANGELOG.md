@@ -7,6 +7,8 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0-rc.5] - 2026-11-15
+
 ### Fixed
 
 - **"Last activity" order in Open windows** no longer counts a notification backend's state
