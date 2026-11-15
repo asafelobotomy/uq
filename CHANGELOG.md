@@ -22,6 +22,19 @@ All notable changes to uQ are listed here. The format follows
 - **Drag tabs to reorder windows.** In the scrolling layout, dragging a tab in Open windows to a
   new place moves its window's column to match, so the tabs and the windows stay in the same
   order.
+- **Drop a tab on the screen.** Drag an Open windows tab down onto the screen below and its
+  window joins the screen shown there, as half of it: beside a Half window alone it fills the
+  empty half; on a Full window both become Half; on two Half windows it takes the half it is
+  dropped on, pushing that window out to that side. Dropped on its own screen, a Half window on
+  its own moves to the other half (the tabs keep their order) and two Halves swap. While
+  dragging, a see-through copy of the tab rides under the pointer and the place the window would
+  take is outlined.
+- **Windows sharing a screen are framed.** Two Half windows on one screen get a light frame
+  round them together; a window on its own has none.
+- **Minimise from the tab's close button.** A tab's X first asks "Minimize to Tab?" (Always
+  minimize instead of close / Never minimize instead of close / Cancel), and the answer is kept;
+  change it in the Open windows island's settings (**A tab's close button**). X on a minimised
+  window's tab closes it.
 - **Whole screen pages.** In the scrolling layout, windows fall into pages a screen wide (a Full
   window, two Half ones, or a Half on its own), and the view always shows one whole page: no
   window is left cut by the screen's edge. Beside a Half window alone on its page the rest of the

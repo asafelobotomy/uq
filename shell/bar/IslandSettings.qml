@@ -400,7 +400,7 @@ IslandPopup {
                     detail: sortBox.mode === modelData ? "✓" : ""
                     Accessible.checkable: true
                     Accessible.checked: sortBox.mode === modelData
-                    onActivated: BarLayout.setOptions("work", { sort: modelData, descending: pop.opts.descending === true })
+                    onActivated: BarLayout.setOptions("work", Object.assign({}, pop.opts, { sort: modelData }))
                 }
             }
             UqText {
@@ -415,12 +415,44 @@ IslandPopup {
                     Layout.fillWidth: true
                     text: Work.ORDER_NAMES[sortBox.mode][modelData ? 1 : 0]
                     detail: (pop.opts.descending === true) === modelData ? "✓" : ""
-                    onActivated: BarLayout.setOptions("work", { sort: sortBox.mode, descending: modelData })
+                    onActivated: BarLayout.setOptions("work", Object.assign({}, pop.opts, { sort: sortBox.mode, descending: modelData }))
                 }
             }
             UqText {
                 visible: sortBox.mode === "activity"
                 text: "The app that last sent a notification comes first."
+                color: Theme.textMuted
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+            }
+        }
+
+        // --- open windows: what a tab's X does ---
+        ColumnLayout {
+            readonly property string mode: Work.CLOSES.indexOf(pop.opts.close) >= 0 ? pop.opts.close : "ask"
+            id: closeBox
+            visible: pop.island === "work"
+            spacing: 2
+            Layout.fillWidth: true
+            Layout.topMargin: Theme.gapIn
+            UqText {
+                text: "A tab's close button"
+                color: Theme.textMuted
+            }
+            Repeater {
+                model: pop.island === "work" ? Work.CLOSES : []
+                delegate: MenuRow {
+                    required property string modelData
+                    Layout.fillWidth: true
+                    text: Work.CLOSE_NAMES[modelData]
+                    detail: closeBox.mode === modelData ? "✓" : ""
+                    Accessible.checkable: true
+                    Accessible.checked: closeBox.mode === modelData
+                    onActivated: BarLayout.setOptions("work", Object.assign({}, pop.opts, { close: modelData }))
+                }
+            }
+            UqText {
+                text: "A minimised window's close button always closes it."
                 color: Theme.textMuted
                 wrapMode: Text.WordWrap
                 Layout.fillWidth: true

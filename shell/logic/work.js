@@ -171,6 +171,22 @@ function sortHasOrder(mode) {
     return ORDER_NAMES[mode] !== undefined;
 }
 
+// What a tab's X does to an open window (shell.bar.options.work.close): ask first ("Minimize to
+// Tab?"), minimise it to its tab, or close it.
+var CLOSES = ["ask", "minimize", "close"];
+var CLOSE_NAMES = { ask: "Ask each time", minimize: "Minimise to the tab", close: "Close the window" };
+
+// What pressing a tab's X does now: "close", "minimise" or "ask". A minimised window's X closes it.
+function closeAction(mode, minimised) {
+    if (minimised === true)
+        return "close";
+    if (mode === "minimize")
+        return "minimise";
+    if (mode === "close")
+        return "close";
+    return "ask";
+}
+
 // The windows in the island's order. ctx: {opened: {addr: n} (lower opened earlier), activity:
 // {addr: ms} (the last notification from its app), pinIndex: {addr: i} (absent = not pinned),
 // usage: {addr: score}, name: {addr: "app name"}}. `descending` reverses the natural order
@@ -375,6 +391,12 @@ function scrollOffset(offset, n, shown, keep) {
 
 // Whether the tab for window `w` can be dragged: a tiled window in the scrolling layout (its
 // column is what moves), while the island shows windows in screen order.
+// A tab that can be dragged down onto the screen to join the page shown there: a tiled window in
+// the scrolling layout (any order).
+function canDropOnScreen(w) {
+    return !!w && w.scrolling === true && w.floating !== true && w.minimised !== true;
+}
+
 function canDrag(w, sortMode) {
     return !!w && sortMode === "screen" && w.scrolling === true && w.floating !== true
         && w.minimised !== true;

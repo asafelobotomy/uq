@@ -33,6 +33,8 @@ Island {
     readonly property int cell: 26
     readonly property var opts: BarLayout.options.work || ({})
     readonly property string sortMode: Work.SORTS.indexOf(opts.sort) >= 0 ? opts.sort : Work.DEFAULT_SORT
+    // What a tab's X does to an open window: "ask", "minimize" or "close".
+    readonly property string closeMode: Work.CLOSES.indexOf(opts.close) >= 0 ? opts.close : "ask"
 
     readonly property string monitorName: {
         var m = root.screen ? Hyprland.monitorFor(root.screen) : null;
@@ -311,7 +313,7 @@ Island {
         if (w.minimised)
             return;
         if (root.inColumn(w))
-            ColumnWidths.set(w.address, full)
+            PageActions.setWidth(w.address, full)
                 .catch(function (e) { console.warn("uq: window width: " + e); });
         else if (full !== root.isFull(w))
             root.act(w, "fullscreen", { mode: "maximized" });
@@ -342,6 +344,33 @@ Island {
         else
             listPopup.show(anchor, listBody);
     }
+    // A tab's X: minimise the window to its tab or close it, as the island's close option says,
+    // asking first ("Minimize to Tab?") until an answer is kept. A minimised window's X closes it.
+    function closePressed(anchor, w) {
+        var a = Work.closeAction(root.closeMode, w.minimised);
+        if (a === "ask") {
+            askWindow = w;
+            askPopup.show(anchor, askBody);
+        } else {
+            root.act(w, a);
+        }
+    }
+    function closeLabel(w) {
+        var a = Work.closeAction(root.closeMode, w.minimised);
+        return (a === "close" ? "Close " : "Minimise ") + (w.title || w.cls);
+    }
+    // The window the "Minimize to Tab?" popup is about; the answer is kept as the close option.
+    property var askWindow: null
+    function answerAsk(mode) {
+        var w = askWindow;
+        askPopup.hide();
+        askWindow = null;
+        if (!w || mode === "")
+            return;
+        BarLayout.setOptions("work", Object.assign({}, root.opts, { close: mode }));
+        root.act(w, mode === "minimize" ? "minimise" : "close");
+    }
+
     // The window menu, for window `w` under `anchor`.
     property var menuWindow: null
     function openMenu(anchor, w) {
@@ -410,26 +439,61 @@ Island {
         }
     }
 
-    // A tab's small round button (close, Full, Half).
+    // A tab's small round button: Half, Full or close. The marks are drawn, not font glyphs (whose
+    // sizes and baselines differ from font to font), all in the same box, so they sit level.
     component TabButton: Rectangle {
         id: tb
-        property string glyph: ""
+        // "half", "full" or "close".
+        property string mark: "close"
         property string label: ""
         // The window is already this way (Full on a Full window): drawn as on.
         property bool on: false
         signal pressed()
         Layout.preferredWidth: root.closeW
         Layout.preferredHeight: root.closeW
+        Layout.alignment: Qt.AlignVCenter
         radius: width / 2
         color: tbMouse.containsMouse ? Theme.overlay : "transparent"
         Accessible.role: Accessible.Button
         Accessible.name: label
         Accessible.onPressAction: tb.pressed()
-        UqText {
+        // The way the window is now (Full or Half) in the accent colour.
+        readonly property color ink: tb.on ? Theme.accent : (tbMouse.containsMouse ? Theme.text : Theme.textMuted)
+        readonly property real box: Math.round(root.closeW * 0.46)
+        readonly property real line: Math.max(1, Math.round(root.closeW / 14))
+        Item {
+            width: tb.box
+            height: tb.box
             anchors.centerIn: parent
-            text: tb.glyph
-            // The way the window is now (Full or Half) in the accent colour.
-            color: tb.on ? Theme.accent : (tbMouse.containsMouse ? Theme.text : Theme.textMuted)
+            // Half and Full: a window's outline, Half with its left half filled.
+            Rectangle {
+                visible: tb.mark !== "close"
+                anchors.fill: parent
+                radius: tb.line
+                color: "transparent"
+                border.width: tb.line
+                border.color: tb.ink
+            }
+            Rectangle {
+                visible: tb.mark === "half"
+                width: Math.round(parent.width / 2)
+                height: parent.height
+                radius: tb.line
+                color: tb.ink
+            }
+            // Close: two crossed strokes.
+            Repeater {
+                model: tb.mark === "close" ? [45, -45] : []
+                delegate: Rectangle {
+                    required property real modelData
+                    anchors.centerIn: parent
+                    width: parent.width * 1.2
+                    height: tb.line * 1.5
+                    radius: height / 2
+                    rotation: modelData
+                    color: tb.ink
+                }
+            }
         }
         MouseArea {
             id: tbMouse
@@ -583,26 +647,74 @@ Island {
                     anchors.fill: parent
                     acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
                     property real pressX: 0
+                    property real pressY: 0
                     property bool dragged: false
-                    cursorShape: root.dragIndex === pill.index ? Qt.ClosedHandCursor : Qt.ArrowCursor
+                    // Dragged below the bar, onto the screen: dropped there, the window joins the
+                    // page shown (PageActions); along the bar, the tabs are reordered.
+                    property bool overScreen: false
+                    property real screenX: 0
+                    // Where in the tab it was taken hold of, so the floating copy keeps that spot
+                    // under the pointer.
+                    property real holdX: 0
+                    property real holdY: 0
+                    cursorShape: dragged && pressed ? Qt.ClosedHandCursor : Qt.ArrowCursor
                     onPressed: function (m) {
-                        pressX = mapToItem(null, m.x, 0).x;
+                        var p = mapToItem(null, m.x, m.y);
+                        pressX = p.x;
+                        pressY = p.y;
+                        holdX = m.x;
+                        holdY = m.y;
                         dragged = false;
+                        overScreen = false;
                     }
                     onPositionChanged: function (m) {
-                        if (!(pressedButtons & Qt.LeftButton) || !Work.canDrag(pill.win, root.sortMode))
+                        if (!(pressedButtons & Qt.LeftButton))
                             return;
-                        var dx = mapToItem(null, m.x, 0).x - pressX;
-                        if (!dragged && Math.abs(dx) < Theme.gapIn * 2)
+                        var reorder = Work.canDrag(pill.win, root.sortMode), drop = Work.canDropOnScreen(pill.win);
+                        if (!reorder && !drop)
+                            return;
+                        var p = mapToItem(null, m.x, m.y), dx = p.x - pressX, dy = p.y - pressY;
+                        if (!dragged && Math.max(Math.abs(dx), Math.abs(dy)) < Theme.gapIn * 2)
                             return;
                         if (!dragged) {
                             dragged = true;
-                            root.startDrag(pill.index);
+                            if (reorder)
+                                root.startDrag(pill.index);
                         }
-                        root.moveDrag(dx);
+                        var bar = pill.QsWindow.window;
+                        var below = bar !== null && p.y > bar.height + Theme.gapIn;
+                        overScreen = drop && below;
+                        screenX = p.x + WindowLook.edgeLeft;
+                        // Off the bar (or where the tab can't follow), a see-through copy of the
+                        // tab rides under the pointer; over the screen, where the window would go
+                        // is outlined (PageActions, drawn by ScreenPages).
+                        PageActions.dropHint = below || !reorder ? {
+                            screen: root.screen ? root.screen.name : "", address: pill.win.address,
+                            x: screenX, y: p.y + WindowLook.gapTop, drop: overScreen,
+                            holdX: holdX, holdY: holdY, width: pill.width, height: pill.height,
+                            title: pill.name, icon: root.iconFor(pill.win.cls)
+                        } : null;
+                        if (reorder)
+                            root.moveDrag(overScreen ? 0 : dx);
                     }
-                    onReleased: if (dragged) root.endDrag()
-                    onCanceled: if (dragged) root.cancelDrag()
+                    onReleased: {
+                        if (!dragged)
+                            return;
+                        PageActions.dropHint = null;
+                        if (overScreen) {
+                            root.cancelDrag();
+                            PageActions.drop(root.screen ? root.screen.name : "", pill.win.address, screenX);
+                        } else if (root.dragIndex >= 0) {
+                            root.endDrag();
+                        }
+                        overScreen = false;
+                    }
+                    onCanceled: {
+                        PageActions.dropHint = null;
+                        overScreen = false;
+                        if (dragged)
+                            root.cancelDrag();
+                    }
                     onClicked: function (m) {
                         if (dragged)
                             return;
@@ -650,8 +762,8 @@ Island {
                             enabled: pill.tier === "icon"
                             hoverEnabled: true
                             Accessible.role: Accessible.Button
-                            Accessible.name: "Close " + pill.name
-                            onClicked: root.act(pill.win, "close")
+                            Accessible.name: root.closeLabel(pill.win)
+                            onClicked: root.closePressed(pill, pill.win)
                         }
                     }
                     UqText {
@@ -669,29 +781,30 @@ Island {
                         visible: pill.tier === "small" && !pill.win.minimised
                         opacity: pillHover.hovered ? 1 : 0
                         enabled: pillHover.hovered
-                        glyph: pill.full ? "◧" : "□"
+                        mark: pill.full ? "half" : "full"
                         label: (pill.full ? "Half width: " : "Full width: ") + pill.name
                         onPressed: root.setFull(pill.win, !pill.full)
                     }
                     TabButton {
                         visible: (pill.tier === "medium" || pill.tier === "large") && !pill.win.minimised
-                        glyph: "◧"
+                        mark: "half"
                         label: "Half width: " + pill.name
                         on: !pill.full
                         onPressed: root.setFull(pill.win, false)
                     }
                     TabButton {
                         visible: (pill.tier === "medium" || pill.tier === "large") && !pill.win.minimised
-                        glyph: "□"
+                        mark: "full"
                         label: "Full width: " + pill.name
                         on: pill.full
                         onPressed: root.setFull(pill.win, true)
                     }
                     TabButton {
+                        id: closeButton
                         visible: pill.tier !== "icon"
-                        glyph: "✕"
-                        label: "Close " + pill.name
-                        onPressed: root.act(pill.win, "close")
+                        mark: "close"
+                        label: root.closeLabel(pill.win)
+                        onPressed: root.closePressed(closeButton, pill.win)
                     }
                 }
             }
@@ -761,6 +874,51 @@ Island {
                     }
                     Component.onCompleted: if (index === 0) forceActiveFocus()
                 }
+            }
+        }
+    }
+
+    // "Minimize to Tab?": a tab's X, until an answer is kept (the island's close option).
+    LazyPopup {
+        id: askPopup
+        onOpenChanged: if (!open) root.askWindow = null
+    }
+    Component {
+        id: askBody
+        ColumnLayout {
+            spacing: 2
+            width: Theme.fontSize * 20
+            UqText {
+                text: "Minimize to Tab?"
+                baseBold: true
+                Layout.fillWidth: true
+            }
+            UqText {
+                text: root.askWindow ? (root.askWindow.title || root.askWindow.cls) : ""
+                color: Theme.textMuted
+                Layout.fillWidth: true
+            }
+            MenuRow {
+                Layout.fillWidth: true
+                text: "Always minimize instead of close"
+                onActivated: root.answerAsk("minimize")
+                Component.onCompleted: forceActiveFocus()
+            }
+            MenuRow {
+                Layout.fillWidth: true
+                text: "Never minimize instead of close"
+                onActivated: root.answerAsk("close")
+            }
+            MenuRow {
+                Layout.fillWidth: true
+                text: "Cancel"
+                onActivated: root.answerAsk("")
+            }
+            UqText {
+                text: "Change it later in this island's settings."
+                color: Theme.textMuted
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
             }
         }
     }

@@ -373,6 +373,19 @@ pub enum WindowSort {
     Name,
 }
 
+/// What a tab's close button (X) does to an open window. A minimised window's X always closes it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CloseButton {
+    /// Ask ("Minimize to Tab?"), where the answer can become `minimize` or `close`.
+    #[default]
+    Ask,
+    /// Minimise the window to its tab.
+    Minimize,
+    /// Close the window.
+    Close,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct WorkOptions {
@@ -380,6 +393,8 @@ pub struct WorkOptions {
     /// Reverse the order (newest, most active, busiest or Z first). Ignored for `screen` and
     /// `pin`.
     pub descending: bool,
+    /// What a tab's X does to an open window.
+    pub close: CloseButton,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -1304,6 +1319,22 @@ mod tests {
         )
         .unwrap();
         assert_eq!(b.options.work.sort, WindowSort::Name);
+    }
+
+    #[test]
+    fn work_close_button() {
+        assert_eq!(WorkOptions::default().close, CloseButton::Ask);
+        let b =
+            BarLayout::from_value(&json!({"options": {"work": {"close": "minimize"}}})).unwrap();
+        assert_eq!(b.options.work.close, CloseButton::Minimize);
+        assert_eq!(
+            b.options.work.sort,
+            WindowSort::Screen,
+            "the rest as default"
+        );
+        let b = BarLayout::from_value(&json!({"options": {"work": {"close": "close"}}})).unwrap();
+        assert_eq!(b.options.work.close, CloseButton::Close);
+        assert!(BarLayout::from_value(&json!({"options": {"work": {"close": "hide"}}})).is_err());
     }
 
     #[test]

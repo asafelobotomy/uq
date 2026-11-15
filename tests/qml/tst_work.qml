@@ -300,4 +300,14 @@ TestCase {
         verify(!Work.canDrag({ scrolling: true, minimised: true }, "screen"));
         verify(!Work.canDrag({ scrolling: true, floating: true }, "screen"));
     }
+
+    function test_close_action() {
+        compare(Work.closeAction("ask", false), "ask");
+        compare(Work.closeAction(undefined, false), "ask", "unset asks");
+        compare(Work.closeAction("minimize", false), "minimise");
+        compare(Work.closeAction("close", false), "close");
+        compare(Work.closeAction("minimize", true), "close", "a minimised window's X closes it");
+        compare(Work.closeAction("ask", true), "close");
+        compare(Work.CLOSES.length, 3);
+    }
 }

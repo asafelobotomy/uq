@@ -55,15 +55,38 @@ function pageOf(list, address) {
     return null;
 }
 
+// A page leaves part of the screen empty: a Half column on its own (or a narrower pair).
+function unfilled(p, room) {
+    return p.used < room - TOLERANCE;
+}
+
+// Whether page `p` (of `list`) sits on the right of the screen, its empty part on the left:
+// `right` ({address: true}) holds the first windows of the pages put there (a tab dropped on the
+// right half of its own screen). Only a page that leaves part of the screen empty can, and not
+// the first (Hyprland doesn't scroll the strip's first column away from the screen's edge).
+function onRight(list, p, room, right) {
+    return !!right && !!p && p !== list[0] && unfilled(p, room)
+        && right[p.cols[0].wins[0].address] === true;
+}
+
 // Where the view should be: the page holding the focused window `address` starts at the screen's
-// left edge, where a column's window has x `left`. Returns {address (that page's first window),
-// x: left} when the view is elsewhere, or null when it already is there or the window isn't on a
-// page (the bridge's `scroll` then moves the view by what it reads the gap to be).
-function snap(wins, address, room, extra, left, starts) {
-    var p = pageOf(pages(wins, room, extra, starts), address);
-    if (p === null || Math.abs(left - p.x) <= TOLERANCE)
+// left edge, where a column's window has x `left` (or, put on the right, ends at its right edge).
+// Returns {address (that page's first window), x} when the view is elsewhere, or null when it
+// already is there or the window isn't on a page (the bridge's `scroll` then moves the view by
+// what it reads the gap to be).
+function snap(wins, address, room, extra, left, starts, right) {
+    var t = target(wins, address, room, extra, left, starts, right);
+    return t === null || Math.abs(t.x - t.at) <= TOLERANCE ? null : { address: t.address, x: t.x };
+}
+
+// Where the page holding `address` goes, whether or not it is there now: {address (its first
+// window), x (that window's x then), at (its x now)}; null when the window isn't on a page.
+function target(wins, address, room, extra, left, starts, right) {
+    var list = pages(wins, room, extra, starts), p = pageOf(list, address);
+    if (p === null)
         return null;
-    return { address: p.cols[0].wins[0].address, x: Math.round(left) };
+    var x = onRight(list, p, room, right) ? left + room - p.used : left;
+    return { address: p.cols[0].wins[0].address, x: Math.round(x), at: p.x };
 }
 
 // The screen geometry pages need, from a Hyprland monitor (its lastIpcObject: x, width, scale,
@@ -84,27 +107,136 @@ function geometry(m, look) {
 }
 
 // The empty part of the page holding window `address`, when something else would show there:
-// the page leaves part of the screen unused (a Half column on its own) and isn't the last page
-// (after which the strip simply ends). Returns {from} (how far into the page, from its left edge,
-// the empty part begins, so it runs from there to the screen's right edge) or null.
-function cover(wins, address, room, extra, starts) {
+// the page leaves part of the screen unused (a Half column on its own) and isn't at the end of
+// the strip on that side (where the strip simply ends). Returns {from, width} (from the page's
+// left edge, where the screen's columns begin) or null.
+function cover(wins, address, room, extra, starts, right) {
     var list = pages(wins, room, extra, starts), p = pageOf(list, address);
-    if (p === null || p === list[list.length - 1] || p.used >= room - TOLERANCE)
+    if (p === null || !unfilled(p, room))
         return null;
-    return { from: p.used };
+    if (onRight(list, p, room, right))
+        return { from: 0, width: room - p.used };
+    if (p === list[list.length - 1])
+        return null;
+    return { from: p.used, width: room - p.used };
 }
 
 // The windows to hide: beside a page that leaves part of the screen empty (cover), the next
-// page's windows would show; they are hidden whenever their own page isn't the one shown (the
-// page holding `address`), so they never show in that space, nor while the view slides past.
-// Returns {address: true}.
-function hidden(wins, address, room, extra, starts) {
+// page's windows would show (the previous page's, for a page on the right); they are hidden
+// whenever their own page isn't the one shown (the page holding `address`), so they never show
+// in that space, nor while the view slides past. Returns {address: true}.
+function hidden(wins, address, room, extra, starts, right) {
     var list = pages(wins, room, extra, starts), shown = pageOf(list, address), out = {};
-    for (var i = 0; i + 1 < list.length; i++) {
-        var p = list[i], next = list[i + 1];
-        if (p.used >= room - TOLERANCE || next === shown)
+    for (var i = 0; i < list.length; i++) {
+        if (!unfilled(list[i], room))
             continue;
-        next.cols.forEach(function (c) { c.wins.forEach(function (w) { out[w.address] = true; }); });
+        var n = onRight(list, list[i], room, right) ? list[i - 1] : list[i + 1];
+        if (!n || n === shown)
+            continue;
+        n.cols.forEach(function (c) { c.wins.forEach(function (w) { out[w.address] = true; }); });
     }
     return out;
+}
+
+// The windows beginning pages put on the right that still can be ({address: true}), from `right`.
+function rightOf(wins, room, extra, starts, right) {
+    var list = pages(wins, room, extra, starts), out = {};
+    for (var i = 0; i < list.length; i++)
+        if (onRight(list, list[i], room, right))
+            out[list[i].cols[0].wins[0].address] = true;
+    return out;
+}
+
+// A tab dropped on the screen: window `dragged` joins the page shown there (the one holding
+// `shown`), as half of it. `side` ("left" or "right") is the half of the screen it was dropped
+// on. Returns null when nothing would change (or it can't: the window isn't tiled here, or the
+// page has more than two columns), else {steps (columns to move it, as the bridge's move_column
+// takes them; 0 when it stays), half (windows to make Half), starts (windows that begin a page
+// afterwards: address -> true or false), right (page-first windows put on the right or back:
+// address -> true or false), area: {from, width} (the part of the page, from its left edge, it
+// will take)}. From another page:
+//   - a page with one Full column: that column becomes Half and the window takes the other half;
+//   - a page with a Half alone: the window fills the empty half (before it when it is on the
+//     right);
+//   - a page of two: the window takes the half it was dropped on, and the column there is pushed
+//     out to that side onto a page of its own (on the left: before it; on the right: after it).
+// On its own page:
+//   - a Half alone moves to the half it was dropped on, the other left empty, with no column
+//     moving (not on the first page, which Hyprland keeps at the screen's left edge);
+//   - a pair swaps halves when dropped on the other one.
+function dropPlan(wins, room, extra, starts, shown, dragged, side, right) {
+    var list = pages(wins, room, extra, starts), p = pageOf(list, shown), from = pageOf(list, dragged);
+    if (p === null || from === null || p.cols.length > 2)
+        return null;
+    var cols = Grips.columns(wins);
+    function first(c) { return c.wins[0].address; }
+    function index(addr) {
+        for (var i = 0; i < cols.length; i++)
+            for (var j = 0; j < cols[i].wins.length; j++)
+                if (cols[i].wins[j].address === addr)
+                    return i;
+        return -1;
+    }
+    function slot(c) { return c.w + (extra || 0); }
+    var a = p.cols[0], s = {}, r = {}, half = [], area, steps;
+    var isRight = onRight(list, p, room, right);
+    if (p === from) {
+        if (p.cols.length === 1) {
+            if (!unfilled(p, room) || (side === "right") === isRight || (side === "right" && p === list[0]))
+                return null;
+            r[first(a)] = side === "right";
+            return { steps: 0, half: [], starts: {}, right: r,
+                     area: side === "right" ? { from: room - p.used, width: p.used } : { from: 0, width: p.used } };
+        }
+        var mine = index(dragged) === index(first(a)) ? 0 : 1;
+        var want = side === "left" ? 0 : 1;
+        if (mine === want)
+            return null;
+        var other = p.cols[1 - mine], me = p.cols[mine];
+        s[dragged] = want === 0;
+        s[first(other)] = want !== 0;
+        return { steps: want - mine, half: [], starts: s, right: {},
+                 area: want === 0 ? { from: 0, width: slot(me) } : { from: room - slot(me), width: slot(me) } };
+    }
+    half = [dragged];
+    area = { from: room / 2, width: room / 2 };
+    var before = false;
+    if (p.cols.length === 1) {
+        if (!unfilled(p, room)) {
+            half.unshift(first(a));
+        } else if (isRight) {
+            before = true;
+            area = { from: 0, width: room - p.used };
+            r[first(a)] = false;
+        } else {
+            area = { from: p.used, width: room - p.used };
+        }
+        s[first(a)] = !before;
+        s[dragged] = before;
+    } else {
+        var b = p.cols[1];
+        half.push(first(side === "left" ? b : a));
+        s[first(a)] = true;
+        s[dragged] = side === "left";
+        s[first(b)] = side !== "left";
+        if (side === "left")
+            area = { from: 0, width: room / 2 };
+    }
+    // Right after the page's first column, or right before it.
+    var ia = index(first(a)), id = index(dragged);
+    if (before)
+        steps = id > ia ? -(id - ia) : ia - id - 1;
+    else
+        steps = id > ia ? -(id - ia - 1) : ia - id;
+    return { steps: steps, half: half, starts: s, right: r, area: area };
+}
+
+// The page shown with window `address`, when it holds more than one column (windows that share a
+// screen are framed together; a window on its own isn't): {from, width} (its columns' span, from
+// the left edge where the screen's columns begin, where it sits once the view is on it) or null.
+function shared(wins, address, room, extra, starts, right) {
+    var list = pages(wins, room, extra, starts), p = pageOf(list, address);
+    if (p === null || p.cols.length < 2)
+        return null;
+    return { from: onRight(list, p, room, right) ? room - p.used : 0, width: p.used };
 }

@@ -73,12 +73,22 @@ Scope {
                 Object.assign(starts, Pages.startsOf(Pages.pages(byWs[wsName], g.room, g.extra, root.starts)));
         }
         root.starts = starts;
+        var right = {};
+        for (var wsR in byWs) {
+            var gR = root.geometryOf(byWs[wsR]);
+            if (gR !== null)
+                Object.assign(right, Pages.rightOf(byWs[wsR], gR.room, gR.extra, starts, root.right));
+        }
+        root.right = right;
         var top = Hyprland.activeToplevel;
         root.focused = top ? (Work.normAddr(top.address) || "") : "";
     }
 
     // Address -> true for the windows beginning a page (Pages.startsOf), as of the last read.
     property var starts: ({})
+    // Address -> true for the first windows of pages put on the right of the screen (a Half alone
+    // dropped on its screen's right half), kept while they still can be (Pages.rightOf).
+    property var right: ({})
     // Pages.geometry for a workspace's windows (from read()), from the screen they are on.
     function geometryOf(wins) {
         if (!WindowLook.known || !wins || wins.length === 0)
@@ -134,11 +144,11 @@ Scope {
         var wins = root.tiled[m.activeWorkspace.id], g = Pages.geometry(m, WindowLook);
         if (!wins || g === null)
             return;
-        var p = Pages.pageOf(Pages.pages(wins, g.room, g.extra, root.starts), addr);
-        if (p === null)
+        var t = Pages.target(wins, addr, g.room, g.extra, g.left, root.starts, root.right);
+        if (t === null)
             return;
         root.focused = addr;
-        root.scrollTo({ address: p.cols[0].wins[0].address, x: Math.round(g.left) });
+        root.scrollTo({ address: t.address, x: t.x });
     }
 
     // Beside a Half alone on its page, the next page's windows are hidden (Pages.hidden). Hyprland
@@ -159,7 +169,7 @@ Scope {
                     continue;
                 var list = wins.slice(0, 64).map(function (w) {
                     return { address: w.address,
-                             hide: Object.keys(Pages.hidden(wins, w.address, g.room, g.extra, root.starts)).slice(0, 64) };
+                             hide: Object.keys(Pages.hidden(wins, w.address, g.room, g.extra, root.starts, root.right)).slice(0, 64) };
                 });
                 spaces.push({ id: Number(ws), anchor: root.anchorOf(wins), windows: list });
             }
@@ -183,7 +193,7 @@ Scope {
             .catch(function (e) { console.warn("uq: screen pages: " + e); });
     }
 
-    // A column made Full or Half from a tab (ColumnWidths). Made Half, it can leave the rest of
+    // A column made Full or Half from a tab (PageActions). Made Half, it can leave the rest of
     // its screen empty, where the next page's window would show until the pages were read
     // again: the pages are worked out as they will be (its window half the room wide) and
     // Hyprland handed them first, so that window is hidden before the width changes.
@@ -208,7 +218,71 @@ Scope {
             return call();
         return root.syncHidden(forecast).then(call);
     }
-    Component.onDestruction: if (ColumnWidths.handler === root.setWidth) ColumnWidths.handler = null
+    // A tab dropped on screen `screenName` at `x` (the screen's own coordinates): how window
+    // `address` would join the page shown there (Pages.dropPlan), with that screen's monitor and
+    // geometry; null when it can't.
+    function dropPlanFor(screenName, address, x) {
+        var m = root.monitors[screenName] || null;
+        if (!root.enabled || !WindowLook.known || !m || !m.activeWorkspace)
+            return null;
+        var wins = root.tiled[m.activeWorkspace.id], g = Pages.geometry(m, WindowLook);
+        if (!wins || g === null)
+            return null;
+        var scale = m.scale > 0 ? m.scale : 1;
+        var side = x < m.width / scale / 2 ? "left" : "right";
+        var plan = Pages.dropPlan(wins, g.room, g.extra, root.starts, root.anchorOf(wins), address, side, root.right);
+        return plan === null ? null : { plan: plan, m: m, g: g };
+    }
+    // The tab's window joins that page: its column moves there, the widths are set, and the
+    // pages begin where the plan says (so the window pushed out of a pair gets a page of its
+    // own). The window is focused at the end.
+    function dropTab(screenName, address, x) {
+        var d = root.dropPlanFor(screenName, address, x);
+        if (d === null)
+            return;
+        var plan = d.plan, st = Object.assign({}, root.starts);
+        for (var a in plan.starts) {
+            if (plan.starts[a])
+                st[a] = true;
+            else
+                delete st[a];
+        }
+        root.starts = st;
+        var rt = Object.assign({}, root.right);
+        for (var b in plan.right) {
+            if (plan.right[b])
+                rt[b] = true;
+            else
+                delete rt[b];
+        }
+        root.right = rt;
+        // A page moved to the other side moves no column: hide what now shows beside it and
+        // scroll there.
+        if (plan.steps === 0 && plan.half.length === 0) {
+            root.syncHidden();
+            root.refresh();
+            return;
+        }
+        var warn = function (e) { console.warn("uq: drop a tab on the screen: " + e); };
+        var chain = plan.steps !== 0
+            ? Bridge.call("Dispatch", ["move_column", { address: address, steps: plan.steps }])
+            : Promise.resolve();
+        plan.half.forEach(function (h) {
+            chain = chain.then(function () {
+                return Bridge.call("Dispatch", ["column_width", { address: h, width: "half", keep_focus: true }]);
+            });
+        });
+        chain.then(function () {
+            return Bridge.call("Dispatch", ["focus_window", { address: address, keep_pointer: true }]);
+        }).catch(warn).then(function () { root.refresh(); });
+    }
+
+    Component.onDestruction: {
+        if (PageActions.widthHandler === root.setWidth)
+            PageActions.widthHandler = null;
+        if (PageActions.dropHandler === root.dropTab)
+            PageActions.dropHandler = null;
+    }
 
     function look() {
         read();
@@ -221,7 +295,7 @@ Scope {
         var wins = root.tiled[m.activeWorkspace.id], g = Pages.geometry(m, WindowLook);
         if (!wins || g === null)
             return;
-        var to = Pages.snap(wins, root.focused, g.room, g.extra, g.left, root.starts);
+        var to = Pages.snap(wins, root.focused, g.room, g.extra, g.left, root.starts, root.right);
         if (to !== null)
             root.scrollTo(to);
     }
@@ -242,16 +316,17 @@ Scope {
                 var wins = root.tiled[m.activeWorkspace.id], g = Pages.geometry(m, WindowLook);
                 if (!wins || g === null)
                     return null;
-                var c = Pages.cover(wins, root.anchorOf(wins), g.room, g.extra, root.starts);
+                var c = Pages.cover(wins, root.anchorOf(wins), g.room, g.extra, root.starts, root.right);
                 if (c === null)
                     return null;
                 var scale = m.scale > 0 ? m.scale : 1;
                 var res = m.reserved && m.reserved.length >= 4 ? m.reserved : [0, 0, 0, 0];
-                // In the screen's own coordinates: from the empty part's left edge to the
-                // screen's right edge, between the reserved strips (the bar).
-                var x = Math.round(res[0] + WindowLook.gapLeft + c.from);
-                var w = Math.round(m.width / scale) - x;
-                return w > 0 ? { x: x, top: res[1], bottom: res[3], w: w } : null;
+                // In the screen's own coordinates, between the reserved strips (the bar): the
+                // empty part, out to the screen's edge on the side it reaches.
+                var sw = Math.round(m.width / scale), base = res[0] + WindowLook.gapLeft;
+                var x0 = c.from <= Pages.TOLERANCE ? 0 : Math.round(base + c.from);
+                var x1 = c.from + c.width >= g.room - Pages.TOLERANCE ? sw : Math.round(base + c.from + c.width);
+                return x1 > x0 ? { x: x0, top: res[1], bottom: res[3], w: x1 - x0 } : null;
             }
 
             screen: modelData
@@ -261,8 +336,8 @@ Scope {
             WlrLayershell.namespace: "uq-page-cover"
             WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
             exclusionMode: ExclusionMode.Ignore
-            anchors { top: true; bottom: true; right: true }
-            margins { top: area ? area.top : 0; bottom: area ? area.bottom : 0 }
+            anchors { top: true; bottom: true; left: true }
+            margins { top: area ? area.top : 0; bottom: area ? area.bottom : 0; left: area ? area.x : 0 }
             implicitWidth: area ? area.w : 1
 
             MouseArea {
@@ -276,8 +351,147 @@ Scope {
         }
     }
 
+    // Windows that share a screen (two Halves, or a pair a resize grip shared out) get a light
+    // frame round them together, in the gaps around them; a window on its own has none. Drawn below
+    // the windows, where the page shown on each screen sits once the view is on it.
+    Variants {
+        model: Quickshell.screens
+        delegate: PanelWindow {
+            id: frameWin
+            required property var modelData
+            readonly property var mon: root.monitors[modelData.name] || null
+            readonly property var rect: {
+                var m = frameWin.mon;
+                if (!root.enabled || !WindowLook.known || !m || !m.activeWorkspace)
+                    return null;
+                var wins = root.tiled[m.activeWorkspace.id], g = Pages.geometry(m, WindowLook);
+                if (!wins || g === null)
+                    return null;
+                var sh = Pages.shared(wins, root.anchorOf(wins), g.room, g.extra, root.starts, root.right);
+                if (sh === null)
+                    return null;
+                var scale = m.scale > 0 ? m.scale : 1;
+                var res = m.reserved && m.reserved.length >= 4 ? m.reserved : [0, 0, 0, 0];
+                var gin = WindowLook.windowGap / 2;
+                // The windows' frames (borders included), then out into the gaps around them.
+                var pad = Math.max(2, Math.min(gin, WindowLook.gapTop, WindowLook.gapBottom) - 1);
+                var left = res[0] + WindowLook.gapLeft + sh.from + gin;
+                var top = res[1] + WindowLook.gapTop;
+                return { x: left - pad, y: top - pad, w: sh.width - 2 * gin + 2 * pad,
+                         h: Math.round(m.height / scale) - res[3] - WindowLook.gapBottom - top + 2 * pad,
+                         radius: WindowLook.frameRadius + pad };
+            }
+
+            screen: modelData
+            visible: rect !== null
+            color: "transparent"
+            WlrLayershell.layer: WlrLayer.Bottom
+            WlrLayershell.namespace: "uq-page-frame"
+            WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+            exclusionMode: ExclusionMode.Ignore
+            anchors { top: true; bottom: true; left: true; right: true }
+            mask: Region {}
+
+            Rectangle {
+                visible: frameWin.rect !== null
+                x: frameWin.rect ? frameWin.rect.x : 0
+                y: frameWin.rect ? frameWin.rect.y : 0
+                width: frameWin.rect ? frameWin.rect.w : 0
+                height: frameWin.rect ? frameWin.rect.h : 0
+                radius: frameWin.rect ? frameWin.rect.radius : 0
+                color: "transparent"
+                border.width: 2
+                border.color: Qt.alpha(Theme.text, 0.35)
+            }
+        }
+    }
+
+    // While a tab is dragged over a screen: where its window would go, drawn as a window frame
+    // over that part of the page (nothing where it can't go).
+    Variants {
+        model: Quickshell.screens
+        delegate: PanelWindow {
+            id: hintWin
+            required property var modelData
+            readonly property var hint: PageActions.dropHint
+            readonly property var place: {
+                var h = hintWin.hint;
+                if (!h || h.screen !== hintWin.modelData.name || h.drop !== true)
+                    return null;
+                var d = root.dropPlanFor(h.screen, h.address, h.x);
+                if (d === null)
+                    return null;
+                var m = d.m, res = m.reserved && m.reserved.length >= 4 ? m.reserved : [0, 0, 0, 0];
+                return { x: res[0] + WindowLook.gapLeft + d.plan.area.from + WindowLook.windowGap / 2,
+                         y: res[1] + WindowLook.gapTop,
+                         w: d.plan.area.width - WindowLook.windowGap,
+                         h: hintWin.modelData.height - res[1] - res[3] - WindowLook.gapTop - WindowLook.gapBottom };
+            }
+
+            screen: modelData
+            visible: hint !== null && hint.screen === modelData.name
+            color: "transparent"
+            WlrLayershell.layer: WlrLayer.Overlay
+            WlrLayershell.namespace: "uq-tab-drop"
+            WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+            exclusionMode: ExclusionMode.Ignore
+            anchors { top: true; bottom: true; left: true; right: true }
+            // Draws only: the dragged tab keeps the pointer.
+            mask: Region {}
+
+            Rectangle {
+                visible: hintWin.place !== null
+                x: hintWin.place ? hintWin.place.x : 0
+                y: hintWin.place ? hintWin.place.y : 0
+                width: hintWin.place ? hintWin.place.w : 0
+                height: hintWin.place ? hintWin.place.h : 0
+                radius: WindowLook.frameRadius
+                color: Qt.alpha(WindowLook.activeBorder, 0.18)
+                border.width: Math.max(2, WindowLook.border)
+                border.color: WindowLook.activeBorder
+            }
+
+            // The tab, see-through, held by the pointer where it was taken.
+            Rectangle {
+                id: ghost
+                readonly property var h: hintWin.hint
+                visible: h !== null
+                x: h ? h.x - h.holdX : 0
+                y: h ? h.y - h.holdY : 0
+                width: h ? Math.max(h.width, Theme.fontSize * 9) : 0
+                height: h ? h.height : 0
+                radius: Theme.radius - 2
+                color: Theme.surfaceAlt
+                border.width: 1
+                border.color: h && h.drop ? WindowLook.activeBorder : Theme.border
+                opacity: 0.8
+                Row {
+                    anchors.fill: parent
+                    anchors.leftMargin: Theme.gapIn
+                    anchors.rightMargin: Theme.gapIn
+                    spacing: Theme.gapIn
+                    Image {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: Math.round(ghost.height * 0.6)
+                        height: width
+                        sourceSize.width: width * 2
+                        sourceSize.height: height * 2
+                        source: ghost.h ? ghost.h.icon : ""
+                    }
+                    UqText {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: ghost.width - ghost.height - Theme.gapIn * 3
+                        text: ghost.h ? ghost.h.title : ""
+                        elide: Text.ElideRight
+                    }
+                }
+            }
+        }
+    }
+
     Component.onCompleted: {
-        ColumnWidths.handler = root.setWidth;
+        PageActions.widthHandler = root.setWidth;
+        PageActions.dropHandler = root.dropTab;
         refresh();
     }
     Connections {
