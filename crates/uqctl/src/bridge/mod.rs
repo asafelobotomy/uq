@@ -591,7 +591,7 @@ mod tests {
         let ev = json!({"v":1,"event":"LockState","data":{"locked":false}});
         assert_eq!(next(&mut out).await, ev);
         drop(in_w);
-        task.await.unwrap();
+        let _ = task.await.unwrap();
 
         // Nothing reported yet: Hello says unlocked and no LockState is sent.
         let (lock_tx, locks) = mpsc::unbounded_channel();
@@ -615,7 +615,7 @@ mod tests {
         let ev = json!({"v":1,"event":"LockState","data":{"locked":true}});
         assert_eq!(next(&mut out).await, ev);
         drop(in_w);
-        task.await.unwrap();
+        let _ = task.await.unwrap();
     }
 
     #[tokio::test]
@@ -640,7 +640,7 @@ mod tests {
             json!({"v":1,"id":4,"err":"unknown call Nope"})
         );
         drop(in_w);
-        task.await.unwrap();
+        let _ = task.await.unwrap();
     }
 
     #[tokio::test]
@@ -669,7 +669,7 @@ mod tests {
             json!({"v":1,"id":2,"err":"SleepLockReady takes no arguments"})
         );
         drop(in_w);
-        task.await.unwrap();
+        let _ = task.await.unwrap();
     }
 
     #[tokio::test]
@@ -694,7 +694,7 @@ mod tests {
             json!({"v":1,"id":1,"err":"uqd is not running"})
         );
         drop(in_w);
-        task.await.unwrap();
+        let _ = task.await.unwrap();
 
         // A reply over MAX_LINE becomes an error for the same id.
         let (w, r) = duplex(1 << 20);

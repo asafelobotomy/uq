@@ -171,6 +171,22 @@ function sortHasOrder(mode) {
     return ORDER_NAMES[mode] !== undefined;
 }
 
+// What a tab's X does to an open window (shell.bar.options.work.close): ask first ("Minimize to
+// Tab?"), minimise it to its tab, or close it.
+var CLOSES = ["ask", "minimize", "close"];
+var CLOSE_NAMES = { ask: "Ask each time", minimize: "Minimise to the tab", close: "Close the window" };
+
+// What pressing a tab's X does now: "close", "minimise" or "ask". A minimised window's X closes it.
+function closeAction(mode, minimised) {
+    if (minimised === true)
+        return "close";
+    if (mode === "minimize")
+        return "minimise";
+    if (mode === "close")
+        return "close";
+    return "ask";
+}
+
 // The windows in the island's order. ctx: {opened: {addr: n} (lower opened earlier), activity:
 // {addr: ms} (the last notification from its app), pinIndex: {addr: i} (absent = not pinned),
 // usage: {addr: score}, name: {addr: "app name"}}. `descending` reverses the natural order
@@ -369,4 +385,62 @@ function scrollOffset(offset, n, shown, keep) {
             o = keep - shown + 1;
     }
     return o;
+}
+
+// --- Dragging tabs into a new order ---
+
+// Whether the tab for window `w` can be dragged: a tiled window in the scrolling layout (its
+// column is what moves), while the island shows windows in screen order.
+// A tab that can be dragged down onto the screen to join the page shown there: a tiled window in
+// the scrolling layout (any order).
+function canDropOnScreen(w) {
+    return !!w && w.scrolling === true && w.floating !== true && w.minimised !== true;
+}
+
+function canDrag(w, sortMode) {
+    return !!w && sortMode === "screen" && w.scrolling === true && w.floating !== true
+        && w.minimised !== true;
+}
+
+// How many columns the window at `from` in `list` (the island's windows in screen order) moves
+// when its tab is dropped at `to` (its index in the list once moved): the other columns before
+// it after the move, less those before it now. Windows stacked in one column (same x) are one
+// column; minimised and floating windows are no column. Negative: left.
+function columnSteps(list, from, to) {
+    if (!list || from < 0 || from >= list.length || to < 0 || to >= list.length || from === to)
+        return 0;
+    var me = list[from];
+    function colsBefore(order, upto) {
+        var xs = [];
+        for (var i = 0; i < upto; i++) {
+            var w = order[i];
+            if (w.minimised === true || w.floating === true || Math.abs(w.x - me.x) <= 2)
+                continue;
+            var seen = false;
+            for (var j = 0; j < xs.length && !seen; j++)
+                seen = Math.abs(xs[j] - w.x) <= 2;
+            if (!seen)
+                xs.push(w.x);
+        }
+        return xs.length;
+    }
+    var moved = list.slice();
+    moved.splice(from, 1);
+    moved.splice(to, 0, me);
+    return colsBefore(moved, to) - colsBefore(list, from);
+}
+
+// The index a tab dragged from `from` lands at when its centre is at `x` along a strip of tabs
+// whose left edges are `lefts` and widths `widths` (as drawn before the drag): the slot whose
+// tab centre it passed last.
+function dropIndex(lefts, widths, from, x) {
+    var to = from;
+    for (var i = 0; i < lefts.length; i++) {
+        var c = lefts[i] + widths[i] / 2;
+        if (i < from && x < c)
+            return i;
+        if (i > from && x > c)
+            to = i;
+    }
+    return to;
 }

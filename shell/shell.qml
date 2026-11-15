@@ -81,6 +81,14 @@ ShellRoot {
     // its own after it, one opened from a Half column is Half, and a lone window is Full.
     ColumnPolicy {}
 
+    // The gaps between tiled windows can be dragged to resize them.
+    ResizeGrips {
+        id: resizeGrips
+    }
+    ScreenPages {
+        paused: resizeGrips.dragging
+    }
+
     // The full-screen "click a window" overlay for the rules editor's Pick a window.
     PickOverlay {}
 

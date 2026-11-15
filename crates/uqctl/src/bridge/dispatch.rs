@@ -83,6 +83,47 @@ pub enum Action {
     },
     /// Give a floating window this size and put its top-left corner here (layout coordinates,
     /// as Hyprland reports `at`): the shell's "keep windows on screen".
+    /// Give windows these sizes where they are, in this order, in one go: a tiled one's column
+    /// width (scrolling) or share of its column's height. The shell's resize grips give two
+    /// neighbours sizes that add up to what they had, so only the gap between them moves.
+    Resize {
+        windows: Vec<(String, i64, i64)>,
+    },
+    /// Set scrolling layout columns to these widths (fractions of the screen, as `colresize`
+    /// takes them), in this order, then scroll the layout so window `pin` has its left edge at
+    /// `x` again: the shell's resize grips move only the gap between two columns, keeping their
+    /// outer edges where they were. `colresize` acts on the focused column, so each window is
+    /// focused in turn (the pointer stays put) and the window focused before gets focus back.
+    Columns {
+        /// Each window and its column's width in ten-thousandths of the screen.
+        widths: Vec<(String, u32)>,
+        pin: Option<(String, i64)>,
+    },
+    /// Move the scrolling layout column holding this window `steps` places (negative: left), one
+    /// `swapcol` at a time: the Open windows island's tabs dragged into a new order. The window
+    /// is focused (the pointer stays put) and keeps focus, as a dragged tab does.
+    MoveColumn {
+        address: String,
+        steps: i64,
+    },
+    /// Which windows to hide on each workspace, by the window focused there: beside a Half
+    /// window alone on its screen page, the next page's windows would show, so the shell hides
+    /// them. Hyprland is handed the table and hides and shows windows itself the moment focus
+    /// moves (`PAGE_HIDING_LUA`, a `window.active` handler), as a round trip through the shell
+    /// would show them for a frame or two. Each workspace: its id, the window its pages follow
+    /// when focus is elsewhere, and per window the windows to hide while it is focused. `reset`:
+    /// windows to show first (a shell that stopped may have left some hidden).
+    PageHiding {
+        workspaces: Vec<PageWorkspace>,
+        reset: Vec<String>,
+    },
+    /// Scroll the scrolling layout's view so this window's left edge is at `x`: the shell keeps
+    /// the view on a whole screen page. The layout's `move` focuses the window it brings into
+    /// view, so the window focused before gets focus back; the pointer stays put.
+    Scroll {
+        address: String,
+        x: i64,
+    },
     Place {
         address: String,
         x: i64,
@@ -105,6 +146,10 @@ pub enum Action {
         keep_focus: bool,
     },
 }
+
+/// One workspace of `Action::PageHiding`: its id, the window its pages follow when focus is
+/// elsewhere, and per window the windows to hide while it is focused.
+type PageWorkspace = (i64, String, Vec<(String, Vec<String>)>);
 
 fn address(o: &Value) -> Result<String, String> {
     let a = o
@@ -192,6 +237,108 @@ impl Action {
                 address: address(a)?,
                 to_ws: ws_id(a, "to_ws")?,
             },
+            "resize" => Action::Resize {
+                windows: match a.get("windows").and_then(Value::as_array) {
+                    Some(list) if (1..=4).contains(&list.len()) => list
+                        .iter()
+                        .map(|w| {
+                            Ok((
+                                address(w)?,
+                                int_in(w, "w", 1, 32_768)?,
+                                int_in(w, "h", 1, 32_768)?,
+                            ))
+                        })
+                        .collect::<Result<_, String>>()?,
+                    _ => return Err("windows must list 1 to 4 {address, w, h}".into()),
+                },
+            },
+            "columns" => Action::Columns {
+                widths: match a.get("windows").and_then(Value::as_array) {
+                    Some(list) if (1..=4).contains(&list.len()) => list
+                        .iter()
+                        .map(|w| {
+                            let f = w
+                                .get("fraction")
+                                .and_then(Value::as_f64)
+                                .filter(|f| (0.05..=1.0).contains(f))
+                                .ok_or("fraction must be from 0.05 to 1")?;
+                            Ok((address(w)?, (f * 10_000.0).round() as u32))
+                        })
+                        .collect::<Result<_, String>>()?,
+                    _ => return Err("windows must list 1 to 4 {address, fraction}".into()),
+                },
+                pin: match a.get("pin") {
+                    None => None,
+                    Some(p) => Some((address(p)?, int_in(p, "x", -65_536, 65_536)?)),
+                },
+            },
+            "move_column" => Action::MoveColumn {
+                address: address(a)?,
+                steps: match int_in(a, "steps", -64, 64)? {
+                    0 => return Err("steps must not be 0".into()),
+                    n => n,
+                },
+            },
+            "page_hiding" => Action::PageHiding {
+                workspaces: match a.get("workspaces").and_then(Value::as_array) {
+                    Some(list) if list.len() <= 32 => list
+                        .iter()
+                        .map(|w| {
+                            let entries = match w.get("windows").and_then(Value::as_array) {
+                                Some(e) if (1..=64).contains(&e.len()) => e
+                                    .iter()
+                                    .map(|e| {
+                                        let hide = match e.get("hide").and_then(Value::as_array) {
+                                            Some(h) if h.len() <= 64 => h
+                                                .iter()
+                                                .map(|h| {
+                                                    h.as_str()
+                                                        .filter(|h| valid_address(h))
+                                                        .map(str::to_string)
+                                                        .ok_or("hide must list window addresses")
+                                                })
+                                                .collect::<Result<Vec<_>, _>>()?,
+                                            _ => {
+                                                return Err(
+                                                    "hide must list up to 64 windows".into()
+                                                );
+                                            }
+                                        };
+                                        Ok((address(e)?, hide))
+                                    })
+                                    .collect::<Result<Vec<_>, String>>()?,
+                                _ => return Err("windows must list 1 to 64 {address, hide}".into()),
+                            };
+                            let anchor = w
+                                .get("anchor")
+                                .and_then(Value::as_str)
+                                .filter(|a| valid_address(a))
+                                .ok_or("anchor must be a window address")?;
+                            Ok((ws_id(w, "id")?, anchor.to_string(), entries))
+                        })
+                        .collect::<Result<_, String>>()?,
+                    _ => return Err("workspaces must list up to 32 workspaces".into()),
+                },
+                reset: match a.get("reset") {
+                    None => Vec::new(),
+                    Some(r) => match r.as_array() {
+                        Some(r) if r.len() <= 256 => r
+                            .iter()
+                            .map(|h| {
+                                h.as_str()
+                                    .filter(|h| valid_address(h))
+                                    .map(str::to_string)
+                                    .ok_or("reset must list window addresses")
+                            })
+                            .collect::<Result<_, _>>()?,
+                        _ => return Err("reset must list up to 256 windows".into()),
+                    },
+                },
+            },
+            "scroll" => Action::Scroll {
+                address: address(a)?,
+                x: int_in(a, "x", -65_536, 65_536)?,
+            },
             "place" => Action::Place {
                 address: address(a)?,
                 x: int_in(a, "x", -65_536, 65_536)?,
@@ -260,6 +407,40 @@ impl Action {
                 tag_lua(address, &format!("+uq_ws_{from_ws}")),
                 move_lua(address, &WsTarget::Special("minimized".into())),
             ],
+            Action::Resize { windows } => windows
+                .iter()
+                .map(|(address, w, h)| {
+                    d(format!(
+                        "hl.dsp.window.resize({{ x = {w}, y = {h}, window = {} }})",
+                        win(address)
+                    ))
+                })
+                .collect(),
+            Action::Columns { widths, .. } => widths
+                .iter()
+                .flat_map(|(address, f)| {
+                    [
+                        d(format!("hl.dsp.focus({{ window = {} }})", win(address))),
+                        d(format!(
+                            "hl.dsp.layout({})",
+                            lua_string(&format!("colresize {}.{:04}", f / 10_000, f % 10_000))
+                        )),
+                    ]
+                })
+                .collect(),
+            Action::MoveColumn { address, steps } => {
+                let swap = d(format!(
+                    "hl.dsp.layout({})",
+                    lua_string(if *steps < 0 { "swapcol l" } else { "swapcol r" })
+                ));
+                std::iter::once(d(format!("hl.dsp.focus({{ window = {} }})", win(address))))
+                    .chain(std::iter::repeat_n(swap, steps.unsigned_abs() as usize))
+                    .collect()
+            }
+            // All in the script (page_hiding_lua).
+            Action::PageHiding { .. } => Vec::new(),
+            // All in the script's scroll step.
+            Action::Scroll { .. } => Vec::new(),
             Action::Place {
                 address,
                 x,
@@ -363,6 +544,118 @@ fn step(out: &mut String, stmt: &str) {
 /// can't be read or set, the pointer position is read first and moved back afterwards instead
 /// (best effort). ColumnWidth reads the focused window's fullscreen state after focusing it and
 /// branches on it (`column_lua`); with `keep_focus` the window focused before gets focus back.
+/// Lua (inside `run`) that scrolls the scrolling layout so window `address` has its left edge
+/// at `x`, by the layout's `move`; nothing when it is already there or can't be read.
+fn scroll_lua(address: &str, x: i64) -> String {
+    format!(
+        "  do local ok, w = pcall(hl.get_window, {})\n    \
+         local dx = ok and w and w.at and ({x} - w.at.x) or 0\n    \
+         if dx >= 1 or dx <= -1 then\n      \
+         local m = fail(hl.dispatch(hl.dsp.layout(\"move \" .. math.floor(dx + 0.5)))); if m then return m end\n    \
+         end\n  end\n",
+        lua_string(&format!("address:{address}"))
+    )
+}
+
+/// Hyprland's side of `PageHiding`, kept in its Lua state as `uq_pages` between calls: the
+/// table from the shell, the windows hidden now per workspace, and a `window.active` handler
+/// that applies the table when focus moves. A window is hidden by setting its opacity (focused,
+/// unfocused and fullscreen: a Full column is maximized) to 0 and turning off the blur behind it
+/// (drawn whatever its opacity), at once rather than faded: the
+/// window's animations are off just around the change (so its moves still slide), and Hyprland's
+/// focus fade (fadeSwitch) is kept off while focused and unfocused windows look the same, when it
+/// shows nothing else (else it is as configured: `uq_pages_fade`, read by `run`).
+const PAGE_HIDING_LUA: &str = r#"  uq_pages = uq_pages or { hidden = {} }
+  local P = uq_pages
+  -- Hidden (v "0.00") or shown ("1.00"). A hidden window has no blur either: Hyprland draws the
+  -- blur behind a window whatever its opacity, which tints the empty space while it moves.
+  function P.set(a, v)
+    local w = "address:" .. a
+    local blur = v == "0.00" and "1" or "unset"
+    for _, kv in ipairs({ { "no_anim", "1" }, { "opacity", v }, { "opacity_inactive", v },
+                          { "opacity_fullscreen", v }, { "no_blur", blur }, { "no_anim", "unset" } }) do
+      pcall(hl.dispatch, hl.dsp.window.set_prop({ window = w, prop = kv[1], value = kv[2] }))
+    end
+  end
+  -- Hyprland fades a window's opacity when focus moves (fadeSwitch), and it does so after this
+  -- handler has run, so a window hidden at a focus change would show for a moment as it fades.
+  -- That fade only shows anything when focused and unfocused windows differ in opacity: while
+  -- they don't, it is kept off; when they do, it is as configured (`uq_pages_fade`, read by
+  -- `run`; ignored while it is off by our hand, which is what Hyprland would report).
+  if not P.fade_off then P.fade = uq_pages_fade end
+  local function opt(k) local ok, v = pcall(hl.get_config, k) return ok and tonumber(v) or nil end
+  local a, i = opt("decoration:active_opacity"), opt("decoration:inactive_opacity")
+  local same = a ~= nil and a == i and a == opt("decoration:fullscreen_opacity")
+  if same and not P.fade_off then
+    if pcall(hl.animation, { leaf = "fadeSwitch", enabled = false }) then P.fade_off = true end
+  elseif not same and P.fade_off then
+    if P.fade then pcall(hl.animation, P.fade) end
+    P.fade_off = false
+  end
+  function P.apply(ws, list)
+    local want, cur = {}, P.hidden[ws] or {}
+    for _, a in ipairs(list or {}) do want[a] = true end
+    for a in pairs(cur) do if not want[a] then P.set(a, "1.00") end end
+    for a in pairs(want) do if not cur[a] then P.set(a, "0.00") end end
+    P.hidden[ws] = want
+  end
+  for _, a in ipairs(data.reset) do P.set(a, "1.00") end
+  if #data.reset > 0 then P.hidden = {} end
+  local map, listed = {}, {}
+  for _, w in ipairs(data.ws) do
+    listed[w.id] = true
+    for a, hide in pairs(w.map) do map[a] = { ws = w.id, hide = hide } end
+  end
+  for ws in pairs(P.hidden) do if not listed[ws] then P.apply(ws, {}) end end
+  P.map = map
+  local ok, act = pcall(hl.get_active_window)
+  local active = ok and act and act.address or nil
+  for _, w in ipairs(data.ws) do
+    local e = (active and map[active] and map[active].ws == w.id) and map[active] or map[w.anchor]
+    P.apply(w.id, e and e.hide or {})
+  end
+  -- A reload builds Hyprland's animations afresh (the fade as configured again).
+  if not (P.reload_sub and P.reload_sub:is_active()) then
+    P.reload_sub = hl.on("config.reloaded", function() uq_pages.fade_off = false end)
+  end
+  if not (P.sub and P.sub:is_active()) then
+    P.sub = hl.on("window.active", function(win)
+      if not win or not win.address then return end
+      local e = uq_pages.map and uq_pages.map[win.address]
+      if e then pcall(uq_pages.apply, e.ws, e.hide) end
+    end)
+  end
+"#;
+
+/// The `PageHiding` table as Lua (`data`), then `PAGE_HIDING_LUA`.
+fn page_hiding_lua(workspaces: &[PageWorkspace], reset: &[String]) -> String {
+    let list = |v: &[String]| {
+        v.iter()
+            .map(|a| lua_string(a))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    let ws = workspaces
+        .iter()
+        .map(|(id, anchor, entries)| {
+            let map = entries
+                .iter()
+                .map(|(a, hide)| format!("[{}] = {{ {} }}", lua_string(a), list(hide)))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!(
+                "{{ id = {id}, anchor = {}, map = {{ {map} }} }}",
+                lua_string(anchor)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(
+        "  local data = {{ reset = {{ {} }}, ws = {{ {ws} }} }}\n{PAGE_HIDING_LUA}",
+        list(reset)
+    )
+}
+
 fn script(action: &Action) -> String {
     let keep = matches!(
         action,
@@ -370,9 +663,19 @@ fn script(action: &Action) -> String {
             keep_pointer: true,
             ..
         } | Action::ColumnWidth { .. }
+            | Action::Columns { .. }
+            | Action::MoveColumn { .. }
+            | Action::Scroll { .. }
     );
     let mut s = String::from(PRELUDE);
     s.push_str("local unwarp, pos, back = false, nil, nil\n");
+    // The layout's `move` focuses the window it brings into view: give focus back after.
+    if let Action::Columns { .. } | Action::Scroll { .. } = action {
+        s.push_str(
+            "do local ok, w = pcall(hl.get_active_window)\n  \
+             if ok and w and w.address then back = w.address end end\n",
+        );
+    }
     if let Action::ColumnWidth {
         address,
         keep_focus: true,
@@ -401,6 +704,16 @@ end
     s.push_str("local function run()\n");
     for stmt in action.to_lua() {
         step(&mut s, &stmt);
+    }
+    match action {
+        // Scroll the layout so the pinned window's left edge is back where it was.
+        Action::Columns {
+            pin: Some((address, x)),
+            ..
+        }
+        | Action::Scroll { address, x } => s.push_str(&scroll_lua(address, *x)),
+        Action::PageHiding { workspaces, reset } => s.push_str(&page_hiding_lua(workspaces, reset)),
+        _ => {}
     }
     if let Action::ColumnWidth { address, full, .. } = action {
         // Now focused: its state decides what Full or Half takes. Unreadable counts as 0.
@@ -463,7 +776,56 @@ fn script_err(e: CompositorError) -> String {
 
 /// Run `action` in one `eval` (see `script`).
 pub async fn run(hypr: &HyprSocket, action: &Action) -> Result<(), String> {
-    hypr.eval(&script(action)).await.map_err(script_err)
+    let mut lua = script(action);
+    if let Action::PageHiding { .. } = action {
+        // The focus fade as configured, for the handler to put back after hiding (unread: the
+        // handler leaves the fade alone).
+        let fade = match hypr.request("j/animations").await {
+            Ok(r) => fade_switch(&r),
+            Err(_) => None,
+        };
+        lua = format!("{}{lua}", fade_lua(fade.as_ref()));
+    }
+    hypr.eval(&lua).await.map_err(script_err)
+}
+
+/// The focus fade (`fadeSwitch`) as Hyprland has it, from a `j/animations` reply: its own
+/// settings when set, else those of the leaf it takes them from (`fade`, then `global`).
+/// `(enabled, speed, bezier)`; None when the reply can't be read.
+fn fade_switch(reply: &str) -> Option<(bool, f64, String)> {
+    let v: Value = serde_json::from_str(reply).ok()?;
+    let leaves = v.get(0)?.as_array()?;
+    let find = |name: &str| {
+        leaves
+            .iter()
+            .find(|l| l.get("name").and_then(Value::as_str) == Some(name))
+    };
+    let leaf = ["fadeSwitch", "fade", "global"]
+        .into_iter()
+        .filter_map(find)
+        .find(|l| l.get("overridden").and_then(Value::as_bool) == Some(true))?;
+    let enabled = match leaf.get("enabled")? {
+        Value::Bool(b) => *b,
+        n => n.as_i64()? != 0,
+    };
+    let speed = leaf.get("speed")?.as_f64()?;
+    let bezier = leaf.get("bezier")?.as_str()?;
+    (bezier
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+        && !bezier.is_empty())
+    .then(|| (enabled, speed, bezier.to_string()))
+}
+
+/// The focus fade for `PAGE_HIDING_LUA` to restore, as a Lua global it reads (`uq_pages_fade`).
+fn fade_lua(fade: Option<&(bool, f64, String)>) -> String {
+    match fade {
+        Some((enabled, speed, bezier)) => format!(
+            "uq_pages_fade = {{ leaf = \"fadeSwitch\", enabled = {enabled}, speed = {speed}, bezier = {} }}\n",
+            lua_string(bezier)
+        ),
+        None => "uq_pages_fade = nil\n".to_string(),
+    }
 }
 
 /// The bridge's `WindowLook` call: how Hyprland draws windows right now, so the shell can draw
@@ -788,6 +1150,179 @@ mod tests {
     }
 
     #[test]
+    fn resize() {
+        let w = r#""address:0x55d0c0ffee""#;
+        const B: &str = "0x55d0c0ffef";
+        let b = r#""address:0x55d0c0ffef""#;
+        assert_eq!(
+            lua(
+                "resize",
+                json!({"windows": [{"address": B, "w": 300, "h": 400}, {"address": A, "w": 600, "h": 400}]})
+            ),
+            [
+                format!(
+                    "return hl.dispatch(hl.dsp.window.resize({{ x = 300, y = 400, window = {b} }}))"
+                ),
+                format!(
+                    "return hl.dispatch(hl.dsp.window.resize({{ x = 600, y = 400, window = {w} }}))"
+                ),
+            ],
+            "in the order given"
+        );
+        for bad in [
+            json!({"windows": [{"address": A, "w": 0, "h": 400}]}),
+            json!({"windows": [{"address": A, "w": 600}]}),
+            json!({"windows": []}),
+            json!({"address": A, "w": 600, "h": 400}),
+        ] {
+            assert!(Action::from_call("resize", &bad).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn move_column() {
+        let l = lua("move_column", json!({"address": A, "steps": -2}));
+        assert_eq!(l.len(), 3, "focus, then one swap a step");
+        assert!(l[0].contains("hl.dsp.focus"));
+        assert!(l[1].contains("swapcol l") && l[2].contains("swapcol l"));
+        assert!(lua("move_column", json!({"address": A, "steps": 1}))[1].contains("swapcol r"));
+        assert!(
+            script(&Action::from_call("move_column", &json!({"address": A, "steps": 1})).unwrap())
+                .contains("no_warps"),
+            "the pointer stays put"
+        );
+        for bad in [
+            json!({"address": A, "steps": 0}),
+            json!({"address": A, "steps": 99}),
+            json!({"address": A}),
+        ] {
+            assert!(Action::from_call("move_column", &bad).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn fade_switch_follows_inheritance() {
+        let leaf = |name: &str, o: bool, speed: f64, bezier: &str| json!({"name": name, "overridden": o, "bezier": bezier, "enabled": true, "speed": speed, "style": ""});
+        let reply = |leaves: Vec<Value>| json!([leaves, []]).to_string();
+        let r = reply(vec![
+            leaf("global", true, 10.0, "default"),
+            leaf("fade", true, 3.03, "quick"),
+            leaf("fadeSwitch", false, 0.0, ""),
+        ]);
+        assert_eq!(
+            fade_switch(&r),
+            Some((true, 3.03, "quick".into())),
+            "from fade"
+        );
+        let r = reply(vec![
+            leaf("global", true, 10.0, "default"),
+            leaf("fade", false, 0.0, ""),
+            leaf("fadeSwitch", true, 2.0, "linear"),
+        ]);
+        assert_eq!(
+            fade_switch(&r),
+            Some((true, 2.0, "linear".into())),
+            "its own"
+        );
+        let r = reply(vec![leaf("global", true, 10.0, "default")]);
+        assert_eq!(
+            fade_switch(&r),
+            Some((true, 10.0, "default".into())),
+            "from global"
+        );
+        assert_eq!(fade_switch("nope"), None);
+        let r = reply(vec![leaf("global", true, 1.0, "a\" .. os.exit()")]);
+        assert_eq!(fade_switch(&r), None, "an odd bezier name isn't passed on");
+        assert!(
+            fade_lua(Some(&(true, 3.03, "quick".into())))
+                .contains("speed = 3.03, bezier = \"quick\"")
+        );
+        assert_eq!(fade_lua(None), "uq_pages_fade = nil\n");
+    }
+
+    #[test]
+    fn page_hiding() {
+        const B: &str = "0x55d0c0ffef";
+        let act = Action::from_call(
+            "page_hiding",
+            &json!({"workspaces": [{"id": 1, "anchor": A,
+                                     "windows": [{"address": A, "hide": [B]}, {"address": B, "hide": []}]}],
+                    "reset": [A]}),
+        )
+        .unwrap();
+        let s = script(&act);
+        assert!(s.contains(&format!("reset = {{ \"{A}\" }}")), "{s}");
+        assert!(s.contains(&format!("[\"{A}\"] = {{ \"{B}\" }}")), "{s}");
+        assert!(s.contains("hl.on(\"window.active\""), "{s}");
+        assert!(
+            s.contains("\"opacity_inactive\"") && s.contains("\"no_anim\""),
+            "{s}"
+        );
+        for bad in [
+            json!({"workspaces": [{"id": 1, "anchor": A, "windows": []}]}),
+            json!({"workspaces": [{"id": 1, "anchor": "nope", "windows": [{"address": A, "hide": []}]}]}),
+            json!({"workspaces": [{"id": 1, "anchor": A, "windows": [{"address": A, "hide": ["x"]}]}]}),
+            json!({"workspaces": "x"}),
+        ] {
+            assert!(Action::from_call("page_hiding", &bad).is_err(), "{bad}");
+        }
+        assert!(
+            Action::from_call("page_hiding", &json!({"workspaces": []})).is_ok(),
+            "nothing to hide"
+        );
+    }
+
+    #[test]
+    fn scroll() {
+        let s = script(&Action::from_call("scroll", &json!({"address": A, "x": 16})).unwrap());
+        assert!(
+            s.contains("(16 - w.at.x)") && s.contains("\"move \""),
+            "{s}"
+        );
+        assert!(
+            s.contains("back = w.address"),
+            "focus goes back after the move"
+        );
+        assert!(s.contains("no_warps = true"), "the pointer stays put");
+        for bad in [
+            json!({"address": A}),
+            json!({"address": A, "x": 99_999_999}),
+        ] {
+            assert!(Action::from_call("scroll", &bad).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn columns() {
+        const B: &str = "0x55d0c0ffef";
+        let a = Action::from_call(
+            "columns",
+            &json!({"windows": [{"address": A, "fraction": 0.6}, {"address": B, "fraction": 0.4}],
+                    "pin": {"address": A, "x": 16}}),
+        )
+        .unwrap();
+        let lua = a.to_lua();
+        assert_eq!(lua.len(), 4, "focus and colresize for each");
+        assert!(lua[1].contains("colresize 0.6000"), "{}", lua[1]);
+        assert!(lua[3].contains("colresize 0.4000"), "{}", lua[3]);
+        let s = script(&a);
+        assert!(
+            s.contains("pcall(hl.get_window, \"address:0x55d0c0ffee\")")
+                && s.contains("16 - w.at.x"),
+            "{s}"
+        );
+        assert!(s.contains("back = w.address"), "focus goes back");
+        for bad in [
+            json!({"windows": [{"address": A, "fraction": 1.5}]}),
+            json!({"windows": [{"address": A}]}),
+            json!({"windows": []}),
+            json!({"windows": [{"address": A, "fraction": 0.5}], "pin": {"address": A}}),
+        ] {
+            assert!(Action::from_call("columns", &bad).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
     fn column_width() {
         let w = r#""address:0x55d0c0ffee""#;
         assert_eq!(
@@ -1056,6 +1591,21 @@ mod tests {
             ("dpms", json!({"on": true})),
             ("dpms", json!({"on": false})),
             ("column_width", json!({"address": A, "width": "full"})),
+            (
+                "resize",
+                json!({"windows": [{"address": A, "w": 600, "h": 400}]}),
+            ),
+            (
+                "columns",
+                json!({"windows": [{"address": A, "fraction": 0.5}], "pin": {"address": A, "x": 16}}),
+            ),
+            ("move_column", json!({"address": A, "steps": -1})),
+            ("scroll", json!({"address": A, "x": 16})),
+            (
+                "page_hiding",
+                json!({"workspaces": [{"id": 1, "anchor": A, "windows": [{"address": A, "hide": [A]}]}],
+                       "reset": [A]}),
+            ),
             ("column_width", json!({"address": A, "width": "half"})),
             (
                 "place",
