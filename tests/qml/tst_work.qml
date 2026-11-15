@@ -273,4 +273,31 @@ TestCase {
         compare(Work.scrollOffset(6, 9, 3, 1), 1);
         compare(Work.scrollOffset(2, 9, 3, 3), 2, "already shown");
     }
+
+    function test_column_steps() {
+        var a = { address: "0xa", x: 0 }, b = { address: "0xb", x: 500 }, b2 = { address: "0xb2", x: 500 },
+            c = { address: "0xc", x: 1000 }, m = { address: "0xm", minimised: true, x: 0 };
+        compare(Work.columnSteps([a, b, c], 0, 2), 2, "first to last: two columns right");
+        compare(Work.columnSteps([a, b, c], 2, 0), -2);
+        compare(Work.columnSteps([a, b, c], 1, 1), 0);
+        compare(Work.columnSteps([a, b, b2, c], 0, 3), 2, "a stacked column counts once");
+        compare(Work.columnSteps([a, b, b2, c], 0, 1), 1, "dropped inside a stack: after the whole column");
+        compare(Work.columnSteps([a, b, b2, c], 0, 2), 1, "past the whole stack");
+        compare(Work.columnSteps([a, m, b, c], 0, 2), 1, "a minimised window is no column");
+        compare(Work.columnSteps([a, b], 5, 0), 0);
+    }
+
+    function test_drop_index_and_can_drag() {
+        var lefts = [0, 100, 200, 300], widths = [90, 90, 90, 90];
+        compare(Work.dropIndex(lefts, widths, 0, 30), 0, "not past the next centre");
+        compare(Work.dropIndex(lefts, widths, 0, 160), 1);
+        compare(Work.dropIndex(lefts, widths, 0, 400), 3);
+        compare(Work.dropIndex(lefts, widths, 3, 120), 1);
+        compare(Work.dropIndex(lefts, widths, 3, -50), 0);
+        verify(Work.canDrag({ scrolling: true }, "screen"));
+        verify(!Work.canDrag({ scrolling: true }, "opened"), "only in screen order");
+        verify(!Work.canDrag({ scrolling: false }, "screen"));
+        verify(!Work.canDrag({ scrolling: true, minimised: true }, "screen"));
+        verify(!Work.canDrag({ scrolling: true, floating: true }, "screen"));
+    }
 }

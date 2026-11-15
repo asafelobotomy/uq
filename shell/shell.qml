@@ -82,7 +82,12 @@ ShellRoot {
     ColumnPolicy {}
 
     // The gaps between tiled windows can be dragged to resize them.
-    ResizeGrips {}
+    ResizeGrips {
+        id: resizeGrips
+    }
+    ScreenPages {
+        paused: resizeGrips.dragging
+    }
 
     // The full-screen "click a window" overlay for the rules editor's Pick a window.
     PickOverlay {}

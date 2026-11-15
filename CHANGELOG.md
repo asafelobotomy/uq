@@ -19,6 +19,14 @@ All notable changes to uQ are listed here. The format follows
   only the gap: one column widens by what the other gives up, and their outer edges stay put.
   Between two windows stacked in a column, the upper one's height changes and the lower one gets
   the rest. A small grip and a resize cursor show in the gap under the pointer.
+- **Drag tabs to reorder windows.** In the scrolling layout, dragging a tab in Open windows to a
+  new place moves its window's column to match, so the tabs and the windows stay in the same
+  order.
+- **Whole screen pages.** In the scrolling layout, windows fall into pages a screen wide (a Full
+  window, two Half ones, or a Half on its own), and the view always shows one whole page: no
+  window is left cut by the screen's edge. Beside a Half window alone on its page the rest of the
+  screen stays empty: the next page's window is hidden until its own page is shown, so it doesn't
+  show there or while the view slides past.
 - **Fill the rest.** An island can grow into the bar's empty space beside its zone (edit mode →
   the island's settings → **Fill the rest**). Open windows does unless you turn it off; the
   centre zone stays centred.

@@ -252,6 +252,53 @@ Island {
     function inColumn(w) {
         return w.scrolling && !w.floating && w.fullscreen !== 2;
     }
+    // --- dragging tabs into a new order (the windows' columns follow) ---
+    // The tab being dragged (its index among the tabs shown), -1 for none; how far it has moved;
+    // its width; and where it would land.
+    property int dragIndex: -1
+    property real dragDx: 0
+    property real dragWidth: 0
+    property int dropIndex: -1
+    // The tabs' left edges and widths as they were when the drag started.
+    property var dragLefts: []
+    property var dragWidths: []
+    function startDrag(i) {
+        var lefts = [], widths = [];
+        for (var k = 0; k < tabsRep.count; k++) {
+            var it = tabsRep.itemAt(k);
+            lefts.push(it ? it.x : 0);
+            widths.push(it ? it.width : 0);
+        }
+        dragLefts = lefts;
+        dragWidths = widths;
+        dragWidth = widths[i] || 0;
+        dragDx = 0;
+        dropIndex = i;
+        dragIndex = i;
+    }
+    function moveDrag(dx) {
+        dragDx = dx;
+        var centre = dragLefts[dragIndex] + dragWidth / 2 + dx;
+        dropIndex = Work.dropIndex(dragLefts, dragWidths, dragIndex, centre);
+    }
+    function cancelDrag() {
+        dragIndex = -1;
+        dropIndex = -1;
+        dragDx = 0;
+    }
+    // Dropped: move the window's column as many places as the tab moved past other columns.
+    function endDrag() {
+        var off = fit.mode === "scroll" ? start : 0;
+        var from = dragIndex + off, to = dropIndex + off, w = ordered[from];
+        cancelDrag();
+        var steps = Work.columnSteps(ordered, from, to);
+        if (steps === 0 || !w)
+            return;
+        Bridge.call("Dispatch", ["move_column", { address: w.address, steps: steps }])
+            .catch(function (e) { console.warn("uq: move column: " + e); });
+        refresh();
+    }
+
     // Full: the window spans its screen. In the scrolling layout that is a maximized column
     // (Hyprland's own Full: fullscreen 1) or one as wide as the screen; elsewhere, maximized or
     // fullscreen.
@@ -264,7 +311,7 @@ Island {
         if (w.minimised)
             return;
         if (root.inColumn(w))
-            Bridge.call("Dispatch", ["column_width", { address: w.address, width: full ? "full" : "half" }])
+            ColumnWidths.set(w.address, full)
                 .catch(function (e) { console.warn("uq: window width: " + e); });
         else if (full !== root.isFull(w))
             root.act(w, "fullscreen", { mode: "maximized" });
@@ -485,14 +532,29 @@ Island {
         }
 
         Repeater {
+            id: tabsRep
             // The windows' addresses: replaced only when windows come, go or change places, so
             // tabs aren't rebuilt (and their widths re-animated) every time a window moves.
             model: root.tabKeys
             delegate: Rectangle {
                 id: pill
                 required property var modelData
+                required property int index
                 // This tab's window, as last read.
                 readonly property var win: root.tabInfo[modelData] || ({ address: modelData, title: "", cls: "" })
+                // Dragging: this tab follows the pointer; the tabs it passes step aside.
+                transform: Translate {
+                    x: root.dragIndex < 0 ? 0
+                        : pill.index === root.dragIndex ? root.dragDx
+                        : (pill.index > root.dragIndex && pill.index <= root.dropIndex) ? -(root.dragWidth + root.metrics.gap)
+                        : (pill.index < root.dragIndex && pill.index >= root.dropIndex) ? root.dragWidth + root.metrics.gap
+                        : 0
+                    Behavior on x {
+                        enabled: !Settings.reduceMotion && pill.index !== root.dragIndex
+                        NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
+                    }
+                }
+                z: pill.index === root.dragIndex ? 1 : 0
                 readonly property real tabW: win.focused ? root.fit.focusW : root.fit.pillW
                 readonly property string tier: Work.tabTier(tabW, root.tiers)
                 readonly property bool full: root.isFull(win)
@@ -520,7 +582,30 @@ Island {
                     id: pillMouse
                     anchors.fill: parent
                     acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
+                    property real pressX: 0
+                    property bool dragged: false
+                    cursorShape: root.dragIndex === pill.index ? Qt.ClosedHandCursor : Qt.ArrowCursor
+                    onPressed: function (m) {
+                        pressX = mapToItem(null, m.x, 0).x;
+                        dragged = false;
+                    }
+                    onPositionChanged: function (m) {
+                        if (!(pressedButtons & Qt.LeftButton) || !Work.canDrag(pill.win, root.sortMode))
+                            return;
+                        var dx = mapToItem(null, m.x, 0).x - pressX;
+                        if (!dragged && Math.abs(dx) < Theme.gapIn * 2)
+                            return;
+                        if (!dragged) {
+                            dragged = true;
+                            root.startDrag(pill.index);
+                        }
+                        root.moveDrag(dx);
+                    }
+                    onReleased: if (dragged) root.endDrag()
+                    onCanceled: if (dragged) root.cancelDrag()
                     onClicked: function (m) {
+                        if (dragged)
+                            return;
                         if (m.button === Qt.MiddleButton)
                             root.act(pill.win, "close");
                         else if (m.button === Qt.RightButton)
