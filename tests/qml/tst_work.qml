@@ -348,4 +348,19 @@ TestCase {
         compare(Object.keys(Work.keepAlerts(two, ["0x55d0aa", "0x1"], "0x1")), ["0x55d0aa"], "focus clears it");
         compare(Object.keys(Work.keepAlerts(two, ["0x1"], "")), ["0x1"], "a closed window's goes");
     }
+
+    function test_with_note() {
+        var n = Work.withNote([], { appName: "Chat", appIcon: "chat", summary: "Hi" }, 5);
+        compare(n, [{ appName: "Chat", appIcon: "chat", at: 5 }]);
+        var before = n;
+        n = Work.withNote(n, { appName: "Mail" }, 6);
+        compare(before.length, 1, "the old list isn't changed");
+        compare(n[1], { appName: "Mail", appIcon: "", at: 6 });
+        var many = [];
+        for (var k = 0; k < 80; k++)
+            many = Work.withNote(many, { appName: "a" + k }, k);
+        compare(many.length, Work.NOTES_MAX, "capped");
+        compare(many[many.length - 1].appName, "a79", "newest last");
+        compare(many[0].appName, "a30", "oldest dropped");
+    }
 }

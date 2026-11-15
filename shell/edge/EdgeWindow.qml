@@ -377,9 +377,9 @@ PanelWindow {
 
     function iconFor(cls) {
         if (cls === "")
-            return Quickshell.iconPath("application-x-executable");
+            return Quickshell.iconPath("application-x-executable", true);
         var d = DesktopEntries.heuristicLookup(cls);
         var name = d && d.icon ? d.icon : cls.toLowerCase();
-        return Quickshell.iconPath(name, true) || Quickshell.iconPath("application-x-executable");
+        return Quickshell.iconPath(name, true) || Quickshell.iconPath("application-x-executable", true);
     }
 }

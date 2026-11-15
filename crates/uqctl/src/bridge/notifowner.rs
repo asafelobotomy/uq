@@ -61,7 +61,11 @@ pub async fn watch(conn: Connection, tx: mpsc::Sender<Outbound>, stop: Cancellat
         return;
     };
     // Subscribe before reading the current owner so a change in between is not lost.
-    let Ok(mut changes) = proxy.receive_name_owner_changed().await else {
+    // Filtered to the one name: see bridge::uqd's subscription.
+    let Ok(mut changes) = proxy
+        .receive_name_owner_changed_with_args(&[(0, NOTIF_NAME)])
+        .await
+    else {
         return;
     };
     let current = match proxy

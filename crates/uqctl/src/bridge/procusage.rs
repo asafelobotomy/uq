@@ -10,6 +10,10 @@ use std::sync::Mutex;
 use std::time::Instant;
 
 pub const MAX_PIDS: usize = 64;
+/// A baseline not refreshed for this long is dropped (its process is gone or no longer asked).
+const STALE: std::time::Duration = std::time::Duration::from_secs(30);
+/// Most baselines kept, across every caller.
+const MAX_KEPT: usize = 512;
 /// Clock ticks per second of /proc/<pid>/stat times (USER_HZ, 100 on Linux).
 const HZ: f64 = 100.0;
 
@@ -63,10 +67,13 @@ impl ProcUsage {
     pub fn usage(&self, pids: &[u32], now: Instant) -> Value {
         let mut out = Map::new();
         let mut last = self.last.lock().unwrap_or_else(|e| e.into_inner());
-        let mut seen = HashMap::new();
+        // Baselines are shared by every caller (the island on each screen asks for its own
+        // pids): each call updates its pids in place, so one screen's call doesn't wipe the
+        // others' and make their next reading 0.
+        let mut seen = std::collections::HashSet::new();
         for &pid in pids.iter().take(MAX_PIDS) {
             // Windows of one app share a process: read it once.
-            if seen.contains_key(&pid) {
+            if !seen.insert(pid) {
                 continue;
             }
             let Some(ticks) = self.read(pid, "stat").as_deref().and_then(parse_ticks) else {
@@ -84,10 +91,18 @@ impl ProcUsage {
                 }
                 _ => 0.0,
             };
-            seen.insert(pid, (ticks, now));
+            last.insert(pid, (ticks, now));
             out.insert(pid.to_string(), json!({"cpu": cpu, "rss": rss}));
         }
-        *last = seen;
+        last.retain(|_, (_, at)| now.saturating_duration_since(*at) < STALE);
+        if last.len() > MAX_KEPT {
+            let mut by_age: Vec<(Instant, u32)> =
+                last.iter().map(|(p, (_, at))| (*at, *p)).collect();
+            by_age.sort_unstable();
+            for (_, p) in by_age.iter().take(last.len() - MAX_KEPT) {
+                last.remove(p);
+            }
+        }
         Value::Object(out)
     }
 }
@@ -168,6 +183,58 @@ mod tests {
         std::fs::write(p.join("stat"), STAT.replace(" 250 50 ", " 300 50 ")).unwrap();
         let second = u.usage(&[1234], t0 + Duration::from_secs(2));
         assert_eq!(second["1234"]["cpu"], 25.0);
+    }
+
+    fn fake_proc(root: &Path, pid: u32, utime: u64) {
+        let p = root.join(pid.to_string());
+        std::fs::create_dir_all(&p).unwrap();
+        std::fs::write(
+            p.join("stat"),
+            STAT.replace(" 250 50 ", &format!(" {utime} 0 ")),
+        )
+        .unwrap();
+        std::fs::write(p.join("statm"), "5000 250 100 10 0 400 0\n").unwrap();
+    }
+
+    /// Two callers (the island on two screens) with different pids keep each other's baselines.
+    #[test]
+    fn callers_with_other_pids_keep_each_others_baselines() {
+        let d = tempfile::tempdir().unwrap();
+        fake_proc(d.path(), 1, 100);
+        fake_proc(d.path(), 2, 100);
+        let u = ProcUsage::with_root(d.path());
+        let t0 = Instant::now();
+        u.usage(&[1], t0);
+        u.usage(&[2], t0);
+        fake_proc(d.path(), 1, 200);
+        fake_proc(d.path(), 2, 150);
+        let a = u.usage(&[1], t0 + Duration::from_secs(1));
+        let b = u.usage(&[2], t0 + Duration::from_secs(1));
+        assert_eq!(a["1"]["cpu"], 100.0);
+        assert_eq!(b["2"]["cpu"], 50.0);
+    }
+
+    #[test]
+    fn stale_baselines_are_dropped_and_capped() {
+        let d = tempfile::tempdir().unwrap();
+        let u = ProcUsage::with_root(d.path());
+        let t0 = Instant::now();
+        for pid in 1..=(MAX_KEPT as u32 + 40) {
+            fake_proc(d.path(), pid, 100);
+        }
+        for chunk in (1..=(MAX_KEPT as u32 + 40))
+            .collect::<Vec<_>>()
+            .chunks(MAX_PIDS)
+        {
+            u.usage(chunk, t0);
+        }
+        assert!(u.last.lock().unwrap().len() <= MAX_KEPT);
+        u.usage(&[1], t0 + STALE + Duration::from_secs(1));
+        assert_eq!(
+            u.last.lock().unwrap().len(),
+            1,
+            "only the one asked for lately"
+        );
     }
 
     #[test]

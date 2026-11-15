@@ -147,7 +147,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .flatten()
             .min()
             .unwrap_or(poll_at);
-        let (mut files, mut schedule) = (false, false);
+        let (mut woke, mut schedule) = (false, false);
         tokio::select! {
             () = tokio::time::sleep_until(wake_at.into()) => {}
             w = wait_wall(&mut wall, next_boundary.map(SystemTime::from)) => {
@@ -157,20 +157,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 schedule = true;
             }
-            () = changed(&mut nested_rx) => files = true,
-            () = changed(&mut flat_rx) => files = true,
+            () = changed(&mut nested_rx) => woke = true,
+            () = changed(&mut flat_rx) => woke = true,
             () = desktop_event(&mut events) => schedule = true,
             _ = tokio::signal::ctrl_c() => break,
             _ = term.recv() => break,
         }
         let now = Instant::now();
-        if now >= poll_at {
+        let poll_due = now >= poll_at;
+        if poll_due {
             last_poll = now;
-            (files, schedule) = (true, true);
+            schedule = true;
         }
-        if retry_at.is_some_and(|t| now >= t) {
-            files = true;
-        }
+        let files = files_due(woke, failing, retry_at.is_some_and(|t| now >= t), poll_due);
         let mut d = shared.lock().await;
         // Writes only when due.
         d.flush_launch_counts_at(now);
@@ -191,4 +190,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .flush_launch_counts_at(std::time::Instant::now() + Duration::from_secs(60));
     tracing::info!("shutting down");
     Ok(())
+}
+
+/// Whether to sync the files now. While a write is failing, a watched folder's change waits for
+/// the retry: a failed write creates and removes its temporary file in that same folder, which
+/// would otherwise wake this again at once and retry about every second (disk full, say).
+fn files_due(watch_woke: bool, failing: bool, retry_due: bool, poll_due: bool) -> bool {
+    poll_due || retry_due || (watch_woke && !failing)
+}
+
+#[cfg(test)]
+mod main_tests {
+    use super::files_due;
+
+    #[test]
+    fn a_failing_write_waits_for_its_retry() {
+        assert!(
+            files_due(true, false, false, false),
+            "a change is synced at once"
+        );
+        assert!(
+            !files_due(true, true, false, false),
+            "not while failing: its own temp files"
+        );
+        assert!(files_due(true, true, true, false), "the retry");
+        assert!(files_due(false, true, false, true), "the poll");
+        assert!(!files_due(false, false, false, false));
+    }
 }

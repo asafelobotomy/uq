@@ -132,7 +132,11 @@ fn launch_detached(argv: &[&str]) -> std::io::Result<()> {
         .stderr(std::process::Stdio::null())
         .process_group(0)
         .spawn()
-        .map(drop)
+        // Reaped when it exits, as pages::shell does: a dropped Child stays a zombie until
+        // Settings quits.
+        .map(|mut child| {
+            std::thread::spawn(move || child.wait());
+        })
 }
 
 /// Where the page looks, so tests can point it at a temporary tree.

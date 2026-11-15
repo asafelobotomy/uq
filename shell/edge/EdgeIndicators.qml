@@ -30,6 +30,9 @@ Scope {
     property int wsSerial: 0
 
     function rebuild() {
+        // Off (or locked): no edges to feed, so no work on every title change.
+        if (!root.enabled)
+            return;
         var out = [], vals = Hyprland.toplevels.values;
         for (var i = 0; i < vals.length; i++) {
             var w = Edges.fromIpc(vals[i].lastIpcObject, vals[i].title);
@@ -49,8 +52,10 @@ Scope {
     // Ask Hyprland for fresh window positions now (an edge was reached, or a step was taken):
     // the scrolling layout moves columns without an event.
     function refresh() {
-        HyprRefresh.request();
+        if (root.enabled)
+            HyprRefresh.request();
     }
+    onEnabledChanged: if (root.enabled) { root.rebuild(); root.refresh(); }
 
     // Focus `n` (a neighbour from Edges.neighbour). Returns whether a dispatch was sent.
     function go(n) {
@@ -128,7 +133,7 @@ Scope {
         function onValuesChanged() { debounce.restart(); }
     }
     Instantiator {
-        model: Hyprland.toplevels.values
+        model: root.enabled ? Hyprland.toplevels.values : []
         delegate: QtObject {
             required property var modelData
             property Connections watch: Connections {

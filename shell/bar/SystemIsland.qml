@@ -308,7 +308,7 @@ Island {
                     backer.sourceSize.height: root.iconSize * root.dpr
                     opacity: dockItem.modelData.minimisedOnly ? 0.5 : 1
                     source: Quickshell.iconPath(dockItem.modelData.icon, true)
-                        || Quickshell.iconPath("application-x-executable")
+                        || Quickshell.iconPath("application-x-executable", true)
                 }
                 // running indicator
                 Rectangle {

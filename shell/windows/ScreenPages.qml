@@ -26,9 +26,11 @@ Scope {
 
     // Set when this asked for fresh lists, so the settle after it looks.
     property bool asked: false
-    function refresh() {
+    // windowsOnly: a focus change, which moves no screen and changes no layout, needs only the
+    // window list (as ColumnPolicy does); everything else reads the screens and workspaces too.
+    function refresh(windowsOnly) {
         root.asked = true;
-        HyprRefresh.request({ monitors: true, workspaces: true });
+        HyprRefresh.request(windowsOnly === true ? null : { monitors: true, workspaces: true });
     }
 
     // From the last look: per workspace id, its tiled windows when it uses the scrolling layout
@@ -514,7 +516,7 @@ Scope {
         // Focus moves the view, without an event of its own.
         function onActiveToplevelChanged() {
             root.followFocus();
-            root.refresh();
+            root.refresh(true);
         }
         function onRawEvent(event) {
             switch (event.name) {

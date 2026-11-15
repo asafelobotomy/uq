@@ -61,7 +61,9 @@ async fn subscribe_unbounded(addr: Option<&str>) -> Option<(Connection, Subs)> {
     let owner = DBusProxy::new(&conn)
         .await
         .ok()?
-        .receive_name_owner_changed()
+        // Only uqd's own name: unfiltered, every client joining or leaving the bus would wake
+        // this, and a full queue of them stalls the whole connection (zbus stops reading).
+        .receive_name_owner_changed_with_args(&[(0, NAME)])
         .await
         .ok()?;
     let rule = MatchRule::builder()

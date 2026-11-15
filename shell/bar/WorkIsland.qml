@@ -85,13 +85,14 @@ Island {
     property var usageByPid: ({})
 
     function rebuild() {
-        var out = [], vals = Hyprland.toplevels.values, seq = Object.assign({}, openedSeq);
+        // Opening order of the windows still open: closed ones drop out, so the map stays small.
+        var out = [], vals = Hyprland.toplevels.values, seq = ({});
         for (var i = 0; i < vals.length; i++) {
             var t = vals[i], o = t.lastIpcObject || ({});
             var wo = t.workspace && t.workspace.lastIpcObject ? t.workspace.lastIpcObject : null;
             var a = Work.normAddr(t.address);
-            if (a !== null && seq[a] === undefined)
-                seq[a] = nextSeq++;
+            if (a !== null)
+                seq[a] = openedSeq[a] !== undefined ? openedSeq[a] : nextSeq++;
             var minimised = t.workspace ? t.workspace.name === "special:minimized" : false;
             out.push({
                 address: t.address,
@@ -148,6 +149,10 @@ Island {
         noteSeen = r.seen;
         if (!r.fresh)
             return;
+        // "Last activity": only a notification that is really new (a backend re-sends `latest`
+        // on every state change, which isn't activity).
+        if (l.appName || l.appIcon)
+            notes = Work.withNote(notes, l, Date.now());
         var f = activeAddr(), hits = [];
         for (var i = 0; i < windows.length; i++) {
             var w = windows[i];
@@ -366,10 +371,10 @@ Island {
     }
     function iconFor(cls) {
         if (cls === "")
-            return Quickshell.iconPath("application-x-executable");
+            return Quickshell.iconPath("application-x-executable", true);
         var a = root.appOf(cls);
         var name = a.icon ? a.icon : cls.toLowerCase();
-        return Quickshell.iconPath(name, true) || Quickshell.iconPath("application-x-executable");
+        return Quickshell.iconPath(name, true) || Quickshell.iconPath("application-x-executable", true);
     }
     function togglePin(w) {
         var pins = Dock.togglePin(Settings.values.pinned || [], appOf(w.cls).id, Settings.loaded);
@@ -434,8 +439,11 @@ Island {
                     || event.name === "movewindowv2" || event.name === "workspacev2")
                 root.refresh();
             // Quickshell sets the title itself from this event: no need to ask Hyprland again.
-            else if (event.name === "windowtitlev2")
-                titleTimer.restart();
+            // Throttled, not debounced: a title that never stops changing still shows.
+            else if (event.name === "windowtitlev2") {
+                if (!titleTimer.running)
+                    titleTimer.start();
+            }
             // A window asked for attention (urgency hint, or an activation request not honoured).
             else if (event.name === "urgent")
                 root.alertFor(String(event.data));
@@ -454,19 +462,6 @@ Island {
                 return;
             root.asked = false;
             root.rebuild();
-        }
-    }
-    // "Last activity": every new notification, matched to its app's windows.
-    Connections {
-        target: NotifBackend
-        ignoreUnknownSignals: true
-        function onLatestChanged() {
-            var l = NotifBackend.latest;
-            if (!l || (!l.appName && !l.appIcon))
-                return;
-            var n = root.notes.slice(Math.max(0, root.notes.length - 49));
-            n.push({ appName: String(l.appName || ""), appIcon: String(l.appIcon || ""), at: Date.now() });
-            root.notes = n;
         }
     }
     // A new notification: once latest and count have both been updated.

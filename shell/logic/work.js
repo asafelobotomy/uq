@@ -327,6 +327,15 @@ function noteArrived(seen, latest, count) {
     return { fresh: fresh, seen: { keys: keys.slice(-SEEN_KEYS), count: c } };
 }
 
+// "Last activity": the recent notifications ({appName, appIcon, at}), newest last, with one
+// more from `latest` at `now`; at most NOTES_MAX kept.
+var NOTES_MAX = 50;
+function withNote(notes, latest, now) {
+    var n = Array.isArray(notes) ? notes.slice(Math.max(0, notes.length - (NOTES_MAX - 1))) : [];
+    n.push({ appName: String(latest && latest.appName || ""), appIcon: String(latest && latest.appIcon || ""), at: now });
+    return n;
+}
+
 // The alerts (address → true) with `addrs` added, leaving out the focused window (it is already
 // being looked at); the same object when nothing changes.
 function withAlerts(alerts, addrs, focused) {

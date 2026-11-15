@@ -7,6 +7,24 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **"Last activity" order in Open windows** no longer counts a notification backend's state
+  updates as new notifications, so the newest app isn't shown as always active.
+- **"By system usage" with more than one screen**: each screen's island no longer wipes the
+  others' readings, which made most windows read 0% processor.
+- **Window titles in Open windows tabs** keep updating while a title changes quickly (a progress
+  bar in a terminal); before, they froze until it stopped.
+- **Progress notifications** (built-in server) update their card in place instead of recreating
+  every popup and centre card on each update.
+- **uqd** no longer retries a failing file write about every second (its own temporary file
+  woke it again); it waits the minute it was meant to.
+- **Fewer wakeups**: the bridge follows only uqd's and the notification server's names on the
+  bus, not every client joining and leaving; edge indicators do no work while switched off; a
+  focus change asks Hyprland only for the window list; the opening-order map of Open windows
+  forgets closed windows; Settings' Welcome page reaps the programs it starts; no "Could not
+  load icon" warning per tab when the icon theme lacks the fallback icon.
+
 ## [0.3.0-rc.4] - 2026-11-15
 
 ### Added
