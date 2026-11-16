@@ -457,9 +457,13 @@ impl Action {
                     win(address)
                 )),
             ],
+            // Focus goes to the window last: a restore is the user choosing it, and the shell's
+            // column policy treats it as a new window and focuses it briefly to size it, then
+            // gives focus back to whatever had it. Without this the window lost to that.
             Action::Restore { address, to_ws } => vec![
                 move_lua(address, &WsTarget::Id(*to_ws)),
                 tag_lua(address, &format!("-uq_ws_{to_ws}")),
+                d(format!("hl.dsp.focus({{ window = {} }})", win(address))),
             ],
             // The rest depends on the window's state once focused: see `run` and `column_lua`.
             Action::ColumnWidth { address, .. } => {
@@ -662,7 +666,8 @@ fn script(action: &Action) -> String {
         Action::FocusWindow {
             keep_pointer: true,
             ..
-        } | Action::ColumnWidth { .. }
+        } | Action::Restore { .. }
+            | Action::ColumnWidth { .. }
             | Action::Columns { .. }
             | Action::MoveColumn { .. }
             | Action::Scroll { .. }
@@ -1035,6 +1040,7 @@ mod tests {
                 format!(
                     "return hl.dispatch(hl.dsp.window.tag({{ tag = \"-uq_ws_4\", window = {w} }}))"
                 ),
+                format!("return hl.dispatch(hl.dsp.focus({{ window = {w} }}))"),
             ]
         );
         assert_eq!(
@@ -1388,6 +1394,11 @@ mod tests {
         let s =
             script(&Action::from_call("minimise", &json!({"address": A, "from_ws": 4})).unwrap());
         assert!(s.find("uq_ws_4").unwrap() < s.find("special:minimized").unwrap());
+        // Restore ends by focusing the window, with the pointer kept still: the column policy
+        // would otherwise focus it to size it and give focus back to the window before.
+        let s = script(&Action::from_call("restore", &json!({"address": A, "to_ws": 4})).unwrap());
+        assert!(s.find("uq_ws_4").unwrap() < s.find("hl.dsp.focus").unwrap());
+        assert!(s.contains("no_warps = true"), "the pointer stays put");
         // keep_pointer: no_warps switched on, and back after the steps whatever they did.
         let s = script(
             &Action::from_call("focus_window", &json!({"address": A, "keep_pointer": true}))

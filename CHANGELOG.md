@@ -7,6 +7,14 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **Choosing a minimised window's tab now leaves that window focused.** The window came back and
+  took focus for a moment, then focus snapped back to the window you had been in: the shell's
+  column policy sizes a returning window like a new one, which focuses it and hands focus back to
+  whatever had it. Restoring a window now ends by focusing it (pointer kept where it is), so the
+  window you chose is the one that has focus when the sizing is done.
+
 ## [0.3.0] - 2026-11-16
 
 ### Fixed

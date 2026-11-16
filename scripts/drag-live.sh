@@ -3,7 +3,7 @@
 # layout: what the shell does while the window is held. Super+drag is played through a virtual
 # keyboard and pointer (tests/live/tools/uqinput).
 #
-#   scripts/drag-live.sh [--scenario half-pair|full-edge|keys] [--unguarded]
+#   scripts/drag-live.sh [--scenario half-pair|full-edge|keys|restore] [--unguarded]
 #
 # It starts Hyprland on uQ's base.lua and the shell, opens windows, drags one and prints what
 # happened between the drag's start and end events: the focus changes, and where the dragged window
@@ -138,6 +138,10 @@ case "$scenario" in
         open_window w1; settle 1.5
         open_window w2; settle 1.5
         width w1 half; width w2 half; settle 2 ;;
+    restore)
+        # A window minimised to its tab, then chosen from the bar: it must end up focused.
+        open_window w1; settle 1.5
+        open_window w2; settle 2 ;;
     *) fail "unknown scenario $scenario" ;;
 esac
 echo "--- before"
@@ -166,6 +170,21 @@ if [ "$scenario" = keys ]; then
     [ "$(fs w2)" = 0 ] || { echo "FAIL: the Full shortcut again did not make w2 Half"; bad=1; }
     echo "--- after"; snap after
     [ "$bad" = 0 ] && echo "drag-live keys: all checks held"
+    exit "$bad"
+fi
+
+if [ "$scenario" = restore ]; then
+    # What the bar does: Minimise w1 (focus is on w2), then Restore it from its tab.
+    active() { hc activewindow -j | jq -r '.title // ""'; }
+    d() { bridge_call "{\"v\":1,\"id\":1,\"call\":\"Dispatch\",\"args\":$1}" >/dev/null; }
+    a1=$(addr_of w1); bad=0
+    d "[\"minimise\",{\"address\":\"$a1\",\"from_ws\":1}]"; settle 2
+    [ "$(active)" = w2 ] || { echo "FAIL: w2 should be focused once w1 is minimised (got $(active))"; bad=1; }
+    d "[\"restore\",{\"address\":\"$a1\",\"to_ws\":1}]"; settle 3
+    echo "--- after"; snap after
+    [ "$(active)" = w1 ] || { echo "FAIL: the restored window lost focus (active is '$(active)', not w1)"; bad=1; }
+    echo "--- focus events after the restore"; grep activewindow "$tmp/events.log" | tail -n 6
+    [ "$bad" = 0 ] && echo "drag-live restore: all checks held"
     exit "$bad"
 fi
 
