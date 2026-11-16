@@ -14,7 +14,8 @@ Item {
     /// Width and height in pixels.
     property int size: Kirigami.Units.iconSizes.medium
     /// Whether the theme had the icon (false while the letter tile shows).
-    readonly property bool found: themed.valid && icon.plainName
+    // Kirigami's `valid` only says the source is set; `status` says whether the theme had it.
+    readonly property bool found: icon.plainName && themed.status === Kirigami.Icon.Ready
 
     readonly property bool plainName: /^[A-Za-z0-9_+-][A-Za-z0-9._+-]{0,127}$/.test(icon.name)
 
@@ -27,7 +28,7 @@ Item {
         id: themed
         anchors.fill: parent
         source: icon.plainName ? icon.name : ""
-        // No stand-in icon: without one, `valid` says whether the theme really has this name.
+        // No stand-in icon: a name the theme lacks shows the letter tile instead.
         fallback: ""
         visible: icon.found
         Accessible.ignored: true
