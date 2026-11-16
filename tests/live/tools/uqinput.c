@@ -9,6 +9,8 @@
 //   move X Y          the pointer to X,Y (layout pixels)
 //   button N down|up  a pointer button (272 left, 273 right)
 //   mod super down|up the Super key, with the modifier state (shift, ctrl and alt likewise)
+//   key NAME          press and release a key by its xkb keysym name (Return, Escape, Down, 1, …)
+//   type TEXT         type the rest of the line (US layout, shift where a character needs it)
 //   sleep MS
 //   # text            ignored
 // Prints "ready" once both devices exist, and "done" at end of input. Exit 1 on a protocol error.
@@ -46,6 +48,27 @@ static uint32_t now_ms(void) {
     struct timespec t;
     clock_gettime(CLOCK_MONOTONIC, &t);
     return (uint32_t)(t.tv_sec * 1000 + t.tv_nsec / 1000000);
+}
+
+// Press and release the key that makes `sym` on the default layout, with shift when it takes level 2.
+static int press_sym(struct wl_display *dpy, struct zwp_virtual_keyboard_v1 *kbd, struct xkb_keymap *km,
+                     xkb_keysym_t sym, uint32_t depressed, uint32_t shift_bit) {
+    xkb_keycode_t lo = xkb_keymap_min_keycode(km), hi = xkb_keymap_max_keycode(km);
+    for (xkb_keycode_t kc = lo; kc <= hi; kc++) {
+        for (xkb_level_index_t lv = 0; lv < 2; lv++) {
+            const xkb_keysym_t *syms;
+            if (xkb_keymap_key_get_syms_by_level(km, kc, 0, lv, &syms) < 1 || syms[0] != sym) continue;
+            uint32_t mods = depressed | (lv == 1 ? shift_bit : 0);
+            zwp_virtual_keyboard_v1_modifiers(kbd, mods, 0, 0, 0);
+            zwp_virtual_keyboard_v1_key(kbd, now_ms(), kc - 8, 1);
+            wl_display_roundtrip(dpy);
+            usleep(12000);
+            zwp_virtual_keyboard_v1_key(kbd, now_ms(), kc - 8, 0);
+            zwp_virtual_keyboard_v1_modifiers(kbd, depressed, 0, 0, 0);
+            return 1;
+        }
+    }
+    return 0;
 }
 
 int main(int argc, char **argv) {
@@ -108,6 +131,24 @@ int main(int argc, char **argv) {
                 found = 1;
             }
             if (!found) { fprintf(stderr, "uqinput: no modifier %s\n", a); return 1; }
+        } else if (!strncmp(line, "key ", 4)) {
+            char name[64] = "";
+            sscanf(line + 4, "%63s", name);
+            xkb_keysym_t sym = xkb_keysym_from_name(name, XKB_KEYSYM_NO_FLAGS);
+            xkb_mod_index_t si = xkb_keymap_mod_get_index(km, "Shift");
+            if (sym == XKB_KEY_NoSymbol || !press_sym(dpy, kbd, km, sym, depressed, si == XKB_MOD_INVALID ? 0 : 1u << si)) {
+                fprintf(stderr, "uqinput: no key %s\n", name);
+                return 1;
+            }
+        } else if (!strncmp(line, "type ", 5)) {
+            xkb_mod_index_t si = xkb_keymap_mod_get_index(km, "Shift");
+            for (const char *c = line + 5; *c && *c != '\n'; c++) {
+                xkb_keysym_t sym = xkb_utf32_to_keysym((uint32_t)(unsigned char)*c);
+                if (!press_sym(dpy, kbd, km, sym, depressed, si == XKB_MOD_INVALID ? 0 : 1u << si)) {
+                    fprintf(stderr, "uqinput: can't type %c\n", *c);
+                    return 1;
+                }
+            }
         } else if (sscanf(line, "sleep %d", &x) == 1) {
             usleep((useconds_t)x * 1000);
         } else {

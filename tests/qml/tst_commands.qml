@@ -49,10 +49,10 @@ TestCase {
         compare(L.activation("commands", { id: "nope" }), null);
     }
 
-    function test_shift_enter_runs_in_a_terminal() {
-        var item = { id: "run-4", actions: ["run", "terminal"] };
-        compare(JSON.stringify(L.activation("run", item).args), JSON.stringify([{ run_id: "run-4" }]));
-        compare(JSON.stringify(L.activation("run", item, true).args), JSON.stringify([{ run_id: "run-4", terminal: true }]));
+    function test_enter_runs_in_a_terminal_shift_enter_in_the_background() {
+        var item = { id: "run-4", actions: ["terminal", "run"] };
+        compare(JSON.stringify(L.activation("run", item).args), JSON.stringify([{ run_id: "run-4", terminal: true }]));
+        compare(JSON.stringify(L.activation("run", item, true).args), JSON.stringify([{ run_id: "run-4" }]));
         compare(JSON.stringify(L.activation("run", { id: "run-4" }, true).args), JSON.stringify([{ run_id: "run-4" }]));
     }
 

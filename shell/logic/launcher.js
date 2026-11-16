@@ -155,8 +155,8 @@ function resultsStale(searchPending, query, searched) {
 
 // What Enter does with a row: { kind: "launch"|"copy"|"activate", call, args, close }.
 // Only bridge calls; provider data is never executed. null when the row can't be activated.
-// `alt` is Shift+Enter: the row's second action, where it has one (Run in a terminal, an emoji
-// provider's "type it").
+// `alt` is Shift+Enter: the row's second action, where it has one (Run in the background, an
+// emoji provider's "type it").
 function activation(provider, item, alt) {
     var p = String(provider === undefined || provider === null ? "" : provider);
     if (p === "" || !item || typeof item.id !== "string" || item.id === "")
@@ -164,7 +164,8 @@ function activation(provider, item, alt) {
     if (p === "apps")
         return { kind: "launch", call: "Launch", args: [{ desktop_id: item.id }], close: true };
     if (p === "run") {
-        var terminal = alt === true && Array.isArray(item.actions) && item.actions[1] === "terminal";
+        // Enter runs it in the default terminal; Shift+Enter in the background.
+        var terminal = alt !== true && Array.isArray(item.actions) && item.actions[0] === "terminal";
         return { kind: "launch", call: "Launch",
                  args: [terminal ? { run_id: item.id, terminal: true } : { run_id: item.id }],
                  close: true };
