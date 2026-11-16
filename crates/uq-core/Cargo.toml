@@ -20,7 +20,7 @@ tempfile = { workspace = true, optional = true }
 # Integrations (`integration`): the command runner, D-Bus calls with deadlines and the watcher.
 tokio = { version = "1", features = ["process", "time", "io-util", "sync", "rt", "macros", "net"] }
 libc = "0.2"
-quick-xml = "0.41"
+quick-xml = "0.42"
 inotify = { version = "0.11", default-features = false, features = ["stream"] }
 futures-util = "0.3.34"
 
