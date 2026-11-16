@@ -553,7 +553,7 @@ pub async fn serve_with(
     let enabled = cfg.has_spawner();
     let runner = Runner::shared(cfg);
     let conn = builder
-        .name(NAME)?
+        .name(NAME)
         .serve_at(
             PATH,
             DesktopIface {
@@ -562,7 +562,7 @@ pub async fn serve_with(
                 captures: crate::capture::CaptureBroker::default(),
                 runner: runner.clone(),
             },
-        )?
+        )
         .build()
         .await?;
     if enabled {

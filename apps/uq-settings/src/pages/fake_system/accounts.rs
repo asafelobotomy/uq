@@ -2,7 +2,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use zbus::zvariant::OwnedObjectPath;
+use zbus::wire::OwnedObjectPath;
 
 use super::{Deny, Shared, SysRig};
 

@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use zbus::fdo;
-use zbus::zvariant::{OwnedObjectPath, OwnedValue, Value};
+use zbus::wire::{OwnedObjectPath, OwnedVariant as OwnedValue, Variant as Value};
 
 use super::{Deny, Shared, SysRig, access_denied};
 

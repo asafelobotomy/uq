@@ -7,7 +7,7 @@
 
 use async_trait::async_trait;
 use std::collections::HashMap;
-use zbus::zvariant::Value;
+use zbus::wire::Variant as Value;
 
 /// The polkit actions in `org.uq.settings.policy`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

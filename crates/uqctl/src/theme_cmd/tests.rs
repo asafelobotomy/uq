@@ -162,13 +162,12 @@ async fn run_imports_exports_deletes() {
     )
     .unwrap();
     let _server = uqd::dbus::serve(
-        zbus::connection::Builder::address(bus.address.as_str()).unwrap(),
+        zbus::connection::Builder::address(bus.address.as_str()),
         desktop,
     )
     .await
     .unwrap();
     let client = zbus::connection::Builder::address(bus.address.as_str())
-        .unwrap()
         .build()
         .await
         .unwrap();

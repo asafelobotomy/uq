@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use uq_core::test_bus::{Bus, connect, private_bus};
 use uq_settings_helper::passwd::Passwd;
 use uq_settings_helper::{Config, Helper, IFACE, NAME, PATH, Polkit, serve};
-use zbus::zvariant::OwnedValue;
+use zbus::wire::OwnedVariant as OwnedValue;
 
 #[derive(Clone, Debug, PartialEq)]
 struct Check {
@@ -148,7 +148,7 @@ impl Setup {
 
     async fn call<B>(&self, method: &str, body: &B) -> Result<(), zbus::Error>
     where
-        B: serde::Serialize + zbus::zvariant::DynamicType,
+        B: serde::Serialize + zbus::wire::DynamicType,
     {
         self.client
             .call_method(Some(NAME), PATH, Some(IFACE), method, body)
@@ -281,7 +281,7 @@ async fn the_wallpaper_fd_is_passed_and_copied() {
     let s = Setup::new().await;
     let mut f = tempfile::tempfile().unwrap();
     f.write_all(b"\x89PNG not really").unwrap();
-    let fd = zbus::zvariant::Fd::from(&f);
+    let fd = zbus::wire::Fd::from(&f);
     s.call("SetGreeterWallpaper", &(fd,)).await.unwrap();
     assert_eq!(
         fs::read(s.file("var/lib/uq-greeter/wallpaper")).unwrap(),
@@ -290,7 +290,7 @@ async fn the_wallpaper_fd_is_passed_and_copied() {
 
     let dir = fs::File::open(s.root.path()).unwrap();
     let r = s
-        .call("SetGreeterWallpaper", &(zbus::zvariant::Fd::from(&dir),))
+        .call("SetGreeterWallpaper", &(zbus::wire::Fd::from(&dir),))
         .await;
     assert_eq!(
         error_name(r),

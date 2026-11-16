@@ -8,7 +8,7 @@
 use std::collections::HashMap;
 use std::net::IpAddr;
 
-use zbus::zvariant::{OwnedValue, Value};
+use zbus::wire::{OwnedVariant as OwnedValue, Variant as Value};
 
 use super::nm::{Settings, get, text};
 use super::profile::{IpInput, apply_ip, ov, permissions};

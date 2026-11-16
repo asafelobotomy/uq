@@ -16,7 +16,7 @@ use regex::Regex;
 use super::command_watch::{RawWatch, WatchSpec, watch_from};
 use serde::Deserialize;
 use zbus::names::{InterfaceName, MemberName, WellKnownName};
-use zbus::zvariant::ObjectPath;
+use zbus::wire::ObjectPath;
 
 /// The integration API this uQ implements (§2.6).
 pub const UQ_API: u32 = 1;

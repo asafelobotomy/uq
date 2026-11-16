@@ -31,7 +31,7 @@ use serde::Deserialize;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use zbus::names::{InterfaceName, MemberName};
-use zbus::zvariant::ObjectPath;
+use zbus::wire::ObjectPath;
 
 use super::manifest::{Bus, valid_bus_name};
 
@@ -297,17 +297,18 @@ async fn watch_signal(
     let mut b = zbus::MatchRule::builder()
         .msg_type(zbus::message::Type::Signal)
         .interface(s.interface.as_str())
-        .and_then(|b| b.member(s.member.as_str()))
-        .map_err(|e| e.to_string())?;
+        .member(s.member.as_str());
     if let Some(p) = &s.path {
-        b = b.path(p.as_str()).map_err(|e| e.to_string())?;
+        b = b.path(p.as_str());
     }
     if let Some(n) = &s.sender {
-        b = b.sender(n.as_str()).map_err(|e| e.to_string())?;
+        b = b.sender(n.as_str());
     }
-    let mut stream = zbus::MessageStream::for_match_rule(b.build(), conn, Some(16))
-        .await
-        .map_err(|e| format!("can't follow {}.{}: {e}", s.interface, s.member))?;
+    let rule = b.build().map_err(|e| e.to_string())?;
+    let mut stream =
+        zbus::MessageStream::for_match_rule(rule, conn, std::num::NonZeroUsize::new(16))
+            .await
+            .map_err(|e| format!("can't follow {}.{}: {e}", s.interface, s.member))?;
     let wanted = s.properties.clone();
     Ok(tokio::spawn(async move {
         while let Some(m) = stream.next().await {
@@ -325,7 +326,7 @@ fn names_a_wanted_property(m: Option<&zbus::Message>, wanted: &[String]) -> bool
     let Some(m) = m else { return true };
     let Ok((_, changed, invalidated)) = m.body().deserialize::<(
         String,
-        HashMap<String, zbus::zvariant::OwnedValue>,
+        HashMap<String, zbus::wire::OwnedVariant>,
         Vec<String>,
     )>() else {
         return true;

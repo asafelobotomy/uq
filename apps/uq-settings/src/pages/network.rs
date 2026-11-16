@@ -26,7 +26,7 @@ use std::sync::{Arc, Mutex as StdMutex};
 use futures_util::StreamExt;
 use serde_json::{Value, json};
 use tokio::sync::{Mutex, Notify};
-use zbus::zvariant::OwnedObjectPath;
+use zbus::wire::OwnedObjectPath;
 
 use super::prompt::Answer;
 use super::runner::PageLogic;
@@ -704,9 +704,11 @@ impl NetworkState {
             .await?;
         let rule = zbus::MatchRule::builder()
             .msg_type(zbus::message::Type::Signal)
-            .path_namespace(nm::NM_PATH)?
-            .build();
-        let mut signals = zbus::MessageStream::for_match_rule(rule, &conn, Some(256)).await?;
+            .path_namespace(nm::NM_PATH)
+            .build()?;
+        let mut signals =
+            zbus::MessageStream::for_match_rule(rule, &conn, std::num::NonZeroUsize::new(256))
+                .await?;
         let dbus = zbus::fdo::DBusProxy::new(&conn).await?;
         let mut owners = dbus
             .receive_name_owner_changed_with_args(&[(0, nm::NM)])

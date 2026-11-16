@@ -88,7 +88,7 @@ mod tests {
         )
         .unwrap();
         uqd::dbus::serve(
-            zbus::connection::Builder::address(bus.address.as_str()).unwrap(),
+            zbus::connection::Builder::address(bus.address.as_str()),
             desktop,
         )
         .await

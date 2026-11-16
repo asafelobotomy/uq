@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
 use serde_json::json;
-use zbus::zvariant::{OwnedObjectPath, OwnedValue};
+use zbus::wire::{OwnedObjectPath, OwnedVariant as OwnedValue};
 
 use super::nm::{Settings, text};
 use super::profile::{kind, name, ov};

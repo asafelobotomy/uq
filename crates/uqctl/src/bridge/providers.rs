@@ -300,9 +300,9 @@ async fn owned(conn: &zbus::Connection, name: &str) -> bool {
 
 async fn proxy<'a>(conn: &'a zbus::Connection, name: &'a str) -> zbus::Result<zbus::Proxy<'a>> {
     zbus::proxy::Builder::new(conn)
-        .destination(name)?
-        .path(PATH)?
-        .interface(IFACE)?
+        .destination(name)
+        .path(PATH)
+        .interface(IFACE)
         .cache_properties(CacheProperties::No)
         .build()
         .await
@@ -566,7 +566,7 @@ impl Providers {
                 let name = def.bus_name.as_str();
                 let start = async {
                     let dbus = zbus::fdo::DBusProxy::new(&conn).await?;
-                    let wk = WellKnownName::try_from(name).map_err(zbus::Error::from)?;
+                    let wk = WellKnownName::try_from(name)?;
                     dbus.start_service_by_name(wk, 0)
                         .await
                         .map_err(zbus::Error::from)
@@ -696,12 +696,8 @@ impl Providers {
         }
         let call = async {
             let p = proxy(conn, &def.bus_name).await?;
-            p.call_with_flags::<_, _, Vec<RawItem>>(
-                "Search",
-                MethodFlags::NoAutoStart.into(),
-                &(q,),
-            )
-            .await
+            p.call_with_flags::<_, _, Vec<RawItem>>("Search", MethodFlags::NO_AUTO_START, &(q,))
+                .await
         };
         let raw = match tokio::time::timeout(SEARCH_TIMEOUT, call).await {
             Ok(Ok(Some(r))) => r,
@@ -803,7 +799,7 @@ impl Providers {
                     let p = proxy(&conn, &def.bus_name).await?;
                     p.call_with_flags::<_, _, ()>(
                         "Activate",
-                        MethodFlags::NoAutoStart.into(),
+                        MethodFlags::NO_AUTO_START,
                         &(id.as_str(), action.as_str()),
                     )
                     .await

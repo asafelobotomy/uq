@@ -116,7 +116,6 @@ async fn section_changed_is_forwarded() {
 
     // The typed client against the real DesktopIface, on the same private bus.
     let conn = zbus::connection::Builder::address(bus.address.as_str())
-        .unwrap()
         .build()
         .await
         .unwrap();
@@ -151,7 +150,6 @@ async fn monitors_changed_is_forwarded() {
     assert!(b.call(2, "ListOutputs", json!([1])).await["err"].is_string());
 
     let conn = zbus::connection::Builder::address(bus.address.as_str())
-        .unwrap()
         .build()
         .await
         .unwrap();
@@ -266,7 +264,6 @@ async fn bridge_lists_applies_and_turns_off_profiles() {
     b.next().await;
 
     let conn = zbus::connection::Builder::address(bus.address.as_str())
-        .unwrap()
         .build()
         .await
         .unwrap();
@@ -306,7 +303,6 @@ async fn bridge_forwards_pick_requests_and_done() {
     b.next().await;
 
     let conn = zbus::connection::Builder::address(bus.address.as_str())
-        .unwrap()
         .build()
         .await
         .unwrap();
@@ -511,11 +507,8 @@ async fn bridge_hello_is_not_held_up_by_a_stuck_uqd() {
     let bus = private_bus();
     let dir = tempfile::tempdir().unwrap();
     let _stuck = zbus::connection::Builder::address(bus.address.as_str())
-        .unwrap()
         .name(NAME)
-        .unwrap()
         .serve_at("/org/uq/Desktop1", StuckUqd)
-        .unwrap()
         .build()
         .await
         .unwrap();

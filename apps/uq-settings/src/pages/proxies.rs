@@ -3,7 +3,7 @@
 //! ([`super::sysbus::CALL_TIMEOUT`]) covers the time the prompt is up.
 
 use zbus::proxy::CacheProperties;
-use zbus::zvariant::OwnedObjectPath;
+use zbus::wire::OwnedObjectPath;
 
 #[zbus::proxy(
     interface = "org.freedesktop.Accounts",
@@ -205,7 +205,7 @@ pub trait Helper {
         hide_users: bool,
         reduce_motion: bool,
     ) -> zbus::Result<()>;
-    fn set_greeter_wallpaper(&self, fd: zbus::zvariant::Fd<'_>) -> zbus::Result<()>;
+    fn set_greeter_wallpaper(&self, fd: zbus::wire::Fd<'_>) -> zbus::Result<()>;
     fn clear_greeter_wallpaper(&self) -> zbus::Result<()>;
     fn set_greeter_monitors(&self, json: &str) -> zbus::Result<()>;
     fn clear_greeter_monitors(&self) -> zbus::Result<()>;
@@ -245,7 +245,7 @@ where
     P: From<zbus::Proxy<'a>> + zbus::proxy::Defaults,
 {
     zbus::proxy::Builder::<P>::new(conn)
-        .path(path)?
+        .path(path)
         .cache_properties(CacheProperties::No)
         .build()
         .await

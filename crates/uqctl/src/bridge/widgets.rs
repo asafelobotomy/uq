@@ -32,7 +32,7 @@ use uq_core::integration::scan::scan_widgets;
 use uq_core::integration::watch::{DEBOUNCE, watch_dirs};
 use zbus::fdo::DBusProxy;
 use zbus::message::Type;
-use zbus::zvariant::{OwnedValue, Structure};
+use zbus::wire::{OwnedVariant as OwnedValue, Structure};
 use zbus::{MatchRule, MessageStream};
 
 /// D-Bus calls in flight per widget (§2.2).
@@ -72,11 +72,7 @@ impl BusConn {
         }
         let open = async {
             match (&self.addr, self.bus) {
-                (Some(a), _) => {
-                    zbus::connection::Builder::address(a.as_str())?
-                        .build()
-                        .await
-                }
+                (Some(a), _) => zbus::connection::Builder::address(a.as_str()).build().await,
                 (None, Bus::Session) => zbus::Connection::session().await,
                 (None, Bus::System) => zbus::Connection::system().await,
             }
@@ -764,16 +760,16 @@ pub(crate) fn signal_args(msg: &zbus::Message) -> Result<Value, DbusJsonError> {
 fn rule(spec: &DbusSpec, props: bool) -> zbus::Result<MatchRule<'static>> {
     let b = MatchRule::builder()
         .msg_type(Type::Signal)
-        .sender(spec.name.clone())?
-        .path(spec.path.clone())?;
-    Ok(if props {
-        b.interface(PROPERTIES)?
-            .member("PropertiesChanged")?
-            .arg(0, spec.interface.clone())?
+        .sender(spec.name.clone())
+        .path(spec.path.clone());
+    if props {
+        b.interface(PROPERTIES)
+            .member("PropertiesChanged")
+            .arg(0, spec.interface.clone())
             .build()
     } else {
-        b.interface(spec.interface.clone())?.build()
-    })
+        b.interface(spec.interface.clone()).build()
+    }
 }
 
 async fn next_msg(s: &mut Option<MessageStream>) -> Option<zbus::Result<zbus::Message>> {
@@ -799,7 +795,9 @@ async fn signal_loop(
         let conn = conn.clone();
         async move {
             let r = rule(spec, props).ok()?;
-            MessageStream::for_match_rule(r, &conn, Some(64)).await.ok()
+            MessageStream::for_match_rule(r, &conn, std::num::NonZeroUsize::new(64))
+                .await
+                .ok()
         }
     };
     let want_props = !spec.properties.is_empty();

@@ -194,7 +194,7 @@ pub async fn serve_uqd(bus: &Bus, root: &std::path::Path) -> zbus::Connection {
     )
     .unwrap();
     uqd::dbus::serve(
-        zbus::connection::Builder::address(bus.address.as_str()).unwrap(),
+        zbus::connection::Builder::address(bus.address.as_str()),
         desktop,
     )
     .await
@@ -205,7 +205,6 @@ pub async fn serve_uqd(bus: &Bus, root: &std::path::Path) -> zbus::Connection {
 /// A session-bus connection to `bus` for typed calls.
 pub async fn connect(bus: &Bus) -> zbus::Connection {
     zbus::connection::Builder::address(bus.address.as_str())
-        .unwrap()
         .build()
         .await
         .unwrap()

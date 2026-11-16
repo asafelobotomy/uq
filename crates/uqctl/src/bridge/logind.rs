@@ -22,7 +22,7 @@ use std::time::Duration;
 use tokio::sync::{mpsc, watch};
 use tokio_util::sync::CancellationToken;
 use zbus::message::Type as MsgType;
-use zbus::zvariant::{OwnedFd, OwnedObjectPath};
+use zbus::wire::{OwnedFd, OwnedObjectPath};
 use zbus::{Connection, MatchRule, MessageStream};
 
 const DEST: &str = "org.freedesktop.login1";
@@ -224,10 +224,7 @@ impl Logind {
     /// Connect to the system bus (`addr`, or the default system bus) and run the watch.
     pub async fn connect_and_run(self: Arc<Self>, addr: Option<String>, stop: CancellationToken) {
         let conn = match addr {
-            Some(a) => match zbus::connection::Builder::address(a.as_str()) {
-                Ok(b) => b.build().await,
-                Err(e) => Err(e),
-            },
+            Some(a) => zbus::connection::Builder::address(a.as_str()).build().await,
             None => Connection::system().await,
         };
         match conn {
@@ -241,7 +238,9 @@ impl Logind {
     pub async fn run(self: Arc<Self>, conn: Connection, stop: CancellationToken) {
         let rule = signal_rule(PATH, MANAGER, "PrepareForSleep");
         let mut sleeps = match rule {
-            Ok(r) => match MessageStream::for_match_rule(r, &conn, Some(16)).await {
+            Ok(r) => match MessageStream::for_match_rule(r, &conn, std::num::NonZeroUsize::new(16))
+                .await
+            {
                 Ok(s) => s,
                 Err(e) => return self.warn(e),
             },
@@ -251,7 +250,10 @@ impl Logind {
         match find_session(&conn, own_uid(), std::env::var("XDG_SESSION_ID").ok()).await {
             Some(path) => {
                 if let Ok(r) = signal_rule(path.as_str(), SESSION, "Lock") {
-                    locks = MessageStream::for_match_rule(r, &conn, Some(16)).await.ok();
+                    locks =
+                        MessageStream::for_match_rule(r, &conn, std::num::NonZeroUsize::new(16))
+                            .await
+                            .ok();
                 }
                 self.session.send_replace(Some((conn.clone(), path)));
             }
@@ -389,13 +391,13 @@ impl Logind {
 
 /// A match rule for `member` signals from logind on `path`.
 fn signal_rule(path: &str, iface: &str, member: &str) -> zbus::Result<MatchRule<'static>> {
-    Ok(MatchRule::builder()
+    MatchRule::builder()
         .msg_type(MsgType::Signal)
-        .sender(DEST)?
-        .path(path.to_owned())?
-        .interface(iface.to_owned())?
-        .member(member.to_owned())?
-        .build())
+        .sender(DEST)
+        .path(path.to_owned())
+        .interface(iface.to_owned())
+        .member(member.to_owned())
+        .build()
 }
 
 /// Our session. The bridge runs in a user service, outside any session scope, so the pid lookup
@@ -440,9 +442,7 @@ async fn display_session(conn: &Connection, uid: u32) -> Option<OwnedObjectPath>
     let user = reply.body().deserialize::<OwnedObjectPath>().ok()?;
     let props = zbus::fdo::PropertiesProxy::builder(conn)
         .destination(DEST)
-        .ok()?
         .path(user)
-        .ok()?
         .build()
         .await
         .ok()?;
@@ -456,9 +456,7 @@ async fn display_session(conn: &Connection, uid: u32) -> Option<OwnedObjectPath>
 async fn inhibit_delay_max(conn: &Connection) -> Option<u64> {
     let props = zbus::fdo::PropertiesProxy::builder(conn)
         .destination(DEST)
-        .ok()?
         .path(PATH)
-        .ok()?
         .build()
         .await
         .ok()?;
@@ -630,17 +628,11 @@ mod tests {
     async fn serve_fake(bus: &Bus, fake: Fake) -> (Connection, Shared) {
         let shared = Arc::new(Mutex::new(fake));
         let c = zbus::connection::Builder::address(bus.address.as_str())
-            .unwrap()
             .name(DEST)
-            .unwrap()
             .serve_at(PATH, FakeManager(shared.clone()))
-            .unwrap()
             .serve_at(SESSION_PATH, FakeSession(shared.clone()))
-            .unwrap()
             .serve_at(DISPLAY_PATH, FakeSession(shared.clone()))
-            .unwrap()
             .serve_at(USER_PATH, FakeUser(shared.clone()))
-            .unwrap()
             .build()
             .await
             .unwrap();

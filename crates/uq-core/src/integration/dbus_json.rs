@@ -12,7 +12,9 @@ use std::time::Duration;
 
 use serde_json::{Map, Number, Value as Json};
 use zbus::names::{BusName, InterfaceName, MemberName};
-use zbus::zvariant::{Array, Dict, ObjectPath, OwnedValue, Signature, Structure, Value};
+use zbus::wire::{
+    Array, Dict, ObjectPath, OwnedVariant as OwnedValue, Signature, Structure, Variant as Value,
+};
 
 /// The most JSON a caller may send as arguments.
 pub const MAX_ARGS_JSON: usize = 16 * 1024;
@@ -194,7 +196,7 @@ fn dict_sv(v: &Json, depth: usize) -> Result<Value<'static>, DbusJsonError> {
     let mut dict = Dict::new(&Signature::Str, &Signature::Variant);
     for (k, val) in obj {
         let inner = variant_from_json(val, depth + 1)?;
-        dict.append(Value::from(k.clone()), Value::Value(Box::new(inner)))
+        dict.append(Value::from(k.clone()), Value::Variant(Box::new(inner)))
             .map_err(|e| bad(e.to_string()))?;
     }
     Ok(Value::Dict(dict))
@@ -317,7 +319,7 @@ fn to_json(v: &Value<'_>, depth: usize) -> Result<Json, DbusJsonError> {
                     return Err(unsupported());
                 };
                 let val = match (variant_values, val) {
-                    (true, Value::Value(inner)) => to_json(inner, depth + 1)?,
+                    (true, Value::Variant(inner)) => to_json(inner, depth + 1)?,
                     (false, Value::Str(s)) => Json::String(s.as_str().to_string()),
                     _ => return Err(unsupported()),
                 };
@@ -356,15 +358,13 @@ pub fn method_in_signature(
             Event::Start(ref e) | Event::Empty(ref e) => {
                 let open = matches!(ev, Event::Start(_));
                 match e.name().as_ref() {
-                    b"interface" => {
-                        in_iface = open && attr(e, "name").as_deref() == Some(interface)
-                    }
-                    b"method" if in_iface && attr(e, "name").as_deref() == Some(method) => {
+                    "interface" => in_iface = open && attr(e, "name").as_deref() == Some(interface),
+                    "method" if in_iface && attr(e, "name").as_deref() == Some(method) => {
                         // `<method name="M"/>` takes no arguments and has no end tag.
                         in_method = open;
                         found = true;
                     }
-                    b"arg"
+                    "arg"
                         if in_method && attr(e, "direction").as_deref().unwrap_or("in") == "in" =>
                     {
                         sig.push_str(&attr(e, "type").unwrap_or_default());
@@ -373,8 +373,8 @@ pub fn method_in_signature(
                 }
             }
             Event::End(e) => match e.name().as_ref() {
-                b"interface" => in_iface = false,
-                b"method" => in_method = false,
+                "interface" => in_iface = false,
+                "method" => in_method = false,
                 _ => {}
             },
             Event::Eof => break,
@@ -515,7 +515,7 @@ pub async fn call_within(
             )
             .await
         } else {
-            let mut body = zbus::zvariant::StructureBuilder::new();
+            let mut body = zbus::wire::StructureBuilder::new();
             for v in values {
                 body = body.append_field(v);
             }

@@ -22,7 +22,7 @@ use serde_json::{Value, json};
 use tokio::sync::{Mutex, Notify};
 use tokio::task::JoinHandle;
 use zbus::proxy::CacheProperties;
-use zbus::zvariant::{OwnedObjectPath, OwnedValue};
+use zbus::wire::{OwnedObjectPath, OwnedVariant as OwnedValue};
 
 use super::prompt::{Answer, Prompts};
 use super::runner::PageLogic;
@@ -184,8 +184,8 @@ impl BluetoothState {
 
     async fn objects(&self, conn: &zbus::Connection) -> zbus::Result<Objects> {
         let om = zbus::fdo::ObjectManagerProxy::builder(conn)
-            .destination(BLUEZ)?
-            .path("/")?
+            .destination(BLUEZ)
+            .path("/")
             .cache_properties(CacheProperties::No)
             .build()
             .await?;
@@ -207,9 +207,9 @@ impl BluetoothState {
         iface: &'static str,
     ) -> zbus::Result<zbus::Proxy<'static>> {
         zbus::proxy::Builder::<zbus::Proxy<'static>>::new(conn)
-            .destination(BLUEZ)?
-            .path(path.to_string())?
-            .interface(iface)?
+            .destination(BLUEZ)
+            .path(path.to_string())
+            .interface(iface)
             .cache_properties(CacheProperties::No)
             .build()
             .await
@@ -293,9 +293,9 @@ impl BluetoothState {
         let task = async move {
             let r = async {
                 zbus::proxy::Builder::<zbus::Proxy<'static>>::new(&conn)
-                    .destination(BLUEZ)?
-                    .path(path.clone())?
-                    .interface(DEVICE)?
+                    .destination(BLUEZ)
+                    .path(path.clone())
+                    .interface(DEVICE)
                     .cache_properties(CacheProperties::No)
                     .build()
                     .await?
@@ -349,16 +349,18 @@ impl BluetoothState {
             .await?;
         let devices = zbus::MatchRule::builder()
             .msg_type(zbus::message::Type::Signal)
-            .path_namespace("/org/bluez")?
-            .build();
+            .path_namespace("/org/bluez")
+            .build()?;
         let added = zbus::MatchRule::builder()
             .msg_type(zbus::message::Type::Signal)
-            .path("/")?
-            .interface("org.freedesktop.DBus.ObjectManager")?
-            .build();
+            .path("/")
+            .interface("org.freedesktop.DBus.ObjectManager")
+            .build()?;
         let mut signals = futures_util::stream::select(
-            zbus::MessageStream::for_match_rule(devices, &conn, Some(256)).await?,
-            zbus::MessageStream::for_match_rule(added, &conn, Some(64)).await?,
+            zbus::MessageStream::for_match_rule(devices, &conn, std::num::NonZeroUsize::new(256))
+                .await?,
+            zbus::MessageStream::for_match_rule(added, &conn, std::num::NonZeroUsize::new(64))
+                .await?,
         );
         let dbus = zbus::fdo::DBusProxy::new(&conn).await?;
         let mut owners = dbus

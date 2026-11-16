@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 use futures_util::StreamExt;
 use serde::Serialize;
 use tokio::sync::Notify;
-use zbus::zvariant::OwnedObjectPath;
+use zbus::wire::OwnedObjectPath;
 
 use crate::pages::sysbus::{READ_TIMEOUT, SystemBus};
 
@@ -71,7 +71,7 @@ async fn device(sys: &SystemBus) -> zbus::Result<FprintDeviceProxy<'static>> {
         .await?
         .get_default_device()
         .await?;
-    FprintDeviceProxy::builder(&conn).path(path)?.build().await
+    FprintDeviceProxy::builder(&conn).path(path).build().await
 }
 
 /// Ask fprintd, within a few seconds. No fprintd, no reader or no answer: no reader.
@@ -275,7 +275,7 @@ pub mod fake {
     use std::sync::{Arc, Mutex};
 
     use zbus::object_server::SignalEmitter;
-    use zbus::zvariant::OwnedObjectPath;
+    use zbus::wire::OwnedObjectPath;
 
     pub const DEVICE: &str = "/net/reactivated/Fprint/Device/0";
 

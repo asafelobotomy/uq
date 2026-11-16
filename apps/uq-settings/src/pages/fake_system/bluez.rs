@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 
 use zbus::message::Header;
 use zbus::object_server::SignalEmitter;
-use zbus::zvariant::OwnedObjectPath;
+use zbus::wire::OwnedObjectPath;
 use zbus::{ObjectServer, fdo};
 
 use super::{Shared, SysRig};

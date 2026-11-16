@@ -286,12 +286,12 @@ fn words() {
 fn first_adapter_is_picked_from_one_snapshot() {
     use std::collections::HashMap;
     use zbus::names::OwnedInterfaceName;
-    use zbus::zvariant::{OwnedObjectPath, OwnedValue};
+    use zbus::wire::{OwnedObjectPath, OwnedVariant as OwnedValue};
     let entry = |iface: &str, name: &str| {
         let mut props = HashMap::new();
         props.insert(
             "Alias".to_string(),
-            OwnedValue::try_from(zbus::zvariant::Value::from(name)).unwrap(),
+            OwnedValue::try_from(zbus::wire::Variant::from(name)).unwrap(),
         );
         let mut o = HashMap::new();
         o.insert(OwnedInterfaceName::try_from(iface).unwrap(), props);

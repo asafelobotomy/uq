@@ -9,7 +9,7 @@ use uq_core::integration::dbus_json::{
     DbusJsonError, MAX_RESULT_JSON, Target, call, call_within, get_properties, get_property,
 };
 use uq_core::test_bus::{connect, private_bus};
-use zbus::zvariant::{OwnedObjectPath, OwnedValue};
+use zbus::wire::{OwnedObjectPath, OwnedVariant as OwnedValue};
 
 const NAME: &str = "org.uq.Test1";
 
@@ -308,7 +308,7 @@ async fn a_watched_property_change_counts_only_for_the_named_properties() {
     use std::collections::HashMap;
     use uq_core::integration::command_watch::{SignalMatch, WatchSpec, start};
     use uq_core::integration::manifest::Bus;
-    use zbus::zvariant::Value as ZValue;
+    use zbus::wire::Variant as ZValue;
 
     let bus = private_bus();
     let svc = serve(&bus).await;

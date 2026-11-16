@@ -26,14 +26,13 @@ async fn dbus_round_trip() {
     )
     .unwrap();
     let _server = serve(
-        zbus::connection::Builder::address(bus.address.as_str()).unwrap(),
+        zbus::connection::Builder::address(bus.address.as_str()),
         desktop,
     )
     .await
     .unwrap();
 
     let client = zbus::connection::Builder::address(bus.address.as_str())
-        .unwrap()
         .build()
         .await
         .unwrap();
@@ -150,13 +149,12 @@ async fn get_schedule_round_trips() {
     )
     .unwrap();
     let _server = serve(
-        zbus::connection::Builder::address(bus.address.as_str()).unwrap(),
+        zbus::connection::Builder::address(bus.address.as_str()),
         desktop,
     )
     .await
     .unwrap();
     let client = zbus::connection::Builder::address(bus.address.as_str())
-        .unwrap()
         .build()
         .await
         .unwrap();
@@ -195,13 +193,12 @@ async fn section_round_trip_over_dbus() {
     )
     .unwrap();
     let _server = serve(
-        zbus::connection::Builder::address(bus.address.as_str()).unwrap(),
+        zbus::connection::Builder::address(bus.address.as_str()),
         desktop,
     )
     .await
     .unwrap();
     let client = zbus::connection::Builder::address(bus.address.as_str())
-        .unwrap()
         .build()
         .await
         .unwrap();
@@ -254,13 +251,12 @@ async fn look_section_round_trip_over_dbus() {
     )
     .unwrap();
     let _server = serve(
-        zbus::connection::Builder::address(bus.address.as_str()).unwrap(),
+        zbus::connection::Builder::address(bus.address.as_str()),
         desktop,
     )
     .await
     .unwrap();
     let client = zbus::connection::Builder::address(bus.address.as_str())
-        .unwrap()
         .build()
         .await
         .unwrap();
@@ -321,13 +317,12 @@ async fn served() -> Served {
     )
     .unwrap();
     let server = serve(
-        zbus::connection::Builder::address(bus.address.as_str()).unwrap(),
+        zbus::connection::Builder::address(bus.address.as_str()),
         desktop,
     )
     .await
     .unwrap();
     let client = zbus::connection::Builder::address(bus.address.as_str())
-        .unwrap()
         .build()
         .await
         .unwrap();
@@ -900,13 +895,12 @@ async fn input_section_round_trip_over_dbus() {
             .into();
     let desktop = Desktop::new(paths, comp, Arc::new(FakeSystem::default())).unwrap();
     let _server = serve(
-        zbus::connection::Builder::address(bus.address.as_str()).unwrap(),
+        zbus::connection::Builder::address(bus.address.as_str()),
         desktop,
     )
     .await
     .unwrap();
     let client = zbus::connection::Builder::address(bus.address.as_str())
-        .unwrap()
         .build()
         .await
         .unwrap();
@@ -975,13 +969,12 @@ async fn rules_section_and_list_windows_over_dbus() {
         .into();
     let desktop = Desktop::new(paths, comp, Arc::new(FakeSystem::default())).unwrap();
     let _server = serve(
-        zbus::connection::Builder::address(bus.address.as_str()).unwrap(),
+        zbus::connection::Builder::address(bus.address.as_str()),
         desktop,
     )
     .await
     .unwrap();
     let client = zbus::connection::Builder::address(bus.address.as_str())
-        .unwrap()
         .build()
         .await
         .unwrap();
@@ -1062,13 +1055,12 @@ async fn pause_and_resume_over_dbus() {
     let comp = Arc::new(FakeCompositor::running());
     let desktop = Desktop::new(paths, comp.clone(), Arc::new(FakeSystem::default())).unwrap();
     let _server = serve(
-        zbus::connection::Builder::address(bus.address.as_str()).unwrap(),
+        zbus::connection::Builder::address(bus.address.as_str()),
         desktop,
     )
     .await
     .unwrap();
     let client = zbus::connection::Builder::address(bus.address.as_str())
-        .unwrap()
         .build()
         .await
         .unwrap();
@@ -1141,14 +1133,13 @@ async fn pick_server() -> (
     *comp.cursor_json.lock().unwrap() = r#"{"x":10,"y":10}"#.into();
     let desktop = Desktop::new(paths, comp.clone(), Arc::new(FakeSystem::default())).unwrap();
     let server = serve(
-        zbus::connection::Builder::address(bus.address.as_str()).unwrap(),
+        zbus::connection::Builder::address(bus.address.as_str()),
         desktop,
     )
     .await
     .unwrap();
     std::mem::forget(server);
     let client = zbus::connection::Builder::address(bus.address.as_str())
-        .unwrap()
         .build()
         .await
         .unwrap();
@@ -1161,7 +1152,6 @@ async fn pick_over_dbus() {
     let proxy = uq_core::client::DesktopProxy::new(&client).await.unwrap();
     let mut requested = proxy.receive_pick_requested().await.unwrap();
     let shell = zbus::connection::Builder::address(bus.address.as_str())
-        .unwrap()
         .build()
         .await
         .unwrap();
@@ -1324,14 +1314,13 @@ async fn autostart_served(
         false,
     );
     let server = uqd::dbus::serve_with(
-        zbus::connection::Builder::address(bus.address.as_str()).unwrap(),
+        zbus::connection::Builder::address(bus.address.as_str()),
         desktop,
         cfg,
     )
     .await
     .unwrap();
     let client = zbus::connection::Builder::address(bus.address.as_str())
-        .unwrap()
         .build()
         .await
         .unwrap();
@@ -1535,13 +1524,12 @@ async fn integration_rules_over_dbus() {
     )
     .unwrap();
     let _server = serve(
-        zbus::connection::Builder::address(bus.address.as_str()).unwrap(),
+        zbus::connection::Builder::address(bus.address.as_str()),
         desktop,
     )
     .await
     .unwrap();
     let client = zbus::connection::Builder::address(bus.address.as_str())
-        .unwrap()
         .build()
         .await
         .unwrap();

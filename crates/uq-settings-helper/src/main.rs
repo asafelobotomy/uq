@@ -28,7 +28,7 @@ async fn main() -> ExitCode {
 }
 
 async fn run() -> Result<(), Box<dyn std::error::Error>> {
-    let conn = zbus::connection::Builder::system()?.build().await?;
+    let conn = zbus::connection::Builder::system().build().await?;
     let helper = Arc::new(Helper::new(
         Config::system(),
         Arc::new(Polkit::new(conn.clone())),

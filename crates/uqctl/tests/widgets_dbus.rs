@@ -64,11 +64,8 @@ impl Fake {
 
 async fn serve_fake(bus: &Bus) -> zbus::Connection {
     zbus::connection::Builder::address(bus.address.as_str())
-        .unwrap()
         .name(NAME)
-        .unwrap()
         .serve_at(PATH, Fake { count: 0 })
-        .unwrap()
         .build()
         .await
         .unwrap()
@@ -589,9 +586,7 @@ async fn launcher_open_starts_cold_activatable_providers_once() {
     }
     // Already running: never started again.
     let _warm = zbus::connection::Builder::address(bus.address.as_str())
-        .unwrap()
         .name("org.test.Warm")
-        .unwrap()
         .build()
         .await
         .unwrap();

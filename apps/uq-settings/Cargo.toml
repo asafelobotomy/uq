@@ -21,7 +21,7 @@ serde.workspace = true
 serde_json.workspace = true
 tokio = { workspace = true }
 toml.workspace = true
-zbus = { version = "6", default-features = false, features = ["tokio"] }
+zbus = { version = "6", default-features = false, features = ["tokio", "proxy", "service", "object-manager"] }
 
 [dev-dependencies]
 async-trait.workspace = true

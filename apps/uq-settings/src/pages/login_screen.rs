@@ -170,7 +170,7 @@ impl LoginScreenState {
         let file = open_wallpaper(path)?;
         let helper = self.helper().await?;
         let r = helper
-            .set_greeter_wallpaper(zbus::zvariant::Fd::from(&file))
+            .set_greeter_wallpaper(zbus::wire::Fd::from(&file))
             .await;
         self.saved(r)
     }

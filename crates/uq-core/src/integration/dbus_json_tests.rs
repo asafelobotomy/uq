@@ -131,7 +131,7 @@ fn args_match_the_signature_count() {
 
 #[test]
 fn other_types_are_refused_on_the_way_out() {
-    use zbus::zvariant::{Signature, StructureBuilder};
+    use zbus::wire::{Signature, StructureBuilder};
     let st = StructureBuilder::new()
         .add_field(1i32)
         .add_field("x")
@@ -141,7 +141,7 @@ fn other_types_are_refused_on_the_way_out() {
         value_to_json(&Value::Structure(st)),
         Err(DbusJsonError::Unsupported(_))
     ));
-    assert!(value_to_json(&Value::Value(Box::new(Value::U8(1)))).is_err());
+    assert!(value_to_json(&Value::Variant(Box::new(Value::U8(1)))).is_err());
     assert!(value_to_json(&Value::Signature(Signature::Str)).is_err());
     assert!(value_to_json(&Value::F64(f64::NAN)).is_err());
     let mut nested = Array::new(&Signature::try_from("as").unwrap());

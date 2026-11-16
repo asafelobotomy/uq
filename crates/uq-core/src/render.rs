@@ -114,11 +114,16 @@ pub fn render(
     }
     let mut env = Environment::new();
     env.set_undefined_behavior(UndefinedBehavior::Strict);
-    env.set_keep_trailing_newline(true);
+    env.set_syntax(
+        minijinja::syntax::SyntaxConfig::builder()
+            .keep_trailing_newline(true)
+            .build()
+            .expect("the default delimiters are valid"),
+    );
     env.add_filter("bare", bare);
     env.add_filter("argb", argb);
     env.add_filter("rgb", rgb);
-    let ctx = context! { theme => theme, variant => theme.variant.as_str(), is_dark => theme.variant == crate::theme::Variant::Dark, base => kvantum_base };
+    let ctx = context! { theme => minijinja::Value::from(minijinja::value::Serde(theme)), variant => theme.variant.as_str(), is_dark => theme.variant == crate::theme::Variant::Dark, base => kvantum_base };
     let mut out = BTreeMap::new();
     let extra = kvantum_base.map(|_| KVANTUM_TARGET);
     for (name, rel) in TARGETS.into_iter().chain(extra) {

@@ -77,7 +77,6 @@ pub fn private_bus_with_services(services: &[(&str, &str)]) -> Bus {
 
 pub async fn connect(bus: &Bus) -> zbus::Connection {
     zbus::connection::Builder::address(bus.address.as_str())
-        .unwrap()
         .build()
         .await
         .unwrap()

@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 
 use zbus::proxy::CacheProperties;
-use zbus::zvariant::{OwnedObjectPath, OwnedValue};
+use zbus::wire::{OwnedObjectPath, OwnedVariant as OwnedValue};
 
 pub const NM: &str = "org.freedesktop.NetworkManager";
 pub const NM_PATH: &str = "/org/freedesktop/NetworkManager";
@@ -92,7 +92,7 @@ pub trait NmConnection {
     default_service = "org.freedesktop.NetworkManager"
 )]
 pub trait NmWireless {
-    fn request_scan(&self, options: HashMap<&str, zbus::zvariant::Value<'_>>) -> zbus::Result<()>;
+    fn request_scan(&self, options: HashMap<&str, zbus::wire::Variant<'_>>) -> zbus::Result<()>;
 }
 
 #[zbus::proxy(
@@ -111,7 +111,7 @@ where
     P: From<zbus::Proxy<'a>> + zbus::proxy::Defaults,
 {
     zbus::proxy::Builder::<P>::new(conn)
-        .path(path.clone())?
+        .path(path.clone())
         .cache_properties(CacheProperties::No)
         .build()
         .await
@@ -120,8 +120,8 @@ where
 /// Every property of `iface` on NetworkManager's object at `path`.
 pub async fn get_all(conn: &zbus::Connection, path: &str, iface: &str) -> zbus::Result<Props> {
     let p = zbus::fdo::PropertiesProxy::builder(conn)
-        .destination(NM)?
-        .path(path)?
+        .destination(NM)
+        .path(path)
         .cache_properties(CacheProperties::No)
         .build()
         .await?;

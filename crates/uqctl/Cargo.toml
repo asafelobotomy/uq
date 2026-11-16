@@ -16,7 +16,7 @@ chrono = "0.4"
 chrono-tz = "0.10.4"
 quick-xml = "0.42"
 clap = { version = "4", features = ["derive"] }
-zbus = { version = "6", default-features = false, features = ["tokio"] }
+zbus = { version = "6", default-features = false, features = ["tokio", "proxy", "service"] }
 futures-util = "0.3.34"
 tokio-util = "0.7"
 reqwest.workspace = true

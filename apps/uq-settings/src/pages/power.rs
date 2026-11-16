@@ -20,7 +20,7 @@ use futures_util::StreamExt;
 use serde_json::{Value, json};
 use tokio::sync::{Mutex, Notify};
 use zbus::proxy::CacheProperties;
-use zbus::zvariant::OwnedValue;
+use zbus::wire::OwnedVariant as OwnedValue;
 
 use super::proxies::{
     HELPER_NAME, HelperProxy, Login1Proxy, POWER_PROFILES_NAMES, UPowerDeviceProxy, UPowerProxy,
@@ -114,23 +114,23 @@ impl PowerState {
         let mut rules = vec![
             zbus::MatchRule::builder()
                 .msg_type(zbus::message::Type::Signal)
-                .path_namespace(UPOWER_PATHS)?
-                .build(),
+                .path_namespace(UPOWER_PATHS)
+                .build()?,
         ];
         for (_, path, _) in POWER_PROFILES_NAMES {
             if !path.starts_with(UPOWER_PATHS) {
                 rules.push(
                     zbus::MatchRule::builder()
                         .msg_type(zbus::message::Type::Signal)
-                        .path(path)?
-                        .build(),
+                        .path(path)
+                        .build()?,
                 );
             }
         }
         let mut streams = Vec::new();
         for rule in rules {
             streams.push(
-                zbus::MessageStream::for_match_rule(rule, &conn, Some(64))
+                zbus::MessageStream::for_match_rule(rule, &conn, std::num::NonZeroUsize::new(64))
                     .await?
                     .map(|_| ())
                     .boxed(),
@@ -166,9 +166,9 @@ impl PowerState {
         for (name, path, iface) in POWER_PROFILES_NAMES {
             if sysbus::has_service(&conn, name).await {
                 return zbus::proxy::Builder::<zbus::Proxy<'static>>::new(&conn)
-                    .destination(name)?
-                    .path(path)?
-                    .interface(iface)?
+                    .destination(name)
+                    .path(path)
+                    .interface(iface)
                     .cache_properties(CacheProperties::No)
                     .build()
                     .await;

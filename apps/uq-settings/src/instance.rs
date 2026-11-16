@@ -52,7 +52,7 @@ pub async fn claim(conn: &zbus::Connection, page: &str, setting: &str) -> zbus::
     for _ in 0..PASSES {
         // zbus reports `Exists` (someone else holds the name) as `Error::NameTaken`.
         match conn
-            .request_name_with_flags(SETTINGS_NAME, RequestNameFlags::DoNotQueue.into())
+            .request_name_with_flags(SETTINGS_NAME, RequestNameFlags::DO_NOT_QUEUE)
             .await
         {
             Ok(RequestNameReply::PrimaryOwner | RequestNameReply::AlreadyOwner) => {

@@ -50,8 +50,8 @@ impl SystemBus {
         self.conn
             .get_or_try_init(|| async {
                 let builder = match &self.address {
-                    Some(a) => zbus::connection::Builder::address(a.as_str())?,
-                    None => zbus::connection::Builder::system()?,
+                    Some(a) => zbus::connection::Builder::address(a.as_str()),
+                    None => zbus::connection::Builder::system(),
                 };
                 builder.method_timeout(CALL_TIMEOUT).build().await
             })
@@ -246,7 +246,6 @@ mod tests {
 
     fn method_error(name: &str, text: &str) -> zbus::Error {
         let msg = zbus::message::Message::method_call("/", "X")
-            .unwrap()
             .build(&())
             .unwrap();
         zbus::Error::MethodError(

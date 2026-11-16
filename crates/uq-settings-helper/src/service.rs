@@ -391,7 +391,7 @@ impl HelperIface {
 
     async fn set_greeter_wallpaper(
         &self,
-        fd: zbus::zvariant::OwnedFd,
+        fd: zbus::wire::OwnedFd,
         #[zbus(header)] header: zbus::message::Header<'_>,
     ) -> Result<(), HelperError> {
         let _busy = self.helper.activity.begin();

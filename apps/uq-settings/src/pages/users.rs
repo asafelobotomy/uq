@@ -90,7 +90,7 @@ pub struct User {
     pub admin: bool,
     pub icon: String,
     pub locked: bool,
-    path: zbus::zvariant::OwnedObjectPath,
+    path: zbus::wire::OwnedObjectPath,
 }
 
 pub struct UsersState {

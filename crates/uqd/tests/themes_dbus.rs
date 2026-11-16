@@ -31,13 +31,12 @@ async fn served() -> Served {
     )
     .unwrap();
     let server = serve(
-        zbus::connection::Builder::address(bus.address.as_str()).unwrap(),
+        zbus::connection::Builder::address(bus.address.as_str()),
         desktop,
     )
     .await
     .unwrap();
     let client = zbus::connection::Builder::address(bus.address.as_str())
-        .unwrap()
         .build()
         .await
         .unwrap();

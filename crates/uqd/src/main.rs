@@ -83,7 +83,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // The only place the real spawner is made (F1).
     let autostart = AutostartConfig::system(dev, session);
     let (conn, shared) =
-        serve_with(zbus::connection::Builder::session()?, desktop, autostart).await?;
+        serve_with(zbus::connection::Builder::session(), desktop, autostart).await?;
     tracing::info!("serving org.uq.Desktop1");
     // The only place the real notifier, `xrandr` and the event listener are made (F15): they
     // need the session connection and the shared desktop, which exist only after serving.

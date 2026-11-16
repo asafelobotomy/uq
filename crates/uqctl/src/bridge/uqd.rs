@@ -69,11 +69,11 @@ async fn subscribe_unbounded(addr: Option<&str>) -> Option<(Connection, Subs)> {
     let rule = MatchRule::builder()
         .msg_type(Type::Signal)
         .sender(NAME)
-        .and_then(|b| b.path(PATH))
-        .and_then(|b| b.interface(IFACE))
-        .map(|b| b.build())
+        .path(PATH)
+        .interface(IFACE)
+        .build()
         .ok()?;
-    let signals = MessageStream::for_match_rule(rule, &conn, Some(64))
+    let signals = MessageStream::for_match_rule(rule, &conn, std::num::NonZeroUsize::new(64))
         .await
         .ok()?;
     Some((conn, Subs { owner, signals }))
@@ -81,7 +81,7 @@ async fn subscribe_unbounded(addr: Option<&str>) -> Option<(Connection, Subs)> {
 
 async fn connect(addr: Option<&str>) -> zbus::Result<Connection> {
     match addr {
-        Some(a) => zbus::connection::Builder::address(a)?.build().await,
+        Some(a) => zbus::connection::Builder::address(a).build().await,
         None => Connection::session().await,
     }
 }

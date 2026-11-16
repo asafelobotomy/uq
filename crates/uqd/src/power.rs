@@ -75,10 +75,7 @@ impl SystemPowerProfiles {
     async fn connect(&self) -> Result<zbus::Connection, PowerError> {
         let conn = match &self.address {
             None => zbus::Connection::system().await,
-            Some(a) => match zbus::connection::Builder::address(a.as_str()) {
-                Ok(b) => b.build().await,
-                Err(e) => Err(e),
-            },
+            Some(a) => zbus::connection::Builder::address(a.as_str()).build().await,
         };
         conn.map_err(|e| {
             tracing::debug!("system bus: {e}");
@@ -96,9 +93,8 @@ impl SystemPowerProfiles {
         for (name, path, iface) in SERVICES {
             let proxy = zbus::proxy::Builder::new(&conn)
                 .destination(name)
-                .and_then(|b| b.path(path))
-                .and_then(|b| b.interface(iface))
-                .map_err(refused)?
+                .path(path)
+                .interface(iface)
                 .cache_properties(CacheProperties::No)
                 .build()
                 .await
@@ -263,17 +259,14 @@ mod tests {
     ) -> (zbus::Connection, Arc<Mutex<String>>) {
         let profile = Arc::new(Mutex::new(mode.to_string()));
         let (name, path, _) = SERVICES[index];
-        let b = zbus::connection::Builder::address(bus.address.as_str())
-            .unwrap()
-            .name(name)
-            .unwrap();
+        let b = zbus::connection::Builder::address(bus.address.as_str()).name(name);
         let d = Daemon {
             profile: profile.clone(),
         };
         let b = if index == 0 {
-            b.serve_at(path, d).unwrap()
+            b.serve_at(path, d)
         } else {
-            b.serve_at(path, OldDaemon(d)).unwrap()
+            b.serve_at(path, OldDaemon(d))
         };
         (b.build().await.unwrap(), profile)
     }
@@ -338,11 +331,8 @@ mod tests {
         }
         let bus = private_bus();
         let _c = zbus::connection::Builder::address(bus.address.as_str())
-            .unwrap()
             .name(SERVICES[0].0)
-            .unwrap()
             .serve_at(SERVICES[0].1, Strict)
-            .unwrap()
             .build()
             .await
             .unwrap();

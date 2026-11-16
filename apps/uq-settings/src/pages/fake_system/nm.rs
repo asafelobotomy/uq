@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 
 use zbus::message::Header;
 use zbus::object_server::SignalEmitter;
-use zbus::zvariant::{OwnedObjectPath, OwnedValue};
+use zbus::wire::{OwnedObjectPath, OwnedVariant as OwnedValue};
 use zbus::{ObjectServer, fdo};
 
 use super::{Deny, Shared, SysRig};
@@ -120,7 +120,7 @@ pub fn without_secrets(s: &Settings) -> Settings {
                     .collect();
                 b.insert(
                     "peers".into(),
-                    OwnedValue::try_from(zbus::zvariant::Value::from(peers)).unwrap(),
+                    OwnedValue::try_from(zbus::wire::Variant::from(peers)).unwrap(),
                 );
             }
         } else {

@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use serde_json::json;
 use zbus::proxy::CacheProperties;
-use zbus::zvariant::OwnedObjectPath;
+use zbus::wire::OwnedObjectPath;
 
 use super::{BLUEZ, DEVICE, Shared};
 use crate::pages::prompt::Answer;
@@ -30,9 +30,9 @@ pub struct PairingAgent {
 async fn device_name(conn: &zbus::Connection, device: &OwnedObjectPath) -> String {
     let read = async {
         let p = zbus::proxy::Builder::<zbus::Proxy<'static>>::new(conn)
-            .destination(BLUEZ)?
-            .path(device.clone())?
-            .interface(DEVICE)?
+            .destination(BLUEZ)
+            .path(device.clone())
+            .interface(DEVICE)
             .cache_properties(CacheProperties::No)
             .build()
             .await?;

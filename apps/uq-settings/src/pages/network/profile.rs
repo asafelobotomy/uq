@@ -15,7 +15,7 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::path::Path;
 
 use serde_json::{Value as Json, json};
-use zbus::zvariant::{OwnedValue, Value};
+use zbus::wire::{OwnedVariant as OwnedValue, Variant as Value};
 
 use super::nm::{Settings, get, text};
 

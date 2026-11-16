@@ -285,7 +285,6 @@ async fn the_agent_asks_only_for_connections_started_here() {
         .path
         .clone();
     let other = zbus::connection::Builder::address(_rig.bus.address.as_str())
-        .unwrap()
         .build()
         .await
         .unwrap();

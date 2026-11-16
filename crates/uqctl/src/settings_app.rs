@@ -103,11 +103,8 @@ mod tests {
         let bus = private_bus();
         let calls = Arc::new(Mutex::new(Vec::new()));
         let _app = zbus::connection::Builder::address(bus.address.as_str())
-            .unwrap()
             .name(uq_core::client::SETTINGS_NAME)
-            .unwrap()
             .serve_at(uq_core::client::SETTINGS_PATH, Fake(calls.clone()))
-            .unwrap()
             .build()
             .await
             .unwrap();

@@ -3,7 +3,7 @@
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::time::Duration;
-use zbus::zvariant::Value;
+use zbus::wire::Variant as Value;
 
 /// A notification must never wedge uqd (it holds the desktop lock while it waits).
 const TIMEOUT: Duration = Duration::from_secs(3);

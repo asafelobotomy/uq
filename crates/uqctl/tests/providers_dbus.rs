@@ -63,9 +63,7 @@ async fn serve_fake_logged(
     let calls = Calls::default();
     let searches = Calls::default();
     let conn = zbus::connection::Builder::address(bus.address.as_str())
-        .unwrap()
         .name(name)
-        .unwrap()
         .serve_at(
             "/org/uq/Launcher1",
             Fake {
@@ -75,7 +73,6 @@ async fn serve_fake_logged(
                 searches: searches.clone(),
             },
         )
-        .unwrap()
         .build()
         .await
         .unwrap();
@@ -222,7 +219,6 @@ async fn unowned_provider_not_activated() {
 
     // Control: the service file does start the service when asked to.
     let conn = zbus::connection::Builder::address(bus.address.as_str())
-        .unwrap()
         .build()
         .await
         .unwrap();
@@ -305,7 +301,7 @@ async fn serve_uqd(bus: &Bus, root: &Path) -> zbus::Connection {
     )
     .unwrap();
     uqd::dbus::serve(
-        zbus::connection::Builder::address(bus.address.as_str()).unwrap(),
+        zbus::connection::Builder::address(bus.address.as_str()),
         desktop,
     )
     .await
@@ -341,7 +337,6 @@ async fn disabled_builtin_and_external_are_not_asked() {
 
     // Switch calc and P off through the typed client; the bridge relays SettingsChanged.
     let conn = zbus::connection::Builder::address(bus.address.as_str())
-        .unwrap()
         .build()
         .await
         .unwrap();
@@ -403,7 +398,6 @@ async fn rows_from_before_switch_off_cannot_act() {
     b.reply(5).await;
 
     let conn = zbus::connection::Builder::address(bus.address.as_str())
-        .unwrap()
         .build()
         .await
         .unwrap();

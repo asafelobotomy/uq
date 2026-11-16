@@ -97,11 +97,8 @@ impl SlowUqd {
 async fn launch_with_slow_uqd_times_out_and_launches() {
     let bus = private_bus();
     let _slow = zbus::connection::Builder::address(bus.address.as_str())
-        .unwrap()
         .name("org.uq.Desktop1")
-        .unwrap()
         .serve_at("/org/uq/Desktop1", SlowUqd)
-        .unwrap()
         .build()
         .await
         .unwrap();

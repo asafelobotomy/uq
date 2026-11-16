@@ -266,7 +266,7 @@ pub fn parse_feed(bytes: &[u8]) -> Result<Parsed, &'static str> {
         match ev {
             Event::Start(ref e) | Event::Empty(ref e) => {
                 let empty = matches!(ev, Event::Empty(_));
-                let name = String::from_utf8_lossy(e.name().as_ref()).into_owned();
+                let name = e.name().as_ref().to_string();
                 if stack.is_empty() {
                     is_feed = matches!(name.as_str(), "rss" | "feed" | "rdf:RDF" | "RDF");
                     if !is_feed {
@@ -341,17 +341,17 @@ pub fn parse_feed(bytes: &[u8]) -> Result<Parsed, &'static str> {
                 &mut feed_title,
             ),
             Event::Text(t) if capture.is_some() => {
-                buf.push_str(&t.decode().unwrap_or_default());
+                buf.push_str(&t);
             }
             Event::CData(t) if capture.is_some() => {
-                buf.push_str(&t.decode().unwrap_or_default());
+                buf.push_str(&t);
             }
             Event::GeneralRef(g) if capture.is_some() => {
                 if let Ok(Some(c)) = g.resolve_char_ref() {
                     buf.push(c);
                 } else {
-                    let name = g.decode().unwrap_or_default();
-                    match name.as_ref() {
+                    let name: &str = &g;
+                    match name {
                         "lt" => buf.push('<'),
                         "gt" => buf.push('>'),
                         "amp" => buf.push('&'),
