@@ -923,8 +923,8 @@ fn hostile_binds_run_as_one_call_each() {
         .expect(&text);
     let after = &lines[unbind..];
     let calls = after.iter().filter(|l| **l == "hl.bind").count();
-    // 59 defaults, the capture submap's placeholder bind and two binds per hostile name.
-    assert_eq!(calls, 60 + 2 * hostile.len(), "{text}");
+    // 59 defaults, four mouse hooks, the capture submap's placeholder bind and two binds per hostile name.
+    assert_eq!(calls, 64 + 2 * hostile.len(), "{text}");
     assert_eq!(bind_lines(&text).len(), calls, "{text}");
     assert!(!text.contains("hl.exec_cmd:x"), "{text}");
     assert!(!text.contains("hl.exec_cmd:\"x"), "{text}");
