@@ -46,7 +46,7 @@ SH
 chmod +x "$tmp/bin/systemd-run" "$tmp/bin/kitty"
 printf '[Desktop Entry]\nType=Application\nName=Kitty\nExec=kitty\nIcon=utilities-terminal\n' >"$tmp/data/applications/kitty.desktop"
 # Recents and the pinned squares, as the shell saves them.
-printf '{"v":1,"pins":["foot.desktop","","","",""],"recents":["foot.desktop","footclient.desktop"]}' >"$tmp/state/uq/lookseedo.json"
+printf '{"v":1,"pins":["","","","",""],"recents":["foot"]}' >"$tmp/state/uq/lookseedo.json"
 
 dbus-daemon --session --address="unix:path=$tmp/bus" --nofork --nopidfile >"$tmp/dbus.log" 2>&1 &
 pids+=($!)
