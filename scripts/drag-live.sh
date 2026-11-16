@@ -3,7 +3,7 @@
 # layout: what the shell does while the window is held. Super+drag is played through a virtual
 # keyboard and pointer (tests/live/tools/uqinput).
 #
-#   scripts/drag-live.sh [--scenario half-pair|full-edge|keys|drop] [--unguarded]
+#   scripts/drag-live.sh [--scenario half-pair|full-edge|keys|drop|restore] [--unguarded]
 #
 # It starts Hyprland on uQ's base.lua and the shell, opens windows, drags one and prints what
 # happened between the drag's start and end events: the focus changes, and where the dragged window
@@ -145,6 +145,10 @@ case "$scenario" in
         open_window w1; settle 1.5
         open_window w2; settle 1.5
         width w1 half; width w2 half; settle 2 ;;
+    restore)
+        # A window minimised to its tab, then chosen from the bar: it must end up focused.
+        open_window w1; settle 1.5
+        open_window w2; settle 2 ;;
     *) fail "unknown scenario $scenario" ;;
 esac
 echo "--- before"
@@ -173,6 +177,38 @@ if [ "$scenario" = keys ]; then
     [ "$(fs w2)" = 0 ] || { echo "FAIL: the Full shortcut again did not make w2 Half"; bad=1; }
     echo "--- after"; snap after
     [ "$bad" = 0 ] && echo "drag-live keys: all checks held"
+    exit "$bad"
+fi
+
+if [ "$scenario" = restore ]; then
+    # What the bar does: Minimise w1 (focus is on w2), then Restore it from its tab.
+    active() { hc activewindow -j | jq -r '.title // ""'; }
+    d() { bridge_call "{\"v\":1,\"id\":1,\"call\":\"Dispatch\",\"args\":$1}" >/dev/null; }
+    a1=$(addr_of w1); bad=0
+    # With UQ_CAPTURE_DIR set (CI does), keep a screenshot of each step and a GIF of the whole
+    # thing: frames are grabbed every ~0.2 s from here on. Skipped quietly without grim.
+    cap=${UQ_CAPTURE_DIR:-}; grabber=""
+    if [ -n "$cap" ] && command -v grim >/dev/null 2>&1; then
+        mkdir -p "$cap/frames"
+        shot() { env XDG_RUNTIME_DIR="$rt" WAYLAND_DISPLAY="$wl" grim "$1" 2>/dev/null; }
+        (n=0; while :; do shot "$cap/frames/$(printf %04d $n).png"; n=$((n + 1)); sleep 0.2; done) &
+        grabber=$!; pids+=($!)
+        settle 1; cp "$cap/frames/0000.png" "$cap/restore-1-before.png" 2>/dev/null
+    fi
+    d "[\"minimise\",{\"address\":\"$a1\",\"from_ws\":1}]"; settle 2
+    [ -n "$grabber" ] && shot "$cap/restore-2-minimised.png"
+    [ "$(active)" = w2 ] || { echo "FAIL: w2 should be focused once w1 is minimised (got $(active))"; bad=1; }
+    d "[\"restore\",{\"address\":\"$a1\",\"to_ws\":1}]"; settle 3
+    echo "--- after"; snap after
+    if [ -n "$grabber" ]; then
+        shot "$cap/restore-3-restored.png"; sleep 0.5; kill "$grabber" 2>/dev/null
+        command -v ffmpeg >/dev/null 2>&1 && ffmpeg -loglevel error -y -framerate 5 -i "$cap/frames/%04d.png" \
+            -vf "scale=800:-1:flags=lanczos,split[a][b];[a]palettegen[p];[b][p]paletteuse" "$cap/restore.gif" 2>&1 | tail -n 3
+        rm -rf "$cap/frames"; ls -l "$cap"
+    fi
+    [ "$(active)" = w1 ] || { echo "FAIL: the restored window lost focus (active is '$(active)', not w1)"; bad=1; }
+    echo "--- focus events after the restore"; grep activewindow "$tmp/events.log" | tail -n 6
+    [ "$bad" = 0 ] && echo "drag-live restore: all checks held"
     exit "$bad"
 fi
 
