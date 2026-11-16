@@ -7,6 +7,12 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-16
+
+The first stable release. It is v0.3.0-rc.8 plus the change below; the release candidates'
+notes, v0.3.0-rc.1 to rc.8, list everything this version adds. From now on a plain `vX.Y.Z` tag
+is published as a full release rather than a pre-release, so Bindle picks it up.
+
 ### Changed
 
 - **Packaging: `uq` depends on the pin it is tested with** (`uq-hyprland-pin>=0.56.2`, from

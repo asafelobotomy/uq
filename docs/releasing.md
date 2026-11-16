@@ -8,7 +8,8 @@
 - Tags are `vX.Y.Z` or, for release candidates, `vX.Y.Z-rc.N`. pacman forbids `-` in `pkgver`,
   so a release candidate's `pkgver` is `X.Y.ZrcN` (`1.0.0-rc.1` → `1.0.0rc1`, which `vercmp`
   sorts before `1.0.0`). The PKGBUILD maps it back with `_tag=${pkgver/rc/-rc.}`.
-- Anything below 1.0.0, and every release candidate, is published as a GitHub pre-release.
+- Every release candidate is published as a GitHub pre-release. A plain `vX.Y.Z` tag, 0.x
+  included, is a full release: Bindle and other tools that take only stable releases follow it.
 - `uq-hyprland-pin` has its own `pkgver`: the lowest Hyprland it allows. Bump it only with the
   pin itself, and set `_pin` in `packaging/uq/PKGBUILD` to the same version: `uq` depends on
   `uq-hyprland-pin>=$_pin`, so an updated `uq` can't install beside an older pin

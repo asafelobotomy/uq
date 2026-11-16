@@ -63,9 +63,10 @@ jobs:
             echo "::error::packaging/uq/PKGBUILD pkgver $pkgver does not match $version (want ${version/-rc./rc})."
             exit 1
           fi
-          # Below 1.0.0, or a release candidate: a pre-release.
+          # A release candidate is a pre-release; a plain X.Y.Z tag (0.x included) is a full
+          # release, so tools that take only stable releases (Bindle) pick it up.
           case "$version" in
-            0.*|*-*) prerelease=true ;;
+            *-*) prerelease=true ;;
             *) prerelease=false ;;
           esac
           echo "version=$version" >>"$GITHUB_OUTPUT"
