@@ -96,6 +96,9 @@ hl.config({
     misc = {
         force_default_wallpaper = 0,
         disable_hyprland_logo   = true,
+        -- An app that asks to be activated (a notification's View/Activate action, a tray
+        -- click, xdg-activation) gets focus and its workspace instead of only an urgent mark.
+        focus_on_activate = true,
         -- Session lock (slice 5): survive a lock client crash, keep the lock opaque, and wake
         -- the screen on input.
         allow_session_lock_restore = true,
