@@ -27,6 +27,8 @@ Item {
         id: themed
         anchors.fill: parent
         source: icon.plainName ? icon.name : ""
+        // No stand-in icon: without one, `valid` says whether the theme really has this name.
+        fallback: ""
         visible: icon.found
         Accessible.ignored: true
     }
