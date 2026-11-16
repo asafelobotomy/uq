@@ -31,8 +31,9 @@ TestCase {
         }
     }
 
+    // No dashes: Qt looks up "a-b-c" as "a-b", then "a", so a dashed name can find a generic icon.
     function test_letter_tile_uses_the_first_letter() {
-        const c = createTemporaryObject(comp, tc, { name: "no-such-icon-anywhere-xyz", label: "steam", size: 48 });
+        const c = createTemporaryObject(comp, tc, { name: "nosuchiconanywherexyz", label: "steam", size: 48 });
         verify(c);
         compare(c.width, 48);
         tryCompare(c, "found", false);
