@@ -7,6 +7,8 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-11-16
+
 ### Changed
 
 - **Settings rows no longer stretch across a wide window.** On a big window a label sat at one
