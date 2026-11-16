@@ -7,6 +7,8 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-16
+
 ### Fixed
 
 - **Moving a window with Super+drag no longer sets the rest of the desktop off.** Hyprland lifts a
