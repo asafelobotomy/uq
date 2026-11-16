@@ -186,9 +186,10 @@ hl.bind(mainMod .. " + SHIFT + S", hl.dsp.window.move({ workspace = "special:mag
 hl.bind(mainMod .. " + mouse_down", hl.dsp.focus({ workspace = "e+1" }))
 hl.bind(mainMod .. " + mouse_up",   hl.dsp.focus({ workspace = "e-1" }))
 
--- Move/resize with the mouse
+-- Move with the mouse. Resizing is not bound: a mouse resize would take tiled windows from any
+-- edge, the screen's outer ones too. Tiled windows resize by the grips in the gaps between them
+-- (shell/windows/ResizeGrips.qml); bind hl.dsp.window.resize() in user.lua for floating ones.
 hl.bind(mainMod .. " + mouse:272", hl.dsp.window.drag(),   { mouse = true })
-hl.bind(mainMod .. " + mouse:273", hl.dsp.window.resize(), { mouse = true })
 
 -- Lock recovery: if the lock surface dies, this restarts it (locked = true, so it works over the
 -- lock screen). uq-lock.service arrives in a later slice; until then hyprlock takes over.
