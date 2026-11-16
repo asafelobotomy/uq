@@ -178,10 +178,27 @@ if [ "$scenario" = restore ]; then
     active() { hc activewindow -j | jq -r '.title // ""'; }
     d() { bridge_call "{\"v\":1,\"id\":1,\"call\":\"Dispatch\",\"args\":$1}" >/dev/null; }
     a1=$(addr_of w1); bad=0
+    # With UQ_CAPTURE_DIR set (CI does), keep a screenshot of each step and a GIF of the whole
+    # thing: frames are grabbed every ~0.2 s from here on. Skipped quietly without grim.
+    cap=${UQ_CAPTURE_DIR:-}; grabber=""
+    if [ -n "$cap" ] && command -v grim >/dev/null 2>&1; then
+        mkdir -p "$cap/frames"
+        shot() { env XDG_RUNTIME_DIR="$rt" WAYLAND_DISPLAY="$wl" grim "$1" 2>/dev/null; }
+        (n=0; while :; do shot "$cap/frames/$(printf %04d $n).png"; n=$((n + 1)); sleep 0.2; done) &
+        grabber=$!; pids+=($!)
+        settle 1; cp "$cap/frames/0000.png" "$cap/restore-1-before.png" 2>/dev/null
+    fi
     d "[\"minimise\",{\"address\":\"$a1\",\"from_ws\":1}]"; settle 2
+    [ -n "$grabber" ] && shot "$cap/restore-2-minimised.png"
     [ "$(active)" = w2 ] || { echo "FAIL: w2 should be focused once w1 is minimised (got $(active))"; bad=1; }
     d "[\"restore\",{\"address\":\"$a1\",\"to_ws\":1}]"; settle 3
     echo "--- after"; snap after
+    if [ -n "$grabber" ]; then
+        shot "$cap/restore-3-restored.png"; sleep 0.5; kill "$grabber" 2>/dev/null
+        command -v ffmpeg >/dev/null 2>&1 && ffmpeg -loglevel error -y -framerate 5 -i "$cap/frames/%04d.png" \
+            -vf "scale=800:-1:flags=lanczos,split[a][b];[a]palettegen[p];[b][p]paletteuse" "$cap/restore.gif" 2>&1 | tail -n 3
+        rm -rf "$cap/frames"; ls -l "$cap"
+    fi
     [ "$(active)" = w1 ] || { echo "FAIL: the restored window lost focus (active is '$(active)', not w1)"; bad=1; }
     echo "--- focus events after the restore"; grep activewindow "$tmp/events.log" | tail -n 6
     [ "$bad" = 0 ] && echo "drag-live restore: all checks held"

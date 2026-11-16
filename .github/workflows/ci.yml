@@ -94,6 +94,13 @@ jobs:
         run: |
           docker run --rm --device "$SMOKE_CARD" -e SMOKE_CARD -e SMOKE_UID="$(id -u)" \
             -v "$GITHUB_WORKSPACE:/src" archlinux:latest bash /src/scripts/smoke-in-container.sh
+      - name: Keep the screenshots and GIFs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: smoke-captures
+          path: captures/
+          if-no-files-found: ignore
 
   settings-live:
     # The Settings live checks (tests/live: slices A–G, keybinds and E) against this checkout's uqd

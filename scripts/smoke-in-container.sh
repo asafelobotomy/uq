@@ -11,7 +11,7 @@ set -eu
 card=${SMOKE_CARD:?SMOKE_CARD must name the DRM card passed to the container}
 # SMOKE_NO_INSTALL=1: the image already has these (a local run from a prepared image).
 [ -n "${SMOKE_NO_INSTALL:-}" ] ||
-    pacman -Syu --noconfirm --needed rust dbus hyprland quickshell qt6-declarative jq foot ttf-dejavu grim seatd socat gcc pkgconf wayland libxkbcommon >/dev/null
+    pacman -Syu --noconfirm --needed rust dbus hyprland quickshell qt6-declarative jq foot ttf-dejavu grim ffmpeg seatd socat gcc pkgconf wayland libxkbcommon >/dev/null
 # Same uid as the checkout's owner on the runner, so the build can write /src/target.
 id tester >/dev/null 2>&1 || useradd -m -u "${SMOKE_UID:-1000}" tester
 # The node keeps the runner's root:video 0660, and the container's video group is another gid.
@@ -29,7 +29,7 @@ for scenario in half-pair full-edge keys restore; do
     echo "=========== drag-live $scenario"
     su tester -c "set -e
         cd /src
-        export XDG_RUNTIME_DIR=\$(mktemp -d) LIBSEAT_BACKEND=seatd UQCTL=/src/target/debug/uqctl
+        export XDG_RUNTIME_DIR=\$(mktemp -d) LIBSEAT_BACKEND=seatd UQCTL=/src/target/debug/uqctl UQ_CAPTURE_DIR=/src/captures
         timeout 200 scripts/drag-live.sh --scenario $scenario" || { r=$?; [ "$r" = 77 ] || rc=$r; }
 done
 kill %1 2>/dev/null || true
