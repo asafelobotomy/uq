@@ -3,7 +3,7 @@
 # layout: what the shell does while the window is held. Super+drag is played through a virtual
 # keyboard and pointer (tests/live/tools/uqinput).
 #
-#   scripts/drag-live.sh [--unguarded]
+#   scripts/drag-live.sh [--scenario half-pair|full-edge] [--unguarded]
 #
 # It starts Hyprland on uQ's base.lua and the shell, opens windows, drags one and prints what
 # happened between the drag's start and end events: the focus changes, and where the dragged window
@@ -15,8 +15,15 @@
 # environment can't run it; 1 when a check failed.
 set -u
 root=$(cd "$(dirname "$0")/.." && pwd)
-unguarded=0
-[ "${1:-}" = --unguarded ] && unguarded=1
+unguarded=0 scenario=half-pair
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --unguarded) unguarded=1 ;;
+        --scenario) scenario=${2:?--scenario needs a name}; shift ;;
+        *) echo "unknown option $1" >&2; exit 2 ;;
+    esac
+    shift
+done
 
 skip() { echo "SKIP: $*"; exit 77; }
 for bin in Hyprland hyprctl qs dbus-daemon jq foot socat gcc wayland-scanner; do
@@ -81,6 +88,13 @@ pids+=($!)
 for _ in $(seq 1 50); do hc layers -j | grep -q uq-bar && break; sleep 0.2; done
 hc layers -j | grep -q uq-bar || fail "the bar never appeared"
 
+# Hyprland's own first-run notice is a floating window over the middle of the screen: close it.
+for _ in $(seq 1 15); do
+    a=$(hc clients -j | jq -r '.[] | select(.class | test("hyprland")) | .address' | head -n1)
+    [ -n "$a" ] && { hc dispatch "hl.dsp.window.close({ window = \"address:$a\" })" >/dev/null; sleep 0.5; break; }
+    sleep 0.2
+done
+
 # Everything Hyprland says, with when.
 socat -u "UNIX-CONNECT:$rt/hypr/$sig/.socket2.sock" - 2>/dev/null | while IFS= read -r l; do
     printf '%s %s\n' "$(date +%s.%N)" "$l"; done >"$tmp/events.log" &
@@ -106,10 +120,20 @@ width() { # title full|half
     bridge_call "{\"v\":1,\"id\":1,\"call\":\"Dispatch\",\"args\":[\"column_width\",{\"address\":\"$(addr_of "$1")\",\"width\":\"$2\"}]}" >/dev/null
 }
 
-open_window w1; settle 1.5
-open_window w2; settle 1.5
-open_window w3; settle 2
-width w1 half; width w2 half; settle 2
+case "$scenario" in
+    half-pair)
+        # Two Half windows share the screen. Take w2 and put it down where it was.
+        open_window w1; settle 1.5
+        open_window w2; settle 1.5
+        width w1 half; width w2 half; settle 2
+        grab=w2; grab_dx=0.5 ;;
+    full-edge)
+        # Two Full windows. Take w2 by its right side: lifted, it hangs over the screen's edge.
+        open_window w1; settle 1.5
+        open_window w2; settle 2
+        grab=w2; grab_dx=0.93 ;;
+    *) fail "unknown scenario $scenario" ;;
+esac
 echo "--- before"
 snap before
 
@@ -122,20 +146,25 @@ for _ in $(seq 1 50); do grep -q ready "$tmp/uqinput.out" && break; sleep 0.1; d
 grep -q ready "$tmp/uqinput.out" || fail "uqinput: $(cat "$tmp/uqinput.out")"
 send() { printf '%s\n' "$@" >&7; }
 
-# The centre of w2's frame.
-read -r cx cy < <(hc clients -j | jq -r '.[] | select(.title=="w2") | "\(.at[0] + (.size[0]/2|floor)) \(.at[1] + (.size[1]/2|floor))"')
-echo "grab w2 at $cx,$cy"
+read -r cx cy < <(hc clients -j | jq -r --arg t "$grab" --argjson f "$grab_dx" \
+    '.[] | select(.title==$t) | "\((.at[0] + .size[0] * $f)|floor) \((.at[1] + .size[1]/2)|floor)"')
+echo "grab $grab at $cx,$cy"
 t0=$(date +%s.%N)
 send "move $cx $cy" "sleep 300" "mod super down" "sleep 100" "button 272 down" "sleep 100"
-for i in 1 2 3 4 5 6 7 8 9 10 11 12; do send "move $((cx + i * 20)) $((cy + i * 10))" "sleep 40"; done
-send "sleep 1200"
-echo "--- while held"
-snap held
-send "move $((cx + 260)) $((cy + 130))" "sleep 300" "button 272 up" "sleep 100" "mod super up"
+if [ "$scenario" = half-pair ]; then
+    for i in 1 2 3 4 5 6 7 8 9 10 11 12; do send "move $((cx + i * 20)) $((cy + i * 10))" "sleep 40"; done
+    send "sleep 1200"
+    echo "--- while held"; snap held
+    for i in 11 10 9 8 7 6 5 4 3 2 1 0; do send "move $((cx + i * 20)) $((cy + i * 10))" "sleep 40"; done
+else
+    for i in 1 2 3 4 5 6 7 8 9 10; do send "move $((cx - i * 8)) $((cy + i * 4))" "sleep 40"; done
+    send "sleep 1200"
+    echo "--- while held"; snap held
+fi
+send "sleep 300" "button 272 up" "sleep 100" "mod super up"
 settle 3
 echo "--- after"
 snap after
-t1=$(date +%s.%N)
 
 echo "--- events between the first custom event and the last"
 begin=$(awk '/custom>>uq-mouse:begin/{print $1; exit}' "$tmp/events.log")
@@ -150,6 +179,6 @@ fi
 
 in_hold() { awk -v b="${begin:-0}" -v e="${end:-0}" -v n="$1" '$1 >= b && $1 <= e && $2 ~ n' "$tmp/events.log" | wc -l; }
 focus_changes=$(in_hold '^activewindowv2>>')
-echo "RESULT mode=$([ "$unguarded" = 1 ] && echo unguarded || echo guarded) begin_end_seen=$([ -n "$begin" ] && [ -n "$end" ] && echo yes || echo no) focus_events_in_hold=$focus_changes"
+echo "RESULT scenario=$scenario mode=$([ "$unguarded" = 1 ] && echo unguarded || echo guarded) begin_end_seen=$([ -n "$begin" ] && [ -n "$end" ] && echo yes || echo no) focus_events_in_hold=$focus_changes"
 echo "--- qs.log (tail)"; tail -n 8 "$tmp/qs.log"
 exit 0
