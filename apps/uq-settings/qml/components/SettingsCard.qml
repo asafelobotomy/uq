@@ -1,5 +1,6 @@
 // A group of related settings on a SettingsTab: an icon and a short title over its rows, on a
-// raised surface. `wide` makes it span both columns of the tab.
+// raised surface. `wide` makes it span both columns of the tab; its plain rows (SettingRow and
+// its kin) then go two to a line, and anything else in it (a list, a table) spans the whole width.
 import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
@@ -79,11 +80,33 @@ Rectangle {
             Layout.fillWidth: true
             Layout.bottomMargin: Kirigami.Units.smallSpacing
         }
-        ColumnLayout {
+        GridLayout {
             id: body
+            // Two rows to a line in a card spanning both columns of the tab, and only while each
+            // would get a useful width; otherwise one.
+            readonly property int rowColumns: card.wide && card.parent && card.parent.columns > 1 ? 2 : 1
             Layout.alignment: Qt.AlignTop
-            spacing: Kirigami.Units.smallSpacing
+            columns: body.rowColumns
+            columnSpacing: Kirigami.Units.largeSpacing * 2
+            rowSpacing: Kirigami.Units.smallSpacing
             Layout.fillWidth: true
+
+            // A plain row takes one cell; everything else spans the line, as it did in the one
+            // column this grid replaced.
+            function arrange() {
+                for (let i = 0; i < body.children.length; i++) {
+                    const c = body.children[i];
+                    if (!c || c.Layout === undefined)
+                        continue;
+                    c.Layout.columnSpan = c.isSettingRow === true ? 1 : body.rowColumns;
+                    // Rows keep filling their cell unless the page said otherwise.
+                    if (body.rowColumns > 1 && c.isSettingRow === true && !c.Layout.fillWidth)
+                        c.Layout.fillWidth = true;
+                }
+            }
+            onChildrenChanged: Qt.callLater(body.arrange)
+            onRowColumnsChanged: Qt.callLater(body.arrange)
+            Component.onCompleted: body.arrange()
         }
         // A card stretched to its neighbour's height keeps its rows at the top.
         Item {
