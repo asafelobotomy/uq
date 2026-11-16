@@ -39,11 +39,75 @@ pub fn exec_lua(cmd: &str) -> String {
     format!("return hl.dispatch(hl.dsp.exec_cmd({}))", lua_string(cmd))
 }
 
+/// Where a terminal opened from look=see>do_ goes: floating, at `x, y` (from the top-left of
+/// its monitor) and `w` by `h`, without taking focus from look=see>do_.
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct Place {
+    pub x: i64,
+    pub y: i64,
+    pub w: i64,
+    pub h: i64,
+    /// An output name, when the window must open on a given monitor.
+    pub monitor: Option<String>,
+}
+
+/// [`exec_lua`] with the window rules for a placed window (Hyprland applies them to the first
+/// window the command opens).
+pub fn exec_lua_placed(cmd: &str, place: Option<&Place>) -> String {
+    let Some(p) = place else {
+        return exec_lua(cmd);
+    };
+    let monitor = p
+        .monitor
+        .as_deref()
+        .map(|m| format!("monitor = {}, ", lua_string(m)))
+        .unwrap_or_default();
+    format!(
+        "return hl.dispatch(hl.dsp.exec_cmd({}, {{ float = true, {monitor}size = {{ {}, {} }}, move = {{ {}, {} }}, no_initial_focus = true }}))",
+        lua_string(cmd),
+        p.w,
+        p.h,
+        p.x,
+        p.y
+    )
+}
+
+/// The `place` argument of a terminal run: `{x, y, w, h}` whole numbers, the size positive, and
+/// an optional `monitor` that is a plain output name.
+fn parse_place(v: &Value) -> Result<Place, String> {
+    let n = |k: &str, lo: i64, hi: i64| match v.get(k).and_then(Value::as_i64) {
+        Some(n) if (lo..=hi).contains(&n) => Ok(n),
+        _ => Err(format!(
+            "place.{k} must be a whole number from {lo} to {hi}"
+        )),
+    };
+    let monitor = match v.get("monitor") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(m)) if m.is_empty() => None,
+        Some(Value::String(m))
+            if m.len() <= 64
+                && m.chars()
+                    .all(|c| c.is_ascii_alphanumeric() || "-_.:".contains(c)) =>
+        {
+            Some(m.clone())
+        }
+        Some(_) => return Err("place.monitor must be an output name".into()),
+    };
+    Ok(Place {
+        x: n("x", -65_536, 65_536)?,
+        y: n("y", -65_536, 65_536)?,
+        w: n("w", 1, 32_768)?,
+        h: n("h", 1, 32_768)?,
+        monitor,
+    })
+}
+
 /// A launch ready to send: the shell command and the id to record, if it was a desktop entry.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Plan {
     pub command: String,
     pub record: Option<String>,
+    pub place: Option<Place>,
 }
 
 const FALLBACK_TERMINAL: [&str; 2] = ["kitty", "-e"];
@@ -152,9 +216,15 @@ pub fn plan(
         } else {
             vec!["sh".to_string(), "-c".to_string(), cmd]
         };
+        let place = match obj.get("place") {
+            None | Some(Value::Null) => None,
+            Some(_) if !in_terminal => return Err("place needs terminal: true".into()),
+            Some(p) => Some(parse_place(p)?),
+        };
         return Ok(Plan {
             command: scope_command("run", &argv, rand),
             record: None,
+            place,
         });
     }
     if let Some(argv) = obj.get("argv") {
@@ -176,6 +246,7 @@ pub fn plan(
         return Ok(Plan {
             command: scope_command(app, &argv, rand),
             record: None,
+            place: None,
         });
     }
     let id = obj
@@ -207,6 +278,7 @@ pub fn plan(
     Ok(Plan {
         command: scope_command(id.strip_suffix(".desktop").unwrap_or(id), &argv, rand),
         record: Some(id.to_string()),
+        place: None,
     })
 }
 
@@ -227,7 +299,10 @@ pub fn fix_in(section: Value, id: &str) -> Option<AppFix> {
 
 /// Send a plan to Hyprland; Ok means Hyprland accepted the eval.
 pub async fn dispatch(hypr: &HyprSocket, plan: &Plan) -> Result<(), String> {
-    match hypr.eval(&exec_lua(&plan.command)).await {
+    match hypr
+        .eval(&exec_lua_placed(&plan.command, plan.place.as_ref()))
+        .await
+    {
         Ok(()) => Ok(()),
         Err(CompositorError::NotRunning) => Err("Hyprland is not running".into()),
         Err(CompositorError::Rejected(msg)) => Err(msg),

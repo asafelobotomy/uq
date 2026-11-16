@@ -43,10 +43,10 @@ pub(crate) fn run_item(query: &str, generation: u64, state: &mut RunState) -> Op
     Some(ProviderItem {
         id: format!("run-{generation}"),
         title: format!("Run \"{shown}\""),
-        subtitle: "Runs in the background · Shift+Enter opens a terminal".into(),
+        subtitle: "Enter runs it in a terminal · Shift+Enter runs it in the background".into(),
         icon: "utilities-terminal".into(),
         score: 1.0,
-        actions: vec!["run".into(), "terminal".into()],
+        actions: vec!["terminal".into(), "run".into()],
     })
 }
 
@@ -72,11 +72,11 @@ mod tests {
         assert_eq!(it.title, "Run \"ls -la\"");
         assert_eq!(
             it.subtitle,
-            "Runs in the background · Shift+Enter opens a terminal"
+            "Enter runs it in a terminal · Shift+Enter runs it in the background"
         );
         assert_eq!(it.icon, "utilities-terminal");
         assert_eq!(it.score, 1.0);
-        assert_eq!(it.actions, vec!["run", "terminal"]);
+        assert_eq!(it.actions, vec!["terminal", "run"]);
         assert_eq!(take_command(&s, "run-2").unwrap(), "ls -la");
     }
 

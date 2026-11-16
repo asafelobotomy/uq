@@ -10,6 +10,8 @@ Item {
     property alias text: input.text
     property string placeholder: ""
     property bool secret: false
+    // No box of its own: for a field that sits inside a surface that already draws one.
+    property bool flat: false
     property int maximumLength: secret ? 512 : 100
     signal edited(string text)
     signal accepted()
@@ -17,6 +19,7 @@ Item {
     implicitWidth: 180
 
     Rectangle {
+        visible: !root.flat
         anchors.fill: parent
         radius: Theme.radius - 2
         color: Theme.surfaceAlt

@@ -12,3 +12,4 @@ UqText 1.0 UqText.qml
 UqInput 1.0 UqInput.qml
 ThemeIo 1.0 ThemeIo.qml
 BridgeIo 1.0 BridgeIo.qml
+singleton LauncherState 1.0 LauncherState.qml

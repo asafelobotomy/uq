@@ -124,6 +124,8 @@ PanelWindow {
         launchClose.restart();
         Bridge.call(a.call, a.args).then(function () {
             launchClose.stop();
+            // look=see>do_'s Recents list is every app opened from either.
+            LauncherState.recordRecent(String(item.id || ""));
             if (root.shown)
                 Surfaces.close();
         }).catch(function (e) {

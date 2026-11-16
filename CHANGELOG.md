@@ -7,6 +7,21 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **look=see>do_ opens on Recents and five pinned squares.** Under the search pill: the apps you
+  opened lately (from look=see>do_ or the app menu), then five squares for the apps you choose.
+  A square opens its app (Alt+1 to 5 too); an empty square, **Edit**, or a right click lets you
+  pick, change or remove the app. Both go away as soon as you type.
+- **A `>` command drops your terminal down from the pill.** Enter opens the default terminal
+  floating under the pill with the command running in it. look=see>do_ stays until you click the
+  terminal, which focuses it and closes look=see>do_. Shift+Enter still runs the command in the
+  background.
+
+### Changed
+
+- The search field is now a pill of its own, with the results card below it.
+
 ## [0.3.2] - 2026-11-16
 
 ### Changed

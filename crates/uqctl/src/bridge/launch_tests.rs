@@ -275,6 +275,7 @@ async fn dispatch_sends_eval_and_maps_errors() {
     let p = Plan {
         command: "c".into(),
         record: None,
+        place: None,
     };
     dispatch(&h, &p).await.unwrap();
     assert_eq!(dispatch(&h, &p).await.unwrap_err(), "nope");
@@ -304,4 +305,37 @@ fn run_in_terminal_keeps_the_window_and_passes_the_command_as_an_argument() {
     assert!(p.command.ends_with("'sh' 'ls'"), "{}", p.command);
     let bad = json!({"run_id": "run-9", "terminal": "yes"});
     assert!(plan(Some(&bad), &d, 4, &runs, None, None).is_err());
+}
+
+#[test]
+fn placed_terminal_run_floats_without_taking_focus() {
+    let runs = {
+        let mut r = super::super::run::RunState::default();
+        super::super::run::run_item("> ls", 3, &mut r).unwrap();
+        r
+    };
+    let d = Dirs::new(None, vec![]);
+    let arg = serde_json::json!({
+        "run_id": "run-3", "terminal": true,
+        "place": { "x": 320, "y": 150, "w": 640, "h": 240, "monitor": "HEADLESS-2" }
+    });
+    let p = plan(Some(&arg), &d, 1, &runs, None, None).unwrap();
+    assert_eq!(
+        exec_lua_placed("c", p.place.as_ref()),
+        "return hl.dispatch(hl.dsp.exec_cmd(\"c\", { float = true, monitor = \"HEADLESS-2\", size = { 640, 240 }, move = { 320, 150 }, no_initial_focus = true }))"
+    );
+    assert_eq!(exec_lua_placed("c", None), exec_lua("c"));
+    let evil = serde_json::json!({ "run_id": "run-3", "terminal": true,
+        "place": { "x": 0, "y": 0, "w": 5, "h": 5, "monitor": "a\") hl.exec_cmd(\"x" } });
+    assert!(plan(Some(&evil), &d, 1, &runs, None, None).is_err());
+    // A place needs a terminal, and must be whole numbers with a size.
+    let bg = serde_json::json!({ "run_id": "run-3", "place": { "x": 0, "y": 0, "w": 1, "h": 1 } });
+    assert!(plan(Some(&bg), &d, 1, &runs, None, None).is_err());
+    let bad = serde_json::json!({ "run_id": "run-3", "terminal": true, "place": { "x": 0, "y": 0, "w": 0, "h": 5 } });
+    assert!(plan(Some(&bad), &d, 1, &runs, None, None).is_err());
+    let none = serde_json::json!({ "run_id": "run-3", "terminal": true });
+    assert_eq!(
+        plan(Some(&none), &d, 1, &runs, None, None).unwrap().place,
+        None
+    );
 }
