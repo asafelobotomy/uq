@@ -7,8 +7,28 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **Print opens one area selection, with no full-screen capture first.** `uq-screenshot` used to
+  grab the whole screen, then open satty over it (the screen went lighter) with its own crop
+  tool, so you saw a second selector after the first. Now you pick the area with slurp, only
+  that area is captured, and satty opens for marking it up. A second press while a capture is
+  open does nothing, so a Print binding of your own in `user.lua` can no longer start a second
+  selector beside uQ's (remove that binding, uQ's own does the job).
+
+### Added
+
+- **Settings → Shell → Screenshots → Print key.** Choose what Print captures: an area (the
+  default, marked up in satty), the whole screen or the focused window. Shift+Print and
+  Super+Print keep taking the screen and the window.
+
 ### Changed
 
+- **Tiled windows can't be resized from the screen's outer sides.** Super + right-drag took a
+  tiled window by whichever edge was nearest, the outer ones too, moving the window off its side
+  of the screen. It is now unbound by default: tiled windows resize only by the grips in the gaps
+  between them (side by side, or stacked). To resize floating windows with the mouse, bind
+  **Resize the window with the mouse** again in Settings → Shortcuts.
 - **Dependencies updated:** zbus 6, minijinja 3, quick-xml 0.42 and toml 1.2, and the CI
   actions (checkout 7, upload-artifact 7, download-artifact 8). No change in behaviour.
 - **Packaging: `uq` depends on the pin it is tested with** (`uq-hyprland-pin>=0.56.2`, from

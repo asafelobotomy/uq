@@ -26,6 +26,8 @@ QQC2.ScrollView {
     readonly property var knownProviders: snap.providers || []
     readonly property bool ready: App.uqdUp
     readonly property var backendIds: ["auto", "notifi", "builtin", "swaync", "mako", "dunst"]
+    readonly property var printIds: ["region", "screen", "window"]
+    readonly property var printLabels: ["An area, then mark it up", "The whole screen", "The focused window"]
     readonly property var backendLabels: ({
         auto: "Automatic", notifi: "noti-fi", builtin: "uQ's built-in", swaync: "SwayNotificationCenter",
         mako: "mako", dunst: "dunst"
@@ -62,6 +64,11 @@ QQC2.ScrollView {
     }
     function backendIndex() {
         const i = backendIds.indexOf((settings.notif || {}).backend);
+        return i < 0 ? 0 : i;
+    }
+
+    function printIndex() {
+        const i = printIds.indexOf((settings.ui || {}).print_action);
         return i < 0 ? 0 : i;
     }
 
@@ -316,6 +323,32 @@ QQC2.ScrollView {
             enabled: page.ready
             onChosen: (key, value) => page.setSetting(key, value)
             Layout.fillWidth: true
+        }
+
+        UqLabel {
+            text: "Screenshots"
+            font.bold: true
+            Layout.topMargin: Kirigami.Units.largeSpacing
+        }
+        SettingRow {
+            settingId: "print-key"
+            label: "Print key takes a screenshot of"
+            help: "An area opens a selection, then lets you mark it up before it is saved. The screen and the window are saved at once. Shift+Print always takes the screen and Super+Print the window."
+            highlight: App.highlight
+            enabled: page.ready
+            Layout.fillWidth: true
+            UqComboBox {
+                id: printCombo
+                model: page.printLabels
+                currentIndex: page.printIndex()
+                enabled: page.ready
+                implicitContentWidthPolicy: QQC2.ComboBox.WidestText
+                Accessible.name: "Print key takes a screenshot of"
+                onActivated: index => {
+                    page.setSetting("ui.print_action", page.printIds[index]);
+                    printCombo.currentIndex = Qt.binding(() => page.printIndex());
+                }
+            }
         }
 
         UqLabel {
