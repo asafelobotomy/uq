@@ -803,7 +803,7 @@ fn base_lua_binds_equal_the_default_table() {
             .filter(|l| !l.contains("XF86Launch9"))
             .collect(),
     );
-    assert_eq!(a.len(), 59, "{from_base}");
+    assert_eq!(a.len(), 63, "{from_base}");
     assert_eq!(a, b, "base.lua and the default table have drifted apart");
 }
 

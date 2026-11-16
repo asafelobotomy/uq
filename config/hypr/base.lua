@@ -87,6 +87,12 @@ hl.config({
     animations = {
         enabled = true,
     },
+    -- A Super+click on a window only becomes a move once the pointer has travelled this far (px).
+    -- At 0 (Hyprland's default) the click lifts a tiled window out of its layout at once, and the
+    -- others reflow for what is only a click.
+    binds = {
+        drag_threshold = 8,
+    },
     dwindle = {
         preserve_split = true,
     },
@@ -186,8 +192,13 @@ hl.bind(mainMod .. " + SHIFT + S", hl.dsp.window.move({ workspace = "special:mag
 hl.bind(mainMod .. " + mouse_down", hl.dsp.focus({ workspace = "e+1" }))
 hl.bind(mainMod .. " + mouse_up",   hl.dsp.focus({ workspace = "e-1" }))
 
--- Move/resize with the mouse
+-- Move/resize with the mouse. The two hooks before each tell the shell when the button goes down
+-- and comes up (custom events), so it holds its own window rearranging still meanwhile.
+hl.bind(mainMod .. " + mouse:272", hl.dsp.event("uq-mouse:begin"), { non_consuming = true })
+hl.bind(mainMod .. " + mouse:272", hl.dsp.event("uq-mouse:end"),   { release = true, ignore_mods = true, non_consuming = true })
 hl.bind(mainMod .. " + mouse:272", hl.dsp.window.drag(),   { mouse = true })
+hl.bind(mainMod .. " + mouse:273", hl.dsp.event("uq-mouse:begin"), { non_consuming = true })
+hl.bind(mainMod .. " + mouse:273", hl.dsp.event("uq-mouse:end"),   { release = true, ignore_mods = true, non_consuming = true })
 hl.bind(mainMod .. " + mouse:273", hl.dsp.window.resize(), { mouse = true })
 
 -- Lock recovery: if the lock surface dies, this restarts it (locked = true, so it works over the

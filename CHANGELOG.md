@@ -7,6 +7,18 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **Moving a window with Super+drag no longer sets the rest of the desktop off.** Hyprland lifts a
+  tiled window out of its layout the moment the move starts, and the shell took that for a window
+  closing or turning floating: it scrolled the view, moved focus about, hid and showed pages,
+  made the window left alone Full and fitted the lifted window to the screen, all while the
+  pointer held it. The mouse binds now send a start and an end event (two extra `hl.bind` lines
+  each in `generated.lua` and `base.lua`), and the shell waits for the end and then looks at the
+  windows as they are. Hyprland also now needs the pointer to travel 8 px
+  (`binds.drag_threshold`) before a click on a window becomes a move, so a plain Super+click no
+  longer lifts the window and reflows the others. Not yet checked on a live session.
+
 ### Changed
 
 - **Dependencies updated:** zbus 6, minijinja 3, quick-xml 0.42 and toml 1.2, and the CI
