@@ -159,12 +159,14 @@ function merge(apps, providerGroups, generation, order) {
                     items: g.items });
     }
     var custom = Array.isArray(order) ? order : [];
+    // A custom position first, then the built-in order (also between the groups of one files
+    // preference), then the name.
     var rank = function (p) {
-        var c = custom.indexOf(p.provider);
-        if (c >= 0)
-            return c;
+        // Every files:<type> group is ordered (and switched off) as "files".
+        var pid = String(p.provider).indexOf("files:") === 0 ? "files" : p.provider;
+        var c = custom.indexOf(pid);
         var b = BUILTIN_ORDER.indexOf(p.provider);
-        return custom.length + (b >= 0 ? b : BUILTIN_ORDER.length);
+        return (c >= 0 ? c : custom.length) * 1000 + (b >= 0 ? b : BUILTIN_ORDER.length);
     };
     live.sort(function (a, b) {
         var d = rank(a) - rank(b);

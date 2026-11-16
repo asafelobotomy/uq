@@ -14,6 +14,15 @@ function clockFormat(shell) {
     return (shell && shell.clock_24h === false) ? "h:mm AP" : "HH:mm";
 }
 
+// Whether a built-in provider is on (it is unless the saved preferences list it as off).
+function providerEnabled(shell, id) {
+    var list = shell && Array.isArray(shell.providers) ? shell.providers : [];
+    for (var i = 0; i < list.length; i++)
+        if (list[i] && list[i].id === id)
+            return list[i].enabled !== false;
+    return true;
+}
+
 function providerOrder(shell) {
     var out = [];
     var list = shell && Array.isArray(shell.providers) ? shell.providers : [];

@@ -17,7 +17,9 @@ use serde_json::Value;
 use zbus::names::WellKnownName;
 
 /// Providers the launcher always has, in their default order. The apps group is not one.
-pub const BUILTIN_PROVIDERS: [&str; 2] = ["calc", "run"];
+/// The launcher'"'"'s own search groups, in the order they show after Apps: web addresses, the
+/// calculator, Run, open windows, Settings and files (every `files:<type>` group, contents too).
+pub const BUILTIN_PROVIDERS: [&str; 6] = ["web", "calc", "run", "windows", "settings", "files"];
 
 const MAX_PROVIDERS: usize = 64;
 
@@ -117,7 +119,8 @@ impl Islands {
     pub const FIELDS: [&str; 5] = ["system", "work", "time", "notif", "status"];
 }
 
-/// One launcher provider's preference. `id` is `calc`, `run` or a D-Bus well-known name.
+/// One launcher provider's preference. `id` is one of [`BUILTIN_PROVIDERS`] or a D-Bus well-known
+/// name.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProviderPref {
     pub id: String,

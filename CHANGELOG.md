@@ -9,6 +9,12 @@ All notable changes to uQ are listed here. The format follows
 
 ### Fixed
 
+- **look=see>do_'s Web, Open windows, Settings and Files groups can be switched off and
+  reordered.** Settings → Shell → Search providers only listed the calculator and Run, though the
+  launcher already honoured a saved off switch for the others; they are listed now, and the
+  Files group orders all its file types together. Open windows follows its switch too.
+- **Run's row says what it does.** It read "in a terminal-less scope"; it now says "Runs in the
+  background, without a terminal".
 - **Print opens one area selection, with no full-screen capture first.** `uq-screenshot` used to
   grab the whole screen, then open satty over it (the screen went lighter) with its own crop
   tool, so you saw a second selector after the first. Now you pick the area with slurp, only

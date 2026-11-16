@@ -174,7 +174,14 @@ fn providers_list(defs: &[ProviderDef], shell: &Value) -> Vec<Value> {
     let mut out: Vec<Value> = BUILTIN_PROVIDERS
         .iter()
         .map(|id| {
-            let name = if *id == "calc" { "Calculator" } else { "Run" };
+            let name = match *id {
+                "web" => "Web addresses",
+                "calc" => "Calculator",
+                "run" => "Run",
+                "windows" => "Open windows",
+                "settings" => "Settings",
+                _ => "Files and folders",
+            };
             json!({"id": id, "name": name, "builtin": true})
         })
         .collect();

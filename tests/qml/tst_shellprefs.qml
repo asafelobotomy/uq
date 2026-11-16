@@ -37,4 +37,11 @@ TestCase {
             { id: "calc", enabled: true }
         ] }), ["run", "calc"]);
     }
+
+    function test_provider_enabled() {
+        verify(ShellPrefs.providerEnabled(undefined, "windows"));
+        verify(ShellPrefs.providerEnabled({ providers: [] }, "windows"));
+        verify(!ShellPrefs.providerEnabled({ providers: [{ id: "windows", enabled: false }] }, "windows"));
+        verify(ShellPrefs.providerEnabled({ providers: [{ id: "windows", enabled: false }] }, "files"));
+    }
 }

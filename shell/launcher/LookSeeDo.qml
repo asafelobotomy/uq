@@ -112,7 +112,9 @@ PanelWindow {
         searched = q;
         apps = q !== "" && L.classify(q) === "search"
             ? Rank.searchApps(q, appList, Settings.launchCounts) : [];
-        var wins = q !== "" && L.classify(q) === "search" ? Rank.searchWindows(q, windowList()) : [];
+        var wins = q !== "" && L.classify(q) === "search"
+            && ShellPrefs.providerEnabled(Settings.values.shell, "windows")
+            ? Rank.searchWindows(q, windowList()) : [];
         if (wins.length > 0) {
             var pr = {};
             pr.windows = { generation: generation, provider: "windows", provider_name: "Windows", items: wins };
