@@ -1,16 +1,25 @@
 //! Spotlight search: built-in rows plus third-party D-Bus launcher providers (spec §2.3).
 //!
+//! The built-ins: the calculator and Run, a typed web address (`web`), the user's files grouped
+//! by type (`files:<type>`, files.rs), files by their text (`files:contents`, contents.rs) and
+//! Settings' pages and settings (`settings`). Activating one of those only ever opens what this
+//! generation's search showed.
+//!
 //! Provider results are untrusted text. Everything is clamped here before it reaches the shell,
 //! only names that currently own a bus name are called (never auto-started), and answers for a
 //! stale generation are dropped.
 
 use super::calc::{self, ProviderItem};
+use super::contents;
+use super::files::{self, Files};
 use super::launch;
 use super::protocol::Outbound;
 use super::run::{self, RunState};
+use super::settings_search;
 use super::uqd::Link;
+use super::web;
 use serde_json::{Value, json};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant, SystemTime};
@@ -78,7 +87,7 @@ fn truncate(s: &str, max: usize) -> String {
     s[..end].to_string()
 }
 
-fn valid_icon(icon: &str) -> bool {
+pub(crate) fn valid_icon(icon: &str) -> bool {
     let theme = icon.chars().any(|c| c.is_ascii_alphanumeric())
         && icon.len() <= 128
         && icon
@@ -219,8 +228,34 @@ impl StartThrottle {
 #[derive(Default)]
 struct State {
     generation: u64,
+    /// The newest generation's query, so an index that finishes later can answer it.
+    query: String,
     /// The query behind the calculator row of the newest generation.
     calc: Option<String>,
+    /// The web address the newest generation offered.
+    web: Option<String>,
+    /// The files the newest generation showed: only these can be opened.
+    files: HashSet<String>,
+}
+
+/// The preference id a provider is switched on or off by: every file group is `files`.
+fn pref_id(provider: &str) -> &str {
+    if provider.starts_with("files:") {
+        "files"
+    } else {
+        provider
+    }
+}
+
+/// Whether the built-in search rows (web, files, Settings) see this query: not a `>` command,
+/// `=` sum or another provider's prefix (`:` emoji, …).
+fn builtin_sees(query: &str, defs: &[ProviderDef]) -> bool {
+    !query.is_empty()
+        && !query.starts_with(['>', '=', ':'])
+        && !defs
+            .iter()
+            .filter_map(|d| d.prefix.as_deref())
+            .any(|p| query.starts_with(p))
 }
 
 pub(crate) struct Providers {
@@ -230,6 +265,8 @@ pub(crate) struct Providers {
     defs: Mutex<DefCache>,
     logged: Mutex<HashMap<String, Instant>>,
     starts: Mutex<StartThrottle>,
+    files: Mutex<Files>,
+    settings: Mutex<settings_search::Index>,
 }
 
 fn results_event(
@@ -288,7 +325,163 @@ impl Providers {
             }),
             logged: Mutex::default(),
             starts: Mutex::default(),
+            files: Mutex::new(Files {
+                roots: Arc::new(files::default_roots()),
+                ..Files::default()
+            }),
+            settings: Mutex::default(),
         })
+    }
+
+    /// Build the file index on a blocking thread when it is missing or stale; when it is done,
+    /// answer the newest query from it.
+    fn refresh_files(self: &Arc<Self>) {
+        let roots = {
+            let mut f = lock(&self.files);
+            if !f.wants_build(Instant::now()) {
+                return;
+            }
+            f.building = true;
+            f.roots.clone()
+        };
+        let me = self.clone();
+        tokio::spawn(async move {
+            let built =
+                tokio::task::spawn_blocking(move || files::build(&roots, SystemTime::now())).await;
+            {
+                let mut f = lock(&me.files);
+                f.building = false;
+                if let Ok(idx) = built {
+                    f.index = Arc::new(idx);
+                    f.built = Some(Instant::now());
+                }
+            }
+            me.answer_latest(true, false).await;
+        });
+    }
+
+    /// Read Settings' pages and settings when missing, stale or Settings changed; when done,
+    /// answer the newest query from them.
+    fn refresh_settings(self: &Arc<Self>) {
+        let Some(bin) = settings_search::binary() else {
+            return;
+        };
+        {
+            let mut s = lock(&self.settings);
+            if !s.wants_read(Instant::now(), &bin) {
+                return;
+            }
+            s.reading = true;
+        }
+        let me = self.clone();
+        tokio::spawn(async move {
+            let got = tokio::select! {
+                _ = me.stop.cancelled() => None,
+                got = settings_search::read(bin) => got,
+            };
+            {
+                let mut s = lock(&me.settings);
+                s.reading = false;
+                s.read = Some(Instant::now());
+                if let Some((rows, stamp)) = got {
+                    s.rows = rows;
+                    s.stamp = stamp;
+                }
+            }
+            me.answer_latest(false, true).await;
+        });
+    }
+
+    /// Run the file and/or Settings search again for the newest generation (an index just
+    /// became ready).
+    async fn answer_latest(self: &Arc<Self>, files: bool, settings: bool) {
+        let (generation, query) = {
+            let st = lock(&self.state);
+            (st.generation, st.query.clone())
+        };
+        if query.is_empty() {
+            return;
+        }
+        if files {
+            self.search_files(generation, &query).await;
+        }
+        if settings {
+            self.search_settings(generation, &query).await;
+        }
+    }
+
+    /// The file groups for `query`, each its own `SearchResults` event, while `generation` is
+    /// still the newest. The shown paths are remembered for `Activate`.
+    async fn search_files(self: &Arc<Self>, generation: u64, query: &str) {
+        let idx = lock(&self.files).index.clone();
+        let q = query.to_string();
+        let Ok(groups) = tokio::task::spawn_blocking(move || files::search(&idx, &q)).await else {
+            return;
+        };
+        for (kind, items) in groups {
+            if !self.remember_files(generation, &items) {
+                return;
+            }
+            let ev = results_event(generation, kind.provider(), kind.name(), "builtin", &items);
+            let _ = self.tx.send(ev).await;
+        }
+    }
+
+    /// Remember `items` as openable for `generation`; false when it is no longer the newest.
+    fn remember_files(&self, generation: u64, items: &[ProviderItem]) -> bool {
+        let mut st = lock(&self.state);
+        if st.generation != generation {
+            return false;
+        }
+        st.files.extend(items.iter().map(|i| i.id.clone()));
+        true
+    }
+
+    /// Files elsewhere on the system (plocate), when it is installed.
+    async fn search_system(self: &Arc<Self>, generation: u64, query: &str) {
+        let roots = lock(&self.files).roots.clone();
+        let items = files::system(query, &roots).await;
+        if items.is_empty() || !self.remember_files(generation, &items) {
+            return;
+        }
+        let k = files::Kind::System;
+        let _ = self
+            .tx
+            .send(results_event(
+                generation,
+                k.provider(),
+                k.name(),
+                "builtin",
+                &items,
+            ))
+            .await;
+    }
+
+    /// Files whose text holds the query (contents.rs): Baloo's, or a short scan of the index.
+    async fn search_contents(self: &Arc<Self>, generation: u64, query: &str) {
+        let idx = lock(&self.files).index.clone();
+        let me = self.clone();
+        let items = contents::search(query, idx, move || me.latest() != generation).await;
+        if items.is_empty() || !self.remember_files(generation, &items) {
+            return;
+        }
+        let ev = results_event(
+            generation,
+            contents::PROVIDER,
+            contents::NAME,
+            "builtin",
+            &items,
+        );
+        let _ = self.tx.send(ev).await;
+    }
+
+    async fn search_settings(self: &Arc<Self>, generation: u64, query: &str) {
+        let items = settings_search::search(&lock(&self.settings).rows, query);
+        if items.is_empty() || self.latest() != generation {
+            return;
+        }
+        let ev = results_event(generation, "settings", "Settings", "builtin", &items);
+        let _ = self.tx.send(ev).await;
     }
 
     /// Log a provider error at most once a minute per provider.
@@ -316,6 +509,12 @@ impl Providers {
             return Err("LauncherOpened takes no arguments".into());
         }
         let prefs = provider_prefs(link);
+        if provider_enabled(&prefs, "files") {
+            self.refresh_files();
+        }
+        if provider_enabled(&prefs, "settings") {
+            self.refresh_settings();
+        }
         let defs: Vec<ProviderDef> = lock(&self.defs)
             .current()
             .iter()
@@ -409,7 +608,10 @@ impl Providers {
                 return Ok(Value::Null);
             }
             st.generation = generation;
+            st.query = query.to_string();
             st.calc = None;
+            st.web = None;
+            st.files.clear();
             if provider_enabled(&prefs, "calc")
                 && !query.starts_with('>')
                 && calc::applies(query)
@@ -428,6 +630,13 @@ impl Providers {
             if let Some(it) = run::run_item(run_query, generation, &mut lock(runs)) {
                 builtin.push(("run", "Run", it));
             }
+            if provider_enabled(&prefs, "web")
+                && !query.starts_with(['>', '=', ':'])
+                && let Some(a) = web::parse(query)
+            {
+                st.web = Some(a.url.clone());
+                builtin.push(("web", "Web", web::item(query, &a)));
+            }
         }
         for (id, name, it) in builtin {
             let ev = results_event(generation, id, name, "builtin", &[it]);
@@ -435,6 +644,29 @@ impl Providers {
         }
 
         let defs = lock(&self.defs).current();
+        if builtin_sees(query, &defs) {
+            if provider_enabled(&prefs, "files") {
+                // The first search builds the index when Spotlight's open didn't.
+                self.refresh_files();
+                let (me, q) = (self.clone(), query.to_string());
+                tokio::spawn(async move {
+                    tokio::select! {
+                        _ = me.stop.cancelled() => {}
+                        _ = async {
+                            me.search_files(generation, &q).await;
+                            tokio::join!(
+                                me.search_system(generation, &q),
+                                me.search_contents(generation, &q)
+                            );
+                        } => {}
+                    }
+                });
+            }
+            if provider_enabled(&prefs, "settings") {
+                self.refresh_settings();
+                self.search_settings(generation, query).await;
+            }
+        }
         let routed: Vec<(ProviderDef, String)> = defs
             .iter()
             .filter(|d| provider_enabled(&prefs, &d.bus_name))
@@ -503,7 +735,7 @@ impl Providers {
         };
         // Checked now, not only in `search`: a row shown before the provider was switched off
         // must not act.
-        if !provider_enabled(&provider_prefs(link), provider) {
+        if !provider_enabled(&provider_prefs(link), pref_id(provider)) {
             match provider.as_str() {
                 "calc" => lock(&self.state).calc = None,
                 "run" => lock(runs).forget(),
@@ -520,6 +752,40 @@ impl Providers {
                 }
             }
             "run" => launch::launch(link, &[json!({ "run_id": id })], runs).await,
+            "web" => {
+                let url = lock(&self.state).web.clone();
+                if url.as_deref() != Some(id.as_str()) {
+                    return Err("that address is no longer shown".into());
+                }
+                super::opener::open("xdg-open", id, Some("web"))?;
+                Ok(Value::Null)
+            }
+            "settings" => {
+                let (page, setting) = {
+                    let s = lock(&self.settings);
+                    let (p, st) = settings_search::target(&s.rows, id).ok_or("unknown setting")?;
+                    (p.to_string(), st.to_string())
+                };
+                let conn = link.connection().await.ok_or("no session bus")?;
+                crate::settings_app::open(
+                    &conn,
+                    &page,
+                    &setting,
+                    crate::settings_app::spawn_detached,
+                )
+                .await?;
+                Ok(Value::Null)
+            }
+            p if p.starts_with("files:") => {
+                if !lock(&self.state).files.contains(id.as_str()) {
+                    return Err("that file is no longer shown".into());
+                }
+                if !std::path::Path::new(id.as_str()).exists() {
+                    return Err("it is no longer there".into());
+                }
+                super::opener::open("xdg-open", id, Some("file"))?;
+                Ok(Value::Null)
+            }
             _ => {
                 if id.is_empty() || id.len() > MAX_ID_BYTES || action.len() > MAX_ACTION_BYTES {
                     return Err("id or action too long".into());

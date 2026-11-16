@@ -163,6 +163,16 @@ function activation(provider, item) {
         return { kind: "launch", call: "Launch", args: [{ run_id: item.id }], close: true };
     if (p === "calc")
         return { kind: "copy", call: "Activate", args: ["calc", item.id, "copy"], close: false };
+    // An open window: focus it (the pointer stays put), or bring a minimised one back to the
+    // workspace on show (`toWs`).
+    if (p === "windows") {
+        if (item.minimised === true)
+            return { kind: "window", call: "Dispatch",
+                     args: ["restore", { address: item.id, to_ws: Number(item.toWs) > 0 ? Number(item.toWs) : 1 }],
+                     close: true };
+        return { kind: "window", call: "Dispatch",
+                 args: ["focus_window", { address: item.id, keep_pointer: true }], close: true };
+    }
     var acts = item.actions;
     var action = acts && acts.length > 0 && typeof acts[0] === "string" ? acts[0] : "";
     return { kind: "activate", call: "Activate", args: [p, item.id, action], close: true };

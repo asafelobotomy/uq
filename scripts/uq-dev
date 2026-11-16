@@ -113,13 +113,20 @@ SH
     case "$parent" in /*) ;; *) parent=$orig_rt/$parent ;; esac
 
     local notifi=$projects/noti-fi/notifd
+    # The shell's icon theme, as uqd's shell.env gives it to the real shell (Quickshell reads
+    # QS_ICON_THEME once, at start): the sandbox's from the last run, else the real one's.
+    local icons="" f
+    for f in "$sb/state/uq/theme/shell.env" "${XDG_STATE_HOME:-$HOME/.local/state}/uq/theme/shell.env"; do
+        icons=$(sed -n 's/^QS_ICON_THEME="\([A-Za-z0-9._-]*\)"$/\1/p' "$f" 2>/dev/null)
+        [ -n "$icons" ] && break
+    done
     {
         printf 'require([[%s]])\n' "$uq/config/hypr/base.lua"
         printf 'require("./uq/generated.lua")\nrequire("./uq/user.lua")\n'
         printf '%s\n' '-- uq-dev session: the checkout'"'"'s daemons, started here instead of by systemd.'
         printf 'hl.on("hyprland.start", function()\n'
         printf '    hl.exec_cmd([[exec %q >>%q 2>&1]])\n' "$uq/target/debug/uqd" "$sb/log/uqd.log"
-        printf '    hl.exec_cmd([[exec qs -p %q >>%q 2>&1]])\n' "$uq/shell" "$sb/log/shell.log"
+        printf '    hl.exec_cmd([[QS_ICON_THEME=%q exec qs -p %q >>%q 2>&1]])\n' "$icons" "$uq/shell" "$sb/log/shell.log"
         if [ -f "$notifi/shell.qml" ]; then
             printf '    hl.exec_cmd([[exec qs -p %q >>%q 2>&1]])\n' "$notifi" "$sb/log/notifd.log"
         fi

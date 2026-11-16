@@ -75,6 +75,10 @@ struct Args {
     /// Read plugin pages from this directory instead of /usr/share/uq/settings/pages.
     #[arg(long, hide = true, value_name = "DIR")]
     plugin_dir: Option<PathBuf>,
+    /// Print every page and setting this machine's Settings can show, as JSON, then quit
+    /// (Spotlight's Settings results). Starts no window, bus or Qt.
+    #[arg(long, hide = true, conflicts_with_all = ["page", "setting", "welcome", "screenshots"])]
+    search_index: bool,
 }
 
 fn parse_size(s: &str) -> Result<String, String> {
@@ -92,6 +96,14 @@ fn main() -> ExitCode {
     }
     if let Some(dir) = args.plugin_dir.clone() {
         plugins::set_dir(dir);
+    }
+    if args.search_index {
+        let entries = app::page_entries(
+            &plugins::scan_configured(),
+            pages::login_screen::greeter_installed(),
+        );
+        println!("{}", registry::search_index_json(&entries));
+        return ExitCode::SUCCESS;
     }
     if args.screenshots.is_some() && std::env::var_os("QT_QPA_PLATFORM").is_none() {
         // SAFETY: single-threaded here, before Qt, tokio or any other thread starts.

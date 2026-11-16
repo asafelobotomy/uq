@@ -3,7 +3,11 @@
 // Ranking and merge logic for the launcher. Pure data in, data out; strings are passed
 // through untouched (the UI decides how to render them).
 
-var BUILTIN_ORDER = ["calc", "run"];
+// The built-in groups, in the order they show after Apps (a custom order comes first). Other
+// providers follow them.
+var BUILTIN_ORDER = ["web", "calc", "run", "windows", "settings", "files:folders", "files:documents",
+                     "files:images", "files:audio", "files:video", "files:code", "files:archives",
+                     "files:other", "files:contents", "files:system"];
 
 function _fuzzy(q, t) {
     // Subsequence match; consecutive runs and early starts score higher. Result in (0, 0.6].
@@ -39,21 +43,34 @@ function matchScore(query, text) {
     for (var i = 1; i < words.length; i++)
         if (words[i].indexOf(q) === 0)
             return 0.75;
-    return _fuzzy(q, t);
+    // Scattered letters count only when the first one starts a word ("fire" finds "Fabulous
+    // Install Reader Editor", not the f, i, r, e strewn through "LibreOffice Impress").
+    var starts = false;
+    for (var j = 0; j < words.length && !starts; j++)
+        starts = words[j].charAt(0) === q.charAt(0);
+    return starts ? _fuzzy(q, t) : 0;
+}
+
+// matchScore without the scattered-letter match: the text, or one of its words, starts with the
+// query. For keywords and descriptions, where a subsequence matches nearly anything ("report"
+// is in "Resource monitor that shows usage and stats for processor…").
+function wordScore(query, text) {
+    var s = matchScore(query, text);
+    return s >= 0.75 ? s : 0;
 }
 
 function appScore(query, entry, launchCount) {
     var e = entry || {};
     var nameScore = matchScore(query, e.name);
     var best = nameScore;
-    var gn = matchScore(query, e.genericName);
+    var gn = wordScore(query, e.genericName);
     if (gn > best) best = gn;
     var kws = e.keywords || [];
     for (var i = 0; i < kws.length; i++) {
-        var k = matchScore(query, kws[i]);
+        var k = wordScore(query, kws[i]);
         if (k > best) best = k;
     }
-    var cm = matchScore(query, e.comment) * 0.8;
+    var cm = wordScore(query, e.comment) * 0.8;
     if (cm > best) best = cm;
     var n = Math.max(0, Number(launchCount) || 0);
     var kind = nameScore === 1.0 ? "exact" : (nameScore === 0.9 ? "prefix" : "fuzzy");
@@ -95,6 +112,36 @@ function searchApps(query, entries, counts, limit) {
     return out.slice(0, max);
 }
 
+// Open windows whose title, class or app name match: rows for the "windows" group, best first,
+// below an app's own name match (at most 0.85). windows: [{address, title, cls, app, icon,
+// minimised, workspace}] (address already normalised); at most `limit` (5).
+function searchWindows(query, windows, limit) {
+    var q = String(query === undefined || query === null ? "" : query).trim();
+    if (q.length < 2)
+        return [];
+    var max = limit === undefined ? 5 : limit;
+    var out = [];
+    var list = windows || [];
+    for (var i = 0; i < list.length; i++) {
+        var w = list[i];
+        if (!w || typeof w.address !== "string" || w.address === "")
+            continue;
+        var best = Math.max(matchScore(q, w.title), matchScore(q, w.app), matchScore(q, w.cls));
+        if (best <= 0)
+            continue;
+        var where = w.minimised ? "Minimised" : (w.workspace ? "Workspace " + w.workspace : "");
+        out.push({ id: w.address, title: String(w.title || w.app || w.cls || ""),
+                   subtitle: [String(w.app || w.cls || ""), where].filter(function (s) { return s !== ""; }).join(" · "),
+                   icon: String(w.icon || ""), score: best * 0.85, minimised: !!w.minimised,
+                   toWs: Number(w.toWs) || 0 });
+    }
+    out.sort(function (a, b) {
+        if (b.score !== a.score) return b.score - a.score;
+        return a.title < b.title ? -1 : (a.title > b.title ? 1 : 0);
+    });
+    return out.slice(0, max);
+}
+
 function merge(apps, providerGroups, generation, order) {
     var appList = apps || [];
     var groups = [];
@@ -129,7 +176,13 @@ function merge(apps, providerGroups, generation, order) {
         groups.push(live[j]);
 
     var topHit = null;
-    if (appList.length > 0 && _tier(appList[0].kind) === 1) {
+    // A clear web address (score 1) is what was meant: it leads, even over an app's name.
+    for (var w = 0; w < groups.length && topHit === null; w++)
+        if (groups[w].provider === "web" && groups[w].items.length > 0 && Number(groups[w].items[0].score) >= 1)
+            topHit = { provider: "web", providerName: groups[w].providerName, item: groups[w].items[0] };
+    if (topHit !== null) {
+        // Chosen above.
+    } else if (appList.length > 0 && _tier(appList[0].kind) === 1) {
         topHit = { provider: "apps", providerName: "Apps", item: appList[0] };
     } else {
         var bestScore = -1;

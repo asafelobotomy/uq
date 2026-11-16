@@ -56,6 +56,22 @@ TestCase {
         compare(r[0].kind, "fuzzy");
     }
 
+    // Descriptions and keywords match by word, never by scattered letters.
+    function test_secondary_fields_need_a_word() {
+        var list = [
+            { id: "btop.desktop", name: "btop++", icon: "", comment: "Resource monitor that shows usage and stats for processor" },
+            { id: "base.desktop", name: "Base", icon: "", comment: "Create queries and reports", keywords: ["database"] }];
+        var r = Rank.searchApps("report", list, {});
+        compare(r.length, 1);
+        compare(r[0].id, "base.desktop");
+        compare(Rank.searchApps("data", list, {})[0].id, "base.desktop");
+        compare(Rank.searchApps("rmt", list, {}).length, 0);
+        // A name's scattered letters must start at a word.
+        var office = [{ id: "impress.desktop", name: "LibreOffice Impress", icon: "", comment: "" }];
+        compare(Rank.searchApps("fire", office, {}).length, 0);
+        compare(Rank.searchApps("lim", office, {})[0].id, "impress.desktop");
+    }
+
     function test_nodisplay_skipped() {
         var r = Rank.searchApps("fire", entries, {});
         for (var i = 0; i < r.length; i++)
@@ -128,5 +144,54 @@ TestCase {
         compare(m.groups[1].provider, "calc");
         // Empty order falls back to the built-in order.
         compare(Rank.merge([], pg, 3, []).groups[0].provider, "calc");
+    }
+
+    function test_builtin_groups_in_type_order() {
+        var g = function (id, name) {
+            return { provider: id, provider_name: name, generation: 1, items: [{ id: id, score: 0.5 }] };
+        };
+        var pg = {
+            a: g("files:images", "Images"), b: g("settings", "Settings"), c: g("org.ext", "Ext"),
+            d: g("files:folders", "Folders"), e: g("windows", "Windows"), f: g("files:system", "System files"),
+            h: g("files:contents", "Contents")
+        };
+        var m = Rank.merge([{ id: "x", name: "X", score: 0.5, kind: "fuzzy" }], pg, 1);
+        compare(m.groups.map(function (x) { return x.provider; }),
+                ["apps", "windows", "settings", "files:folders", "files:images", "files:contents", "files:system",
+                 "org.ext"]);
+    }
+
+    function test_clear_web_address_is_the_top_hit() {
+        var apps = [{ id: "gh", name: "GitHub", score: 1.0, kind: "exact" }];
+        var strong = { web: { provider: "web", provider_name: "Web", generation: 2,
+                              items: [{ id: "https://github.com/", score: 1 }] } };
+        compare(Rank.merge(apps, strong, 2).topHit.provider, "web");
+        var weak = { web: { provider: "web", provider_name: "Web", generation: 2,
+                            items: [{ id: "https://notes.md/", score: 0.45 }] } };
+        compare(Rank.merge(apps, weak, 2).topHit.provider, "apps");
+    }
+
+    function test_search_windows() {
+        var wins = [
+            { address: "0x1", title: "Inbox - Mail", cls: "thunderbird", app: "Thunderbird", icon: "tb", workspace: "2" },
+            { address: "0x2", title: "~/Projects", cls: "kitty", app: "kitty", icon: "kitty", workspace: "1" },
+            { address: "0x3", title: "notes", cls: "kitty", app: "kitty", minimised: true, toWs: 4 },
+            { address: "", title: "kitty" }
+        ];
+        compare(Rank.searchWindows("k", wins).length, 0, "one letter is too short");
+        var k = Rank.searchWindows("kitty", wins);
+        compare(k.length, 2);
+        compare(k[0].subtitle.indexOf("kitty"), 0);
+        var mail = Rank.searchWindows("inbox", wins);
+        compare(mail.length, 1);
+        compare(mail[0].id, "0x1");
+        compare(mail[0].title, "Inbox - Mail");
+        compare(mail[0].subtitle, "Thunderbird · Workspace 2");
+        verify(mail[0].score <= 0.85);
+        var min = Rank.searchWindows("notes", wins)[0];
+        compare(min.subtitle, "kitty · Minimised");
+        verify(min.minimised);
+        compare(min.toWs, 4);
+        compare(Rank.searchWindows("kitty", wins, 1).length, 1);
     }
 }

@@ -259,6 +259,22 @@ TestCase {
         compare(s2[2].items[0].id, "b");
     }
 
+    function test_activation_windows() {
+        var a = L.activation("windows", { id: "0xabc" });
+        compare(a.call, "Dispatch");
+        compare(JSON.stringify(a.args), JSON.stringify(["focus_window", { address: "0xabc", keep_pointer: true }]));
+        verify(a.close);
+        a = L.activation("windows", { id: "0xabc", minimised: true, toWs: 3 });
+        compare(JSON.stringify(a.args), JSON.stringify(["restore", { address: "0xabc", to_ws: 3 }]));
+        a = L.activation("windows", { id: "0xabc", minimised: true });
+        compare(a.args[1].to_ws, 1);
+        a = L.activation("files:documents", { id: "/home/u/a.pdf" });
+        compare(JSON.stringify(a.args), JSON.stringify(["files:documents", "/home/u/a.pdf", ""]));
+        a = L.activation("web", { id: "https://example.com/" });
+        compare(a.call, "Activate");
+        verify(a.close);
+    }
+
     function test_activation() {
         var a = L.activation("apps", { id: "firefox.desktop" });
         compare(a.kind, "launch");

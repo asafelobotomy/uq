@@ -7,6 +7,36 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0-rc.7] - 2026-11-16
+
+### Added
+
+- **Spotlight searches your files.** Files and folders in your home folder and on drives under
+  `/mnt`, `/media` and `/run/media` show grouped by type: Folders, Documents, Images, Audio,
+  Video, Code, Archives and Other files. With `plocate` installed, files elsewhere on the system
+  show as System files.
+- **Spotlight searches inside files.** A Contents group lists files whose text holds what you
+  typed, with the line that matched. With KDE's Baloo indexing, it uses Baloo, which also reads
+  PDFs and office files; without it, Spotlight reads your text and code files for a moment.
+- **Spotlight finds settings and open windows.** Every page and setting in Settings shows under
+  Settings and opens there. Open windows show under Windows; choosing one focuses it, or brings
+  a minimised one back.
+- **Type a web address in Spotlight** (`example.com`, `https://…`, `localhost:3000`) to open
+  it in your default browser.
+
+### Changed
+
+- **Spotlight matches more carefully.** An app's description and keywords, and a setting's
+  label, match by whole words, not letters scattered through them, so typing "report" no
+  longer lists unrelated apps.
+
+### Fixed
+
+- **Spotlight no longer looks broken while you type.** The window resized after the panel did,
+  so while results arrived the panel was cut off with no bottom edge; now it grows inside a
+  window that stays put. A long list fades out instead of ending on half a row, the type label is shown
+  only on the top hit, and a search with no results says "No matches".
+
 ## [0.3.0-rc.6] - 2026-11-15
 
 ### Added

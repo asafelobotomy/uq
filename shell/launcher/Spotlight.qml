@@ -11,9 +11,11 @@ import "../logic/rank.js" as Rank
 import "../logic/shellprefs.js" as ShellPrefs
 import "../logic/failure.js" as F
 
-// Super+Space search box: a top hit, then results grouped by source. Logic lives in
-// launcher.js and rank.js; everything shown from apps or providers goes through UqText, and
-// Enter only ever makes bridge calls (Launch / Activate).
+// Super+Space search box: a top hit, then results grouped by type: apps, a typed web address,
+// open windows, Settings, files by type (folders, documents, images, …) and by their text, the
+// calculator, Run and other providers. Apps and windows are matched here; the bridge sends the
+// rest. Logic lives in launcher.js and rank.js; everything shown from apps or providers goes
+// through UqText, and Enter only ever makes bridge calls (Launch / Activate / Dispatch).
 PanelWindow {
     id: root
 
@@ -57,7 +59,12 @@ PanelWindow {
     anchors.top: true
     margins.top: Math.round((screen ? screen.height : 1080) * 0.18)
     implicitWidth: Math.min(640, Math.round((screen ? screen.width : 1280) * 0.5))
-    implicitHeight: panel.implicitHeight
+    // The tallest the panel can get, fixed: the panel grows and shrinks inside it as rows arrive,
+    // so it never outruns the compositor's resize (a clipped panel with no bottom edge). Only the
+    // panel takes input; a click below it falls through to what's underneath and closes Spotlight.
+    readonly property int maxListHeight: Math.round((screen ? screen.height : 1080) * 0.55)
+    implicitHeight: maxListHeight + 200
+    mask: Region { item: panel }
 
     function screenFor(monitor) {
         if (!monitor)
@@ -105,6 +112,12 @@ PanelWindow {
         searched = q;
         apps = q !== "" && L.classify(q) === "search"
             ? Rank.searchApps(q, appList, Settings.launchCounts) : [];
+        var wins = q !== "" && L.classify(q) === "search" ? Rank.searchWindows(q, windowList()) : [];
+        if (wins.length > 0) {
+            var pr = {};
+            pr.windows = { generation: generation, provider: "windows", provider_name: "Windows", items: wins };
+            providerResults = pr;
+        }
         rebuild(true);
         // Always sent, even when empty, so the bridge drops a stale run command.
         var reply = Bridge.call("Search", [q, generation]);
@@ -122,6 +135,27 @@ PanelWindow {
         else
             deadline.stop();
         return reply;
+    }
+
+    // The open windows, read when a search runs (not kept up to date while Spotlight is shut).
+    function windowList() {
+        var out = [], vals = Hyprland.toplevels.values;
+        var mon = Hyprland.focusedMonitor;
+        var toWs = mon && mon.activeWorkspace ? mon.activeWorkspace.id : 1;
+        for (var i = 0; i < vals.length; i++) {
+            var t = vals[i], o = t.lastIpcObject || ({});
+            var cls = o["class"] ? String(o["class"]) : "";
+            var d = cls ? DesktopEntries.heuristicLookup(cls) : null;
+            var a = String(t.address || "");
+            if (a !== "" && a.indexOf("0x") !== 0)
+                a = "0x" + a;
+            var ws = t.workspace ? t.workspace.name : "";
+            out.push({ address: a, title: t.title || "", cls: cls,
+                       app: d && d.name ? String(d.name) : cls, icon: d && d.icon ? String(d.icon) : "",
+                       minimised: ws === "special:minimized",
+                       workspace: ws.indexOf("special:") === 0 ? "" : ws, toWs: toWs });
+        }
+        return out;
     }
 
     function rebuild(reset) {
@@ -318,7 +352,7 @@ PanelWindow {
                 Layout.fillWidth: true
                 implicitHeight: 36
                 maximumLength: 256
-                placeholder: "Search apps, = maths, > command"
+                placeholder: "Search apps, files, settings, windows, or type a web address"
                 Accessible.name: "Spotlight search"
                 onEdited: function (text) { root.edited(text); }
                 Keys.onPressed: function (event) {
@@ -345,8 +379,7 @@ PanelWindow {
             Flickable {
                 id: flick
                 Layout.fillWidth: true
-                Layout.preferredHeight: Math.min(results.implicitHeight,
-                                                 (root.screen ? root.screen.height : 1080) * 0.55)
+                Layout.preferredHeight: Math.min(results.implicitHeight, root.maxListHeight)
                 visible: root.sections.length > 0
                 contentHeight: results.implicitHeight
                 clip: true
@@ -433,9 +466,10 @@ PanelWindow {
                                                 font.pixelSize: Theme.fontSize - 1
                                             }
                                         }
-                                        // Every provider row names its provider.
+                                        // The top hit names where it came from; other rows sit
+                                        // under their group's heading.
                                         UqText {
-                                            visible: !row.isApp
+                                            visible: sec.modelData.top === true
                                             Layout.maximumWidth: root.width * 0.3
                                             text: String(sec.modelData.providerName || "")
                                             color: Theme.textMuted
@@ -467,6 +501,15 @@ PanelWindow {
 
             UqText {
                 Layout.fillWidth: true
+                Layout.leftMargin: Theme.gapIn
+                // Nothing found, once the providers have had their time.
+                visible: root.sections.length === 0 && root.searched !== "" && root.deadlinePassed
+                         && !root.emojiHint && root.query.trim() === root.searched
+                text: "No matches"
+                color: Theme.textMuted
+            }
+            UqText {
+                Layout.fillWidth: true
                 visible: root.emojiHint
                 text: "No emoji provider installed"
                 color: Theme.textMuted
@@ -492,6 +535,19 @@ PanelWindow {
                 text: "= maths   > command   : emoji   Tab next group"
                 color: Theme.textMuted
                 font.pixelSize: Theme.fontSize - 1
+            }
+        }
+
+        // More rows below: the list fades out instead of ending on a row cut in half.
+        Rectangle {
+            x: col.x + flick.x
+            y: col.y + flick.y + flick.height - height
+            width: flick.width
+            height: Math.min(28, flick.height)
+            visible: flick.visible && flick.contentY + flick.height < flick.contentHeight - 1
+            gradient: Gradient {
+                GradientStop { position: 0; color: Qt.rgba(Theme.surface.r, Theme.surface.g, Theme.surface.b, 0) }
+                GradientStop { position: 1; color: Theme.surface }
             }
         }
 

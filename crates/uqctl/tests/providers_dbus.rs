@@ -92,8 +92,17 @@ fn provider_file(data: &Path, file: &str, bus_name: &str, name: &str) {
     .unwrap();
 }
 
+/// The bridge with only the test's providers: no files indexed, and neither Settings nor plocate
+/// on PATH, so the built-in file and Settings rows stay out of the way.
 fn start(bus: &Bus, data: &Path) -> Bridge {
-    Bridge::start_with_env(bus, &[("XDG_DATA_HOME", data.as_os_str())])
+    Bridge::start_with_env(
+        bus,
+        &[
+            ("XDG_DATA_HOME", data.as_os_str()),
+            ("UQ_SEARCH_ROOTS", std::ffi::OsStr::new("")),
+            ("PATH", data.as_os_str()),
+        ],
+    )
 }
 
 /// Collect `SearchResults` events for `dur`.

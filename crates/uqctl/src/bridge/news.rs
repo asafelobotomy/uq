@@ -107,35 +107,8 @@ impl News {
             return Err("not a link from the news feed".into());
         }
         // In a scope of its own, so a browser it starts is an app, not part of the shell's
-        // service (which scdr treats as the desktop). Without systemd-run, directly.
-        let plain = [self.opener.to_string(), url.to_string()];
-        let scoped = self.scoped.then(|| {
-            uq_core::desktop_entry::scope_argv(
-                "link",
-                &plain,
-                uq_core::desktop_entry::random_suffix(),
-            )
-        });
-        let start = |argv: &[String]| {
-            tokio::process::Command::new(&argv[0])
-                .args(&argv[1..])
-                .stdin(std::process::Stdio::null())
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .process_group(0)
-                .spawn()
-        };
-        let spawned = match scoped.as_deref().map(start) {
-            Some(Err(e)) if e.kind() == std::io::ErrorKind::NotFound => start(&plain),
-            Some(r) => r,
-            None => start(&plain),
-        };
-        let mut child =
-            spawned.map_err(|e| format!("could not start {} ({})", self.opener, e.kind()))?;
-        // Reap it whenever it ends, so it never lingers as a zombie.
-        tokio::spawn(async move {
-            let _ = child.wait().await;
-        });
+        // service (which scdr treats as the desktop).
+        super::opener::open(self.opener, url, self.scoped.then_some("link"))?;
         Ok(Value::Null)
     }
 }

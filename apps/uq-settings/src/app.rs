@@ -133,7 +133,7 @@ impl Default for AppRust {
 
 /// Every page for this machine: the core pages, then `plugins`, without the pages it can't use
 /// (`greeter`: whether uQ's login screen is installed).
-fn page_entries(plugins: &[plugins::PluginPage], greeter: bool) -> Vec<PageEntry> {
+pub(crate) fn page_entries(plugins: &[plugins::PluginPage], greeter: bool) -> Vec<PageEntry> {
     let mut entries = registry::all_pages(plugins);
     registry::drop_unavailable(&mut entries, greeter);
     entries

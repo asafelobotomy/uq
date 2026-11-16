@@ -17,7 +17,7 @@ const FALLBACK_TERMINAL: &str = "kitty.desktop";
 const MAX_NAME: usize = 64;
 
 /// `{id, name, icon}` for a launchable desktop entry, else null.
-fn app(dirs: &Dirs, id: &str) -> Value {
+pub(crate) fn app(dirs: &Dirs, id: &str) -> Value {
     if !valid_pinned_id(id) {
         return Value::Null;
     }
