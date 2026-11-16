@@ -63,7 +63,7 @@ pub const KEYBINDS: [Keybind; 10] = [
     Keybind {
         keys: "Super + Space",
         does: "Search for apps, files and settings",
-        lua: r#"hl.bind(mainMod .. " + Space",   hl.dsp.global("uq:spotlight"))"#,
+        lua: r#"hl.bind(mainMod .. " + Space",   hl.dsp.global("uq:lookseedo"))"#,
     },
     Keybind {
         keys: "Tap Super",

@@ -136,7 +136,7 @@ mod tests {
         let kb = Keybinds {
             overrides: vec![
                 Override {
-                    id: "uq.spotlight".into(),
+                    id: "uq.lookseedo".into(),
                     combo: Some("SUPER + K".into()),
                     enabled: None,
                 },
@@ -149,7 +149,7 @@ mod tests {
             custom: vec![],
         };
         let out = emit_binds(&kb);
-        assert!(out.contains("hl.bind(\"SUPER + K\", hl.dsp.global(\"uq:spotlight\")"));
+        assert!(out.contains("hl.bind(\"SUPER + K\", hl.dsp.global(\"uq:lookseedo\")"));
         assert!(!out.contains("\"SUPER + Space\""));
         assert!(!out.contains("uq:uq.close"));
         assert_eq!(out.matches("hl.bind(").count(), 58);

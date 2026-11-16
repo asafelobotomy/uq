@@ -148,8 +148,8 @@ hl.bind(mainMod .. " + SHIFT + M", hl.dsp.exec_cmd("command -v hyprshutdown >/de
 -- Launchers, quick settings, the notification centre, the lock and the power menu: Quickshell GlobalShortcuts (appid "uq"). Never locked, so they
 -- don't work over the lock screen. The app menu bind fires when a tap of left SUPER is released; Hyprland shadows it
 -- once another key or button has been pressed and released while SUPER is held.
-hl.bind(mainMod .. " + Space",   hl.dsp.global("uq:spotlight"))
--- SUPER+.: Spotlight opened at ":", the emoji search (an emoji provider such as emobie answers it).
+hl.bind(mainMod .. " + Space",   hl.dsp.global("uq:lookseedo"))
+-- SUPER+.: look=see>do_ opened at ":", the emoji search (an emoji provider such as emobie answers it).
 hl.bind(mainMod .. " + period",  hl.dsp.global("uq:emoji"))
 hl.bind(mainMod .. " + SUPER_L", hl.dsp.global("uq:appmenu"), { release = true })
 hl.bind(mainMod .. " + A",       hl.dsp.global("uq:quick-settings"))

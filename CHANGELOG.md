@@ -9,6 +9,12 @@ All notable changes to uQ are listed here. The format follows
 
 ### Fixed
 
+- **look=see>do_'s Web, Open windows, Settings and Files groups can be switched off and
+  reordered.** Settings → Shell → Search providers only listed the calculator and Run, though the
+  launcher already honoured a saved off switch for the others; they are listed now, and the
+  Files group orders all its file types together. Open windows follows its switch too.
+- **Run's row says what it does.** It read "in a terminal-less scope"; it now says "Runs in the
+  background, without a terminal".
 - **Print opens one area selection, with no full-screen capture first.** `uq-screenshot` used to
   grab the whole screen, then open satty over it (the screen went lighter) with its own crop
   tool, so you saw a second selector after the first. Now you pick the area with slurp, only
@@ -18,6 +24,14 @@ All notable changes to uQ are listed here. The format follows
 
 ### Added
 
+- **look=see>do_ can do things: a Commands group.** Type `lock`, `suspend`, `log out`,
+  `restart` or `power off` for the power actions, or `profile` / a profile's name to switch
+  profiles or go back to normal. The ones that end the session are never the top hit, so a
+  half-typed word can't log you out on Enter. It has its own switch under Settings → Shell →
+  Search providers.
+- **Shift+Enter runs a row's second action.** On a `>` row it runs the command in your chosen
+  terminal and keeps the window open until you press Enter; on a provider's row it calls the
+  row's second action (emobie's "type it").
 - **Settings → Shell → Screenshots → Print key.** Choose what Print captures: an area (the
   default, marked up in satty), the whole screen or the focused window. Shift+Print and
   Super+Print keep taking the screen and the window.
@@ -30,6 +44,12 @@ All notable changes to uQ are listed here. The format follows
 
 ### Changed
 
+- **Spotlight is now look=see>do_.** The launcher on Super + Space has a new name, and its
+  names inside uQ follow: the shortcut is `uq.lookseedo`, the layer namespace `uq-lookseedo`, the
+  IPC surface and the Hyprland global `uq:lookseedo`, and the four-finger gesture action
+  `uq:lookseedo`. Stored shortcut overrides, custom shortcuts, profiles and gestures using the
+  old names are converted when uQ loads them. Scripts calling `qs ipc ... call uq open
+  spotlight` need the new name.
 - **Tiled windows can't be resized from the screen's outer sides.** Super + right-drag took a
   tiled window by whichever edge was nearest, the outer ones too, moving the window off its side
   of the screen. It is now unbound by default: tiled windows resize only by the grips in the gaps

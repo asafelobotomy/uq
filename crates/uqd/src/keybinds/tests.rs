@@ -98,7 +98,7 @@ async fn conflicting_write_is_refused_with_both_names() {
     let DesktopError::InvalidSetting(m) = &err else {
         panic!("{err:?}")
     };
-    assert!(m.contains("Mine") && m.contains("Open Spotlight"), "{m}");
+    assert!(m.contains("Mine") && m.contains("Open look=see>do_"), "{m}");
     assert!(m.contains("keybinds.custom[0].combo"), "{m}");
     let after = r
         .comp
@@ -117,7 +117,7 @@ async fn rejected_binds_keep_previous_config() {
     let (toml, gen_, sec) = (state_toml(&r), generated(&r), section(&r));
     *r.comp.verify_error.lock().unwrap() = Some("user.lua:9: bad bind".into());
     let mut two = sec.clone();
-    two["overrides"] = json!([{"id": "uq.spotlight", "combo": "SUPER + K"}]);
+    two["overrides"] = json!([{"id": "uq.lookseedo", "combo": "SUPER + K"}]);
     let err = write(&mut r, &two.to_string()).await.unwrap_err();
     assert!(matches!(err, DesktopError::ConfigInvalid(_)), "{err:?}");
     assert_eq!(state_toml(&r), toml);
@@ -151,10 +151,10 @@ async fn undo_and_restore_bring_binds_back() {
 #[tokio::test]
 async fn undo_that_would_conflict_is_refused() {
     let mut r = rig();
-    // Spotlight moves off Super + Space ...
+    // look=see>do_ moves off Super + Space ...
     write(
         &mut r,
-        r#"{"overrides":[{"id":"uq.spotlight","combo":"SUPER + K"}],"custom":[]}"#,
+        r#"{"overrides":[{"id":"uq.lookseedo","combo":"SUPER + K"}],"custom":[]}"#,
     )
     .await
     .unwrap();
@@ -162,18 +162,18 @@ async fn undo_that_would_conflict_is_refused() {
     // ... and a shortcut of your own takes Super + Space.
     write(
         &mut r,
-        r#"{"overrides":[{"id":"uq.spotlight","combo":"SUPER + K"}],
+        r#"{"overrides":[{"id":"uq.lookseedo","combo":"SUPER + K"}],
             "custom":[{"name":"Mine","combo":"SUPER + Space",
               "action":{"kind":"uq","name":"terminal"}}]}"#,
     )
     .await
     .unwrap();
     let before = (state_toml(&r), generated(&r));
-    // Undoing the rebind would put Spotlight back on Super + Space, where Mine is.
+    // Undoing the rebind would put look=see>do_ back on Super + Space, where Mine is.
     let err = r.desktop.undo(&rebind, true).await.unwrap_err();
     let msg = err.to_string();
     assert!(
-        msg.contains("Mine") && msg.contains("Open Spotlight"),
+        msg.contains("Mine") && msg.contains("Open look=see>do_"),
         "{err:?}"
     );
     assert!(!matches!(err, DesktopError::Conflict(_)), "{err:?}");
@@ -216,7 +216,7 @@ async fn explain_live_and_user_lua() {
     assert_eq!(row["source"], "user_lua", "{v}");
     assert_eq!(row["detail"]["line"], 3);
     assert_eq!(row["detail"]["path"], p.to_string_lossy().as_ref());
-    assert_eq!(v["binds.uq.spotlight"]["source"], "default", "{v}");
+    assert_eq!(v["binds.uq.lookseedo"]["source"], "default", "{v}");
     let id = section(&r)["custom"][0]["id"].as_str().unwrap().to_string();
     assert_eq!(v[format!("binds.{id}")]["source"], "uq", "{v}");
     // Hyprland down: every row reports from state.

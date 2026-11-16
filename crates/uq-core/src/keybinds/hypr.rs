@@ -82,7 +82,7 @@ pub const REFUSED_MODIFIERS: [&str; 4] = ["CAPS", "MOD2", "MOD3", "MOD5"];
 
 /// The `GlobalShortcut` names the shell registers (`appid: "uq"`).
 pub const SHELL_NAMES: [&str; 14] = [
-    "spotlight",
+    "lookseedo",
     "emoji",
     "appmenu",
     "quick-settings",

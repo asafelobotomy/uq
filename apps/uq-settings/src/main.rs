@@ -76,7 +76,7 @@ struct Args {
     #[arg(long, hide = true, value_name = "DIR")]
     plugin_dir: Option<PathBuf>,
     /// Print every page and setting this machine's Settings can show, as JSON, then quit
-    /// (Spotlight's Settings results). Starts no window, bus or Qt.
+    /// (look=see>do_'s Settings results). Starts no window, bus or Qt.
     #[arg(long, hide = true, conflicts_with_all = ["page", "setting", "welcome", "screenshots"])]
     search_index: bool,
 }

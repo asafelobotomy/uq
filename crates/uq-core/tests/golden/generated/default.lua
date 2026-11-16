@@ -23,7 +23,7 @@ hl.config({
 
 -- Touchpad gestures
 hl.gesture({ fingers = 3, direction = "horizontal", action = "workspace" })
-hl.gesture({ fingers = 4, direction = "up", action = function() hl.dispatch(hl.dsp.global("uq:spotlight")) end })
+hl.gesture({ fingers = 4, direction = "up", action = function() hl.dispatch(hl.dsp.global("uq:lookseedo")) end })
 hl.curve("easeOutQuint", { type = "bezier", points = { {0.23, 1},  {0.32, 1} } })
 hl.curve("linear",       { type = "bezier", points = { {0, 0},     {1, 1}    } })
 hl.curve("almostLinear", { type = "bezier", points = { {0.5, 0.5}, {0.75, 1} } })
@@ -50,7 +50,7 @@ hl.bind("SUPER + Return", hl.dsp.exec_cmd("systemd-run --user --scope --quiet --
 hl.bind("SUPER + Q", hl.dsp.window.close(), { description = "uq:uq.close" })
 hl.bind("SUPER + V", hl.dsp.window.float({ action = "toggle" }), { description = "uq:uq.float" })
 hl.bind("SUPER + SHIFT + M", hl.dsp.exec_cmd("command -v hyprshutdown >/dev/null 2>&1 && hyprshutdown || hyprctl dispatch 'hl.dsp.exit()'"), { description = "uq:uq.exit" })
-hl.bind("SUPER + Space", hl.dsp.global("uq:spotlight"), { description = "uq:uq.spotlight" })
+hl.bind("SUPER + Space", hl.dsp.global("uq:lookseedo"), { description = "uq:uq.lookseedo" })
 hl.bind("SUPER + period", hl.dsp.global("uq:emoji"), { description = "uq:uq.emoji" })
 hl.bind("SUPER + SUPER_L", hl.dsp.global("uq:appmenu"), { release = true, description = "uq:uq.appmenu" })
 hl.bind("SUPER + A", hl.dsp.global("uq:quick-settings"), { description = "uq:uq.quick-settings" })

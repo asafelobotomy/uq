@@ -2,7 +2,7 @@
 # Headless smoke test: every bar island, at every size, and the launcher and OSD routes (global
 # shortcuts, `uq:edit-bar` among them, and the `uq` IPC handler) compile and instantiate
 # (offscreen, no Hyprland, no bridge), and each island is exactly as wide as its size: 1, 2, 4 or
-# 6 times the Icon size. The bar itself, its popups and Spotlight are PanelWindows, which need a
+# 6 times the Icon size. The bar itself, its popups and look=see>do_ are PanelWindows, which need a
 # Wayland backend; smoke-shell.sh covers them.
 set -u
 root=$(cd "$(dirname "$0")/../.." && pwd)

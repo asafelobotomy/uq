@@ -1,4 +1,4 @@
-//! Run provider for the Spotlight `>` queries.
+//! Run provider for the look=see>do_ `>` queries.
 //!
 //! The command text never leaves the bridge in a result: the shell only sees a per-generation
 //! id, and `Launch {run_id}` looks the command up here.
@@ -43,10 +43,10 @@ pub(crate) fn run_item(query: &str, generation: u64, state: &mut RunState) -> Op
     Some(ProviderItem {
         id: format!("run-{generation}"),
         title: format!("Run \"{shown}\""),
-        subtitle: "in a terminal-less scope".into(),
+        subtitle: "Runs in the background · Shift+Enter opens a terminal".into(),
         icon: "utilities-terminal".into(),
         score: 1.0,
-        actions: vec!["run".into()],
+        actions: vec!["run".into(), "terminal".into()],
     })
 }
 
@@ -70,10 +70,13 @@ mod tests {
         let it = run_item(">  ls -la ", 2, &mut s).unwrap();
         assert_eq!(it.id, "run-2");
         assert_eq!(it.title, "Run \"ls -la\"");
-        assert_eq!(it.subtitle, "in a terminal-less scope");
+        assert_eq!(
+            it.subtitle,
+            "Runs in the background · Shift+Enter opens a terminal"
+        );
         assert_eq!(it.icon, "utilities-terminal");
         assert_eq!(it.score, 1.0);
-        assert_eq!(it.actions, vec!["run"]);
+        assert_eq!(it.actions, vec!["run", "terminal"]);
         assert_eq!(take_command(&s, "run-2").unwrap(), "ls -la");
     }
 

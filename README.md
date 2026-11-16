@@ -13,7 +13,7 @@ included (see [CHANGELOG.md](CHANGELOG.md)). What it gives you:
   layouts and every setting, writes `~/.config/hypr/uq/generated.lua` and the rendered theme
   files, records history and restore points, and serves `org.uq.Desktop1` on the session bus.
 - **`uqctl`**: the command-line client.
-- **The shell** (Quickshell): bar, Spotlight launcher, quick settings, notifications, OSD, lock
+- **The shell** (Quickshell): bar, look=see>do_ launcher, quick settings, notifications, OSD, lock
   and idle.
 - **`uq-settings`**: the Settings app (below), with pages other apps can add.
 - **A login screen** for greetd (see [docs/greeter.md](docs/greeter.md)), and a first-login
@@ -177,7 +177,7 @@ be undone. An arrangement that can't be used leaves the layout alone and shows o
 notification.
 
 **Main display** is the screen where notifications, the volume and brightness pop-ups and
-Spotlight open, where the session starts, and, when `xrandr` is installed (optional,
+look=see>do_ open, where the session starts, and, when `xrandr` is installed (optional,
 `xorg-xrandr`), the X11 primary. It does nothing until you choose one; until then those follow
 the focused screen. Menus opened from a bar stay on that bar's screen. **Show the bar on** picks
 all screens, the main one or the ones you tick; a bar always shows somewhere. **Workspaces
@@ -191,7 +191,7 @@ or plan at once.
 
 The Input page lists **touchpad gestures**: fingers (3 to 5), direction (sideways, up, down,
 left, right, pinch in, pinch out), what it does, and an optional held key. uQ ships two:
-three fingers sideways switches workspace, and four fingers up opens Spotlight. Turn either off
+three fingers sideways switches workspace, and four fingers up opens look=see>do_. Turn either off
 with its switch, or use **Back to uQ's gestures** to restore the list. Two gestures that use the
 same fingers and key conflict when their directions are equal or one covers the other (sideways
 covers left and right, up and down are covered by vertical), because Hyprland refuses the second
@@ -278,7 +278,7 @@ checks are in [docs/notes/settings-slice-b-live-check.md](docs/notes/settings-sl
 Every shortcut uQ sets up is listed here by what it does, with its keys, grouped as Apps and
 desktop, Windows, Workspaces, Sound and brightness, Media, and Profiles. The defaults:
 Open a terminal (Super + Return), Close the window (Super + Q), Float or tile the window
-(Super + V), Log out (Super + Shift + M), Open Spotlight (Super + Space), Open Spotlight for emoji (Super + period; it needs the shell's emoji shortcut, which comes with the emoji picker), Open the app menu
+(Super + V), Log out (Super + Shift + M), Open look=see>do_ (Super + Space), Open look=see>do_ for emoji (Super + period; it needs the shell's emoji shortcut, which comes with the emoji picker), Open the app menu
 (tap Super), Open quick settings (Super + A), Open notifications (Super + N), Lock the screen
 (Super + L), Open the power menu (Super + Escape), the three layouts (Super + Alt + D, M and S),
 focus with Super + the arrows, workspaces 1 to 10 with Super + the number (Shift moves the
@@ -301,7 +301,7 @@ uqd refuses the same write over D-Bus. A shortcut in `user.lua` that you mark wi
 `user.lua` are not shown, and a `hl.unbind` there shows as "Overridden in user.lua, line N".
 
 **Press the keys…** in the shortcut editor listens for the new keys: while it waits, uQ's shortcuts are paused for at most
-15 seconds, so Super + Space can be pressed without opening Spotlight. `uqctl keys list` prints
+15 seconds, so Super + Space can be pressed without opening look=see>do_. `uqctl keys list` prints
 every shortcut and `uqctl keys reset <id>` or `--all` puts changes back. `base.lua` keeps a
 fallback copy of the defaults, so the shortcuts still work if `generated.lua` is missing. Manual
 checks are in [docs/notes/settings-slice4-live-check.md](docs/notes/settings-slice4-live-check.md).
@@ -405,7 +405,7 @@ Five switches, each applying to apps started after the change:
 **Blurry right now** lists the open older X11 apps, the ones that get stretched on a scaled
 screen, each with a **Fix this app** button. A fix sets an app's **Run on** (Automatic, Wayland
 or X11), its **Size** (100 % to 300 % in steps of 25 %), extra variables and launch options. It
-applies when the app is started from uQ's launcher, Spotlight, a pin, `uqctl launch <id>` or
+applies when the app is started from uQ's launcher, look=see>do_, a pin, `uqctl launch <id>` or
 the login runner (Startup), and not when something else starts it. **Also when started from
 other launchers** writes a copy of the app's desktop file into `~/.local/share/applications` that carries the fix,
 marked `X-uQ-Override=true`, so other launchers pick it up. It's refused if a file of yours is
@@ -466,10 +466,11 @@ See [`docs/companion-pages.md`](docs/companion-pages.md).
 
 ### Launchers
 
-- `SUPER+Space` opens or closes Spotlight: apps, a calculator (`=2+2`), a command runner
+- `SUPER+Space` opens or closes look=see>do_ (say "look see do"; `lookseedo` in names and
+  scripts), the launcher: apps, a calculator (`=2+2`), a command runner
   (`>cmd`) and any installed search providers.
-- `SUPER+.` opens Spotlight at `:`, the emoji search. It needs an emoji provider (emobie);
-  without one Spotlight says "No emoji provider installed".
+- `SUPER+.` opens look=see>do_ at `:`, the emoji search. It needs an emoji provider (emobie);
+  without one look=see>do_ says "No emoji provider installed".
 - Tapping `SUPER` (left SUPER, pressed and released alone) opens or closes the app menu. It
   doesn't open when you press and release another key or mouse button while SUPER is held. On
   Hyprland 0.56 it can still open if you release SUPER while that other key is still down.
@@ -479,7 +480,7 @@ See [`docs/companion-pages.md`](docs/companion-pages.md).
 Scripts can drive them through the shell's IPC (ignored while the screen is locked):
 
 ```bash
-qs ipc -p /usr/share/uq/shell call uq open spotlight    # or: close, toggle; spotlight | appmenu | quicksettings | powermenu
+qs ipc -p /usr/share/uq/shell call uq open lookseedo    # or: close, toggle; lookseedo | appmenu | quicksettings | powermenu
 ```
 
 `open` only opens and `close` only closes that surface; any other name is ignored. Each call
@@ -496,7 +497,7 @@ input or backlight device, the matching key does nothing.
 
 #### Search providers
 
-Any app can add rows to Spotlight by owning a D-Bus name on the session bus and dropping a
+Any app can add rows to look=see>do_ by owning a D-Bus name on the session bus and dropping a
 `.provider` file in `/usr/share/uq/launcher/` or `~/.local/share/uq/launcher/`
 (`$XDG_DATA_HOME/uq/launcher/`). If two files name the same `BusName`, the system one wins.
 

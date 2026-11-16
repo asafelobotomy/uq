@@ -224,6 +224,12 @@ impl Profile {
             }
             values.insert(key.clone(), json);
         }
+        // The launcher's shortcut was `uq.spotlight` before it became look=see>do_.
+        if let Some(Value::Object(kb)) = values.get_mut("keybinds")
+            && let Some(on) = kb.remove("uq.spotlight")
+        {
+            kb.entry("uq.lookseedo").or_insert(on);
+        }
         let profile = Profile {
             id,
             name,
@@ -777,8 +783,8 @@ profile = "performance"
 
     #[test]
     fn keybinds_domain_holds_shortcut_switches() {
-        let p = Profile::parse(&with("[keybinds]\n\"uq.spotlight\" = false\n")).unwrap();
-        assert_eq!(p.values["keybinds"], json!({"uq.spotlight": false}));
+        let p = Profile::parse(&with("[keybinds]\n\"uq.lookseedo\" = false\n")).unwrap();
+        assert_eq!(p.values["keybinds"], json!({"uq.lookseedo": false}));
         // The "newer version" refusal stays for a future domain; no domain uses it now.
         assert!(
             ProfileError::NeedsNewer("keybinds".into())
@@ -1048,5 +1054,20 @@ profile = "performance"
             read_file(&dir.path().join("none.toml")),
             Err(ProfileError::Unreadable(_))
         ));
+    }
+}
+
+#[cfg(test)]
+mod lookseedo_migration {
+    use super::*;
+
+    #[test]
+    fn old_launcher_shortcut_key_moves() {
+        let src = "format = 1\nid = \"p\"\nname = \"P\"\n[keybinds]\n\"uq.spotlight\" = false\n";
+        let p = Profile::parse(src).unwrap();
+        assert_eq!(
+            p.values["keybinds"],
+            serde_json::json!({"uq.lookseedo": false})
+        );
     }
 }

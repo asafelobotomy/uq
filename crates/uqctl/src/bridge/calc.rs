@@ -1,4 +1,4 @@
-//! Calculator provider for the Spotlight `=` queries.
+//! Calculator provider for the look=see>do_ `=` queries.
 //!
 //! Tokenizer plus precedence climbing with explicit stacks (no recursion), so
 //! hostile input cannot overflow the stack. Nothing here executes code.

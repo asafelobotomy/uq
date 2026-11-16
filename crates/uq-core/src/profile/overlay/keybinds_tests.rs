@@ -56,20 +56,20 @@ fn apply_skips_unknown_custom_ids() {
 
 #[test]
 fn profile_conflicts_refuse_the_apply() {
-    // Spotlight is off and one of your own holds Super + Space; the profile turns Spotlight on.
+    // look=see>do_ is off and one of your own holds Super + Space; the profile turns look=see>do_ on.
     let mut cur = State::default();
     cur.set_section(
         "keybinds",
-        json!({"overrides": [{"id": "uq.spotlight", "enabled": false}],
+        json!({"overrides": [{"id": "uq.lookseedo", "enabled": false}],
                "custom": [custom("Mine", "SUPER + Space")]}),
     )
     .unwrap();
     let before = cur.clone();
-    let p = profile("loud", "[keybinds]\n\"uq.spotlight\" = true\n");
+    let p = profile("loud", "[keybinds]\n\"uq.lookseedo\" = true\n");
     let e = apply(&cur, &p, &BTreeSet::new(), 0).unwrap_err();
     let text = e.to_string();
     assert!(
-        text.contains("Mine") && text.contains("Open Spotlight"),
+        text.contains("Mine") && text.contains("Open look=see>do_"),
         "{text}"
     );
     assert!(text.contains("Super + Space"), "{text}");

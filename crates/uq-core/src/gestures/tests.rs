@@ -107,10 +107,10 @@ fn conflicts_follow_hyprland() {
     // A modifier or another finger count is another trigger.
     let mut with_super = g(4, Direction::Up, Action::Close);
     with_super.modifier = Mods::parse("SUPER").unwrap();
-    assert!(validate(&[g(4, Direction::Up, Action::Spotlight), with_super.clone()]).is_ok());
+    assert!(validate(&[g(4, Direction::Up, Action::LookSeeDo), with_super.clone()]).is_ok());
     assert!(
         validate(&[
-            g(4, Direction::Up, Action::Spotlight),
+            g(4, Direction::Up, Action::LookSeeDo),
             g(3, Direction::Up, Action::Close)
         ])
         .is_ok()
@@ -271,7 +271,7 @@ fn defaults_are_the_two_spec_gestures() {
     );
     assert_eq!(
         (d[1].fingers, d[1].direction, d[1].action),
-        (4, Direction::Up, Action::Spotlight)
+        (4, Direction::Up, Action::LookSeeDo)
     );
     assert!(d.iter().all(|g| g.enabled));
     assert!(validate(&d).is_ok());
@@ -382,7 +382,7 @@ fn summary_lines_are_plain() {
     );
     let added = with(json!([
         {"fingers": 3, "direction": "horizontal", "action": "workspace", "enabled": true},
-        {"fingers": 4, "direction": "up", "action": "uq:spotlight", "enabled": true},
+        {"fingers": 4, "direction": "up", "action": "uq:lookseedo", "enabled": true},
         {"fingers": 3, "direction": "down", "action": "special", "enabled": true}]));
     assert_eq!(
         summary(&defaults_json, &added),
@@ -396,7 +396,7 @@ fn summary_lines_are_plain() {
     );
     let off = with(json!([
         {"fingers": 3, "direction": "horizontal", "action": "workspace", "enabled": true},
-        {"fingers": 4, "direction": "up", "action": "uq:spotlight", "enabled": false}]));
+        {"fingers": 4, "direction": "up", "action": "uq:lookseedo", "enabled": false}]));
     assert_eq!(
         summary(&defaults_json, &off),
         ["Touchpad gesture turned off: 4 fingers, swipe up"]

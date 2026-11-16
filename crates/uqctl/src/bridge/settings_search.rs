@@ -1,7 +1,7 @@
-//! Spotlight's Settings results: every page and setting the Settings app can show, read from
+//! look=see>do_'s Settings results: every page and setting the Settings app can show, read from
 //! `uq-settings --search-index` and matched with the same scorer Settings' own search uses.
 //!
-//! The list is read off the request path when Spotlight opens and the last read is missing,
+//! The list is read off the request path when look=see>do_ opens and the last read is missing,
 //! older than [`STALE_AFTER`] (plugin pages come and go) or the binary changed. Opening a row goes
 //! through `uqctl settings`' own path: a running Settings shows the page, else one starts in a
 //! scope of its own.

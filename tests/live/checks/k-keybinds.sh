@@ -7,7 +7,7 @@
 # What stays manual, and why:
 #   1   upgrading the package over a running one, moving generated.lua aside (the fallback keys
 #       are base.lua's, outside uqd) and pressing keys: needs a person and a real install
-#   2   that Super + K really opens Spotlight and Super + Space doesn't (a key press; SK2 checks
+#   2   that Super + K really opens look=see>do_ and Super + Space doesn't (a key press; SK2 checks
 #       that Hyprland has the new bind and no longer the old one)
 #   3   the editor naming "Close the window" before Save and Save staying disabled (Qt)
 #   4   starting Firefox in its own scope with its Apps and scaling fix, and `systemctl --user
@@ -56,11 +56,11 @@ sk1() {
     local rows n ids total
     rows=$("$UQCTL" keys list) || { bad "uqctl keys list failed"; return; }
     n=$(grep -c '^uq\.' <<<"$rows")
-    note "$n of uQ's shortcuts listed; spotlight: $(grep -P '^uq\.spotlight\t' <<<"$rows")"
+    note "$n of uQ's shortcuts listed; lookseedo: $(grep -P '^uq\.lookseedo\t' <<<"$rows")"
     expect_eq "rows in 'uqctl keys list' that are one of uQ's" "$(bus ListBinds | jq '[.binds[] | select(.custom | not)] | length')" "$n"
     [ "$n" -ge 50 ] || bad "expected at least 50 of uQ's shortcuts; observed $n"
     awk -F'\t' 'NF != 3' <<<"$rows" | grep -q . && bad "a row that isn't id, keys and label separated by tabs"
-    expect_eq "Open Spotlight's keys" "$KB_DEFAULT_COMBO" "$(kb_row uq.spotlight | cut -f2)"
+    expect_eq "Open look=see>do_'s keys" "$KB_DEFAULT_COMBO" "$(kb_row uq.lookseedo | cut -f2)"
     expect_eq "Close the window's keys" "SUPER + Q" "$(kb_row uq.close | cut -f2)"
     [ -n "${HAVE[hypr]:-}" ] || { note "Hyprland's own binds need Hyprland"; return; }
     total=$(grep -c 'description = "uq:' "$CFG/hypr/uq/generated.lua")
@@ -71,42 +71,42 @@ sk1() {
     local row bad_rows
     bad_rows=$(explain keybinds | jq -r 'to_entries[] | select(.value.source == "runtime" or .value.source == "error") | .key' | tr '\n' ' ')
     [ -z "$bad_rows" ] || bad "Explain says these shortcuts aren't live, or the last write was refused: $bad_rows"
-    row=$(explain keybinds | jq -c '.["binds.uq.spotlight"]')
+    row=$(explain keybinds | jq -c '.["binds.uq.lookseedo"]')
     note "Explain: $row"
-    expect_eq "Open Spotlight, live in Hyprland" "space/64" "$(kb_live uq.spotlight)"
+    expect_eq "Open look=see>do_, live in Hyprland" "space/64" "$(kb_live uq.lookseedo)"
 }
 
 check SK2 "Rebind a default: generated.lua and Hyprland follow, the old keys go, reset and Undo bring them back" sk2
 sk2() {
     local r e0 e id
     e0=$(kb_errors)
-    r=$(kb_merge '.overrides += [{id: "uq.spotlight", combo: "SUPER + K"}]') || { bad "rebinding: $r"; return; }
-    gen_has 'hl.bind("SUPER + K", hl.dsp.global("uq:spotlight")' || bad "generated.lua has no SUPER + K bind for spotlight"
-    gen_has 'hl.bind("SUPER + Space", hl.dsp.global("uq:spotlight")' && bad "generated.lua still binds SUPER + Space to spotlight"
-    expect_eq "Open Spotlight in 'keys list'" "SUPER + K" "$(kb_row uq.spotlight | cut -f2)"
+    r=$(kb_merge '.overrides += [{id: "uq.lookseedo", combo: "SUPER + K"}]') || { bad "rebinding: $r"; return; }
+    gen_has 'hl.bind("SUPER + K", hl.dsp.global("uq:lookseedo")' || bad "generated.lua has no SUPER + K bind for lookseedo"
+    gen_has 'hl.bind("SUPER + Space", hl.dsp.global("uq:lookseedo")' && bad "generated.lua still binds SUPER + Space to lookseedo"
+    expect_eq "Open look=see>do_ in 'keys list'" "SUPER + K" "$(kb_row uq.lookseedo | cut -f2)"
     e=$(newest); note "History: $(jq -r .summary <<<"$e")"
-    [[ $(jq -r .summary <<<"$e") == *"Open Spotlight"*"now uses Super + K" ]] || bad "expected the History row to say Open Spotlight now uses Super + K; observed $(jq -r .summary <<<"$e")"
+    [[ $(jq -r .summary <<<"$e") == *"Open look=see>do_"*"now uses Super + K" ]] || bad "expected the History row to say Open look=see>do_ now uses Super + K; observed $(jq -r .summary <<<"$e")"
     if [ -n "${HAVE[hypr]:-}" ]; then
-        wait_for 5 kb_live_is uq.spotlight k/64 || bad "Hyprland's bind for spotlight: expected k/64; observed $(kb_live uq.spotlight)"
-        expect_eq "Explain for spotlight" uq "$(kb_src uq.spotlight)"
-        [ "$(hc binds -j | jq '[.[] | select(.description == "uq:uq.spotlight")] | length')" = 1 ] || bad "Hyprland has more than one spotlight bind"
+        wait_for 5 kb_live_is uq.lookseedo k/64 || bad "Hyprland's bind for lookseedo: expected k/64; observed $(kb_live uq.lookseedo)"
+        expect_eq "Explain for lookseedo" uq "$(kb_src uq.lookseedo)"
+        [ "$(hc binds -j | jq '[.[] | select(.description == "uq:uq.lookseedo")] | length')" = 1 ] || bad "Hyprland has more than one lookseedo bind"
         expect_eq "Hyprland errors after the rebind" "$e0" "$(kb_errors)"
     fi
-    r=$("$UQCTL" keys reset uq.spotlight) || bad "keys reset: $r"
+    r=$("$UQCTL" keys reset uq.lookseedo) || bad "keys reset: $r"
     note "reset: $r"
-    gen_has 'hl.bind("SUPER + Space", hl.dsp.global("uq:spotlight")' || bad "generated.lua has no SUPER + Space bind after the reset"
-    gen_has 'hl.bind("SUPER + K", hl.dsp.global("uq:spotlight")' && bad "generated.lua still binds SUPER + K after the reset"
-    expect_eq "Open Spotlight after the reset" "$KB_DEFAULT_COMBO" "$(kb_row uq.spotlight | cut -f2)"
+    gen_has 'hl.bind("SUPER + Space", hl.dsp.global("uq:lookseedo")' || bad "generated.lua has no SUPER + Space bind after the reset"
+    gen_has 'hl.bind("SUPER + K", hl.dsp.global("uq:lookseedo")' && bad "generated.lua still binds SUPER + K after the reset"
+    expect_eq "Open look=see>do_ after the reset" "$KB_DEFAULT_COMBO" "$(kb_row uq.lookseedo | cut -f2)"
     [ -z "${HAVE[hypr]:-}" ] || {
-        wait_for 5 kb_live_is uq.spotlight space/64 || bad "Hyprland's bind after the reset: expected space/64; observed $(kb_live uq.spotlight)"
-        expect_eq "Explain after the reset" default "$(kb_src uq.spotlight)"
+        wait_for 5 kb_live_is uq.lookseedo space/64 || bad "Hyprland's bind after the reset: expected space/64; observed $(kb_live uq.lookseedo)"
+        expect_eq "Explain after the reset" default "$(kb_src uq.lookseedo)"
     }
     # Undo of a rebind, from History.
-    r=$(kb_merge '.overrides += [{id: "uq.spotlight", combo: "SUPER + K"}]') || bad "rebinding again: $r"
+    r=$(kb_merge '.overrides += [{id: "uq.lookseedo", combo: "SUPER + K"}]') || bad "rebinding again: $r"
     id=$(newest_id)
     r=$(bus Undo sb "$id" false) || bad "Undo: $r"
-    expect_eq "Open Spotlight after Undo" "$KB_DEFAULT_COMBO" "$(kb_row uq.spotlight | cut -f2)"
-    [ -z "${HAVE[hypr]:-}" ] || wait_for 5 kb_live_is uq.spotlight space/64 || bad "Hyprland's bind after Undo: observed $(kb_live uq.spotlight)"
+    expect_eq "Open look=see>do_ after Undo" "$KB_DEFAULT_COMBO" "$(kb_row uq.lookseedo | cut -f2)"
+    [ -z "${HAVE[hypr]:-}" ] || wait_for 5 kb_live_is uq.lookseedo space/64 || bad "Hyprland's bind after Undo: observed $(kb_live uq.lookseedo)"
     # A shortcut turned off has no bind at all.
     r=$(kb_merge '.overrides += [{id: "uq.close", enabled: false}]') || bad "turning Close off: $r"
     gen_bind uq.close >/dev/null && bad "generated.lua still binds Close while it is off"
@@ -125,8 +125,8 @@ sk3() {
     r=$(kb_merge '.custom += [{name: "uqlive q", combo: "SUPER + Q", action: {kind: "command", command: "foot"}}]') && bad "a shortcut on Super + Q was accepted"
     note "custom on Super + Q: $r"
     [[ $r == *"uqlive q"* && $r == *"Close the window"* && $r == *"Super + Q"* ]] || bad "expected a refusal naming both shortcuts; observed $r"
-    r=$(kb_merge '.overrides += [{id: "uq.spotlight", combo: "SUPER + Q"}]') && bad "Spotlight on Super + Q was accepted"
-    [[ $r == *"Open Spotlight"* && $r == *"Close the window"* ]] || bad "expected both names in the refusal; observed $r"
+    r=$(kb_merge '.overrides += [{id: "uq.lookseedo", combo: "SUPER + Q"}]') && bad "look=see>do_ on Super + Q was accepted"
+    [[ $r == *"Open look=see>do_"* && $r == *"Close the window"* ]] || bad "expected both names in the refusal; observed $r"
     for c in 'SUPER + Nonsensekey' 'SUPER + CAPS + A' 'SUPER' 'A + B' ''; do
         r=$(kb_merge ".custom += [{name: \"uqlive bad\", combo: \"$c\", action: {kind: \"command\", command: \"foot\"}}]") && bad "the combo '$c' was accepted"
         note "'$c': $r"
@@ -277,7 +277,7 @@ sk8() {
     r=$(bus ProfileOff) || bad "ProfileOff: $r"
     gen_bind uq.close >/dev/null || bad "generated.lua has no Close bind after Back to normal"
     [ -z "${HAVE[hypr]:-}" ] || wait_for 5 kb_live_is uq.close q/64 || bad "Close's bind didn't come back: $(kb_live uq.close)"
-    r=$(bus SetProfile sb "$(printf 'format = 1\nid = "%s-x"\nname = "uqlive x"\n\n[keybinds]\n"uq.spotlight" = "SUPER + K"\n' "$LIVE_PREFIX")" false) && bad "a profile holding keys for a shortcut was accepted"
+    r=$(bus SetProfile sb "$(printf 'format = 1\nid = "%s-x"\nname = "uqlive x"\n\n[keybinds]\n"uq.lookseedo" = "SUPER + K"\n' "$LIVE_PREFIX")" false) && bad "a profile holding keys for a shortcut was accepted"
     note "keys in a profile: $r"
     r=$(bus SetProfile sb "$(printf 'format = 1\nid = "%s-y"\nname = "uqlive y"\n\n[keybinds."k-1234"]\ncommand = "foot"\n' "$LIVE_PREFIX")" false) && bad "a profile holding a command was accepted"
     note "a command in a profile: $r"
@@ -287,7 +287,7 @@ check SK9 "History and restore: undo an added shortcut; restoring a point takes 
 sk9() {
     local r p id
     p=$(bus SaveRestorePoint s "uqlive keys") || { bad "save: $p"; return; }
-    r=$(kb_merge '.overrides += [{id: "uq.spotlight", combo: "SUPER + K"}]') || bad "rebinding: $r"
+    r=$(kb_merge '.overrides += [{id: "uq.lookseedo", combo: "SUPER + K"}]') || bad "rebinding: $r"
     r=$(kb_merge '.custom += [{name: "uqlive own", combo: "SUPER + SHIFT + F8", action: {kind: "command", command: "foot"}}]') || bad "adding: $r"
     id=$(section keybinds | jq -r '.custom[] | select(.name == "uqlive own") | .id')
     note "History: $(history_json 2 | jq -r '[.[].summary] | join(" / ")')"
@@ -295,11 +295,11 @@ sk9() {
     r=$(bus Undo sb "$(newest_id)" false) || bad "Undo of the added shortcut: $r"
     gen_bind "$id" >/dev/null && bad "Undo left the added shortcut in generated.lua"
     expect_eq "custom shortcuts after Undo" 0 "$(section keybinds | jq '.custom | length')"
-    expect_eq "Open Spotlight after Undo (the rebind stays)" "SUPER + K" "$(kb_row uq.spotlight | cut -f2)"
+    expect_eq "Open look=see>do_ after Undo (the rebind stays)" "SUPER + K" "$(kb_row uq.lookseedo | cut -f2)"
     kb_merge '.custom += [{name: "uqlive own", combo: "SUPER + SHIFT + F8", action: {kind: "command", command: "foot"}}]' >/dev/null
     r=$(bus Restore s "$p") || bad "Restore: $r"
-    expect_eq "Open Spotlight after the restore" "$KB_DEFAULT_COMBO" "$(kb_row uq.spotlight | cut -f2)"
+    expect_eq "Open look=see>do_ after the restore" "$KB_DEFAULT_COMBO" "$(kb_row uq.lookseedo | cut -f2)"
     expect_eq "custom shortcuts after the restore" 0 "$(section keybinds | jq '.custom | length')"
-    [ -z "${HAVE[hypr]:-}" ] || wait_for 5 kb_live_is uq.spotlight space/64 || bad "Hyprland's spotlight bind after the restore: $(kb_live uq.spotlight)"
+    [ -z "${HAVE[hypr]:-}" ] || wait_for 5 kb_live_is uq.lookseedo space/64 || bad "Hyprland's lookseedo bind after the restore: $(kb_live uq.lookseedo)"
     bus DeleteRestorePoint s "$p" >/dev/null
 }

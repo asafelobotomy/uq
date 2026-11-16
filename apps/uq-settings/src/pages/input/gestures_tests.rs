@@ -43,7 +43,7 @@ async fn defaults_listed_when_null() {
     assert_eq!(rows[0]["enabled"], true);
     assert_eq!(rows[0]["gesture"]["action"], "workspace");
     assert_eq!(rows[1]["label"], "4 fingers, swipe up");
-    assert_eq!(rows[1]["action_label"], "Open Spotlight");
+    assert_eq!(rows[1]["action_label"], "Open look=see>do_");
     assert!(out.state["input"].get("gestures").is_none());
     assert_eq!(stored(&r), None);
     assert_eq!(out.state["clashes"], json!({}));

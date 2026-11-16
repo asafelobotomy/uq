@@ -5,7 +5,7 @@
 
 // The built-in groups, in the order they show after Apps (a custom order comes first). Other
 // providers follow them.
-var BUILTIN_ORDER = ["web", "calc", "run", "windows", "settings", "files:folders", "files:documents",
+var BUILTIN_ORDER = ["web", "calc", "run", "windows", "commands", "settings", "files:folders", "files:documents",
                      "files:images", "files:audio", "files:video", "files:code", "files:archives",
                      "files:other", "files:contents", "files:system"];
 
@@ -159,12 +159,14 @@ function merge(apps, providerGroups, generation, order) {
                     items: g.items });
     }
     var custom = Array.isArray(order) ? order : [];
+    // A custom position first, then the built-in order (also between the groups of one files
+    // preference), then the name.
     var rank = function (p) {
-        var c = custom.indexOf(p.provider);
-        if (c >= 0)
-            return c;
+        // Every files:<type> group is ordered (and switched off) as "files".
+        var pid = String(p.provider).indexOf("files:") === 0 ? "files" : p.provider;
+        var c = custom.indexOf(pid);
         var b = BUILTIN_ORDER.indexOf(p.provider);
-        return custom.length + (b >= 0 ? b : BUILTIN_ORDER.length);
+        return (c >= 0 ? c : custom.length) * 1000 + (b >= 0 ? b : BUILTIN_ORDER.length);
     };
     live.sort(function (a, b) {
         var d = rank(a) - rank(b);
@@ -190,6 +192,9 @@ function merge(apps, providerGroups, generation, order) {
             var its = groups[k].items;
             for (var m = 0; m < its.length; m++) {
                 var s = Number(its[m].score) || 0;
+                // Commands that end the session are never offered as the top hit.
+                if (its[m].noTop === true)
+                    continue;
                 if (s > bestScore) {
                     bestScore = s;
                     topHit = { provider: groups[k].provider, providerName: groups[k].providerName,

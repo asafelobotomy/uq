@@ -141,11 +141,11 @@ static DEFAULTS: [Default; 60] = [
         mouse: false,
     },
     Default {
-        id: "uq.spotlight",
-        label: "Open Spotlight",
+        id: "uq.lookseedo",
+        label: "Open look=see>do_",
         group: Group::AppsAndDesktop,
         combo: Some("SUPER + Space"),
-        action: DefaultAction::Global("spotlight"),
+        action: DefaultAction::Global("lookseedo"),
         locked: false,
         repeating: false,
         release: false,
@@ -153,7 +153,7 @@ static DEFAULTS: [Default; 60] = [
     },
     Default {
         id: "uq.emoji",
-        label: "Open Spotlight for emoji",
+        label: "Open look=see>do_ for emoji",
         group: Group::AppsAndDesktop,
         combo: Some("SUPER + period"),
         action: DefaultAction::Global("emoji"),
@@ -806,7 +806,10 @@ mod tests {
             );
             assert!(!d.label.is_empty());
         }
-        assert_eq!(default_of("uq.spotlight").unwrap().label, "Open Spotlight");
+        assert_eq!(
+            default_of("uq.lookseedo").unwrap().label,
+            "Open look=see>do_"
+        );
         assert!(default_of("uq.nope").is_none());
     }
 
@@ -890,7 +893,7 @@ mod tests {
         );
         // The launcher rows are never locked; base.lua says the same line by line.
         for id in [
-            "uq.spotlight",
+            "uq.lookseedo",
             "uq.emoji",
             "uq.appmenu",
             "uq.quick-settings",

@@ -39,7 +39,7 @@ pub fn find<K: Ord + Clone>(items: &[(K, &str, &str)]) -> Vec<Conflict> {
     out
 }
 
-/// `“Screenshot” and “Open Spotlight” both use Super + K.` (the later one first).
+/// `“Screenshot” and “Open look=see>do_” both use Super + K.` (the later one first).
 pub fn message(c: &Conflict) -> String {
     format!(
         "“{}” and “{}” both use {}.",

@@ -51,8 +51,8 @@ pub enum Action {
     Fullscreen,
     #[serde(rename = "float")]
     Float,
-    #[serde(rename = "uq:spotlight")]
-    Spotlight,
+    #[serde(rename = "uq:lookseedo", alias = "uq:spotlight")]
+    LookSeeDo,
     #[serde(rename = "uq:quick-settings")]
     QuickSettings,
 }
@@ -288,7 +288,7 @@ impl Gesture {
 }
 
 /// uQ's own two gestures: three fingers sideways switch workspace, four fingers up open
-/// Spotlight.
+/// look=see>do_.
 pub fn defaults() -> Vec<Gesture> {
     vec![
         Gesture {
@@ -302,7 +302,7 @@ pub fn defaults() -> Vec<Gesture> {
         Gesture {
             fingers: 4,
             direction: Direction::Up,
-            action: Action::Spotlight,
+            action: Action::LookSeeDo,
             modifier: Mods::default(),
             workspace: None,
             enabled: true,
