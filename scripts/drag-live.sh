@@ -144,7 +144,16 @@ pids+=($!)
 exec 7>"$tmp/in"
 for _ in $(seq 1 50); do grep -q ready "$tmp/uqinput.out" && break; sleep 0.1; done
 grep -q ready "$tmp/uqinput.out" || fail "uqinput: $(cat "$tmp/uqinput.out")"
-send() { printf '%s\n' "$@" >&7; }
+sent=0
+send() { sent=$((sent + $#)); printf '%s\n' "$@" >&7; }
+# Wait until uqinput has done everything sent so far (it answers "ok" to each command).
+drain() {
+    for _ in $(seq 1 300); do
+        [ "$(grep -c '^ok' "$tmp/uqinput.out")" -ge "$sent" ] && return 0
+        sleep 0.1
+    done
+    fail "uqinput didn't finish its commands ($(tail -n 3 "$tmp/uqinput.out"))"
+}
 
 read -r cx cy < <(hc clients -j | jq -r --arg t "$grab" --argjson f "$grab_dx" \
     '.[] | select(.title==$t) | "\((.at[0] + .size[0] * $f)|floor) \((.at[1] + .size[1]/2)|floor)"')
@@ -154,15 +163,15 @@ send "move $cx $cy" "sleep 300" "mod super down" "sleep 100" "button 272 down" "
 if [ "$scenario" = half-pair ]; then
     for i in 1 2 3 4 5 6 7 8 9 10 11 12; do send "move $((cx + i * 20)) $((cy + i * 10))" "sleep 40"; done
     send "sleep 1200"
-    echo "--- while held"; snap held
+    drain; echo "--- while held"; snap held
     for i in 11 10 9 8 7 6 5 4 3 2 1 0; do send "move $((cx + i * 20)) $((cy + i * 10))" "sleep 40"; done
 else
     for i in 1 2 3 4 5 6 7 8 9 10; do send "move $((cx - i * 8)) $((cy + i * 4))" "sleep 40"; done
     send "sleep 1200"
-    echo "--- while held"; snap held
+    drain; echo "--- while held"; snap held
 fi
 send "sleep 300" "button 272 up" "sleep 100" "mod super up"
-settle 3
+drain; settle 2
 echo "--- after"
 snap after
 
