@@ -13,7 +13,9 @@ tests/uq/tst_components.qml      checks the stub itself (keep or drop)
 1. In `tst_page.qml`, point `pageUrl` at your page: `Qt.resolvedUrl("../../uq/pages/<id>/Page.qml")`.
 2. Give `FakeContext` the answers your page expects: `commands` (command id → result, or a
    function of the arguments), `dbus` (method or property → `{value}` or `{error}`), and
-   `confirmed`/`confirms` for commands with `confirm`. Every request is logged in `calls`.
+   `confirmed`/`confirms` for commands with `confirm`, and `events` (command id → the lines a
+   `ctx.command.stream` of it delivers before its `commands` answer). Every request is logged in
+   `calls`.
    `fake.change(id)` stands for a change to a watched command's files or signals: each
    `ctx.command.watch` of it runs again.
 3. Run it:

@@ -148,7 +148,7 @@ fn limits_and_needs() {
     assert!(err(&one("float = true\nname = \"a\\u0007\"")).contains("name"));
     let e = err(&one("float = \"yes\""));
     assert!(e.contains("line 4") && e.contains("bool"), "{e}");
-    assert!(err(&format!("uq_api = 3\n{ROMFORGE}")).contains("needs a newer uQ"));
+    assert!(err(&format!("uq_api = 4\n{ROMFORGE}")).contains("needs a newer uQ"));
     assert!(err(&format!("uq_api = \"1\"\n{ROMFORGE}")).contains("uq_api"));
 }
 

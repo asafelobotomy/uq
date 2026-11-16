@@ -387,3 +387,34 @@ fn pages_may_ship_logic_js_and_components() {
     assert!(out.contains("StatusRow.qml:3: Text"), "{out}");
     assert!(out.contains("logic.js:2: Text"), "{out}");
 }
+
+/// `uq_api = 3` pages may stream and preview; a page that says less is refused, and so is a
+/// `ctx.command.stream` call in a page that says less.
+#[test]
+fn api3_features_need_uq_api_3() {
+    let d = tempfile::tempdir().unwrap();
+    let uq = d.path().join("uq");
+    good_folder(&uq);
+    let page = |api: u32| {
+        put(
+            &uq.join("pages/demo/page.toml"),
+            &format!(
+                "uq_api = {api}\nid = \"demo\"\nname = \"Demo\"\nqml = \"Page.qml\"\n\
+                 [[command]]\nid = \"run\"\nargv = [\"/usr/bin/env\", \"run\"]\noutput = \"ndjson\"\n\
+                 confirm = \"Run it?\"\npreview = \"plan\"\n\
+                 [[command]]\nid = \"plan\"\nargv = [\"/usr/bin/env\", \"plan\"]\noutput = \"json\"\n"
+            ),
+        );
+    };
+    put(
+        &uq.join("pages/demo/Page.qml"),
+        "import QtQuick\nItem {\n    property var ctx\n    Component.onCompleted: ctx.command.stream(\"run\", [], e => {}, r => {})\n}\n",
+    );
+    page(3);
+    let (ok, out) = uqctl(&["integrations", "check", "--no-programs", uq.to_str().unwrap()]);
+    assert!(ok, "{out}");
+    page(2);
+    let (ok, out) = uqctl(&["integrations", "check", "--no-programs", uq.to_str().unwrap()]);
+    assert!(!ok, "{out}");
+    assert!(out.contains("needs uq_api = 3"), "{out}");
+}

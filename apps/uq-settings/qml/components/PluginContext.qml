@@ -4,6 +4,10 @@
 //                                               {code, output} or {error, …}
 //   ctx.dbus.call(method, args, callback[, target])
 //   ctx.dbus.get(property, callback[, target])  callback gets {value} or {error}
+//   ctx.command.stream(id, args, onEvent, onDone)
+//                                               (uq_api 3) a [[command]] with output = "ndjson":
+//                                               onEvent(event) for each line it prints, then
+//                                               onDone(result) as for run, with output null
 //   ctx.command.watch(id, callback)             run a [[command]] with a `watch` table now and
 //                                               again after each change; returns a handle
 //   ctx.command.unwatch(handle)                 stop it (closing the page stops them all)
@@ -11,8 +15,8 @@
 //                                               does; callback gets {ok: true} or {error}
 // `target` is {path, interface}, needed only by a page without a [dbus] table.
 // Everything goes through `host` (the PluginHost singleton); without one every request fails
-// with an error. A command with `confirm` raises confirmNeeded; the page shows the dialog and
-// calls answer(). Free of Kirigami so it can be tested on its own.
+// with an error. A command with `confirm` raises confirmNeeded (with its previewed plan, if it has
+// a `preview`); the page shows the dialog and calls answer(). Free of Kirigami so it can be tested on its own.
 import QtQuick
 
 QtObject {
@@ -25,16 +29,20 @@ QtObject {
     property var theme: ({})
     /// request id -> callback, for this page's requests only.
     property var callbacks: ({})
+    /// request id -> onEvent, for ctx.command.stream requests.
+    property var streams: ({})
     /// watch id -> {id, callback, running, again}: this page's followed commands.
     property var watches: ({})
 
     /// A command of this page asks to be confirmed: show `text` and call answer(request, …).
-    signal confirmNeeded(int request, string text)
+    /// `plan` is the previewed plan ({summary, changes, more, would_refuse, reason}) or null.
+    signal confirmNeeded(int request, string text, var plan)
 
     readonly property var ctx: ({
             theme: context.theme,
             command: {
                 run: (id, args, callback) => context.run(id, args, callback),
+                stream: (id, args, onEvent, onDone) => context.stream(id, args, onEvent, onDone),
                 watch: (id, callback) => context.watch(id, callback),
                 unwatch: handle => context.unwatch(handle)
             },
@@ -76,6 +84,15 @@ QtObject {
         if (!context.host)
             return context.unavailable(callback);
         return context.track(context.host.runCommand(context.pageId, String(id), JSON.stringify(args || [])), callback);
+    }
+
+    function stream(id, args, onEvent, onDone) {
+        if (!context.host || typeof context.host.streamCommand !== "function")
+            return context.unavailable(onDone);
+        const request = context.host.streamCommand(context.pageId, String(id), JSON.stringify(args || []));
+        if (typeof onEvent === "function")
+            context.streams[request] = onEvent;
+        return context.track(request, onDone);
     }
 
     function call(method, args, callback, target) {
@@ -161,6 +178,7 @@ QtObject {
                 return;
             const callback = context.callbacks[request];
             delete context.callbacks[request];
+            delete context.streams[request];
             let result;
             try {
                 result = JSON.parse(resultJson);
@@ -176,9 +194,28 @@ QtObject {
             context.rerun(watch);
         }
 
-        function onConfirmRequested(request, page, text) {
-            if (request in context.callbacks)
-                context.confirmNeeded(request, text);
+        function onProgress(request, eventJson) {
+            if (!(request in context.streams))
+                return;
+            let event;
+            try {
+                event = JSON.parse(eventJson);
+            } catch (e) {
+                return;
+            }
+            context.finish(context.streams[request], event);
+        }
+
+        function onConfirmRequested(request, page, text, planJson) {
+            if (!(request in context.callbacks))
+                return;
+            let plan = null;
+            try {
+                plan = planJson ? JSON.parse(planJson) : null;
+            } catch (e) {
+                plan = null;
+            }
+            context.confirmNeeded(request, text, plan);
         }
     }
 }

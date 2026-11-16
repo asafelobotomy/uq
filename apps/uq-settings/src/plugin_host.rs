@@ -6,8 +6,14 @@
 //!
 //! - **Commands** run only as declared in the page's `[[command]]` tables, through
 //!   `uq_core::integration::command`. A command with `confirm` first emits
-//!   `confirmRequested(id, page, text)` and runs only after `answer(id, true)`; the text is the
-//!   manifest's, with `%s` filled from the first argument. One run per command at a time.
+//!   `confirmRequested(id, page, text, plan)` and runs only after `answer(id, true)`; the text is
+//!   the manifest's, with `%s` filled from the first argument. With `preview` (`uq_api` 3), the
+//!   preview command runs first and its answer, cleaned by `uq_core::integration::plan`, is the
+//!   `plan` (JSON; "" without a preview). A plan that says `would_refuse` can't be confirmed.
+//!   One run per command at a time.
+//! - **Streams** (`ctx.command.stream`, `uq_api` 3): a command with `output = "ndjson"` run with
+//!   `stream_command` emits `progress(id, event)` for each line it prints, then `finished` as
+//!   usual (its `output` is `null`: the events were not kept).
 //! - **D-Bus** reaches only the page's own name. With a `[dbus]` table, only its path, interface
 //!   and listed methods and properties (no target is passed). With only Phase 3's `dbus_name`,
 //!   the page names the object path and interface, and any method or property on that name is
@@ -37,7 +43,8 @@ use serde_json::{Value, json};
 use uq_core::integration::command::{self, BusySet, CommandError, Runner};
 use uq_core::integration::command_watch::{self, WATCH_DEBOUNCE, WatchSpec};
 use uq_core::integration::dbus_json::{self, Target};
-use uq_core::integration::manifest::{Bus, CommandSpec, PageManifest};
+use uq_core::integration::manifest::{Bus, CommandSpec, Output, PageManifest};
+use uq_core::integration::plan;
 
 use crate::plugins;
 
@@ -59,6 +66,16 @@ pub mod qobject {
         /// request id.
         #[qinvokable]
         fn run_command(
+            self: Pin<&mut PluginHost>,
+            page: &QString,
+            command: &QString,
+            args_json: &QString,
+        ) -> i32;
+
+        /// As `run_command` for a command with `output = "ndjson"`: `progress(request, event)` for
+        /// each line, then `finished` with `{code, output: null}` or `{error, …}`.
+        #[qinvokable]
+        fn stream_command(
             self: Pin<&mut PluginHost>,
             page: &QString,
             command: &QString,
@@ -112,14 +129,19 @@ pub mod qobject {
         #[qsignal]
         fn finished(self: Pin<&mut PluginHost>, request: i32, result_json: QString);
 
+        /// A streamed command printed one JSON line.
+        #[qsignal]
+        fn progress(self: Pin<&mut PluginHost>, request: i32, event_json: QString);
+
         /// A command needs the person's confirmation: show `text` (plain text) with Cancel and
-        /// Confirm, then call `answer`.
+        /// Confirm, then call `answer`. `plan_json` is the previewed plan, or "" for none.
         #[qsignal]
         fn confirm_requested(
             self: Pin<&mut PluginHost>,
             request: i32,
             page: QString,
             text: QString,
+            plan_json: QString,
         );
     }
 
@@ -230,6 +252,10 @@ struct Pending {
     page: String,
     spec: CommandSpec,
     args: Vec<String>,
+    /// Run as a stream (`stream_command`).
+    stream: bool,
+    /// The plan said `would_refuse`: Confirm can't run it, whatever the page sends.
+    refused: bool,
 }
 
 #[derive(Default)]
@@ -379,48 +405,141 @@ impl PluginHost {
     }
 
     fn run_command(
-        mut self: Pin<&mut Self>,
+        self: Pin<&mut Self>,
         page: &QString,
         command: &QString,
         args_json: &QString,
     ) -> i32 {
+        self.begin(page, command, args_json, false)
+    }
+
+    fn stream_command(
+        self: Pin<&mut Self>,
+        page: &QString,
+        command: &QString,
+        args_json: &QString,
+    ) -> i32 {
+        self.begin(page, command, args_json, true)
+    }
+
+    fn begin(
+        mut self: Pin<&mut Self>,
+        page: &QString,
+        command: &QString,
+        args_json: &QString,
+        stream: bool,
+    ) -> i32 {
         let id = self.as_mut().next_id();
         let page = page.to_string();
-        match prepare(
-            plugins::manifest(&page),
+        let manifest = plugins::manifest(&page);
+        let (spec, args) = match prepare(
+            manifest.clone(),
             &command.to_string(),
             &args_json.to_string(),
         ) {
-            Err(e) => self.deliver(id, error(e)),
-            Ok((spec, args)) => match spec.confirm_text(&args) {
-                Some(text) => {
-                    let (p, t) = (QString::from(&page), QString::from(&text));
-                    self.as_mut()
-                        .rust_mut()
-                        .pending
-                        .insert(id, Pending { page, spec, args });
-                    let _ = self
-                        .qt_thread()
-                        .queue(move |host| host.confirm_requested(id, p, t));
-                }
-                None => self.start(id, page, spec, args),
-            },
+            Ok(x) => x,
+            Err(e) => {
+                self.deliver(id, error(e));
+                return id;
+            }
+        };
+        if stream && spec.output != Output::Ndjson {
+            self.deliver(
+                id,
+                error(format!(
+                    "{} doesn't stream (it needs output = \"ndjson\")",
+                    spec.id
+                )),
+            );
+            return id;
         }
+        let Some(text) = spec.confirm_text(&args) else {
+            self.start(id, page, spec, args, stream);
+            return id;
+        };
+        let Some(preview) = spec.preview.clone() else {
+            self.ask(
+                id,
+                Pending {
+                    page,
+                    spec,
+                    args,
+                    stream,
+                    refused: false,
+                },
+                &text,
+                "",
+            );
+            return id;
+        };
+        // Work out what would change first; the person is asked only when that worked.
+        let pspec = manifest
+            .as_ref()
+            .and_then(|m| command::find(&m.commands, &preview).ok().cloned());
+        let (Some(pspec), Some(rt)) = (pspec, RUNTIME.get()) else {
+            self.deliver(id, error("can't work out what would change right now"));
+            return id;
+        };
+        let qt = self.qt_thread();
+        rt.spawn(async move {
+            let plan = match runner().run(&pspec, &args).await {
+                Ok(r) if r.code == 0 => plan::normalize(&r.output),
+                Ok(r) => Err(r.to_json()["error"]
+                    .as_str()
+                    .unwrap_or("it failed")
+                    .to_string()),
+                Err(e) => Err(e.to_string()),
+            };
+            let _ = qt.queue(move |mut host| match plan {
+                Ok(plan) => {
+                    let refused = plan["would_refuse"].as_bool().unwrap_or(false);
+                    let json = plan.to_string();
+                    host.as_mut().ask(
+                        id,
+                        Pending {
+                            page,
+                            spec,
+                            args,
+                            stream,
+                            refused,
+                        },
+                        &text,
+                        &json,
+                    );
+                }
+                Err(e) => {
+                    eprintln!("uq-settings: page {page}: preview of {}: {e}", spec.id);
+                    host.deliver(
+                        id,
+                        error(format!(
+                            "Couldn't work out what would change, so nothing was done: {e}"
+                        )),
+                    );
+                }
+            });
+        });
         id
+    }
+
+    /// Hold `pending` and show the question (and the plan, "" for none).
+    fn ask(mut self: Pin<&mut Self>, id: i32, pending: Pending, text: &str, plan_json: &str) {
+        let page = QString::from(&pending.page);
+        self.as_mut().rust_mut().pending.insert(id, pending);
+        self.confirm_requested(id, page, QString::from(text), QString::from(plan_json));
     }
 
     fn answer(mut self: Pin<&mut Self>, request: i32, confirmed: bool) {
         let Some(p) = self.as_mut().rust_mut().pending.remove(&request) else {
             return;
         };
-        if confirmed {
-            self.start(request, p.page, p.spec, p.args);
+        if confirmed && !p.refused {
+            self.start(request, p.page, p.spec, p.args, p.stream);
         } else {
             self.deliver(request, json!({"error": "Cancelled", "cancelled": true}));
         }
     }
 
-    fn start(&self, id: i32, page: String, spec: CommandSpec, args: Vec<String>) {
+    fn start(&self, id: i32, page: String, spec: CommandSpec, args: Vec<String>, stream: bool) {
         let token = match busy().try_acquire(&page, &spec.id) {
             Ok(t) => t,
             Err(e) => return self.deliver(id, command::error_json(&e)),
@@ -429,8 +548,17 @@ impl PluginHost {
             return self.deliver(id, error("commands can't run right now"));
         };
         let qt = self.qt_thread();
+        let events = self.qt_thread();
         rt.spawn(async move {
-            let result = runner().run(&spec, &args).await;
+            let result = if stream {
+                let mut on_event = move |v: Value| {
+                    let json = QString::from(&v.to_string());
+                    let _ = events.queue(move |host| host.progress(id, json));
+                };
+                runner().stream(&spec, &args, &mut on_event).await
+            } else {
+                runner().run(&spec, &args).await
+            };
             drop(token);
             let value = match &result {
                 Ok(r) => {

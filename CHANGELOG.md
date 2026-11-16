@@ -27,6 +27,14 @@ All notable changes to uQ are listed here. The format follows
   (or its first letter). The page test kit has stand-ins for all five, and
   `uqctl integrations check` refuses a page that uses them while saying `uq_api = 1`. Pages that
   say `uq_api = 1` work as before.
+- **App pages can show progress and preview a change (`uq_api = 3`).** A command with
+  `output = "ndjson"` can be run with `ctx.command.stream(id, args, onEvent, onDone)`, which
+  hands the page each JSON line as it arrives (for a progress bar) instead of one answer at the
+  end. A command with `confirm` can also say `preview = "<command id>"`: Settings first runs that
+  read and shows what it would change, grouped, with sizes and whether each can be put back,
+  before the person confirms; a plan that would be refused offers no Confirm. The page test kit's
+  `FakeContext` has `stream`, and `uqctl integrations check` refuses these in a page that says
+  an older `uq_api`.
 
 ### Changed
 

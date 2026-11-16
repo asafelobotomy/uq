@@ -198,6 +198,24 @@ pub fn api2_hits(text: &str) -> Vec<(usize, String)> {
         .collect()
 }
 
+/// `ctx.command.stream(`, which a page may call only with `uq_api = 3` or later.
+static API3_CALL: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"\bcommand\s*\.\s*stream\s*\(").unwrap_or_else(|e| panic!("bad api3 regex: {e}"))
+});
+
+/// Each call that needs `uq_api = 3`, as `(line, call)`.
+pub fn api3_hits(text: &str) -> Vec<(usize, String)> {
+    text.lines()
+        .enumerate()
+        .filter(|(_, line)| !line.trim_start().starts_with("//"))
+        .flat_map(|(i, line)| {
+            API3_CALL
+                .find_iter(line)
+                .map(move |_| (i + 1, "ctx.command.stream".to_string()))
+        })
+        .collect()
+}
+
 fn sorted_entries(dir: &Path) -> Result<Vec<PathBuf>, String> {
     let mut v: Vec<PathBuf> = std::fs::read_dir(dir)
         .map_err(|e| format!("{}: {e}", dir.display()))?
@@ -251,23 +269,33 @@ impl Checker {
         }
     }
 
-    /// A page below `uq_api = 2` that uses a component added in 2: an older uQ would show
+    /// A page below `uq_api = 3` (or 2) that uses a component or call added later: an older uQ would show
     /// "This page couldn't load" instead of "needs a newer uQ".
-    fn api2_folder(&mut self, dir: &Path, api: u32) {
+    fn api_folder(&mut self, dir: &Path, api: u32) {
         let Ok(files) = sorted_entries(dir) else {
             return;
         };
         for f in files {
             if f.is_dir() {
-                self.api2_folder(&f, api);
-            } else if f.extension().is_some_and(|x| x == "qml")
+                self.api_folder(&f, api);
+            } else if (f.extension().is_some_and(|x| x == "qml" || x == "js"))
                 && let Ok(text) = std::fs::read_to_string(&f)
             {
-                for (n, name) in api2_hits(&text) {
-                    self.problems.push(format!(
-                        "{}:{n}: {name} needs uq_api = 2 in page.toml (it says {api})",
-                        f.display()
-                    ));
+                if api < 2 && f.extension().is_some_and(|x| x == "qml") {
+                    for (n, name) in api2_hits(&text) {
+                        self.problems.push(format!(
+                            "{}:{n}: {name} needs uq_api = 2 in page.toml (it says {api})",
+                            f.display()
+                        ));
+                    }
+                }
+                if api < 3 {
+                    for (n, name) in api3_hits(&text) {
+                        self.problems.push(format!(
+                            "{}:{n}: {name} needs uq_api = 3 in page.toml (it says {api})",
+                            f.display()
+                        ));
+                    }
                 }
             }
         }
@@ -306,8 +334,8 @@ impl Checker {
                 Ok((cmds, page_api)) => {
                     self.counts[usize::from(kind != "widget")] += 1;
                     self.commands(&p, &cmds);
-                    if let Some(api) = page_api.filter(|a| *a < 2) {
-                        self.api2_folder(&p, api);
+                    if let Some(api) = page_api.filter(|a| *a < 3) {
+                        self.api_folder(&p, api);
                     }
                 }
                 Err(e) => self.problem(&p, e),
@@ -556,6 +584,19 @@ mod tests {
                 (3, "SettingsTab".to_string()),
                 (6, "UqAppIcon".to_string()),
             ]
+        );
+    }
+
+    #[test]
+    fn api3_calls_are_found() {
+        let text = "ctx.command.run(\"a\", [], cb);\n\
+                    // ctx.command.stream(\"b\") is a comment\n\
+                    host.ctx.command.stream(\"c\", [], ev, done);\n\
+                    const s = ctx.command\n  .stream(x);\n";
+        assert_eq!(
+            api3_hits(text),
+            [(3, "ctx.command.stream".to_string())],
+            "a call split over two lines is not found: keep it on one"
         );
     }
 

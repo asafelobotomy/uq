@@ -356,7 +356,7 @@ mod tests {
         put(&r.widgets.join("needs/W.qml"), "Item {}\n");
         put(
             &r.widgets.join("future/widget.toml"),
-            "uq_api = 3\nid = \"future\"\nshiny = true\n",
+            "uq_api = 4\nid = \"future\"\nshiny = true\n",
         );
         put(
             &r.pages.join("tailscale/page.toml"),

@@ -266,15 +266,15 @@ fn widget_rejects_every_bad_key() {
 
 #[test]
 fn newer_uq_api_is_refused_before_strict_checks() {
-    let text = "uq_api = 3\nid = \"x\"\nbrand_new_key = true\n";
-    assert_eq!(parse_widget(text), Err(ManifestError::NeedsNewerUq(3)));
+    let text = "uq_api = 4\nid = \"x\"\nbrand_new_key = true\n";
+    assert_eq!(parse_widget(text), Err(ManifestError::NeedsNewerUq(4)));
     assert!(
         parse_widget(text)
             .unwrap_err()
             .to_string()
             .contains("needs a newer uQ")
     );
-    assert_eq!(parse_page(text), Err(ManifestError::NeedsNewerUq(3)));
+    assert_eq!(parse_page(text), Err(ManifestError::NeedsNewerUq(4)));
 }
 
 const PAGE: &str = "id = \"tailscale\"\nname = \"Tailscale\"\nqml = \"Page.qml\"\n";
@@ -483,4 +483,64 @@ fn small_validators() {
     assert!(valid_bus_name("org.a.B") && !valid_bus_name(":1.5") && !valid_bus_name("org"));
     assert!(valid_bin_name("tailscale") && valid_bin_name("g++"));
     assert!(!valid_bin_name("a/b") && !valid_bin_name(".hidden") && !valid_bin_name(""));
+}
+
+const API3_COMMANDS: &str = "[[command]]\nid = \"run\"\nargv = [\"/usr/bin/x\", \"run\"]\n\
+    output = \"ndjson\"\nargs = [{ name = \"app\", pattern = \"^[a-z]+$\" }]\n\
+    confirm = \"Run %s?\"\npreview = \"plan\"\n\
+    [[command]]\nid = \"plan\"\nargv = [\"/usr/bin/x\", \"run\", \"--dry-run\", \"--json\"]\n\
+    output = \"json\"\nargs = [{ name = \"app\", pattern = \"^[a-z]+$\" }]\n";
+
+#[test]
+fn page_api3_takes_ndjson_and_a_preview() {
+    let p = parse_page(&format!("uq_api = 3\n{PAGE}{API3_COMMANDS}")).unwrap();
+    assert_eq!(p.commands[0].output, Output::Ndjson);
+    assert_eq!(p.commands[0].preview.as_deref(), Some("plan"));
+}
+
+#[test]
+fn page_below_api3_is_refused_ndjson_and_preview() {
+    for api in ["uq_api = 1\n", "uq_api = 2\n", ""] {
+        let e = parse_page(&format!("{api}{PAGE}{API3_COMMANDS}")).unwrap_err();
+        assert!(e.to_string().contains("needs uq_api = 3"), "{e}");
+    }
+}
+
+#[test]
+fn a_preview_must_be_a_matching_read() {
+    let bad = |find: &str, with: &str| {
+        let text = format!("uq_api = 3\n{PAGE}{}", API3_COMMANDS.replace(find, with));
+        parse_page(&text).unwrap_err().to_string()
+    };
+    assert!(bad("preview = \"plan\"", "preview = \"nope\"").contains("not a declared command"));
+    assert!(bad("preview = \"plan\"", "preview = \"run\"").contains("itself"));
+    assert!(bad("confirm = \"Run %s?\"\n", "").contains("needs a confirm"));
+    let diff = format!(
+        "uq_api = 3\n{PAGE}{}",
+        API3_COMMANDS.replacen(
+            "output = \"json\"\nargs = [{ name = \"app\", pattern = \"^[a-z]+$\" }]",
+            "output = \"json\"\nargs = [{ name = \"app\", pattern = \"^[a-z0-9]+$\" }]",
+            1
+        )
+    );
+    assert!(
+        parse_page(&diff)
+            .unwrap_err()
+            .to_string()
+            .contains("same args")
+    );
+    let text = API3_COMMANDS.replace("output = \"json\"", "output = \"text\"");
+    assert!(
+        parse_page(&format!("uq_api = 3\n{PAGE}{text}"))
+            .unwrap_err()
+            .to_string()
+            .contains("output = \"json\"")
+    );
+}
+
+#[test]
+fn widgets_may_not_use_ndjson_or_preview() {
+    let text = WIDGET.replace("uq_api = 1", "uq_api = 3") + "\n" + API3_COMMANDS;
+    let e = parse_widget(&text).unwrap_err();
+    assert!(e.to_string().contains("settings pages only"), "{e}");
 }

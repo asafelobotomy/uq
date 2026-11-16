@@ -19,9 +19,14 @@ use zbus::names::{InterfaceName, MemberName, WellKnownName};
 use zbus::wire::ObjectPath;
 
 /// The integration API this uQ implements (§2.6). 2 adds the layout components settings pages
-/// may use (`SettingsPage`, `SettingsTab`, `SettingsCard`, `HelpTip`, `UqAppIcon`); for widgets
-/// and rules it means the same as 1.
-pub const UQ_API: u32 = 2;
+/// may use (`SettingsPage`, `SettingsTab`, `SettingsCard`, `HelpTip`, `UqAppIcon`). 3 adds
+/// streamed command output (`output = "ndjson"`, `ctx.command.stream`) and a previewed
+/// confirmation (`preview = "<command id>"`) for settings pages. For widgets and rules both
+/// mean the same as 1.
+pub const UQ_API: u32 = 3;
+
+/// The first `uq_api` in which a page may use `output = "ndjson"` and `preview`.
+pub const STREAM_API: u32 = 3;
 
 /// The `uq_api` a page that leaves the key out is read as: pages predate it.
 pub const PAGE_DEFAULT_API: u32 = 1;
@@ -230,6 +235,9 @@ pub enum Output {
     Text,
     /// Ignored; `output` is `null`.
     None,
+    /// One JSON value per line. `ctx.command.run` gets the list of them at the end;
+    /// `ctx.command.stream` gets each as it arrives (pages with `uq_api` 3 or later).
+    Ndjson,
 }
 
 /// One declared argument: the caller's value must match `pattern` in full.
@@ -291,6 +299,10 @@ pub struct CommandSpec {
     pub args: Vec<ArgSpec>,
     /// A fixed question shown before running; at most one `%s` (the first argument).
     pub confirm: Option<String>,
+    /// The id of a read-only command of the same page that takes the same arguments and prints
+    /// what this one would change; its answer is shown under the `confirm` question
+    /// (`uq_api` 3 or later, needs `confirm`).
+    pub preview: Option<String>,
     /// Re-run this read when a file changes or a signal arrives (pages only).
     pub watch: Option<WatchSpec>,
 }
@@ -348,6 +360,7 @@ struct RawCommand {
     #[serde(default)]
     args: Vec<RawArg>,
     confirm: Option<String>,
+    preview: Option<String>,
     watch: Option<RawWatch>,
 }
 
@@ -498,6 +511,19 @@ fn command_from(raw: RawCommand, prefixes: &[PathBuf]) -> Result<CommandSpec, St
             return Err(what("confirm has %s but the command declares no args"));
         }
     }
+    if let Some(p) = &raw.preview {
+        if !valid_command_id(p) {
+            return Err(what(&format!(
+                "preview {p:?} must match [a-z0-9_-]{{1,40}}"
+            )));
+        }
+        if *p == id {
+            return Err(what("preview can't be the command itself"));
+        }
+        if raw.confirm.is_none() {
+            return Err(what("preview needs a confirm question to show it under"));
+        }
+    }
     let watch = match raw.watch {
         None => None,
         Some(w) => {
@@ -511,6 +537,7 @@ fn command_from(raw: RawCommand, prefixes: &[PathBuf]) -> Result<CommandSpec, St
         timeout_ms,
         args,
         confirm: raw.confirm,
+        preview: raw.preview,
         watch,
     })
 }
@@ -530,7 +557,53 @@ fn commands_from(raw: Vec<RawCommand>) -> Result<Vec<CommandSpec>, ManifestError
         }
         out.push(c);
     }
+    check_previews(&out).map_err(invalid)?;
     Ok(out)
+}
+
+/// Each `preview` names another command of the page that takes the same arguments, prints JSON,
+/// asks nothing and previews nothing itself.
+fn check_previews(commands: &[CommandSpec]) -> Result<(), String> {
+    for c in commands {
+        let Some(pid) = &c.preview else { continue };
+        let what = |m: &str| format!("command {:?}: preview {pid:?} {m}", c.id);
+        let Some(p) = commands.iter().find(|o| &o.id == pid) else {
+            return Err(what("is not a declared command"));
+        };
+        if p.args != c.args {
+            return Err(what("must declare the same args"));
+        }
+        if p.output != Output::Json {
+            return Err(what("must have output = \"json\""));
+        }
+        if p.confirm.is_some() || p.preview.is_some() {
+            return Err(what("can't have confirm or preview of its own"));
+        }
+    }
+    Ok(())
+}
+
+/// A page below [`STREAM_API`] that uses streamed output or a previewed confirmation: an older
+/// uQ would run it wrongly, so it is refused with a reason instead.
+fn check_stream_api(commands: &[CommandSpec], api: u32) -> Result<(), ManifestError> {
+    if api >= STREAM_API {
+        return Ok(());
+    }
+    for c in commands {
+        if c.output == Output::Ndjson {
+            return Err(invalid(format!(
+                "command {:?}: output = \"ndjson\" needs uq_api = {STREAM_API} (page.toml says {api})",
+                c.id
+            )));
+        }
+        if c.preview.is_some() {
+            return Err(invalid(format!(
+                "command {:?}: preview needs uq_api = {STREAM_API} (page.toml says {api})",
+                c.id
+            )));
+        }
+    }
+    Ok(())
 }
 
 /// Check `uq_api` before anything else. `required`: the key must be present (widgets); pages
@@ -657,6 +730,15 @@ pub fn parse_widget(text: &str) -> Result<WidgetManifest, ManifestError> {
     }
     check_requires_bus(&requires, dbus.as_ref())?;
     let commands = commands_from(m.command)?;
+    if let Some(c) = commands
+        .iter()
+        .find(|c| c.output == Output::Ndjson || c.preview.is_some())
+    {
+        return Err(invalid(format!(
+            "command {:?}: ndjson output and preview are for settings pages only",
+            c.id
+        )));
+    }
     if let Some(c) = commands.iter().find(|c| c.watch.is_some()) {
         return Err(invalid(format!(
             "command {:?}: watch is for settings pages only; widgets follow [dbus] signals",
@@ -808,8 +890,10 @@ pub fn parse_page(text: &str) -> Result<PageManifest, ManifestError> {
         }
         (n, d) => n.or_else(|| d.as_ref().map(|d| d.name.clone())),
     };
+    let commands = commands_from(m.command)?;
+    check_stream_api(&commands, m.uq_api.unwrap_or(PAGE_DEFAULT_API))?;
     Ok(PageManifest {
-        commands: commands_from(m.command)?,
+        commands,
         id: m.id,
         name: m.name,
         icon: m.icon,

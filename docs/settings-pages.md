@@ -73,10 +73,11 @@ timeout_ms = { Refresh = 120000 }   # optional: longer deadlines for listed meth
 [[command]]                     # optional, up to 64: what ctx.command.run may run
 id = "status"                   # [a-z0-9_-]{1,40}
 argv = ["/usr/bin/tailscale", "status", "--json"]
-output = "json"                 # "json" | "text" | "none"
+output = "json"                 # "json" | "text" | "none" | "ndjson" (uq_api 3)
 timeout_ms = 3000               # default 10000, at most 600000
 args = [{ name = "peer", pattern = "^[A-Za-z0-9._-]{1,64}$" }]   # optional
 confirm = "Disconnect from %s?" # optional
+preview = "disconnect-plan"     # optional, uq_api 3: a read of this page that shows what it would change
 watch = { files = ["~/.config/tailscale/x.conf"], signals = [{ bus = "system", interface = "org.example.App1", member = "Changed" }] }   # optional, see "Following changes"
 ```
 
@@ -230,6 +231,56 @@ What is enforced, whatever the page does:
   `{error: "already running"}`.
 - Nothing runs as root. A command that needs it uses your app's own polkit action; uQ's polkit
   agent shows the prompt.
+
+### Progress and previews (`uq_api = 3`)
+
+Two things for pages whose commands take a while or change a lot. Both need `uq_api = 3` in
+`page.toml`; an older uQ skips the page with "needs a newer uQ", and `uqctl integrations check`
+refuses `output = "ndjson"`, `preview` and `ctx.command.stream` in a page that says less.
+
+#### `output = "ndjson"` and `ctx.command.stream(id, args, onEvent, onDone)`
+
+An `ndjson` command prints one JSON value per line. `ctx.command.stream` runs it and calls
+`onEvent(value)` for each line as it arrives, then `onDone(result)` as for `run`, with `output`
+set to `null` (the events were not kept). Use it for a progress bar:
+
+```js
+ctx.command.stream("scan", [], ev => { bar.value = ev.percent / 100; }, result => { /* done */ });
+```
+
+- A line that isn't JSON, or is over 64 KiB, stops the command and ends the run with an error.
+  Blank lines are skipped. A last line with no newline counts.
+- stdout isn't capped when streaming (a long job may say a lot), but the timeout still is. Keep
+  events small and not more than a few per second.
+- `ctx.command.run` on an `ndjson` command still works: `output` is the list of all its lines.
+- `stream` takes the same `args`, `confirm` and one-run-at-a-time rules as `run`; a declined
+  confirmation sends no events and gives `{error: "Cancelled", cancelled: true}`.
+- A command without `output = "ndjson"` can't be streamed.
+
+#### `preview` and the confirmation sheet
+
+A `[[command]]` with `confirm` and `preview = "<id>"` doesn't just ask a question: Settings first
+runs the preview command, a read of the same page with the **same `args`** and `output = "json"`
+(it can have no `confirm` or `preview` of its own), and shows what it printed under the question,
+grouped, before the person confirms. If the preview fails, nothing runs and the page gets
+`{error}`. The preview prints one plan document:
+
+```json
+{ "summary": "3 caches, 120 MB",
+  "changes": [ { "group": "Caches", "label": "Firefox", "detail": "~/.cache/mozilla",
+                 "bytes": 125829120, "reversible": true } ],
+  "would_refuse": false, "reason": "" }
+```
+
+- `label` is required; `group`, `detail`, `bytes` (a whole number), `reversible` (`true`: it can
+  be put back, `false`: it can't be undone; leave it out when unknown) are optional. Changes
+  are shown grouped in order of first appearance, with a size per group; a change with no
+  `group` goes under "Changes". At most 500 are shown, and "And N more" says how many weren't.
+- `would_refuse: true` means the app would turn this down. The sheet shows `reason` and a Close
+  button, and the command can't be confirmed.
+- All text is shown as plain text and cut to length. A plan can't carry markup.
+- Give each app's destructive command a `--dry-run --json` that prints this document, so the
+  window and the command line say the same thing.
 
 ### Following changes: `watch` and `ctx.command.watch(id, callback)`
 
