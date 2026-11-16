@@ -180,6 +180,24 @@ pub fn qml_lint_hits(text: &str) -> Vec<(usize, String)> {
     hits
 }
 
+/// The `org.uq.settings` components a page may use only with `uq_api = 2` or later.
+static API2_TYPE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(^|[^A-Za-z0-9_.])(SettingsPage|SettingsTab|SettingsCard|HelpTip|UqAppIcon)\s*\{")
+        .unwrap_or_else(|e| panic!("bad api2 regex: {e}"))
+});
+
+/// Each object of a component that needs `uq_api = 2`, as `(line, component)`.
+pub fn api2_hits(text: &str) -> Vec<(usize, String)> {
+    text.lines()
+        .enumerate()
+        .flat_map(|(i, line)| {
+            API2_TYPE
+                .captures_iter(line)
+                .map(move |c| (i + 1, c[2].to_string()))
+        })
+        .collect()
+}
+
 fn sorted_entries(dir: &Path) -> Result<Vec<PathBuf>, String> {
     let mut v: Vec<PathBuf> = std::fs::read_dir(dir)
         .map_err(|e| format!("{}: {e}", dir.display()))?
@@ -233,6 +251,28 @@ impl Checker {
         }
     }
 
+    /// A page below `uq_api = 2` that uses a component added in 2: an older uQ would show
+    /// "This page couldn't load" instead of "needs a newer uQ".
+    fn api2_folder(&mut self, dir: &Path, api: u32) {
+        let Ok(files) = sorted_entries(dir) else {
+            return;
+        };
+        for f in files {
+            if f.is_dir() {
+                self.api2_folder(&f, api);
+            } else if f.extension().is_some_and(|x| x == "qml")
+                && let Ok(text) = std::fs::read_to_string(&f)
+            {
+                for (n, name) in api2_hits(&text) {
+                    self.problems.push(format!(
+                        "{}:{n}: {name} needs uq_api = 2 in page.toml (it says {api})",
+                        f.display()
+                    ));
+                }
+            }
+        }
+    }
+
     fn commands(&mut self, path: &Path, commands: &[CommandSpec]) {
         if !self.programs {
             return;
@@ -258,14 +298,17 @@ impl Checker {
                 continue;
             }
             let result = if kind == "widget" {
-                load_widget(&p, &root).map(|l| l.manifest.commands)
+                load_widget(&p, &root).map(|l| (l.manifest.commands, None))
             } else {
-                load_page(&p, &root).map(|l| l.manifest.commands)
+                load_page(&p, &root).map(|l| (l.manifest.commands, Some(l.manifest.uq_api)))
             };
             match result {
-                Ok(cmds) => {
+                Ok((cmds, page_api)) => {
                     self.counts[usize::from(kind != "widget")] += 1;
                     self.commands(&p, &cmds);
+                    if let Some(api) = page_api.filter(|a| *a < 2) {
+                        self.api2_folder(&p, api);
+                    }
                 }
                 Err(e) => self.problem(&p, e),
             }
@@ -494,6 +537,26 @@ mod tests {
                    }\n";
         let lines: Vec<usize> = qml_lint_hits(qml).into_iter().map(|(n, _)| n).collect();
         assert_eq!(lines, [3, 5, 7, 8, 15, 17]);
+    }
+
+    #[test]
+    fn api2_components_are_found() {
+        let qml = "import org.uq.settings\n\
+                   SettingsPage {\n\
+                   \x20   SettingsTab { title: \"Apps\" }\n\
+                   \x20   // SettingsCard in a comment without a brace\n\
+                   \x20   MySettingsCard {}\n\
+                   \x20   Item { UqAppIcon{} }\n\
+                   }\n";
+        let hits: Vec<(usize, String)> = api2_hits(qml);
+        assert_eq!(
+            hits,
+            [
+                (2, "SettingsPage".to_string()),
+                (3, "SettingsTab".to_string()),
+                (6, "UqAppIcon".to_string()),
+            ]
+        );
     }
 
     #[test]

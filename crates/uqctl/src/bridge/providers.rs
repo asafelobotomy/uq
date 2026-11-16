@@ -1,4 +1,4 @@
-//! Spotlight search: built-in rows plus third-party D-Bus launcher providers (spec §2.3).
+//! look=see>do_ search: built-in rows plus third-party D-Bus launcher providers (spec §2.3).
 //!
 //! The built-ins: the calculator and Run, a typed web address (`web`), the user's files grouped
 //! by type (`files:<type>`, files.rs), files by their text (`files:contents`, contents.rs) and
@@ -496,7 +496,7 @@ impl Providers {
         }
     }
 
-    /// The bridge's `LauncherOpened` call (Spotlight or the app menu opened): start each
+    /// The bridge's `LauncherOpened` call (look=see>do_ or the app menu opened): start each
     /// switched-on `Activatable=true` provider whose name has no owner and has a session service
     /// file, at most once per 30 s each, without waiting (§2.4.1). Queries still go only to
     /// owned names, with `NO_AUTO_START`.
@@ -646,7 +646,7 @@ impl Providers {
         let defs = lock(&self.defs).current();
         if builtin_sees(query, &defs) {
             if provider_enabled(&prefs, "files") {
-                // The first search builds the index when Spotlight's open didn't.
+                // The first search builds the index when look=see>do_'s open didn't.
                 self.refresh_files();
                 let (me, q) = (self.clone(), query.to_string());
                 tokio::spawn(async move {

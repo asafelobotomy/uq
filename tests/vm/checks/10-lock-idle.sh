@@ -79,16 +79,16 @@ c_L2() {
 
 # --- L3 ----------------------------------------------------------------------------------------
 c_L3() {
-    ipc open spotlight >/dev/null; sleep 0.5
+    ipc open lookseedo >/dev/null; sleep 0.5
     note "before lock: $(layer_names | sort -u | tr '\n' ' ')"
-    has_layer uq-spotlight || note "(spotlight was not open before locking)"
+    has_layer uq-lookseedo || note "(lookseedo was not open before locking)"
     ipc open quicksettings >/dev/null; sleep 0.5
     note "after opening quick settings: $(layer_names | sort -u | tr '\n' ' ')"
     # Timed inside the guest: from the key press until LockedHint=yes and both surfaces are gone.
     local sid; sid=$(gsession)
     vgh bash -c 'start=$(date +%s%N); for i in $(seq 1 100); do
             l=$(loginctl show-session '"$sid"' -p LockedHint --value)
-            n=$(hyprctl layers -j | grep -cE "\"uq-(spotlight|quick)\"")
+            n=$(hyprctl layers -j | grep -cE "\"uq-(lookseedo|quick)\"")
             [ "$l" = yes ] && [ "$n" = 0 ] && { echo "$(( ($(date +%s%N) - start) / 1000000 ))"; exit 0; }
             sleep 0.03; done; echo never' >"$RUN_DIR/.l3" 2>/dev/null &
     local p=$!
@@ -96,22 +96,22 @@ c_L3() {
     qmp key meta_l-l
     wait "$p"
     local ms; ms=$(cat "$RUN_DIR/.l3")
-    note "LockedHint=yes and spotlight/quick settings gone ${ms} ms after SUPER+L (timed in the guest, from 0.3 s before the key)"
+    note "LockedHint=yes and lookseedo/quick settings gone ${ms} ms after SUPER+L (timed in the guest, from 0.3 s before the key)"
     if [ "$ms" = never ]; then
         bad "expected the surfaces closed and LockedHint=yes within a second of SUPER+L; observed LockedHint=$(locked_hint), layers: $(layer_names | sort -u | tr '\n' ' ')"
     elif [ "$ms" -gt 1300 ]; then
         bad "the shell saw the lock after $((ms - 300)) ms (expected within a second)"
     fi
     qmp key meta_l-spc; sleep 1
-    has_layer uq-spotlight && bad "SUPER+Space opened spotlight over the lock"
+    has_layer uq-lookseedo && bad "SUPER+Space opened lookseedo over the lock"
     local s r
-    for s in spotlight appmenu quicksettings powermenu; do
+    for s in lookseedo appmenu quicksettings powermenu; do
         r=$(ipc open "$s")
         note "locked: qs ipc call uq open $s -> $r"
         [ "$r" = ignored ] || bad "expected 'ignored' from open $s while locked; observed '$r'"
     done
     sleep 0.5
-    for s in uq-spotlight uq-appmenu uq-quick uq-power uq-notif-centre; do
+    for s in uq-lookseedo uq-appmenu uq-quick uq-power uq-notif-centre; do
         has_layer "$s" && bad "$s is mapped while locked"
     done
     qmp key meta_l-n; sleep 1

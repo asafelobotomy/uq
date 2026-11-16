@@ -1357,7 +1357,7 @@ pub fn all_pages(plugins: &[PluginPage]) -> Vec<PageEntry> {
 
 /// The sidebar model: every page in category order, each with its category's heading, its QML
 /// file, whether it is a plugin page and the history domains it changes.
-/// Every page and setting as a flat JSON list for Spotlight (`uq-settings --search-index`):
+/// Every page and setting as a flat JSON list for look=see>do_ (`uq-settings --search-index`):
 /// `[{page, setting, label, pageName, icon, keywords}]`, a page's own row with `setting` "".
 pub fn search_index_json(pages: &[PageEntry]) -> String {
     let mut rows = Vec::new();

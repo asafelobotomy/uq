@@ -54,7 +54,7 @@ ShellRoot {
         delegate: Bar {}
     }
 
-    // One Spotlight and one app menu (not per screen): they move to the focused monitor.
+    // One look=see>do_ and one app menu (not per screen): they move to the focused monitor.
     Launchers {}
 
     // The volume, mic and brightness keys, their OSD source, and the fallback OSD window.

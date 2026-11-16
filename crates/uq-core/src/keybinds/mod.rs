@@ -85,11 +85,44 @@ pub struct Effective {
 /// log line and the others are kept.
 impl<'de> Deserialize<'de> for Keybinds {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Keybinds, D::Error> {
-        let v = Value::deserialize(d)?;
+        let mut v = Value::deserialize(d)?;
+        migrate_renamed(&mut v);
         Ok(Keybinds {
             overrides: lenient(&v, "overrides"),
             custom: lenient(&v, "custom"),
         })
+    }
+}
+
+/// The launcher was called Spotlight until it became look=see>do_: a stored override of its
+/// shortcut (`uq.spotlight`) or a custom shortcut that opens it (`shell` / `spotlight`) moves to
+/// the new name when the state loads.
+pub const OLD_LAUNCHER_ID: &str = "uq.spotlight";
+pub const LAUNCHER_ID: &str = "uq.lookseedo";
+
+fn migrate_renamed(v: &mut Value) {
+    for o in v
+        .get_mut("overrides")
+        .and_then(Value::as_array_mut)
+        .into_iter()
+        .flatten()
+    {
+        if o.get("id").and_then(Value::as_str) == Some(OLD_LAUNCHER_ID) {
+            o["id"] = Value::from(LAUNCHER_ID);
+        }
+    }
+    for b in v
+        .get_mut("custom")
+        .and_then(Value::as_array_mut)
+        .into_iter()
+        .flatten()
+    {
+        if let Some(a) = b.get_mut("action")
+            && a.get("kind").and_then(Value::as_str) == Some("shell")
+            && a.get("name").and_then(Value::as_str) == Some("spotlight")
+        {
+            a["name"] = Value::from("lookseedo");
+        }
     }
 }
 

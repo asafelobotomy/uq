@@ -35,7 +35,9 @@ Keep everything in a `uq/` folder in your own repository, installed by your own 
   `optdepends` with a one-line reason.
 - uQ watches these directories. What a package installs shows up within a second or two, and
   goes when the package is removed; nobody logs out or restarts anything.
-- Every manifest says `uq_api = 1`. A manifest that needs a newer uQ is skipped, and says so.
+- Every manifest says `uq_api = 1`, or `uq_api = 2` for a settings page that uses the layout
+  components (`SettingsPage`, `SettingsTab`, `SettingsCard`, `HelpTip`, `UqAppIcon`; see
+  [settings-pages.md](settings-pages.md)). A manifest that needs a newer uQ is skipped, and says so.
 
 Tools:
 

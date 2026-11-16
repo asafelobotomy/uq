@@ -137,7 +137,7 @@ fn custom_lines(before: &Value, after: &Value, lines: &mut Vec<String>) {
     }
 }
 
-/// "“Open Spotlight” now uses Super + K", up to three, then ", and N more".
+/// "“Open look=see>do_” now uses Super + K", up to three, then ", and N more".
 pub fn summary(before: &Value, after: &Value) -> String {
     let mut lines = Vec::new();
     override_lines(before, after, &mut lines);
@@ -174,9 +174,9 @@ mod tests {
         assert_eq!(
             s(
                 &none,
-                &json!({"overrides": [{"id": "uq.spotlight", "combo": "SUPER + K"}]})
+                &json!({"overrides": [{"id": "uq.lookseedo", "combo": "SUPER + K"}]})
             ),
-            "“Open Spotlight” now uses Super + K"
+            "“Open look=see>do_” now uses Super + K"
         );
         assert_eq!(
             s(
@@ -185,10 +185,10 @@ mod tests {
             ),
             "“Close the window” turned off"
         );
-        let with = json!({"overrides": [{"id": "uq.spotlight", "combo": "SUPER + K"}]});
+        let with = json!({"overrides": [{"id": "uq.lookseedo", "combo": "SUPER + K"}]});
         assert_eq!(
             s(&with, &json!({"overrides": []})),
-            "“Open Spotlight” back to its default"
+            "“Open look=see>do_” back to its default"
         );
         assert_eq!(
             s(
@@ -200,10 +200,10 @@ mod tests {
         // Back on with the keys it had: "turned on", not "now uses".
         assert_eq!(
             s(
-                &json!({"overrides": [{"id": "uq.spotlight", "combo": "SUPER + K", "enabled": false}]}),
-                &json!({"overrides": [{"id": "uq.spotlight", "combo": "SUPER + K"}]})
+                &json!({"overrides": [{"id": "uq.lookseedo", "combo": "SUPER + K", "enabled": false}]}),
+                &json!({"overrides": [{"id": "uq.lookseedo", "combo": "SUPER + K"}]})
             ),
-            "“Open Spotlight” turned on"
+            "“Open look=see>do_” turned on"
         );
         let term = json!({"kind": "uq", "name": "terminal"});
         let shot = custom("k-0001", "Screenshot", term.clone());
@@ -241,7 +241,7 @@ mod tests {
 
     #[test]
     fn reset_all_reads_plainly() {
-        let before = json!({"overrides": [{"id": "uq.spotlight", "combo": "SUPER + K"},
+        let before = json!({"overrides": [{"id": "uq.lookseedo", "combo": "SUPER + K"},
                                           {"id": "uq.close", "enabled": false}]});
         assert_eq!(
             summary(&before, &json!({"overrides": []})),

@@ -2,7 +2,7 @@ import QtQuick
 import "../core"
 import "../widgets"
 
-// The right-click menu of an app row in Spotlight and the app menu: the app actions other apps
+// The right-click menu of an app row in look=see>do_ and the app menu: the app actions other apps
 // installed for it (Phase 4 spec §2.4.2), names as plain text. Choosing one asks the bridge to
 // run it (`Launch {app_action, desktop_id}`); the shell never builds a command line. Fills its
 // parent while open, so a click outside closes it.

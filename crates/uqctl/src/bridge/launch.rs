@@ -136,7 +136,22 @@ pub fn plan(
     if let Some(run_id) = obj.get("run_id") {
         let cmd =
             super::run::take_command(runs, run_id.as_str().ok_or("run_id must be a string")?)?;
-        let argv = ["sh".to_string(), "-c".to_string(), cmd];
+        let in_terminal = match obj.get("terminal") {
+            None => false,
+            Some(Value::Bool(b)) => *b,
+            Some(_) => return Err("terminal must be true or false".into()),
+        };
+        // In a terminal the window stays until Enter, so the output can be read. The command is
+        // an argument of the script ($1), never part of its text.
+        let argv: Vec<String> = if in_terminal {
+            let script = "eval \"$1\"; s=$?; printf '\\n[exited with %s: press Enter to close] ' \"$s\"; read _; exit \"$s\"";
+            let mut v = terminal_prefix(dirs, terminal);
+            v.extend(["sh", "-c", script, "sh"].map(String::from));
+            v.push(cmd);
+            v
+        } else {
+            vec!["sh".to_string(), "-c".to_string(), cmd]
+        };
         return Ok(Plan {
             command: scope_command("run", &argv, rand),
             record: None,

@@ -150,10 +150,10 @@ pub const ACTIONS: [ActionName; 9] = [
         only_with: "",
     },
     ActionName {
-        uq: Action::Spotlight,
-        lua: ActionLua::Global("spotlight"),
+        uq: Action::LookSeeDo,
+        lua: ActionLua::Global("lookseedo"),
         allowed: ANY,
-        label: "Open Spotlight",
+        label: "Open look=see>do_",
         only_with: "",
     },
     ActionName {

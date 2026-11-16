@@ -8,6 +8,8 @@ import Quickshell.Widgets
 import "../core"
 import "../logic/launcher.js" as L
 import "../logic/rank.js" as Rank
+import "../logic/commands.js" as Commands
+import "../logic/quickui.js" as QuickUi
 import "../logic/shellprefs.js" as ShellPrefs
 import "../logic/failure.js" as F
 
@@ -19,7 +21,7 @@ import "../logic/failure.js" as F
 PanelWindow {
     id: root
 
-    readonly property bool shown: Surfaces.open === "spotlight" && !Bridge.locked
+    readonly property bool shown: Surfaces.open === "lookseedo" && !Bridge.locked
     // The focused monitor at the moment the surface opened, so an open surface stays put when
     // the cursor (and Hyprland's focus) crosses to another output. Followed live only while hidden.
     property var openedOn: null
@@ -41,6 +43,8 @@ PanelWindow {
     // The shared Surfaces counter: the bridge ignores a Search older than the newest it has seen.
     readonly property int generation: Surfaces.generation
     property var providerResults: ({})
+    // ListProfiles' rows, read when this opens, for the Commands group's profile switches.
+    property var profiles: []
     property var apps: []
     property var sections: []
     property var selection: ({ group: -1, index: -1 })
@@ -53,7 +57,7 @@ PanelWindow {
     screen: target
     color: "transparent"
     WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.namespace: "uq-spotlight"
+    WlrLayershell.namespace: "uq-lookseedo"
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
     exclusionMode: ExclusionMode.Ignore
     anchors.top: true
@@ -61,7 +65,7 @@ PanelWindow {
     implicitWidth: Math.min(640, Math.round((screen ? screen.width : 1280) * 0.5))
     // The tallest the panel can get, fixed: the panel grows and shrinks inside it as rows arrive,
     // so it never outruns the compositor's resize (a clipped panel with no bottom edge). Only the
-    // panel takes input; a click below it falls through to what's underneath and closes Spotlight.
+    // panel takes input; a click below it falls through to what's underneath and closes look=see>do_.
     readonly property int maxListHeight: Math.round((screen ? screen.height : 1080) * 0.55)
     implicitHeight: maxListHeight + 200
     mask: Region { item: panel }
@@ -112,10 +116,18 @@ PanelWindow {
         searched = q;
         apps = q !== "" && L.classify(q) === "search"
             ? Rank.searchApps(q, appList, Settings.launchCounts) : [];
-        var wins = q !== "" && L.classify(q) === "search" ? Rank.searchWindows(q, windowList()) : [];
-        if (wins.length > 0) {
+        var wins = q !== "" && L.classify(q) === "search"
+            && ShellPrefs.providerEnabled(Settings.values.shell, "windows")
+            ? Rank.searchWindows(q, windowList()) : [];
+        var cmds = q !== "" && L.classify(q) === "search"
+            && ShellPrefs.providerEnabled(Settings.values.shell, "commands")
+            ? Commands.search(q, profiles) : [];
+        if (wins.length > 0 || cmds.length > 0) {
             var pr = {};
-            pr.windows = { generation: generation, provider: "windows", provider_name: "Windows", items: wins };
+            if (wins.length > 0)
+                pr.windows = { generation: generation, provider: "windows", provider_name: "Windows", items: wins };
+            if (cmds.length > 0)
+                pr.commands = { generation: generation, provider: "commands", provider_name: "Commands", items: cmds };
             providerResults = pr;
         }
         rebuild(true);
@@ -137,7 +149,7 @@ PanelWindow {
         return reply;
     }
 
-    // The open windows, read when a search runs (not kept up to date while Spotlight is shut).
+    // The open windows, read when a search runs (not kept up to date while look=see>do_ is shut).
     function windowList() {
         var out = [], vals = Hyprland.toplevels.values;
         var mon = Hyprland.focusedMonitor;
@@ -182,7 +194,7 @@ PanelWindow {
     // Enter. If the rows are stale (typed within the debounce), search now and act on the fresh
     // top hit once the bridge replies: it emits the built-in calc/run rows before the reply, so
     // they're in place by then, and the bridge's run state is this generation's.
-    function activate() {
+    function activate(alt) {
         if (Bridge.locked)
             return;
         if (L.resultsStale(debounce.running, query, searched)) {
@@ -192,13 +204,13 @@ PanelWindow {
             gen = generation;
             reply.then(function () {
                 if (root.shown && generation === gen && !L.resultsStale(debounce.running, query, searched))
-                    root.activateSelected();
+                    root.activateSelected(alt);
             }).catch(function () {
                 // runSearch's own handler has logged it and shows it (searchError).
             });
             return;
         }
-        activateSelected();
+        activateSelected(alt);
     }
 
     // A click acts on the row the user clicked, so it's only honoured when the rows are current;
@@ -215,18 +227,18 @@ PanelWindow {
         activateSelected();
     }
 
-    function activateSelected() {
+    function activateSelected(alt) {
         var sec = selectedSection();
         if (!sec || Bridge.locked)
             return;
-        var a = L.activation(sec.provider, sec.items[selection.index]);
+        var a = L.activation(sec.provider, sec.items[selection.index], alt === true);
         if (a === null)
             return;
         var item = sec.items[selection.index];
         var label = String(item.name || item.title || item.id || "");
         var what = a.kind === "launch" ? "Couldn't open " + label
             : a.kind === "copy" ? "Couldn't copy that" : "Couldn't do that";
-        // A refusal keeps Spotlight open and says why; it closes once the call worked (or after
+        // A refusal keeps look=see>do_ open and says why; it closes once the call worked (or after
         // activateClose, if that takes long).
         var fail = function (e) {
             activateClose.stop();
@@ -279,8 +291,12 @@ PanelWindow {
         openedOn = shown ? (Outputs.primaryScreen(Quickshell.screens)
                             || screenFor(Hyprland.focusedMonitor)) : null;
         wipe();
-        if (shown)
+        if (shown) {
             Qt.callLater(field.forceActiveFocus);
+            Bridge.call("ListProfiles", []).then(function (v) {
+                root.profiles = QuickUi.profileList(v);
+            }).catch(function () { root.profiles = []; });
+        }
     }
 
     Connections {
@@ -309,12 +325,12 @@ PanelWindow {
     Connections {
         target: Surfaces
         function onWipe(surface) {
-            if (surface === "spotlight")
+            if (surface === "lookseedo")
                 root.wipe();
         }
         // The emoji bind: start at ":" as if typed, so the search runs as usual.
         function onPrefill(surface, text) {
-            if (surface !== "spotlight")
+            if (surface !== "lookseedo")
                 return;
             field.text = text;
             root.edited(field.text);
@@ -353,13 +369,13 @@ PanelWindow {
                 implicitHeight: 36
                 maximumLength: 256
                 placeholder: "Search apps, files, settings, windows, or type a web address"
-                Accessible.name: "Spotlight search"
+                Accessible.name: "look=see>do_ search"
                 onEdited: function (text) { root.edited(text); }
                 Keys.onPressed: function (event) {
                     if (event.key === Qt.Key_Escape) {
                         Surfaces.close();
                     } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                        root.activate();
+                        root.activate((event.modifiers & Qt.ShiftModifier) !== 0);
                     } else if (event.key === Qt.Key_Down) {
                         root.moveSelection("down");
                     } else if (event.key === Qt.Key_Up) {
@@ -521,7 +537,7 @@ PanelWindow {
                 color: Theme.success
             }
             UqText {
-                objectName: "spotlightError"
+                objectName: "lookseedoError"
                 Layout.fillWidth: true
                 visible: text !== ""
                 text: root.error !== "" ? root.error : root.searchError

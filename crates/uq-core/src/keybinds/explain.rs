@@ -143,9 +143,9 @@ mod tests {
     fn default_row_is_default() {
         let k = Keybinds::default();
         let v = explain(&k, Some(&live_of(&k)), None, None, "/u.lua");
-        assert_eq!(v["binds.uq.spotlight"]["source"], "default");
-        assert_eq!(v["binds.uq.spotlight"]["stored"], "SUPER + Space");
-        assert_eq!(v["binds.uq.spotlight"]["live"], Value::Null);
+        assert_eq!(v["binds.uq.lookseedo"]["source"], "default");
+        assert_eq!(v["binds.uq.lookseedo"]["stored"], "SUPER + Space");
+        assert_eq!(v["binds.uq.lookseedo"]["live"], Value::Null);
         assert_eq!(v["binds.uq.profile.next"]["stored"], Value::Null);
         assert_eq!(v.as_object().unwrap().len(), 60);
     }
@@ -153,14 +153,14 @@ mod tests {
     #[test]
     fn override_live_is_uq() {
         let k = kb(
-            json!({"overrides": [{"id": "uq.spotlight", "combo": "SUPER + K"}],
+            json!({"overrides": [{"id": "uq.lookseedo", "combo": "SUPER + K"}],
             "custom": [{"name": "T", "combo": "SUPER + F1",
                 "action": {"kind": "uq", "name": "terminal"}}]}),
         );
         let id = k.custom[0].id.clone();
         let v = explain(&k, Some(&live_of(&k)), None, None, "/u.lua");
-        assert_eq!(v["binds.uq.spotlight"]["source"], "uq");
-        assert_eq!(v["binds.uq.spotlight"]["stored"], "SUPER + K");
+        assert_eq!(v["binds.uq.lookseedo"]["source"], "uq");
+        assert_eq!(v["binds.uq.lookseedo"]["stored"], "SUPER + K");
         assert_eq!(v[format!("binds.{id}")]["source"], "uq");
         assert_eq!(v["binds.uq.close"]["source"], "default");
     }
@@ -223,9 +223,9 @@ mod tests {
 
     #[test]
     fn hyprland_down_reports_state() {
-        let k = kb(json!({"overrides": [{"id": "uq.spotlight", "combo": "SUPER + K"}]}));
+        let k = kb(json!({"overrides": [{"id": "uq.lookseedo", "combo": "SUPER + K"}]}));
         let v = explain(&k, None, Some("hl.unbind(\"all\")\n"), None, "/u");
-        assert_eq!(v["binds.uq.spotlight"]["source"], "uq");
+        assert_eq!(v["binds.uq.lookseedo"]["source"], "uq");
         assert_eq!(v["binds.uq.close"]["source"], "default");
         // So does a Hyprland that prints no `uq:` description at all.
         let none = [LiveBind {
@@ -242,7 +242,7 @@ mod tests {
           {"locked": false, "mouse": false, "release": false, "repeat": false,
            "longPress": false, "non_consuming": false, "modmask": 64, "submap": "",
            "submap_universal": "false", "key": "Space", "keycode": 0, "catch_all": false,
-           "description": "uq:uq.spotlight", "dispatcher": "global", "arg": "uq:spotlight"},
+           "description": "uq:uq.lookseedo", "dispatcher": "global", "arg": "uq:lookseedo"},
           {"modmask": 65, "key": "mouse_down", "description": "uq:uq.ws.next"},
           {"modmask": 2, "key": "Q", "description": "capslock"},
           {"modmask": 64, "key": "code:12", "description": ""},
@@ -251,7 +251,7 @@ mod tests {
         ]"#;
         let l = live_binds(json);
         assert_eq!(l.len(), 6);
-        assert_eq!(l[0].description, "uq:uq.spotlight");
+        assert_eq!(l[0].description, "uq:uq.lookseedo");
         assert_eq!(combo::canonical(l[0].combo.unwrap()), "SUPER + Space");
         assert_eq!(
             combo::canonical(l[1].combo.unwrap()),

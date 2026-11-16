@@ -2,7 +2,7 @@
 # Smoke test: the shell on a real (headless) Hyprland.
 #
 #   - the uq-bar layer appears within 10 s
-#   - qs ipc call uq open/close spotlight maps and unmaps the uq-spotlight layer
+#   - qs ipc call uq open/close lookseedo maps and unmaps the uq-lookseedo layer
 #   - Dispatch focus_window / move against a real window moves it (hyprctl clients -j)
 #   - smoke_launch_survives_restart: a Launch'd app scope outlives a shell restart
 #   - hot-plug: a new headless output gets a bar, and removing it removes the bar
@@ -132,7 +132,7 @@ if command -v grim >/dev/null 2>&1; then
     env XDG_RUNTIME_DIR="$rt" WAYLAND_DISPLAY="$wl" grim "$out/bar.png" 2>/dev/null && echo "ok: screenshot $out/bar.png"
 fi
 
-# --- shell IPC opens Spotlight --------------------------------------------------------------
+# --- shell IPC opens look=see>do_ --------------------------------------------------------------
 layer_count() { hc layers -j 2>/dev/null | grep -o "\"namespace\": *\"$1\"" | wc -l; }
 wait_layer() { # wait_layer <namespace> <n>: poll up to 5 s until exactly n such layers exist
     for _ in $(seq 1 25); do
@@ -141,22 +141,22 @@ wait_layer() { # wait_layer <namespace> <n>: poll up to 5 s until exactly n such
     done
     return 1
 }
-smoke_ipc_spotlight() {
+smoke_ipc_lookseedo() {
     # The reply is stdout only (stderr is kept for the message). shell_env sets a UTF-8 locale:
     # under LANG=C, Qt prints its locale warning on qs ipc's stdout, ahead of the reply.
     local r
-    if ! r=$("${shell_env[@]}" timeout 10 qs ipc -p "$root/shell" call uq open spotlight 2>"$tmp/ipc.err"); then
-        echo "SKIP (sub-check): IPC open spotlight: qs ipc could not reach the shell here ($r $(tail -n 3 "$tmp/ipc.err"))"
+    if ! r=$("${shell_env[@]}" timeout 10 qs ipc -p "$root/shell" call uq open lookseedo 2>"$tmp/ipc.err"); then
+        echo "SKIP (sub-check): IPC open lookseedo: qs ipc could not reach the shell here ($r $(tail -n 3 "$tmp/ipc.err"))"
         return 0
     fi
-    [ "$r" = ok ] || fail "qs ipc call uq open spotlight printed '$r', not ok ($(tail -n 3 "$tmp/ipc.err"))"
-    wait_layer uq-spotlight 1 || fail "no uq-spotlight layer after qs ipc call uq open spotlight"
-    r=$("${shell_env[@]}" timeout 10 qs ipc -p "$root/shell" call uq close spotlight 2>"$tmp/ipc.err")
-    [ "$r" = ok ] || fail "qs ipc call uq close spotlight printed '$r', not ok ($(tail -n 3 "$tmp/ipc.err"))"
-    wait_layer uq-spotlight 0 || fail "the uq-spotlight layer stayed after qs ipc call uq close spotlight"
-    echo "ok: qs ipc open/close spotlight (uq-spotlight layer mapped and unmapped)"
+    [ "$r" = ok ] || fail "qs ipc call uq open lookseedo printed '$r', not ok ($(tail -n 3 "$tmp/ipc.err"))"
+    wait_layer uq-lookseedo 1 || fail "no uq-lookseedo layer after qs ipc call uq open lookseedo"
+    r=$("${shell_env[@]}" timeout 10 qs ipc -p "$root/shell" call uq close lookseedo 2>"$tmp/ipc.err")
+    [ "$r" = ok ] || fail "qs ipc call uq close lookseedo printed '$r', not ok ($(tail -n 3 "$tmp/ipc.err"))"
+    wait_layer uq-lookseedo 0 || fail "the uq-lookseedo layer stayed after qs ipc call uq close lookseedo"
+    echo "ok: qs ipc open/close lookseedo (uq-lookseedo layer mapped and unmapped)"
 }
-smoke_ipc_spotlight
+smoke_ipc_lookseedo
 
 # One bridge request, answered on stdout (the bridge stays up 1.5 s so the reply is flushed).
 bridge_call() {

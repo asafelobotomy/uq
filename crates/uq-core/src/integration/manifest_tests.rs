@@ -266,15 +266,15 @@ fn widget_rejects_every_bad_key() {
 
 #[test]
 fn newer_uq_api_is_refused_before_strict_checks() {
-    let text = "uq_api = 2\nid = \"x\"\nbrand_new_key = true\n";
-    assert_eq!(parse_widget(text), Err(ManifestError::NeedsNewerUq(2)));
+    let text = "uq_api = 3\nid = \"x\"\nbrand_new_key = true\n";
+    assert_eq!(parse_widget(text), Err(ManifestError::NeedsNewerUq(3)));
     assert!(
         parse_widget(text)
             .unwrap_err()
             .to_string()
             .contains("needs a newer uQ")
     );
-    assert_eq!(parse_page(text), Err(ManifestError::NeedsNewerUq(2)));
+    assert_eq!(parse_page(text), Err(ManifestError::NeedsNewerUq(3)));
 }
 
 const PAGE: &str = "id = \"tailscale\"\nname = \"Tailscale\"\nqml = \"Page.qml\"\n";
@@ -286,7 +286,7 @@ fn page_phase3_manifest_still_parses() {
          keywords = [\"vpn\"]\n[[setting]]\nid = \"exit-node\"\nlabel = \"Exit node\"\n"
     ))
     .unwrap();
-    assert_eq!(p.uq_api, UQ_API);
+    assert_eq!(p.uq_api, 1, "a page without uq_api is read as 1");
     assert_eq!(p.dbus_name.as_deref(), Some("org.example.Good"));
     assert!(p.dbus.is_none());
     assert_eq!(p.settings[0].label, "Exit node");

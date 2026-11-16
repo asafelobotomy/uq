@@ -1,4 +1,4 @@
-//! Spotlight's web row: a typed web address (`example.com`, `https://…`, `localhost:3000`, an IP
+//! look=see>do_'s web row: a typed web address (`example.com`, `https://…`, `localhost:3000`, an IP
 //! address) opens in the default browser.
 //!
 //! Only http and https are ever opened. A query that is clearly an address (a scheme, `www.`,

@@ -134,7 +134,7 @@ function _safeUser(user) {
 }
 
 // Local avatar candidates in order: $HOME/.face, then AccountsService's icon for $USER, as
-// file:// URLs encoded the way Spotlight encodes local icon paths. Only built from HOME and
+// file:// URLs encoded the way look=see>do_ encodes local icon paths. Only built from HOME and
 // USER, never from other data.
 function avatarSources(home, user) {
     var out = [];

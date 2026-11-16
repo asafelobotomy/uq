@@ -449,7 +449,7 @@ mod tests {
             "j-missing-bin",
             &manifest("j-missing-bin", "[requires]\nbins = [\"nope\"]\n"),
         );
-        write(r, "j-newer", &manifest("j-newer", "uq_api = 2\n"));
+        write(r, "j-newer", &manifest("j-newer", "uq_api = 3\n"));
         write(r, "z-after", &manifest("z-after", "uq_api = 1\n"));
 
         // Symlinks: a page directory pointing outside, a qml file pointing outside, a manifest

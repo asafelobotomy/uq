@@ -53,7 +53,7 @@ ColumnLayout {
         settingId: "display-main"
         iconName: "favorite"
         label: "Main display"
-        help: "Notifications, pop-ups and Spotlight open on the main display."
+        help: "Notifications, pop-ups and look=see>do_ open on the main display."
         highlight: root.highlight
         enabled: root.enabled
         Layout.fillWidth: true

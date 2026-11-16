@@ -22,7 +22,7 @@ pub enum KeysCmd {
     /// Put one shortcut (or every shortcut) of uQ's back to its default keys and turn it on.
     /// Your own shortcuts are kept.
     Reset {
-        /// A shortcut id from `uqctl keys list`, such as uq.spotlight.
+        /// A shortcut id from `uqctl keys list`, such as uq.lookseedo.
         #[arg(required_unless_present = "all", conflicts_with = "all")]
         id: Option<String>,
         /// Put every one of uQ's shortcuts back.
@@ -187,7 +187,7 @@ mod tests {
 
     fn section() -> Value {
         json!({
-            "overrides": [{"id": "uq.spotlight", "combo": "SUPER + K"},
+            "overrides": [{"id": "uq.lookseedo", "combo": "SUPER + K"},
                           {"id": "uq.close", "enabled": false}],
             "custom": [{"id": "k-0001", "name": "Shot", "combo": "SUPER + F1", "enabled": true,
                         "locked": false, "repeating": false,
@@ -198,7 +198,7 @@ mod tests {
     #[test]
     fn reset_one_drops_only_that_override() {
         let s = section();
-        let out = reset_section(&s, ResetTarget::One("uq.spotlight".into())).unwrap();
+        let out = reset_section(&s, ResetTarget::One("uq.lookseedo".into())).unwrap();
         assert_eq!(
             out["overrides"],
             json!([{"id": "uq.close", "enabled": false}])
@@ -226,7 +226,7 @@ mod tests {
     fn list_prints_plain_rows() {
         let json = json!({
             "binds": [
-                {"id": "uq.spotlight", "combo": "SUPER + K", "label": "Open Spotlight",
+                {"id": "uq.lookseedo", "combo": "SUPER + K", "label": "Open look=see>do_",
                  "enabled": true},
                 {"id": "uq.profile.next", "combo": null, "label": "Next profile",
                  "enabled": true},
@@ -243,7 +243,7 @@ mod tests {
         assert_eq!(
             lines,
             [
-                "uq.spotlight\tSUPER + K\tOpen Spotlight",
+                "uq.lookseedo\tSUPER + K\tOpen look=see>do_",
                 "uq.profile.next\t-\tNext profile",
                 "k-0001\tSUPER + F1\tBad [31m name x z (off)",
                 "user.lua:12\tSUPER + T\tTerminal two",
@@ -297,7 +297,7 @@ mod tests {
         .unwrap();
 
         // Two overrides and a shortcut of your own, written the way the page writes them.
-        let start = r#"{"overrides":[{"id":"uq.spotlight","combo":"SUPER + K"},
+        let start = r#"{"overrides":[{"id":"uq.lookseedo","combo":"SUPER + K"},
             {"id":"uq.close","enabled":false}],
             "custom":[{"name":"Shot","combo":"SUPER + F1",
               "action":{"kind":"command","command":"grim x.png"}}]}"#;
@@ -310,7 +310,7 @@ mod tests {
         assert!(
             lines
                 .iter()
-                .any(|l| l.starts_with("uq.spotlight\tSUPER + K\t")),
+                .any(|l| l.starts_with("uq.lookseedo\tSUPER + K\t")),
             "{lines:?}"
         );
         assert!(
@@ -321,20 +321,20 @@ mod tests {
         );
 
         let one = KeysCmd::Reset {
-            id: Some("uq.spotlight".into()),
+            id: Some("uq.lookseedo".into()),
             all: false,
         };
         assert_eq!(
             run(&proxy, one).await.unwrap(),
-            ["uq.spotlight is back to its default."]
+            ["uq.lookseedo is back to its default."]
         );
         let again = KeysCmd::Reset {
-            id: Some("uq.spotlight".into()),
+            id: Some("uq.lookseedo".into()),
             all: false,
         };
         assert_eq!(
             run(&proxy, again).await.unwrap(),
-            ["uq.spotlight already uses uQ's default."]
+            ["uq.lookseedo already uses uQ's default."]
         );
         let bad = KeysCmd::Reset {
             id: Some("uq.nope".into()),
@@ -348,7 +348,7 @@ mod tests {
         assert_eq!(history[0]["origin"], "uqctl");
         assert_eq!(
             history[0]["summary"],
-            "“Open Spotlight” back to its default"
+            "“Open look=see>do_” back to its default"
         );
 
         let all = KeysCmd::Reset {

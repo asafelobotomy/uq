@@ -429,7 +429,7 @@ local GESTURE_DIRS = __GESTURE_DIRS__
 local calls = {}
 -- exec_cmd strings seen while a given hl.on("<event>", fn) callback runs.
 local hook, in_hook = nil, {}
--- What each returned proxy stands for, e.g. `hl.dsp.global(uq:spotlight)`, and every hl.bind
+-- What each returned proxy stands for, e.g. `hl.dsp.global(uq:lookseedo)`, and every hl.bind
 -- call as {key, dsp, opts}.
 local desc = setmetatable({}, { __mode = "k" })
 local binds = {}
@@ -596,8 +596,8 @@ local function bind_for(dsp)
   error("no bind runs " .. dsp)
 end
 local function opt(b, k) return type(b.opts) == "table" and b.opts[k] or nil end
-local spotlight = bind_for("hl.dsp.global(uq:spotlight)")
-if spotlight.key ~= "SUPER + Space" then error("uq:spotlight is bound to " .. tostring(spotlight.key)) end
+local lookseedo = bind_for("hl.dsp.global(uq:lookseedo)")
+if lookseedo.key ~= "SUPER + Space" then error("uq:lookseedo is bound to " .. tostring(lookseedo.key)) end
 local emoji = bind_for("hl.dsp.global(uq:emoji)")
 if emoji.key ~= "SUPER + period" then error("uq:emoji is bound to " .. tostring(emoji.key)) end
 for _, b in ipairs(binds) do
@@ -620,12 +620,12 @@ if power.key ~= "SUPER + Escape" then error("uq:power-menu is bound to " .. tost
 for _, b in ipairs(binds) do
   if b.key == "SUPER + Escape" and b ~= power then error("SUPER + Escape is also bound to " .. b.dsp) end
 end
-for _, b in ipairs({spotlight, emoji, appmenu, quick, notif, lock, power}) do
+for _, b in ipairs({lookseedo, emoji, appmenu, quick, notif, lock, power}) do
   if opt(b, "locked") then error(b.dsp .. " must not be locked") end
 end
 -- Nor may any other launcher bind, such as one of your own.
 for _, b in ipairs(binds) do
-  for _, n in ipairs({"spotlight", "appmenu", "quick-settings", "notif-centre", "lock", "power-menu"}) do
+  for _, n in ipairs({"lookseedo", "appmenu", "quick-settings", "notif-centre", "lock", "power-menu"}) do
     if b.dsp == "hl.dsp.global(uq:" .. n .. ")" and opt(b, "locked") then
       error(b.key .. " opens " .. n .. " over the lock screen")
     end
@@ -679,7 +679,7 @@ fn mock() -> String {
 fn base_lua_launcher_binds_are_not_locked() {
     let base = std::fs::read_to_string(repo().join("config/hypr/base.lua")).unwrap();
     for name in [
-        "uq:spotlight",
+        "uq:lookseedo",
         "uq:emoji",
         "uq:appmenu",
         "uq:quick-settings",
@@ -960,7 +960,7 @@ fn rendered_launcher_binds_are_not_locked() {
         let mut seen = 0;
         for l in bind_lines(&text) {
             let launcher = [
-                "spotlight",
+                "lookseedo",
                 "appmenu",
                 "quick-settings",
                 "notif-centre",
@@ -1350,7 +1350,7 @@ fn gesture_settings() -> Settings {
         {"fingers": 5, "direction": "down", "action": "close", "enabled": true},
         {"fingers": 5, "direction": "pinch_in", "action": "fullscreen", "enabled": true},
         {"fingers": 5, "direction": "pinch_out", "action": "float", "enabled": true},
-        {"fingers": 3, "direction": "up", "action": "uq:spotlight", "modifier": "SUPER",
+        {"fingers": 3, "direction": "up", "action": "uq:lookseedo", "modifier": "SUPER",
          "enabled": true},
         {"fingers": 4, "direction": "down", "action": "uq:quick-settings",
          "modifier": "SUPER SHIFT", "enabled": true},
@@ -1415,7 +1415,7 @@ fn gestures_run_under_the_lua_mock() {
         "{text}"
     );
     // The shell actions run their function: a dispatch of the global shortcut.
-    assert!(text.contains("hl.dsp.global:uq:spotlight"), "{text}");
+    assert!(text.contains("hl.dsp.global:uq:lookseedo"), "{text}");
     assert!(text.contains("hl.dsp.global:uq:quick-settings"), "{text}");
 }
 
@@ -1471,7 +1471,7 @@ fn mock_rejects_bad_gestures() {
     let f = dir.path().join("gesture.lua");
     for (text, want) in [
         (
-            "hl.gesture({ fingers = 4, direction = \"up\", action = hl.dsp.global(\"uq:spotlight\") })\n",
+            "hl.gesture({ fingers = 4, direction = \"up\", action = hl.dsp.global(\"uq:lookseedo\") })\n",
             "dispatcher object",
         ),
         (
@@ -1498,7 +1498,7 @@ fn mock_rejects_bad_gestures() {
     // The shape uQ writes is accepted.
     std::fs::write(
         &f,
-        "hl.gesture({ fingers = 4, direction = \"up\", action = function() hl.dispatch(hl.dsp.global(\"uq:spotlight\")) end })\n",
+        "hl.gesture({ fingers = 4, direction = \"up\", action = function() hl.dispatch(hl.dsp.global(\"uq:lookseedo\")) end })\n",
     )
     .unwrap();
     let (ok, out, err) = run_mock(&lua, dir.path(), true, &[&f]);

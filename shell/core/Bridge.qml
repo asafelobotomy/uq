@@ -37,7 +37,7 @@ QtObject {
     signal profileChanged(string id)
     // A window pick began (uqd's PickRequested): show the overlay and answer with PickDone.
     signal pickRequested(string token)
-    // Spotlight results: {generation, provider, provider_name, source_dir, items}.
+    // look=see>do_ results: {generation, provider, provider_name, source_dir, items}.
     signal searchResults(var data)
     // logind PrepareForSleep (true before sleep, false on resume) and the session's Lock signal.
     signal prepareForSleep(bool sleeping)

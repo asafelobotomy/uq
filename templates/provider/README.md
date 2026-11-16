@@ -1,6 +1,6 @@
 # Launcher provider template
 
-A small Rust D-Bus service that adds results to uQ's Spotlight. It is a standalone example crate,
+A small Rust D-Bus service that adds results to uQ's look=see>do_. It is a standalone example crate,
 not part of uQ's workspace: copy the folder into your repository.
 
 ```
@@ -19,7 +19,7 @@ uq/dbus/org.example.Provider.service → /usr/share/dbus-1/services/
    `uqctl integrations check uq/` in your CI.
 
 How it starts: with `Activatable=true` and the service file, uQ asks the session bus to start the
-provider when Spotlight or the app menu opens (at most once every 30 s), never while you type.
+provider when look=see>do_ or the app menu opens (at most once every 30 s), never while you type.
 Queries go only to a running provider, so the first keystrokes after a cold start may miss its
 results. The provider exits after 60 s without a call, so it only runs while it's useful.
 

@@ -82,7 +82,8 @@ watch = { files = ["~/.config/tailscale/x.conf"], signals = [{ bus = "system", i
 
 Every key is checked strictly. An unknown key, a bad value or a QML file that resolves outside
 the folder (through a symlink, say) refuses the whole page, with the reason. `uq_api` may be
-left out (it means 1); a page with a newer `uq_api` than this uQ supports is skipped with
+left out (it means 1); `uq_api = 2` adds the layout components below. A page with a newer
+`uq_api` than this uQ supports is skipped with
 "needs a newer uQ".
 
 `[requires]`: `bins` is checked whenever the directory changes; `bus_name` is followed live, so a
@@ -112,8 +113,8 @@ refused by `uqctl integrations check`. Button texts should be fixed strings.
 ### Components pages may use
 
 These components of `import org.uq.settings` are part of `uq_api = 1`: their names and the
-properties and signals listed here stay as they are while `uq_api` is 1. Anything else the module
-exports is Settings' own and may change. All of them show text as plain text.
+properties and signals listed here stay as they are while `uq_api` is 1 or 2. Anything else the
+module exports is Settings' own and may change. All of them show text as plain text.
 
 | Component | What it is | Properties and signals |
 |---|---|---|
@@ -123,6 +124,52 @@ exports is Settings' own and may change. All of them show text as plain text.
 | `SwitchRow` | a `SettingRow` with a switch; after a flip the switch shows `value` again until you change `value`, so a refused change snaps back | `value`, `chosen(bool value)`, `toggle` (the switch, read-only) |
 | `ValueSlider` | a `SettingRow` with a slider; `chosen` comes 400 ms after the last move | `value`, `from`, `to`, `stepSize`, `lowLabel`, `highLabel`, `busy` (when it turns false the slider shows `value` again), `chosen(real value)`, `slider` (read-only) |
 | `ErrorCard` | a card for something that failed | `title`, `detail` |
+
+#### Layout components (`uq_api = 2`)
+
+With `uq_api = 2` in `page.toml` (uQ 0.3.0 and later), a page can be laid out exactly like
+Settings' own pages: a title row with tabs, and cards in two columns on a wide window. Use them
+rather than a hand-made `TabBar` or `Rectangle`, so the page looks and behaves like the rest of
+Settings (remembered tab, Ctrl+Tab, search jumping to the right tab, the theme's spacing).
+`uqctl integrations check` refuses a page that uses them while saying `uq_api = 1`: an older uQ
+then skips it with "needs a newer uQ" instead of showing a broken page.
+
+| Component | What it is | Properties and signals |
+|---|---|---|
+| `SettingsPage` | the page: icon and title with the tab bar beside them, page-wide messages, then the current tab. One tab shows no tab bar. The tab is remembered between runs | `pageId` (set it to your page's `id`), `title`, `iconName` (default: your `page.toml` `name` and `icon`), `headerItems` (items after the tabs), `banners` (messages under the title), `currentIndex` (read-only), `show(tab)`; children are `SettingsTab`s |
+| `SettingsTab` | one tab: scrolls by itself and lays its cards out in two columns from about 1100 px | `title`, `iconName`, `available` (false hides the tab), `activate()`; children are `SettingsCard`s |
+| `SettingsCard` | a group of related rows on a raised surface, with an icon and a short title | `title`, `iconName`, `help` (one line, shown as a "?"), `wide` (span both columns), `actions` (buttons beside the title); children are the rows |
+| `HelpTip` | a "?" whose tooltip explains a setting | `tip` (hidden when empty) |
+| `UqAppIcon` | an app's icon from the icon theme, or a tile with its first letter when the theme has none. Only a plain icon name (`firefox`, `org.gimp.GIMP`) is looked up: a path or URL from your command's output shows the letter | `name`, `label` (the letter and the accessible name), `size` (px), `found` (read-only) |
+
+```qml
+import QtQuick
+import org.uq.settings
+
+SettingsPage {
+    id: page
+    property var ctx
+    property string highlight
+    pageId: "crumbs"
+
+    SettingsTab {
+        title: "Overview"
+        iconName: "view-list-details"
+        SettingsCard {
+            title: "Safe to clear"
+            help: "These go to the trash, so they can be put back."
+            SettingRow { settingId: "space"; label: "App caches"; highlight: page.highlight }
+        }
+    }
+    SettingsTab {
+        title: "Apps"
+        SettingsCard {
+            title: "Firefox"
+            UqAppIcon { name: "firefox"; label: "Firefox" }
+        }
+    }
+}
+```
 
 Beside these, a page may use stock `QtQuick`, `QtQuick.Layouts` and `QtQuick.Controls` items
 (`Button`, `Switch`, `CheckBox`, `SpinBox`, `Slider`, `TextField` for the person's own input,
