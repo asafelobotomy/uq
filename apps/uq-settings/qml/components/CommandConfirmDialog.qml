@@ -25,6 +25,7 @@ QQC2.Dialog {
     readonly property var groups: dialog.groupsOf(dialog.plan)
     readonly property alias confirmButton: confirmBtn
     readonly property alias cancelButton: cancelBtn
+    readonly property alias closeButton: closeBtn
     readonly property alias questionLabel: questionText
 
     /// The answer for `request`: true only for Confirm.
@@ -224,7 +225,15 @@ QQC2.Dialog {
             QQC2.Button {
                 id: cancelBtn
                 objectName: "confirmCancel"
-                text: dialog.refused ? "Close" : "Cancel"
+                text: "Cancel"
+                visible: !dialog.refused
+                onClicked: dialog.reply(false)
+            }
+            QQC2.Button {
+                id: closeBtn
+                objectName: "confirmClose"
+                text: "Close"
+                visible: dialog.refused
                 onClicked: dialog.reply(false)
             }
             QQC2.Button {

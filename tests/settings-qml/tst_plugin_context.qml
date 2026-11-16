@@ -335,7 +335,8 @@ Item {
             tryCompare(d, "opened", true);
             verify(d.refused);
             verify(!d.confirmButton.visible);
-            compare(d.cancelButton.text, "Close");
+            verify(!d.cancelButton.visible);
+            verify(d.closeButton.visible);
             // Even if Confirm is reached some other way, a refused plan answers no.
             d.reply(true);
             compare(fakeHost.answers[0][1], false);
