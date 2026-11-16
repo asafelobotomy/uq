@@ -129,7 +129,7 @@ module exports is Settings' own and may change. All of them show text as plain t
 #### Layout components (`uq_api = 2`)
 
 With `uq_api = 2` in `page.toml` (uQ 0.3.0 and later), a page can be laid out exactly like
-Settings' own pages: a title row with tabs, and cards in two columns on a wide window. Use them
+Settings' own pages: a title row with tabs, and cards in a centred block (one column, two on a wide window; no column is wider than about 44 grid units, so a label and its control stay close). Use them
 rather than a hand-made `TabBar` or `Rectangle`, so the page looks and behaves like the rest of
 Settings (remembered tab, Ctrl+Tab, search jumping to the right tab, the theme's spacing).
 `uqctl integrations check` refuses a page that uses them while saying `uq_api = 1`: an older uQ
@@ -138,8 +138,8 @@ then skips it with "needs a newer uQ" instead of showing a broken page.
 | Component | What it is | Properties and signals |
 |---|---|---|
 | `SettingsPage` | the page: icon and title with the tab bar beside them, page-wide messages, then the current tab. One tab shows no tab bar. The tab is remembered between runs | `pageId` (set it to your page's `id`), `title`, `iconName` (default: your `page.toml` `name` and `icon`), `headerItems` (items after the tabs), `banners` (messages under the title), `currentIndex` (read-only), `show(tab)`; children are `SettingsTab`s |
-| `SettingsTab` | one tab: scrolls by itself and lays its cards out in two columns from about 1100 px | `title`, `iconName`, `available` (false hides the tab), `activate()`; children are `SettingsCard`s |
-| `SettingsCard` | a group of related rows on a raised surface, with an icon and a short title | `title`, `iconName`, `help` (one line, shown as a "?"), `wide` (span both columns), `actions` (buttons beside the title); children are the rows |
+| `SettingsTab` | one tab: scrolls by itself and lays its cards out in one centred column of at most about 44 grid units (about 800 px), and two columns from about 1400 px | `title`, `iconName`, `available` (false hides the tab), `activate()`; children are `SettingsCard`s |
+| `SettingsCard` | a group of related rows on a raised surface, with an icon and a short title | `title`, `iconName`, `help` (one line, shown as a "?"), `wide` (span both columns; its `SettingRow`s then go two to a line), `actions` (buttons beside the title); children are the rows |
 | `HelpTip` | a "?" whose tooltip explains a setting | `tip` (hidden when empty) |
 | `UqAppIcon` | an app's icon from the icon theme, or a tile with its first letter when the theme has none. Only a plain icon name (`firefox`, `org.gimp.GIMP`) is looked up: a path or URL from your command's output shows the letter | `name`, `label` (the letter and the accessible name), `size` (px), `found` (read-only) |
 

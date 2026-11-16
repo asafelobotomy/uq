@@ -9,6 +9,12 @@ All notable changes to uQ are listed here. The format follows
 
 ### Changed
 
+- **Settings rows no longer stretch across a wide window.** On a big window a label sat at one
+  edge of a card and its switch or field at the other. Every page, and every app's page built on
+  the shared components, now lays its cards out in a centred block with one rule: no column is
+  wider than 44 grid units (about 800 px), a second column appears once there is room for two
+  (about 1400 px), and a card that spans both columns puts its plain rows two to a line.
+  `SettingRow` also caps itself at that width wherever it is used.
 - **Open-window tabs keep their titles until they are icons.** A tab used to drop its title as
   soon as it narrowed below Large. Now the title stays (elided) at every size but Icon, and an
   icon-sized tab shows the title in a tooltip when you hover it.

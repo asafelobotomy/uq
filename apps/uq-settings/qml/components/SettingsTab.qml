@@ -1,6 +1,7 @@
-// One tab of a SettingsPage: its own scroll area, laying its SettingsCards out in two columns
-// when the window is wide enough (one at narrow widths), so a 1920x1080 window isn't one thin
-// column with empty space either side.
+// One tab of a SettingsPage: its own scroll area, laying its SettingsCards out in a centred block
+// of at most `columnWidth` per column: one column, and two once the window has room for two
+// full-size ones. Cards never stretch past that, so a label and its control stay near each other
+// on a 1920x1080 window (or wider) instead of sitting at opposite edges.
 import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
@@ -13,8 +14,14 @@ QQC2.ScrollView {
     property string iconName: ""
     /// Hide the tab's button (a tab with nothing to show on this computer).
     property bool available: true
-    /// Columns at this width: two from about 1100 px.
-    readonly property int columns: tab.width >= Kirigami.Units.gridUnit * 61 ? 2 : 1
+    /// The widest a column of cards gets (the shared rule: SettingRow caps itself at the same width).
+    readonly property real columnWidth: Kirigami.Units.gridUnit * 44
+    /// The room either side of the cards, and between two columns.
+    readonly property real sideMargin: Kirigami.Units.largeSpacing * 2
+    readonly property real columnGap: Kirigami.Units.largeSpacing * 2
+    /// Columns at this width: two once each can be at least 34 grid units wide (about 1400 px in
+    /// all), otherwise one.
+    readonly property int columns: tab.layoutWidth - tab.sideMargin * 2 >= Kirigami.Units.gridUnit * 34 * 2 + tab.columnGap ? 2 : 1
     // The width the cards are laid out in: the tab's own width less a fixed allowance for the
     // scroll bar. Not availableWidth, which shrinks when the scroll bar appears: a page about one
     // screen tall then re-flowed, lost its scroll bar, re-flowed back, and never settled.
@@ -39,13 +46,14 @@ QQC2.ScrollView {
     GridLayout {
         id: grid
         // The same side margin as the page's title row, so cards line up under the title.
-        width: Math.min(tab.layoutWidth - Kirigami.Units.largeSpacing * 4, Kirigami.Units.gridUnit * 96)
+        // At most `columnWidth` per column; narrower windows shrink the cards instead.
+        width: Math.min(tab.layoutWidth - tab.sideMargin * 2, tab.columns * tab.columnWidth + (tab.columns - 1) * tab.columnGap)
         // Centred in the whole tab, so the margins either side match (the scroll bar, when
         // there is one, sits in the right margin).
-        x: Math.max(Kirigami.Units.largeSpacing * 2, (tab.width - width) / 2)
+        x: Math.max(tab.sideMargin, (tab.width - width) / 2)
         y: Kirigami.Units.largeSpacing * 2
         columns: tab.columns
-        columnSpacing: Kirigami.Units.largeSpacing * 2
+        columnSpacing: tab.columnGap
         rowSpacing: Kirigami.Units.largeSpacing * 2
         // Equal columns: each card fills its share.
         uniformCellWidths: true
