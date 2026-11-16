@@ -232,7 +232,26 @@ function sortWindows(list, mode, descending, ctx) {
         return o !== 0 ? o : x.i - y.i;
     });
     var out = keyed.map(function (k) { return k.w; });
-    return mode === "screen" ? screenOrder(out, c.lastOrder) : out;
+    return minimisedLast(mode === "screen" ? screenOrder(out, c.lastOrder) : out, c.lastMin);
+}
+
+// Minimised windows go to the end of the queue, whatever the order: the live windows keep the
+// order they had, then the minimised ones. Among those, the ones already minimised keep their
+// order (`lastMin`: their addresses as last shown) and a window minimised just now goes last.
+function minimisedLast(list, lastMin) {
+    var prev = Array.isArray(lastMin) ? lastMin : [];
+    var live = [], mins = [];
+    for (var i = 0; i < list.length; i++)
+        (list[i].minimised === true ? mins : live).push({ w: list[i], i: i });
+    if (mins.length === 0)
+        return list;
+    mins.sort(function (a, b) {
+        var pa = prev.indexOf(a.w.address), pb = prev.indexOf(b.w.address);
+        if (pa < 0) pa = 1e9;
+        if (pb < 0) pb = 1e9;
+        return pa !== pb ? pa - pb : a.i - b.i;
+    });
+    return live.concat(mins).map(function (k) { return k.w; });
 }
 
 // "Screen order": the windows left to right as they sit on screen (top to bottom within a
@@ -372,10 +391,16 @@ function keepAlerts(alerts, live, focused) {
 // focusW, shown}: "empty" (no windows); "pills" (all fit: each pillW wide, at most maxPill, the
 // focused one focusW); "scroll" (only `shown` fit at a time, between two arrows, with "+N"
 // listing the rest); "compact" (not even one pill fits: the lead window's icon, which lists them
-// all).
-function strip(n, width, m, focus) {
+// all). `fixed` (optional) is how many of the `n` are icon-sized always (minimised windows, last in
+// the queue): when everything fits they take just minPill each and the others share the rest.
+function strip(n, width, m, focus, fixed) {
     if (n <= 0)
         return { mode: "empty", pillW: 0, focusW: 0, shown: 0 };
+    var fx = typeof fixed === "number" && fixed > 0 && fixed < n ? Math.floor(fixed) : 0;
+    if (fx > 0 && n * m.minPill + (n - 1) * m.gap <= width) {
+        var inner = strip(n - fx, width - fx * (m.minPill + m.gap), m, focus);
+        return { mode: "pills", shown: n, pillW: inner.pillW, focusW: inner.focusW };
+    }
     var hasF = typeof focus === "number" && focus >= 0 && focus < n
         && typeof m.medium === "number" && m.medium > m.minPill;
     if (n * m.minPill + (n - 1) * m.gap <= width) {
@@ -542,4 +567,21 @@ function dropIndex(lefts, widths, from, x) {
             to = i;
     }
     return to;
+}
+
+// The window a restored one lands after, to join the end of the queue: the rightmost column's
+// window on workspace `ws` (ties: lowest, i.e. the last in a column), among windows that are
+// tiled and not minimised, other than `self`. null when there is none. windows: as the bar reads
+// them (address, wsId, minimised, floating, x, y).
+function lastLive(windows, ws, self) {
+    var best = null, me = normAddr(self);
+    for (var i = 0; i < (windows || []).length; i++) {
+        var w = windows[i], a = normAddr(w && w.address);
+        if (a === null || a === me || w.minimised === true || w.floating === true || w.wsId !== ws)
+            continue;
+        var x = typeof w.x === "number" ? w.x : 0, y = typeof w.y === "number" ? w.y : 0;
+        if (best === null || x > best.x || (x === best.x && y > best.y))
+            best = { a: a, x: x, y: y };
+    }
+    return best === null ? null : best.a;
 }

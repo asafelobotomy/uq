@@ -292,14 +292,14 @@ cmd_rollback() {
     done
     if [ -n "$best" ]; then
         note "reinstalling $pkg $bestver from $best"
-        sudo pacman -U "$best"
+        run0 pacman -U "$best"
         return
     fi
     local helper
     for helper in paru yay; do
         if command -v "$helper" >/dev/null 2>&1; then
             note "no earlier build of $pkg is cached; reinstalling it from the AUR with $helper"
-            "$helper" -S "$pkg"
+            "$helper" --sudo run0 -S "$pkg"
             return
         fi
     done

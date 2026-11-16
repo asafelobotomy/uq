@@ -25,12 +25,12 @@ su tester -c "set -e
     export XDG_RUNTIME_DIR=\$(mktemp -d) LIBSEAT_BACKEND=seatd UQCTL=/src/target/debug/uqctl
     timeout 300 scripts/smoke-shell.sh" || rc=$?
 # Super+drag on the real shell (scripts/drag-live.sh asserts what it leaves behind). 77 is "can't run here".
-for scenario in half-pair full-edge keys drop restore; do
+for scenario in half-pair full-edge keys drop restore tabs; do
     echo "=========== drag-live $scenario"
     su tester -c "set -e
         cd /src
         export XDG_RUNTIME_DIR=\$(mktemp -d) LIBSEAT_BACKEND=seatd UQCTL=/src/target/debug/uqctl UQ_CAPTURE_DIR=/src/captures
-        timeout 200 scripts/drag-live.sh --scenario $scenario" || { r=$?; [ "$r" = 77 ] || rc=$r; }
+        timeout 240 scripts/drag-live.sh --scenario $scenario" || { r=$?; [ "$r" = 77 ] || rc=$r; }
 done
 kill %1 2>/dev/null || true
 exit "$rc"

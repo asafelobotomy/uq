@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Hyprland
@@ -13,20 +14,21 @@ import "../logic/dock.js" as Dock
 
 // Open windows (`work`): one tab per window on this screen's current workspace, like browser
 // tabs, in the order the windows sit on screen (left to right, as the scrolling layout's columns
-// run; the island's setting shell.bar.options.work can pick another order in edit mode). Windows
-// minimised from this workspace keep their place, dimmed. The focused window's tab grows to
-// Medium and the others share what is left. What a tab shows depends on its width (Work.tabTier):
-// Icon, the app icon, which turns into a close button under the pointer; Small, the icon, Full or
-// Half (whichever the window isn't, under the pointer) and close; Medium, the icon, Half, Full and
-// close; Large, Medium plus the title (untrusted, elided). Full makes the window's column the
+// run; the island's setting shell.bar.options.work can pick another order in edit mode). The
+// focused window's tab grows to Medium and the others share what is left. What a tab shows
+// depends on its width (Work.tabTier): the title at every size but Icon (untrusted, elided), and
+// beside it, Small, Full or Half (whichever the window isn't, under the pointer) and close;
+// Medium, Half, Full and close. At Icon size the tab is the app icon, which turns into a close
+// button under the pointer, and the title shows in a tooltip. Full makes the window's column the
 // screen's width and Half half of it (outside the scrolling layout, Full maximizes and Half puts
-// it back). Past the narrowest tabs, arrows scroll the strip and "+N" lists every window; when a
-// window out of view gets focus the strip centres on it. When not even one tab fits, the lead
-// window's icon lists them all. Left click focuses a window (or brings a minimised one back),
-// middle click closes it, right click opens its menu (minimise, full or half width, float, pin
-// the app, move it, close it, and the uQ Island Menu). A window that wants attention (Hyprland
-// marks it urgent, or its app sends a notification) gets a dot in the accent colour on its tab's
-// icon until it is focused.
+// it back). A minimised window's tab is always an icon, greyed, at the end of the tabs; choosing
+// it brings the window back as the last column, focused. Past the narrowest tabs, arrows scroll
+// the strip and "+N" lists every window; when a window out of view gets focus the strip centres
+// on it. When not even one tab fits, the lead window's icon lists them all. Left click focuses a
+// window (or brings a minimised one back), middle click closes it, right click opens its menu
+// (minimise, full or half width, float, pin the app, move it, close it, and the uQ Island Menu).
+// A window that wants attention (Hyprland marks it urgent, or its app sends a notification) gets
+// a dot in the accent colour on its tab's icon until it is focused.
 Island {
     id: root
     property var screen: null
@@ -194,7 +196,7 @@ Island {
     }
     readonly property var here: Work.windowsHere(windows, monitorName, wsId, focusedAddr)
     readonly property var ordered: {
-        var ctx = { opened: openedSeq, activity: {}, pinIndex: {}, usage: {}, name: {}, lastOrder: memo.order };
+        var ctx = { opened: openedSeq, activity: {}, pinIndex: {}, usage: {}, name: {}, lastOrder: memo.order, lastMin: memo.min };
         var pins = Settings.values.pinned || [];
         for (var i = 0; i < here.length; i++) {
             var w = here[i], app = appOf(w.cls);
@@ -216,24 +218,31 @@ Island {
 
     // The order last shown, for "Screen order" to keep minimised windows in their place. Held
     // inside an object so updating it doesn't re-run `ordered`.
-    readonly property var memo: ({ order: [] })
-    onOrderedChanged: memo.order = ordered.map(function (w) { return w.address; })
+    readonly property var memo: ({ order: [], min: [] })
+    onOrderedChanged: {
+        memo.order = ordered.map(function (w) { return w.address; });
+        memo.min = ordered.filter(function (w) { return w.minimised; }).map(function (w) { return w.address; });
+    }
 
     // --- the strip ---
     readonly property real closeW: Theme.fontSize + Theme.gapIn
     // The narrowest width of each tab size (Work.tabTier): the icon with its margins, then a
     // button more each step, then room for a short title.
     readonly property real tabPad: 6
+    // The title is shown at every size but Icon, so even the smallest tab with buttons has room
+    // for a few letters of it (past that, the tab is an icon and the title is in its tooltip).
+    readonly property real titleMin: Theme.fontSize * 3 + Theme.gapIn
     readonly property var tiers: ({
-        small: tabPad * 2 + iconSize + Theme.gapIn + closeW * 2 + 2,
-        medium: tabPad * 2 + iconSize + Theme.gapIn + closeW * 3 + 4,
-        large: tabPad * 2 + iconSize + Theme.gapIn * 2 + closeW * 3 + 4 + Theme.fontSize * 4
+        small: tabPad * 2 + iconSize + Theme.gapIn + closeW * 2 + 2 + titleMin,
+        medium: tabPad * 2 + iconSize + Theme.gapIn + closeW * 3 + 4 + titleMin,
+        large: tabPad * 2 + iconSize + Theme.gapIn * 2 + closeW * 3 + 4 + titleMin + Theme.fontSize * 4
     })
     readonly property var metrics: ({
         minPill: tabPad * 2 + iconSize, maxPill: BarLayout.unit * 5, gap: 2, medium: tiers.medium,
         arrow: Theme.fontSize + Theme.gapIn, chip: Theme.fontSize * 2 + Theme.gapIn * 2
     })
-    readonly property var fit: Work.strip(ordered.length, room, metrics, focusedIndex)
+    readonly property var fit: Work.strip(ordered.length, room, metrics, focusedIndex, minimisedCount)
+    readonly property int minimisedCount: ordered.filter(function (w) { return w.minimised; }).length
     readonly property int focusedIndex: {
         for (var i = 0; i < ordered.length; i++)
             if (ordered[i].focused)
@@ -287,7 +296,13 @@ Island {
             var ws = t && t.lastIpcObject ? Min.wsFromTags(t.lastIpcObject.tags) : null;
             if (ws === null)
                 ws = root.wsId > 0 ? root.wsId : 1;
-            Bridge.call("Dispatch", ["restore", { address: w.address, to_ws: ws }]);
+            // At the end of the queue: after the last window on the workspace (the scrolling
+            // layout puts it next to the focused one).
+            var last = Work.lastLive(root.windows, ws, w.address);
+            var args = { address: w.address, to_ws: ws };
+            if (last !== null)
+                args.after = last;
+            Bridge.call("Dispatch", ["restore", args]);
         } else if (!w.focused) {
             // The pointer stays put; a window out of view (a scrolled-away column) is brought
             // into view by the focus itself.
@@ -695,8 +710,10 @@ Island {
                     }
                 }
                 z: pill.index === root.dragIndex ? 1 : 0
-                readonly property real tabW: win.focused ? root.fit.focusW : root.fit.pillW
-                readonly property string tier: Work.tabTier(tabW, root.tiers)
+                // A minimised window's tab is an icon, greyed, at the end of the queue.
+                readonly property real tabW: win.minimised ? root.metrics.minPill
+                    : (win.focused ? root.fit.focusW : root.fit.pillW)
+                readonly property string tier: win.minimised ? "icon" : Work.tabTier(tabW, root.tiers)
                 readonly property bool full: root.isFull(win)
                 readonly property string name: win.title || win.cls
                 Layout.preferredWidth: tabW
@@ -705,7 +722,7 @@ Island {
                 color: win.focused ? Theme.surfaceAlt : (pillHover.hovered ? Theme.overlay : "transparent")
                 border.color: win.focused ? Theme.accent : "transparent"
                 border.width: win.focused ? 1 : 0
-                opacity: win.minimised ? 0.55 : 1
+                opacity: win.minimised ? 0.5 : 1
                 Accessible.role: Accessible.PageTab
                 readonly property bool alert: root.alerts[modelData] === true
                 Accessible.name: name + (win.minimised ? ", minimised" : "")
@@ -719,6 +736,43 @@ Island {
 
                 HoverHandler {
                     id: pillHover
+                }
+                // At icon size the title shows in a tooltip under the pointer.
+                Timer {
+                    id: tipDelay
+                    interval: 350
+                    running: pillHover.hovered && pill.tier === "icon" && root.dragIndex < 0
+                    onTriggered: pill.tipShown = true
+                }
+                property bool tipShown: false
+                Connections {
+                    target: pillHover
+                    function onHoveredChanged() { if (!pillHover.hovered) pill.tipShown = false; }
+                }
+                Loader {
+                    active: pill.tipShown && pill.tier === "icon" && pill.name !== ""
+                    sourceComponent: PopupWindow {
+                        anchor.item: pill
+                        anchor.edges: Edges.Bottom
+                        anchor.gravity: Edges.Bottom
+                        implicitWidth: tipText.implicitWidth + Theme.gapIn * 2
+                        implicitHeight: tipText.implicitHeight + Theme.gapIn * 2
+                        color: "transparent"
+                        visible: true
+                        Rectangle {
+                            anchors.fill: parent
+                            color: Theme.surface
+                            radius: Theme.radius
+                            border.color: Theme.border
+                            border.width: Theme.borderWidth
+                            UqText {
+                                id: tipText
+                                anchors.centerIn: parent
+                                width: Math.min(implicitWidth, 320)
+                                text: pill.name + (pill.win.minimised ? " (minimised)" : "")
+                            }
+                        }
+                    }
                 }
                 MouseArea {
                     id: pillMouse
@@ -823,6 +877,10 @@ Island {
                             backer.sourceSize.width: root.iconSize * root.dpr
                             backer.sourceSize.height: root.iconSize * root.dpr
                             source: root.iconFor(pill.win.cls)
+                            layer.enabled: pill.win.minimised === true
+                            layer.effect: MultiEffect {
+                                saturation: -1.0
+                            }
                         }
                         AlertDot {
                             shown: pill.alert && !(pill.tier === "icon" && iconClose.containsMouse)
@@ -840,7 +898,8 @@ Island {
                         MouseArea {
                             id: iconClose
                             anchors.fill: parent
-                            enabled: pill.tier === "icon"
+                            // A minimised tab's icon isn't a close button: clicking it restores.
+                            enabled: pill.tier === "icon" && !pill.win.minimised
                             hoverEnabled: true
                             Accessible.role: Accessible.Button
                             Accessible.name: root.closeLabel(pill.win)
@@ -848,8 +907,9 @@ Island {
                         }
                     }
                     UqText {
-                        visible: pill.tier === "large"
+                        visible: pill.tier !== "icon"
                         Layout.fillWidth: true
+                        Layout.minimumWidth: 0
                         text: pill.name
                         color: pill.win.focused ? Theme.text : Theme.textMuted
                     }
