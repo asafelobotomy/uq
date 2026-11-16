@@ -101,12 +101,22 @@ pub const OLD_LAUNCHER_ID: &str = "uq.spotlight";
 pub const LAUNCHER_ID: &str = "uq.lookseedo";
 
 fn migrate_renamed(v: &mut Value) {
-    for o in v.get_mut("overrides").and_then(Value::as_array_mut).into_iter().flatten() {
+    for o in v
+        .get_mut("overrides")
+        .and_then(Value::as_array_mut)
+        .into_iter()
+        .flatten()
+    {
         if o.get("id").and_then(Value::as_str) == Some(OLD_LAUNCHER_ID) {
             o["id"] = Value::from(LAUNCHER_ID);
         }
     }
-    for b in v.get_mut("custom").and_then(Value::as_array_mut).into_iter().flatten() {
+    for b in v
+        .get_mut("custom")
+        .and_then(Value::as_array_mut)
+        .into_iter()
+        .flatten()
+    {
         if let Some(a) = b.get_mut("action")
             && a.get("kind").and_then(Value::as_str) == Some("shell")
             && a.get("name").and_then(Value::as_str) == Some("spotlight")

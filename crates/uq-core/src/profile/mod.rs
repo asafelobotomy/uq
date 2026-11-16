@@ -1065,6 +1065,9 @@ mod lookseedo_migration {
     fn old_launcher_shortcut_key_moves() {
         let src = "format = 1\nid = \"p\"\nname = \"P\"\n[keybinds]\n\"uq.spotlight\" = false\n";
         let p = Profile::parse(src).unwrap();
-        assert_eq!(p.values["keybinds"], serde_json::json!({"uq.lookseedo": false}));
+        assert_eq!(
+            p.values["keybinds"],
+            serde_json::json!({"uq.lookseedo": false})
+        );
     }
 }

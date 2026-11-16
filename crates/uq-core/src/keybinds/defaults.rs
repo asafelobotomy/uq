@@ -806,7 +806,10 @@ mod tests {
             );
             assert!(!d.label.is_empty());
         }
-        assert_eq!(default_of("uq.lookseedo").unwrap().label, "Open look=see>do_");
+        assert_eq!(
+            default_of("uq.lookseedo").unwrap().label,
+            "Open look=see>do_"
+        );
         assert!(default_of("uq.nope").is_none());
     }
 

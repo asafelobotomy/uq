@@ -465,5 +465,10 @@ fn spotlight_names_migrate_to_lookseedo() {
     }))
     .unwrap();
     assert_eq!(kb.overrides[0].id, "uq.lookseedo");
-    assert_eq!(kb.custom[0].action, Action::Shell { name: "lookseedo".into() });
+    assert_eq!(
+        kb.custom[0].action,
+        Action::Shell {
+            name: "lookseedo".into()
+        }
+    );
 }
