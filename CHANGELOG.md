@@ -24,6 +24,14 @@ All notable changes to uQ are listed here. The format follows
 
 ### Added
 
+- **look=see>do_ can do things: a Commands group.** Type `lock`, `suspend`, `log out`,
+  `restart` or `power off` for the power actions, or `profile` / a profile's name to switch
+  profiles or go back to normal. The ones that end the session are never the top hit, so a
+  half-typed word can't log you out on Enter. It has its own switch under Settings → Shell →
+  Search providers.
+- **Shift+Enter runs a row's second action.** On a `>` row it runs the command in your chosen
+  terminal and keeps the window open until you press Enter; on a provider's row it calls the
+  row's second action (emobie's "type it").
 - **Settings → Shell → Screenshots → Print key.** Choose what Print captures: an area (the
   default, marked up in satty), the whole screen or the focused window. Shift+Print and
   Super+Print keep taking the screen and the window.
