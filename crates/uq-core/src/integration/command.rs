@@ -27,6 +27,8 @@ use crate::integration::manifest::{CommandSpec, Output, command_prefixes, path_u
 
 /// stdout above this kills the command (§2.3).
 pub const STDOUT_CAP: usize = 4 << 20;
+/// A streamed line longer than this kills the command (`uq_api` 3).
+pub const LINE_CAP: usize = 64 << 10;
 /// stderr above this kills the command (§2.3).
 pub const STDERR_CAP: usize = 64 << 10;
 /// Between `SIGTERM` and `SIGKILL`.
@@ -59,6 +61,8 @@ pub enum CommandError {
     Signal(i32),
     #[error("its output isn't valid JSON: {0}")]
     BadJson(String),
+    #[error("printed a line of more than 64 KiB and was stopped")]
+    LineTooLarge,
     #[error("{0}")]
     Io(String),
 }
@@ -195,6 +199,35 @@ impl Runner {
         spec: &CommandSpec,
         args: &[String],
     ) -> Result<RunResult, CommandError> {
+        self.run_with(spec, args, None).await
+    }
+
+    /// As [`Runner::run`] for a command with `output = "ndjson"`, but each line of stdout is
+    /// parsed and handed to `on_event` as it arrives instead of being kept: the result's `output`
+    /// is `null`, and stdout isn't capped (a long job may say a lot). A line that isn't JSON, or
+    /// is over [`LINE_CAP`], stops the command.
+    pub async fn stream(
+        &self,
+        spec: &CommandSpec,
+        args: &[String],
+        on_event: &mut (dyn FnMut(Value) + Send),
+    ) -> Result<RunResult, CommandError> {
+        if spec.output != Output::Ndjson {
+            return Err(CommandError::BadArgs(format!(
+                "{:?} doesn't have output = \"ndjson\"",
+                spec.id
+            )));
+        }
+        self.run_with(spec, args, Some(on_event)).await
+    }
+
+    async fn run_with(
+        &self,
+        spec: &CommandSpec,
+        args: &[String],
+        mut sink: Option<&mut (dyn FnMut(Value) + Send)>,
+    ) -> Result<RunResult, CommandError> {
+        let streamed = sink.is_some();
         let argv = self.argv(spec, args)?;
         let mut cmd = tokio::process::Command::new(&argv[0]);
         cmd.args(&argv[1..])
@@ -218,8 +251,17 @@ impl Runner {
         let (mut out, mut err) = (Vec::new(), Vec::new());
         let work = async {
             let reads = async {
+                let stdout_read = async {
+                    match sink.as_deref_mut() {
+                        Some(sink) => read_lines(stdout, sink).await,
+                        None => {
+                            read_capped(stdout, STDOUT_CAP, CommandError::StdoutTooLarge, &mut out)
+                                .await
+                        }
+                    }
+                };
                 tokio::try_join!(
-                    read_capped(stdout, STDOUT_CAP, CommandError::StdoutTooLarge, &mut out),
+                    stdout_read,
                     read_capped(stderr, STDERR_CAP, CommandError::StderrTooLarge, &mut err),
                 )
                 .map(|_| ())
@@ -249,7 +291,7 @@ impl Runner {
             Err(_) => Err(CommandError::Timeout(spec.timeout_ms)),
         };
         match outcome {
-            Ok(status) => finish(spec, out, err, status),
+            Ok(status) => finish(spec, out, err, status, streamed),
             Err(e) => {
                 if let Some(pgid) = pgid {
                     stop_group(pgid, &mut child, self.grace).await;
@@ -284,6 +326,58 @@ async fn read_capped(
     }
 }
 
+/// Read stdout to the end, handing each complete line (parsed as JSON) to `sink`. A last line
+/// with no newline counts. Blank lines are skipped.
+async fn read_lines(
+    mut r: impl AsyncRead + Unpin,
+    sink: &mut (dyn FnMut(Value) + Send),
+) -> Result<(), CommandError> {
+    let mut chunk = [0u8; 16 * 1024];
+    let mut line: Vec<u8> = Vec::new();
+    loop {
+        let n = r
+            .read(&mut chunk)
+            .await
+            .map_err(|e| CommandError::Io(e.to_string()))?;
+        if n == 0 {
+            return emit_line(&line, sink);
+        }
+        for &b in &chunk[..n] {
+            if b == b'\n' {
+                emit_line(&line, sink)?;
+                line.clear();
+            } else {
+                if line.len() >= LINE_CAP {
+                    return Err(CommandError::LineTooLarge);
+                }
+                line.push(b);
+            }
+        }
+    }
+}
+
+fn emit_line(line: &[u8], sink: &mut (dyn FnMut(Value) + Send)) -> Result<(), CommandError> {
+    if line.iter().all(u8::is_ascii_whitespace) {
+        return Ok(());
+    }
+    let v =
+        serde_json::from_slice::<Value>(line).map_err(|e| CommandError::BadJson(e.to_string()))?;
+    sink(v);
+    Ok(())
+}
+
+/// The values of an `ndjson` output: one per non-blank line.
+fn parse_lines(out: &[u8]) -> Result<Value, serde_json::Error> {
+    let mut items = Vec::new();
+    for line in out.split(|&b| b == b'\n') {
+        if line.iter().all(u8::is_ascii_whitespace) {
+            continue;
+        }
+        items.push(serde_json::from_slice::<Value>(line)?);
+    }
+    Ok(Value::Array(items))
+}
+
 fn killpg(pgid: i32, sig: i32) {
     // SAFETY: killpg only sends a signal; a stale or empty group is ESRCH, which is ignored.
     unsafe {
@@ -305,6 +399,7 @@ fn finish(
     out: Vec<u8>,
     err: Vec<u8>,
     status: ExitStatus,
+    streamed: bool,
 ) -> Result<RunResult, CommandError> {
     use std::os::unix::process::ExitStatusExt;
     let stderr_head = String::from_utf8_lossy(&err[..err.len().min(STDERR_LOG_BYTES)]).into_owned();
@@ -313,7 +408,14 @@ fn finish(
     };
     let output = match spec.output {
         Output::None => Value::Null,
+        // Streamed lines were handed over as they came; none are kept.
+        Output::Ndjson if streamed => Value::Null,
         Output::Text => Value::String(String::from_utf8_lossy(&out).into_owned()),
+        Output::Ndjson => match parse_lines(&out) {
+            Ok(v) => v,
+            Err(_) if code != 0 => Value::String(String::from_utf8_lossy(&out).into_owned()),
+            Err(e) => return Err(CommandError::BadJson(e.to_string())),
+        },
         Output::Json => match serde_json::from_slice::<Value>(&out) {
             Ok(v) => v,
             Err(_) if code != 0 => Value::String(String::from_utf8_lossy(&out).into_owned()),

@@ -18,7 +18,8 @@ Item {
         property var answers: []
 
         signal finished(int request, string resultJson)
-        signal confirmRequested(int request, string page, string text)
+        signal confirmRequested(int request, string page, string text, string planJson)
+        signal progress(int request, string eventJson)
         signal commandChanged(int watch)
         property var watching: []
 
@@ -27,6 +28,7 @@ Item {
             calls = [];
             answers = [];
             watching = [];
+            plan = defaultPlan;
         }
         function watchCommand(page, id) {
             if (id !== "status")
@@ -45,11 +47,34 @@ Item {
             calls.push(["run", page, id, argsJson]);
             const args = JSON.parse(argsJson);
             if (id === "remove")
-                later(() => confirmRequested(req, page, "Remove " + args[0] + " and its leftovers?"));
+                later(() => confirmRequested(req, page, "Remove " + args[0] + " and its leftovers?", ""));
+            else if (id === "previewed")
+                later(() => confirmRequested(req, page, "Remove " + args[0] + "?", JSON.stringify(fakeHost.plan)));
             else if (id === "broken")
                 later(() => finished(req, "not json"));
             else
                 later(() => finished(req, JSON.stringify({ code: 0, output: { id: id, args: args } })));
+            return req;
+        }
+        property var plan: fakeHost.defaultPlan
+        readonly property var defaultPlan: ({
+                summary: "2 changes, 1.5 MB",
+                changes: [
+                    { group: "Caches", label: "Firefox", detail: "~/.cache/mozilla", bytes: 1200000, reversible: true },
+                    { group: "Caches", label: "Chrome", detail: "", bytes: 300000, reversible: true },
+                    { group: "", label: "Menu entry", detail: "", bytes: null, reversible: false }
+                ],
+                more: 3,
+                would_refuse: false,
+                reason: ""
+            })
+        function streamCommand(page, id, argsJson) {
+            const req = ++next;
+            calls.push(["stream", page, id, argsJson]);
+            later(() => progress(req, JSON.stringify({ percent: 10 })));
+            later(() => progress(req, "not json"));
+            later(() => progress(req, JSON.stringify({ percent: 90 })));
+            later(() => finished(req, JSON.stringify({ code: 0, output: null })));
             return req;
         }
         function answer(req, confirmed) {
@@ -104,7 +129,7 @@ Item {
         function make(host) {
             const c = createTemporaryObject(contextComp, root, { host: host });
             const d = createTemporaryObject(dialogComp, root);
-            c.confirmNeeded.connect((req, text) => d.ask(req, text));
+            c.confirmNeeded.connect((req, text, plan) => d.ask(req, text, plan));
             d.answered.connect((req, ok) => c.answer(req, ok));
             return [c, d];
         }
@@ -117,6 +142,7 @@ Item {
             const [c] = make(fakeHost);
             compare(c.ctx.theme.accent, "#ff0000");
             compare(typeof c.ctx.command.run, "function");
+            compare(typeof c.ctx.command.stream, "function");
             compare(typeof c.ctx.dbus.call, "function");
             compare(typeof c.ctx.dbus.get, "function");
             compare(typeof c.ctx.openApp, "function");
@@ -260,6 +286,64 @@ Item {
             c.ctx.openApp("x.desktop", collect);
             tryCompare(tc.results, "length", 4);
             verify(tc.results.every(r => r.error.length > 0));
+        }
+
+        function test_stream_delivers_events_then_the_end() {
+            const [c] = make(fakeHost);
+            const events = [];
+            c.ctx.command.stream("job", ["a"], e => events.push(e), collect);
+            tryCompare(tc.results, "length", 1);
+            compare(events.length, 2, "the line that isn't JSON is skipped");
+            compare(events[0].percent, 10);
+            compare(events[1].percent, 90);
+            compare(tc.results[0].code, 0);
+            compare(fakeHost.calls[0], ["stream", "demo", "job", "[\"a\"]"]);
+            compare(Object.keys(c.streams).length, 0, "a finished stream is forgotten");
+        }
+
+        function test_stream_without_a_host_fails() {
+            const c = createTemporaryObject(contextComp, root, {});
+            c.ctx.command.stream("job", [], () => {}, collect);
+            tryCompare(tc.results, "length", 1);
+            verify(tc.results[0].error);
+        }
+
+        function test_plan_is_shown_grouped_and_confirmed() {
+            const [c, d] = make(fakeHost);
+            c.ctx.command.run("previewed", ["old"], collect);
+            tryCompare(d, "opened", true);
+            compare(d.questionLabel.text, "Remove old?");
+            verify(d.plan !== null, "the plan reached the dialog");
+            compare(d.plan.changes.length, 3);
+            compare(d.groups.length, 2);
+            compare(d.groups[0].name, "Caches");
+            compare(d.groups[0].bytes, 1500000);
+            compare(d.groups[1].name, "Changes", "a change with no group goes under Changes");
+            compare(d.sizeText(1500000), "1.5 MB");
+            compare(d.sizeText(null), "");
+            compare(d.undoText({ reversible: true }), "can be put back");
+            compare(d.undoText({ reversible: false }), "can't be undone");
+            compare(d.undoText({ reversible: null }), "");
+            verify(d.confirmButton.visible);
+            d.confirmButton.clicked();
+            tryCompare(tc.results, "length", 1);
+            compare(tc.results[0].output, "removed");
+        }
+
+        function test_a_refused_plan_offers_no_confirm() {
+            fakeHost.plan = { summary: "", changes: [], more: 0, would_refuse: true, reason: "Swap is in use" };
+            const [c, d] = make(fakeHost);
+            c.ctx.command.run("previewed", ["old"], collect);
+            tryCompare(d, "opened", true);
+            verify(d.refused);
+            verify(!d.confirmButton.visible);
+            verify(!d.cancelButton.visible);
+            verify(d.closeButton.visible);
+            // Even if Confirm is reached some other way, a refused plan answers no.
+            d.reply(true);
+            compare(fakeHost.answers[0][1], false);
+            tryCompare(tc.results, "length", 1);
+            verify(tc.results[0].cancelled);
         }
     }
 }

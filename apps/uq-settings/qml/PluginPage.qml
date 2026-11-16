@@ -54,7 +54,7 @@ Item {
         host: page.host
         pageId: page.pageId
         theme: page.theme
-        onConfirmNeeded: (request, text) => confirmDialog.ask(request, text)
+        onConfirmNeeded: (request, text, plan) => confirmDialog.ask(request, text, plan)
     }
 
     CommandConfirmDialog {
