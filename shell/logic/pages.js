@@ -240,3 +240,17 @@ function shared(wins, address, room, extra, starts, right) {
         return null;
     return { from: onRight(list, p, room, right) ? room - p.used : 0, width: p.used };
 }
+
+// The index of the column holding window `addr` among the columns of `wins` (left to right), or
+// -1; and how many columns there are.
+function columnIndex(wins, addr) {
+    var cols = Grips.columns(wins);
+    for (var i = 0; i < cols.length; i++)
+        for (var j = 0; j < cols[i].wins.length; j++)
+            if (cols[i].wins[j].address === addr)
+                return i;
+    return -1;
+}
+function columnCount(wins) {
+    return Grips.columns(wins).length;
+}

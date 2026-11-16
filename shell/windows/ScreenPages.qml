@@ -6,6 +6,7 @@ import Quickshell.Wayland
 import "../core"
 import "../services"
 import "../logic/edges.js" as Edges
+import "../logic/mousehold.js" as Hold
 import "../logic/pages.js" as Pages
 import "../logic/work.js" as Work
 
@@ -223,11 +224,13 @@ Scope {
     // A tab dropped on screen `screenName` at `x` (the screen's own coordinates): how window
     // `address` would join the page shown there (Pages.dropPlan), with that screen's monitor and
     // geometry; null when it can't.
-    function dropPlanFor(screenName, address, x) {
+    function dropPlanFor(screenName, address, x, listed) {
         var m = root.monitors[screenName] || null;
-        if (!root.enabled || !WindowLook.known || !m || !m.activeWorkspace)
+        // Not `enabled`: the pages are held while a window is moved with the pointer, and this
+        // is what shows where it would go.
+        if (Bridge.locked || !WindowLook.known || !m || !m.activeWorkspace)
             return null;
-        var wins = root.tiled[m.activeWorkspace.id], g = Pages.geometry(m, WindowLook);
+        var wins = listed || root.tiled[m.activeWorkspace.id], g = Pages.geometry(m, WindowLook);
         if (!wins || g === null)
             return null;
         var scale = m.scale > 0 ? m.scale : 1;
@@ -238,11 +241,14 @@ Scope {
     // The tab's window joins that page: its column moves there, the widths are set, and the
     // pages begin where the plan says (so the window pushed out of a pair gets a page of its
     // own). The window is focused at the end.
-    function dropTab(screenName, address, x) {
-        var d = root.dropPlanFor(screenName, address, x);
+    // `listed` (the windows as they were) and `adjust` (columns to move it besides what the plan
+    // says): for a window moved with the pointer, which Hyprland has already put somewhere
+    // else, see applyPendingDrop.
+    function dropTab(screenName, address, x, listed, adjust) {
+        var d = root.dropPlanFor(screenName, address, x, listed);
         if (d === null)
             return;
-        var plan = d.plan, st = Object.assign({}, root.starts);
+        var plan = d.plan, moves = plan.steps + (adjust || 0), st = Object.assign({}, root.starts);
         for (var a in plan.starts) {
             if (plan.starts[a])
                 st[a] = true;
@@ -260,14 +266,14 @@ Scope {
         root.right = rt;
         // A page moved to the other side moves no column: hide what now shows beside it and
         // scroll there.
-        if (plan.steps === 0 && plan.half.length === 0) {
+        if (moves === 0 && plan.half.length === 0) {
             root.syncHidden();
             root.refresh();
             return;
         }
         var warn = function (e) { console.warn("uq: drop a tab on the screen: " + e); };
-        var chain = plan.steps !== 0
-            ? Bridge.call("Dispatch", ["move_column", { address: address, steps: plan.steps }])
+        var chain = moves !== 0
+            ? Bridge.call("Dispatch", ["move_column", { address: address, steps: moves }])
             : Promise.resolve();
         plan.half.forEach(function (h) {
             chain = chain.then(function () {
@@ -286,9 +292,67 @@ Scope {
             PageActions.dropHandler = null;
     }
 
+    // The windows (per workspace) as they were when a move with the pointer began.
+    property var preDrag: ({})
+    // A window moved with the pointer (WindowDrag.drop), waiting for the look after it let go.
+    property var pendingDrop: null
+
+    // The window's own list among `byWs`, or null.
+    function listHolding(byWs, addr) {
+        for (var ws in byWs)
+            if (Pages.columnIndex(byWs[ws], addr) >= 0)
+                return byWs[ws];
+        return null;
+    }
+
+    // The same rule as a tab dropped on the screen: where the pointer let go decides which half
+    // of the page the window joins, worked out on the windows as they were before the move (the
+    // preview showed that). Hyprland has put the window back in the layout by its own rule
+    // meanwhile, which moved the columns about; the window is moved from where it is to where the
+    // rule puts it. A window that was Full and isn't placed anywhere else is made Full again
+    // (Hyprland un-maximizes it when it lifts it). Returns true when it did something.
+    function applyPendingDrop() {
+        var d = root.pendingDrop;
+        root.pendingDrop = null;
+        if (d === null || !root.enabled)
+            return false;
+        var addr = d.address !== "" ? d.address : d.full;
+        var restoreFull = function () {
+            if (d.full === "")
+                return false;
+            Bridge.call("Dispatch", ["column_width", { address: d.full, width: "full", keep_focus: false }])
+                .catch(function (e) { console.warn("uq: drag: " + e); });
+            return true;
+        };
+        var pre = root.listHolding(root.preDrag, addr), now = root.listHolding(root.tiled, addr);
+        // Anything else (it stacked into another column, or moved to another workspace): leave it
+        // where Hyprland put it.
+        if (pre === null || now === null || Pages.columnCount(pre) !== Pages.columnCount(now))
+            return restoreFull();
+        var back = Pages.columnIndex(pre, addr) - Pages.columnIndex(now, addr);
+        var at = d.x === null ? null : Hold.place(root.monitors, d.x, d.y);
+        if (at !== null && root.dropPlanFor(at.screen, addr, at.x, pre) !== null) {
+            root.dropTab(at.screen, addr, at.x, pre, back);
+            return true;
+        }
+        // Nothing changes by the rule: it goes back where it was.
+        if (back !== 0) {
+            var warn = function (e) { console.warn("uq: drag: " + e); };
+            Bridge.call("Dispatch", ["move_column", { address: addr, steps: back }]).catch(warn).then(function () {
+                if (d.full !== "")
+                    restoreFull();
+                root.refresh();
+            });
+            return true;
+        }
+        return restoreFull();
+    }
+
     function look() {
         read();
         syncHidden();
+        if (root.applyPendingDrop())
+            return;
         var mon = Hyprland.focusedMonitor;
         var m = mon ? root.monitors[mon.name] : null;
         // The pages need Hyprland's gaps and borders, which arrive a moment after start.
@@ -457,7 +521,8 @@ Scope {
             Rectangle {
                 id: ghost
                 readonly property var h: hintWin.hint
-                visible: h !== null
+                // Not for a window moved with the pointer: it is the window itself.
+                visible: h !== null && h.ghost !== false
                 x: h ? h.x - h.holdX : 0
                 y: h ? h.y - h.holdY : 0
                 width: h ? Math.max(h.width, Theme.fontSize * 9) : 0
@@ -488,6 +553,28 @@ Scope {
                     }
                 }
             }
+        }
+    }
+
+    // A window moved with the pointer: while it is held, the screen shows where it would go if
+    // let go here (the frame a dragged tab shows); when it is let go, it is placed there.
+    Connections {
+        target: WindowDrag
+        function onCursorChanged() {
+            var c = WindowDrag.cursor, lifted = Hold.address(WindowDrag.seen.lifted);
+            var at = c === null || lifted === "" ? null : Hold.place(root.monitors, c.x, c.y);
+            PageActions.dropHint = at === null ? null : {
+                screen: at.screen, address: lifted, x: at.x, y: at.y, drop: true,
+                holdX: 0, holdY: 0, width: 0, height: 0, title: "", icon: "", ghost: false
+            };
+        }
+        function onActiveChanged() {
+            if (WindowDrag.active)
+                root.preDrag = root.tiled;
+        }
+        function onEnded() {
+            PageActions.dropHint = null;
+            root.pendingDrop = WindowDrag.drop;
         }
     }
 

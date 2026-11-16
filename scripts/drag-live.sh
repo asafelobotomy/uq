@@ -3,7 +3,7 @@
 # layout: what the shell does while the window is held. Super+drag is played through a virtual
 # keyboard and pointer (tests/live/tools/uqinput).
 #
-#   scripts/drag-live.sh [--scenario half-pair|full-edge|keys|restore] [--unguarded]
+#   scripts/drag-live.sh [--scenario half-pair|full-edge|keys|drop|restore] [--unguarded]
 #
 # It starts Hyprland on uQ's base.lua and the shell, opens windows, drags one and prints what
 # happened between the drag's start and end events: the focus changes, and where the dragged window
@@ -132,6 +132,13 @@ case "$scenario" in
         open_window w1; settle 1.5
         open_window w2; settle 2
         grab=w2; grab_dx=0.93 ;;
+    drop)
+        # Two Half windows, each alone on its page. Take w2 to the right half of its screen: the
+        # screen shows where it will go while it is held, and it ends up there.
+        open_window w1; settle 1.5
+        open_window w2; settle 1.5
+        width w1 half; width w2 half; settle 2
+        grab=w2; grab_dx=0.5 ;;
     keys)
         # Two Half windows; the keyboard actions that do what the mouse does (shortcuts in
         # Settings): move the column, Full and back, wider and narrower.
@@ -233,6 +240,13 @@ if [ "$scenario" = half-pair ]; then
     send "sleep 1200"
     drain; echo "--- while held"; snap held | tee "$tmp/held.txt"
     for i in 11 10 9 8 7 6 5 4 3 2 1 0; do send "move $((cx + i * 20)) $((cy + i * 10))" "sleep 40"; done
+elif [ "$scenario" = drop ]; then
+    # Right across the screen: from the middle of the left half to the right half.
+    for i in 1 2 3 4 5 6 7 8 9 10 11 12; do send "move $((cx + i * 55)) $((cy + i * 3))" "sleep 50"; done
+    send "sleep 1200"
+    drain; echo "--- while held"; snap held | tee "$tmp/held.txt"
+    hc layers -j | jq -r '.. | objects | select(has("namespace")) | .namespace' | sort -u >"$tmp/layers-held.txt"
+    echo "layers while held: $(tr '\n' ' ' <"$tmp/layers-held.txt")"
 else
     for i in 1 2 3 4 5 6 7 8 9 10; do send "move $((cx - i * 8)) $((cy + i * 4))" "sleep 40"; done
     send "sleep 1200"
@@ -274,6 +288,11 @@ case "$scenario" in
             [ "$(win $w fullscreen)" = 0 ] || { echo "FAIL: $w ended up Full (fullscreen=$(win $w fullscreen))"; bad=1; }
         done
         [ "$(awk '/^held w1 /{print $NF}' "$tmp/held.txt")" = fs=0 ] || { echo "FAIL: w1 was made Full while w2 was held"; bad=1; } ;;
+    drop)
+        # The screen showed where it would go, and it went there: the right half of the screen.
+        grep -q '^uq-tab-drop$' "$tmp/layers-held.txt" || { echo "FAIL: no drop preview while w2 was held"; bad=1; }
+        hc layers -j | grep -q uq-tab-drop && { echo "FAIL: the drop preview stayed after the drop"; bad=1; }
+        [ "$(win w2 at | jq -r '.[0]')" -ge 600 ] || { echo "FAIL: w2 is not on the right half of the screen (x=$(win w2 at | jq -r '.[0]'))"; bad=1; } ;;
     full-edge)
         # A Full window that was dragged comes back Full, and nothing else changed.
         [ "$(win w2 fullscreen)" = 1 ] || { echo "FAIL: w2 was Full before the drag and is not after it"; bad=1; }

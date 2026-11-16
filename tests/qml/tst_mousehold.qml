@@ -38,4 +38,39 @@ TestCase {
         compare(s.full, "");
         compare(Hold.note(Hold.fresh(), "fullscreen", "0").full, "");
     }
+
+    function test_note_remembers_the_lifted_window() {
+        var s = Hold.fresh();
+        s = Hold.note(s, "changefloatingmode", "5f9acf20f980,1");
+        compare(s.lifted, "5f9acf20f980");
+        // Only the first one, and only a window made floating.
+        s = Hold.note(s, "changefloatingmode", "abc,1");
+        compare(s.lifted, "5f9acf20f980");
+        compare(Hold.note(Hold.fresh(), "changefloatingmode", "abc,0").lifted, "");
+        compare(Hold.note(Hold.fresh(), "changefloatingmode", "").lifted, "");
+    }
+
+    function test_place_finds_the_screen_and_the_spot() {
+        var mons = {
+            "A": { x: 0, y: 0, width: 2560, height: 1440, scale: 2 },
+            "B": { x: 1280, y: 0, width: 1920, height: 1080, scale: 1 }
+        };
+        var p = Hold.place({ "A": mons.A }, 100, 50);
+        compare(p.screen, "A");
+        compare(p.x, 100);
+        compare(p.y, 50);
+        p = Hold.place(mons, 1300, 10);
+        compare(p.screen, "B");
+        compare(p.x, 20);
+        compare(Hold.place(mons, 5000, 5), null);
+        compare(Hold.place(mons, NaN, 5), null);
+        compare(Hold.place({}, 1, 1), null);
+    }
+
+    function test_address_gets_its_prefix() {
+        compare(Hold.address("5f9a"), "0x5f9a");
+        compare(Hold.address("0x5f9a"), "0x5f9a");
+        compare(Hold.address(""), "");
+        compare(Hold.address(undefined), "");
+    }
 }
