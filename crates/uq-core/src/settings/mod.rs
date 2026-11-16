@@ -40,7 +40,7 @@ pub use shell::{
 pub use wallpaper::{Fit, Wallpaper, WallpaperEntry};
 
 /// Every key `Settings::apply` accepts; anything else is rejected.
-pub const SETTING_KEYS: [&str; 18] = [
+pub const SETTING_KEYS: [&str; 19] = [
     "pinned",
     "weather_location",
     "idle.dim",
@@ -59,6 +59,7 @@ pub const SETTING_KEYS: [&str; 18] = [
     "mouse.left_handed",
     "mouse.scroll_factor",
     "ui.reduce_motion",
+    "ui.print_action",
 ];
 
 /// Keys that change Hyprland's config: uqd renders, verifies and reloads for these instead of
@@ -199,6 +200,21 @@ pub struct UiSettings {
     /// Reduce motion: the shell skips its fades and crossfades and Hyprland's animations are
     /// off (generated.lua). Default false.
     pub reduce_motion: bool,
+    /// What the Print key does (`uq-screenshot print` reads it from `state.toml`).
+    pub print_action: PrintAction,
+}
+
+/// What Print takes a screenshot of. Shift+Print and Super+Print keep their own jobs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PrintAction {
+    /// Pick an area, then mark it up in satty.
+    #[default]
+    Region,
+    /// The screen under the pointer, copied and saved at once.
+    Screen,
+    /// The focused window, copied and saved at once.
+    Window,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -464,6 +480,10 @@ impl Settings {
                 next.mouse.scroll_factor = as_ranged_f64(key, &value, 0.1, 10.0)?;
             }
             "ui.reduce_motion" => next.ui.reduce_motion = as_bool(key, &value)?,
+            "ui.print_action" => {
+                next.ui.print_action = serde_json::from_value(value)
+                    .map_err(|_| invalid(key, "expected region, screen or window"))?;
+            }
             _ => return Err(SettingError::UnknownKey(key.to_string())),
         }
         if key.starts_with("idle.") {

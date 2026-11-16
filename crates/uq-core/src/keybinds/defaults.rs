@@ -230,10 +230,10 @@ static DEFAULTS: [Default; 60] = [
     },
     Default {
         id: "uq.screenshot.area",
-        label: "Take a screenshot of an area",
+        label: "Take a screenshot",
         group: Group::AppsAndDesktop,
         combo: Some("Print"),
-        action: DefaultAction::Exec("uq-screenshot region"),
+        action: DefaultAction::Exec("uq-screenshot print"),
         locked: false,
         repeating: false,
         release: false,

@@ -59,6 +59,7 @@ pub fn label(domain: &str, key: &str) -> Option<String> {
         ("settings", "mouse.left_handed") => "Left-handed buttons",
         ("settings", "mouse.scroll_factor") => "Scroll speed",
         ("settings", "ui.reduce_motion") => "Reduce motion",
+        ("settings", "ui.print_action") => "Print key",
         ("layouts", k) => {
             let ws = k.strip_prefix("workspaces.")?;
             return Some(format!("Workspace {ws} layout"));

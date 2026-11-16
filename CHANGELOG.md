@@ -7,6 +7,21 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **Print opens one area selection, with no full-screen capture first.** `uq-screenshot` used to
+  grab the whole screen, then open satty over it (the screen went lighter) with its own crop
+  tool, so you saw a second selector after the first. Now you pick the area with slurp, only
+  that area is captured, and satty opens for marking it up. A second press while a capture is
+  open does nothing, so a Print binding of your own in `user.lua` can no longer start a second
+  selector beside uQ's (remove that binding, uQ's own does the job).
+
+### Added
+
+- **Settings → Shell → Screenshots → Print key.** Choose what Print captures: an area (the
+  default, marked up in satty), the whole screen or the focused window. Shift+Print and
+  Super+Print keep taking the screen and the window.
+
 ### Changed
 
 - **Dependencies updated:** zbus 6, minijinja 3, quick-xml 0.42 and toml 1.2, and the CI

@@ -157,9 +157,10 @@ hl.bind(mainMod .. " + L",       hl.dsp.global("uq:lock"))
 hl.bind(mainMod .. " + Escape",  hl.dsp.global("uq:power-menu"))
 -- SUPER+ALT+B: edit the bar (move, resize, add and remove islands; Esc finishes).
 hl.bind(mainMod .. " + ALT + B", hl.dsp.global("uq:edit-bar"))
--- Screenshots (uq-screenshot): an area, marked up before it is copied and saved; the screen;
--- the focused window. Files go to ~/Pictures/Screenshots.
-hl.bind("Print",                  hl.dsp.exec_cmd("uq-screenshot region"))
+-- Screenshots (uq-screenshot): Print does what Settings > Input > Print key says (an area, marked up
+-- before it is copied and saved, by default); Shift+Print the screen;
+-- Super+Print the focused window. Files go to ~/Pictures/Screenshots.
+hl.bind("Print",                  hl.dsp.exec_cmd("uq-screenshot print"))
 hl.bind("SHIFT + Print",          hl.dsp.exec_cmd("uq-screenshot screen"))
 hl.bind(mainMod .. " + Print",    hl.dsp.exec_cmd("uq-screenshot window"))
 
