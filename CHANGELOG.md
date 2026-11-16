@@ -7,6 +7,8 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-11-16
+
 ### Changed
 
 - **Open-window tabs keep their titles until they are icons.** A tab used to drop its title as
