@@ -453,17 +453,52 @@ function scrollOffset(offset, n, shown, keep) {
 
 // --- Dragging tabs into a new order ---
 
-// Whether the tab for window `w` can be dragged: a tiled window in the scrolling layout (its
-// column is what moves), while the island shows windows in screen order.
 // A tab that can be dragged down onto the screen to join the page shown there: a tiled window in
 // the scrolling layout (any order).
 function canDropOnScreen(w) {
     return !!w && w.scrolling === true && w.floating !== true && w.minimised !== true;
 }
 
-function canDrag(w, sortMode) {
-    return !!w && sortMode === "screen" && w.scrolling === true && w.floating !== true
-        && w.minimised !== true;
+// Whether the tab for window `w` can be dragged along the island: a tiled window in the
+// scrolling layout, whose column is what moves. In any sort: a drop puts the island in screen
+// order, the order the drag set.
+function canDrag(w) {
+    return !!w && w.scrolling === true && w.floating !== true && w.minimised !== true;
+}
+
+// A drag in the island's tabs (`shown`, from index `from` dropped at `to`) as a move in screen
+// order (`screen`, the same windows left to right): {from, to} indices in `screen`. Dropped first
+// or last, it goes first or last on screen; otherwise just after the tab on its left. In screen
+// order it is the drag itself. null when nothing moves.
+function screenMove(shown, screen, from, to) {
+    if (!shown || !screen || from < 0 || from >= shown.length || to < 0 || to >= shown.length
+            || from === to)
+        return null;
+    var me = shown[from];
+    var at = function (w) {
+        for (var i = 0; i < screen.length; i++)
+            if (screen[i].address === w.address)
+                return i;
+        return -1;
+    };
+    var moved = shown.slice();
+    moved.splice(from, 1);
+    moved.splice(to, 0, me);
+    var sFrom = at(me);
+    if (sFrom < 0)
+        return null;
+    var sTo;
+    if (to === 0) {
+        sTo = 0;
+    } else if (to === shown.length - 1) {
+        sTo = screen.length - 1;
+    } else {
+        var l = at(moved[to - 1]);
+        if (l < 0)
+            return null;
+        sTo = l < sFrom ? l + 1 : l;
+    }
+    return sTo === sFrom ? null : { from: sFrom, to: sTo };
 }
 
 // How many columns the window at `from` in `list` (the island's windows in screen order) moves

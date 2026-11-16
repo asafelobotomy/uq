@@ -294,11 +294,27 @@ TestCase {
         compare(Work.dropIndex(lefts, widths, 0, 400), 3);
         compare(Work.dropIndex(lefts, widths, 3, 120), 1);
         compare(Work.dropIndex(lefts, widths, 3, -50), 0);
-        verify(Work.canDrag({ scrolling: true }, "screen"));
-        verify(!Work.canDrag({ scrolling: true }, "opened"), "only in screen order");
-        verify(!Work.canDrag({ scrolling: false }, "screen"));
-        verify(!Work.canDrag({ scrolling: true, minimised: true }, "screen"));
-        verify(!Work.canDrag({ scrolling: true, floating: true }, "screen"));
+        verify(Work.canDrag({ scrolling: true }));
+        verify(!Work.canDrag({ scrolling: false }));
+        verify(!Work.canDrag({ scrolling: true, minimised: true }));
+        verify(!Work.canDrag({ scrolling: true, floating: true }));
+    }
+
+    function test_screenMove() {
+        var a = { address: "a" }, b = { address: "b" }, c = { address: "c" }, d = { address: "d" };
+        var s = [a, b, c, d];
+        // Screen order: the drag itself.
+        compare(Work.screenMove(s, s, 0, 2), { from: 0, to: 2 });
+        compare(Work.screenMove(s, s, 3, 0), { from: 3, to: 0 });
+        compare(Work.screenMove(s, s, 1, 1), null);
+        // Another order (d, a, c, b shown): the window lands beside the tab it was dropped by.
+        var shown = [d, a, c, b];
+        compare(Work.screenMove(shown, s, 3, 1), { from: 1, to: 3 }, "b just after d: after d on screen");
+        compare(Work.screenMove(shown, s, 0, 1), { from: 3, to: 1 }, "d just after a: after a on screen");
+        compare(Work.screenMove(shown, s, 2, 0), { from: 2, to: 0 }, "c dropped first: first on screen");
+        compare(Work.screenMove(shown, s, 1, 3), { from: 0, to: 3 }, "a dropped last: last on screen");
+        compare(Work.screenMove(shown, s, 1, 0), null, "a dropped first: already first on screen");
+        compare(Work.screenMove(shown, [a, b], 0, 1), null, "a window not on screen");
     }
 
     function test_close_action() {

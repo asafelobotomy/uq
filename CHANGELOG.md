@@ -7,6 +7,16 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0-rc.8] - 2026-11-16
+
+### Fixed
+
+- **Dragging tabs in Open windows works in every sort.** Before, a tab could only be dragged
+  into a new place while the island sorted by screen order; in any other sort it lifted and
+  followed the pointer, then nothing happened. Now the window moves to where its tab was
+  dropped (first or last when dropped at an end, otherwise just after the tab on its left), and
+  the island switches to screen order so the tabs match the windows.
+
 ## [0.3.0-rc.7] - 2026-11-16
 
 ### Added

@@ -337,12 +337,21 @@ Island {
         dropIndex = -1;
         dragDx = 0;
     }
-    // Dropped: move the window's column as many places as the tab moved past other columns.
+    // Dropped: move the window's column as many places as the tab moved past other columns. The
+    // tabs then follow the windows: in another sort, the island switches to screen order, so the
+    // tab stays where it was dropped.
     function endDrag() {
         var off = fit.mode === "scroll" ? start : 0;
-        var from = dragIndex + off, to = dropIndex + off, w = ordered[from];
+        var from = dragIndex + off, to = dropIndex + off;
         cancelDrag();
-        var steps = Work.columnSteps(ordered, from, to);
+        var screenList = sortMode === "screen" ? ordered : Work.sortWindows(here, "screen", false,
+            { lastOrder: memo.order });
+        var mv = Work.screenMove(ordered, screenList, from, to);
+        if (mv === null)
+            return;
+        var w = screenList[mv.from], steps = Work.columnSteps(screenList, mv.from, mv.to);
+        if (sortMode !== "screen")
+            BarLayout.setOptions("work", Object.assign({}, opts, { sort: "screen", descending: false }));
         if (steps === 0 || !w)
             return;
         Bridge.call("Dispatch", ["move_column", { address: w.address, steps: steps }])
@@ -739,7 +748,7 @@ Island {
                     onPositionChanged: function (m) {
                         if (!(pressedButtons & Qt.LeftButton))
                             return;
-                        var reorder = Work.canDrag(pill.win, root.sortMode), drop = Work.canDropOnScreen(pill.win);
+                        var reorder = Work.canDrag(pill.win), drop = Work.canDropOnScreen(pill.win);
                         if (!reorder && !drop)
                             return;
                         var p = mapToItem(null, m.x, m.y), dx = p.x - pressX, dy = p.y - pressY;
