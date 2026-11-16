@@ -1428,7 +1428,9 @@ mod tests {
             &Action::from_call("restore", &json!({"address": A, "to_ws": 4, "after": a2})).unwrap(),
         );
         assert!(s.find(a2).unwrap() < s.find("uq_ws_4").unwrap());
-        assert!(Action::from_call("restore", &json!({"address": A, "to_ws": 4, "after": "x"})).is_err());
+        assert!(
+            Action::from_call("restore", &json!({"address": A, "to_ws": 4, "after": "x"})).is_err()
+        );
         // keep_pointer: no_warps switched on, and back after the steps whatever they did.
         let s = script(
             &Action::from_call("focus_window", &json!({"address": A, "keep_pointer": true}))
