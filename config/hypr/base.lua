@@ -184,13 +184,6 @@ hl.bind(mainMod .. " + right", hl.dsp.focus({ direction = "right" }))
 hl.bind(mainMod .. " + up",    hl.dsp.focus({ direction = "up" }))
 hl.bind(mainMod .. " + down",  hl.dsp.focus({ direction = "down" }))
 
--- Columns in the scrolling layout: Full or back to Half, move a column, make it narrower or wider
-hl.bind(mainMod .. " + F",              hl.dsp.window.fullscreen({ mode = "maximized" }))
-hl.bind(mainMod .. " + SHIFT + left",   hl.dsp.layout("swapcol l"))
-hl.bind(mainMod .. " + SHIFT + right",  hl.dsp.layout("swapcol r"))
-hl.bind(mainMod .. " + CTRL + left",    hl.dsp.layout("colresize -0.1"))
-hl.bind(mainMod .. " + CTRL + right",   hl.dsp.layout("colresize +0.1"))
-
 -- Workspaces 1-10 (key 0 is workspace 10)
 for i = 1, 10 do
     local key = i % 10
@@ -202,6 +195,13 @@ hl.bind(mainMod .. " + S",         hl.dsp.workspace.toggle_special("magic"))
 hl.bind(mainMod .. " + SHIFT + S", hl.dsp.window.move({ workspace = "special:magic" }))
 hl.bind(mainMod .. " + mouse_down", hl.dsp.focus({ workspace = "e+1" }))
 hl.bind(mainMod .. " + mouse_up",   hl.dsp.focus({ workspace = "e-1" }))
+
+-- Columns in the scrolling layout: Full or back to Half, move a column, make it narrower or wider
+hl.bind(mainMod .. " + F",              hl.dsp.window.fullscreen({ mode = "maximized" }))
+hl.bind(mainMod .. " + SHIFT + left",   hl.dsp.layout("swapcol l"))
+hl.bind(mainMod .. " + SHIFT + right",  hl.dsp.layout("swapcol r"))
+hl.bind(mainMod .. " + CTRL + left",    hl.dsp.layout("colresize -0.1"))
+hl.bind(mainMod .. " + CTRL + right",   hl.dsp.layout("colresize +0.1"))
 
 -- Move with the mouse. Resizing is not bound: a mouse resize would take tiled windows from any
 -- edge, the screen's outer ones too. Tiled windows resize by the grips in the gaps between them
