@@ -70,6 +70,13 @@ All notable changes to uQ are listed here. The format follows
 
 ### Changed
 
+- **A window moved with Super+drag lands by the same rule as a tab dropped on the screen, and
+  shows where first.** While you hold it, the screen outlines the half of the page it would take
+  (the frame a dragged tab shows); let go over the left or right half and it joins that half. Before,
+  Hyprland put it down by its own rule (near an edge a new column, else stacked into the column
+  under the pointer), which moved other columns about and could differ from a tab drop. Moved and
+  put back where it was, it now stays in its place.
+
 - **Spotlight is now look=see>do_.** The launcher on Super + Space has a new name, and its
   names inside uQ follow: the shortcut is `uq.lookseedo`, the layer namespace `uq-lookseedo`, the
   IPC surface and the Hyprland global `uq:lookseedo`, and the four-finger gesture action
