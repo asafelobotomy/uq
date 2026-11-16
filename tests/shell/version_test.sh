@@ -19,6 +19,11 @@ pv=$(pkgbuild_var pkgver "$root/packaging/uq/PKGBUILD")
 [ -n "$cv" ] || bad "no workspace version in Cargo.toml"
 [ "${cv/-rc./rc}" = "$pv" ] || bad "Cargo.toml version $cv does not match PKGBUILD pkgver $pv (want ${cv/-rc./rc})"
 
+# 1b. uq depends on the pin it is tested with.
+pin=$(pkgbuild_var _pin "$root/packaging/uq/PKGBUILD")
+pinv=$(pkgbuild_var pkgver "$root/packaging/uq-hyprland-pin/PKGBUILD")
+[ -n "$pin" ] && [ "$pin" = "$pinv" ] || bad "packaging/uq _pin ($pin) does not match uq-hyprland-pin's pkgver ($pinv)"
+
 # 2. .SRCINFO is current. makepkg refuses to run as root.
 if command -v makepkg >/dev/null 2>&1 && [ "$(id -u)" != 0 ]; then
     for d in "$root"/packaging/*/; do
@@ -42,7 +47,7 @@ fresh_copy() {
     rm -rf "$tmp/r"
     mkdir -p "$tmp/r/packaging/uq"
     cp "$root/Cargo.toml" "$root/Cargo.lock" "$tmp/r/"
-    cp "$root/packaging/uq/PKGBUILD" "$tmp/r/packaging/uq/"
+    cp "$root/packaging/uq/PKGBUILD" "$root/packaging/uq/uq.install" "$tmp/r/packaging/uq/"
     sed -i 's/^pkgrel=.*/pkgrel=7/' "$tmp/r/packaging/uq/PKGBUILD"
 }
 # Version lines of registry packages (the ones with a source), which a bump must not touch.

@@ -58,6 +58,9 @@ else
     cp "$src" "$work/PKGBUILD"
 fi
 
+# The PKGBUILD's `install=` script, when the package has one.
+cp "$root/packaging/$pkg/"*.install "$work/" 2>/dev/null || true
+
 cd "$work"
 makepkg "$@"
 echo "build-local-pkg: packages are in $PKGDEST"

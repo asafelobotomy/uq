@@ -7,6 +7,13 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **Packaging: `uq` depends on the pin it is tested with** (`uq-hyprland-pin>=0.56.2`, from
+  `_pin` in the PKGBUILD), so an updated uQ can't be installed beside an older pin that allows a
+  Hyprland its config doesn't support. After an upgrade, pacman now says to log out and back in:
+  uqd and the shell keep running the old version until then.
+
 ## [0.3.0-rc.8] - 2026-11-16
 
 ### Fixed
