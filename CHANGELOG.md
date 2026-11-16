@@ -7,6 +7,8 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-11-16
+
 ### Added
 
 - **look=see>do_ opens on Recents and five pinned squares.** Under the search pill: the apps you
