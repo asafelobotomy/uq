@@ -32,6 +32,7 @@ pub fn label(domain: &str, key: &str) -> Option<String> {
         ("shell", "bar.options.news.feeds") => "News feeds",
         ("shell", "bar.options.worldclock.zones") => "World clock time zones",
         ("shell", "bar.options.work.sort") => "Open windows: order",
+        ("shell", "bar.options.work.close") => "Open windows: close button",
         ("shell", "bar.options.work.descending") => "Open windows: reverse order",
         ("shell", "providers") => "Launcher search providers",
         ("shell", "clock_24h") => "24-hour clock",
@@ -39,6 +40,7 @@ pub fn label(domain: &str, key: &str) -> Option<String> {
         ("shell", "edge_indicators") => "Screen-edge indicators",
         ("shell", "edge_titles") => "Window titles on screen-edge indicators",
         ("shell", "edge_style") => "Screen-edge indicator style",
+        ("shell", "fit_windows") => "Keep windows on screen",
         ("settings", "pinned") => "Pinned apps",
         ("settings", "weather_location") => "Weather location",
         ("settings", "idle.dim") => "Dim the screen",
@@ -253,6 +255,7 @@ mod tests {
         s.shell.edge_indicators = false;
         s.shell.edge_titles = true;
         s.shell.edge_style = crate::settings::EdgeStyle::Peek;
+        s.shell.fit_windows = false;
         s.mouse.sensitivity = 0.2;
         let kb = &mut s.input.keyboard;
         kb.layouts = vec![KbLayout {

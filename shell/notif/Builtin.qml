@@ -112,9 +112,16 @@ QtObject {
         var list = replaced;
         replaced = [];
         list.forEach(function (n) {
-            if (root.notifications.indexOf(n) < 0)
+            var at = root.notifications.indexOf(n);
+            if (at < 0)
                 return;
-            root.setStore([n].concat(root.without(root.notifications, n)));
+            // Already first (a progress notification replacing itself): the cards bind to n's
+            // own properties, so only `latest` needs the new text; a new list would recreate
+            // every card.
+            if (at === 0)
+                root.latest = root.viewOf(n);
+            else
+                root.setStore([n].concat(root.without(root.notifications, n)));
             if (S.popupAllowed(root.dnd, n.urgency))
                 root.showPopup(n);
         });
@@ -122,9 +129,13 @@ QtObject {
 
     function showPopup(n) {
         dropDeadline(n);
-        var ps = [n].concat(without(popups, n));
-        var pushed = ps.length > S.MAX_POPUPS ? ps.splice(S.MAX_POPUPS) : [];
-        popups = ps;
+        // Already the newest popup: keep the list (and its cards), only the deadline is new.
+        var pushed = [];
+        if (popups.length === 0 || popups[0] !== n) {
+            var ps = [n].concat(without(popups, n));
+            pushed = ps.length > S.MAX_POPUPS ? ps.splice(S.MAX_POPUPS) : [];
+            popups = ps;
+        }
         var ms = S.timeoutMs(n.expireTimeout, n.urgency);
         if (ms > 0) {
             var ds = deadlines;

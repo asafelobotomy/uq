@@ -42,7 +42,7 @@ Island {
         UqText {
             id: layoutText
             text: (root.size === "medium" || root.size === "large") && root.keymap !== "" ? root.keymap : root.label
-            font.family: root.isIcon || root.size === "small" ? Theme.fontMono : Theme.fontUi
+            baseFamily: root.isIcon || root.size === "small" ? Theme.fontMono : Theme.fontUi
             Layout.fillWidth: true
         }
     }
@@ -92,8 +92,14 @@ Island {
     Connections {
         target: Hyprland
         function onRawEvent(event) {
+            // One event per keyboard on a switch: read the devices once, after the last.
             if (event.name === "activelayout")
-                root.refresh();
+                layoutSettle.restart();
         }
+    }
+    Timer {
+        id: layoutSettle
+        interval: 100
+        onTriggered: root.refresh()
     }
 }

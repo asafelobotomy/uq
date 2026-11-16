@@ -152,9 +152,14 @@ Kirigami.ApplicationWindow {
 
     title: App.welcome ? "Welcome to uQ" : "uQ Settings"
     visible: true
-    // --screenshots draws at the target size, 1920x1080, so the pages are judged as they will be.
-    width: App.screenshotDir !== "" ? 1920 : Kirigami.Units.gridUnit * 50
-    height: App.screenshotDir !== "" ? 1080 : Kirigami.Units.gridUnit * 34
+    // --screenshots draws at the target size, 1920x1080, so the pages are judged as they will be;
+    // `--shot-size WxH` picks another (to check them small).
+    readonly property var shotSize: {
+        const m = /^(\d+)x(\d+)$/.exec(App.screenshotSize);
+        return m ? { w: Number(m[1]), h: Number(m[2]) } : { w: 1920, h: 1080 };
+    }
+    width: App.screenshotDir !== "" ? shotSize.w : Kirigami.Units.gridUnit * 50
+    height: App.screenshotDir !== "" ? shotSize.h : Kirigami.Units.gridUnit * 34
     minimumWidth: Kirigami.Units.gridUnit * 30
     minimumHeight: Kirigami.Units.gridUnit * 20
 
@@ -305,7 +310,9 @@ Kirigami.ApplicationWindow {
             Sidebar {
                 id: sidebar
                 Layout.fillHeight: true
-                Layout.preferredWidth: Kirigami.Units.gridUnit * 12
+                // Icons only in a narrow window, so the page keeps the room.
+                compact: root.width < Kirigami.Units.gridUnit * 44
+                Layout.preferredWidth: sidebar.wantedWidth
                 pages: root.pages
                 current: App.page
                 focus: true

@@ -22,7 +22,9 @@ Rectangle {
     // Cards side by side are the same height, so the columns line up.
     Layout.fillHeight: true
     Layout.alignment: Qt.AlignTop
-    Layout.columnSpan: card.wide ? 2 : 1
+    // Never more columns than the grid has: in one column (a narrow window), a span of 2 made
+    // the grid lay this card over its neighbours.
+    Layout.columnSpan: card.wide && card.parent && card.parent.columns > 1 ? card.parent.columns : 1
     implicitWidth: Math.max(body.implicitWidth, head.implicitWidth) + Kirigami.Units.largeSpacing * 4
     implicitHeight: col.implicitHeight + Kirigami.Units.largeSpacing * 3
 

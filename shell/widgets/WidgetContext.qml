@@ -7,6 +7,8 @@ import "../logic/widgets.js" as W
 //   ctx.Theme (also ctx.theme)   the design tokens (the shell's Theme)
 //   ctx.UqText, ctx.UqInput      Components: the shell's plain-text label and input
 //   ctx.slot                     "bar" or "quick"
+//   ctx.view.shown               true while the slot is on screen: pause polling and sampling
+//                                while it is false (ctx.view may be missing on an older uQ)
 //   ctx.dbus.call(method, args, cb)   cb({value} | {error}); only methods listed in [dbus]
 //   ctx.dbus.get(cb)                  every listed property: cb({value: {...}} | {error})
 //   ctx.dbus.props                    the listed properties, kept current from PropertiesChanged
@@ -29,6 +31,31 @@ QtObject {
     // Bumped on every (re)load: answers for an older load are dropped.
     property int generation: 0
     property bool alive: false
+    // Set by the slot: on screen (loaded, visible, and its bar or panel showing).
+    property bool shown: false
+    readonly property bool onScreen: shown && alive && widgetId !== ""
+    // The id this context last told the registry was on screen, or "".
+    property string reportedId: ""
+    function report() {
+        var id = onScreen ? widgetId : "";
+        if (id === reportedId)
+            return;
+        if (reportedId !== "" && registry && registry.slotShown)
+            registry.slotShown(reportedId, false);
+        reportedId = id;
+        if (id !== "" && registry && registry.slotShown)
+            registry.slotShown(id, true);
+    }
+    onOnScreenChanged: report()
+    onWidgetIdChanged: report()
+    Component.onDestruction: {
+        shown = false;
+        report();
+    }
+
+    readonly property QtObject view: QtObject {
+        readonly property bool shown: ctx.onScreen
+    }
 
     signal failed(string reason)
     signal popupRequested(bool open)
@@ -133,6 +160,7 @@ QtObject {
         UqText: ctx.uqText,
         UqInput: ctx.uqInput,
         slot: ctx.slot,
+        view: ctx.view,
         dbus: ctx.dbus,
         command: ctx.command,
         openPopup: function () { if (ctx.alive) ctx.popupRequested(true); },

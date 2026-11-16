@@ -4,20 +4,29 @@ import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Widgets
 import "../core"
+import "../services"
 import "../notif"
 import "islands"
 import "../logic/minimise.js" as Min
 import "../logic/work.js" as Work
 import "../logic/dock.js" as Dock
 
-// Open windows (`work`): one pill per window on this screen's current workspace, like browser
-// tabs: its app's icon, its title (untrusted, elided) and a close button. Windows minimised from
-// this workspace show here too, dimmed. As windows open the pills share the island evenly and
-// shrink, down to the icon and close button; past that, arrows scroll the strip and "+N" lists
-// every window. When not even one pill fits (Icon size), the lead window's icon lists them all.
-// Left click focuses a window (or brings a minimised one back), middle click closes it, right
-// click opens its menu (minimise, maximise, float, pin the app, move it, close it, and the uQ
-// Island Menu). The order is the island's setting (shell.bar.options.work, chosen in edit mode).
+// Open windows (`work`): one tab per window on this screen's current workspace, like browser
+// tabs, in the order the windows sit on screen (left to right, as the scrolling layout's columns
+// run; the island's setting shell.bar.options.work can pick another order in edit mode). Windows
+// minimised from this workspace keep their place, dimmed. The focused window's tab grows to
+// Medium and the others share what is left. What a tab shows depends on its width (Work.tabTier):
+// Icon, the app icon, which turns into a close button under the pointer; Small, the icon, Full or
+// Half (whichever the window isn't, under the pointer) and close; Medium, the icon, Half, Full and
+// close; Large, Medium plus the title (untrusted, elided). Full makes the window's column the
+// screen's width and Half half of it (outside the scrolling layout, Full maximizes and Half puts
+// it back). Past the narrowest tabs, arrows scroll the strip and "+N" lists every window; when a
+// window out of view gets focus the strip centres on it. When not even one tab fits, the lead
+// window's icon lists them all. Left click focuses a window (or brings a minimised one back),
+// middle click closes it, right click opens its menu (minimise, full or half width, float, pin
+// the app, move it, close it, and the uQ Island Menu). A window that wants attention (Hyprland
+// marks it urgent, or its app sends a notification) gets a dot in the accent colour on its tab's
+// icon until it is focused.
 Island {
     id: root
     property var screen: null
@@ -25,7 +34,9 @@ Island {
     readonly property int iconSize: 20
     readonly property int cell: 26
     readonly property var opts: BarLayout.options.work || ({})
-    readonly property string sortMode: Work.SORTS.indexOf(opts.sort) >= 0 ? opts.sort : "opened"
+    readonly property string sortMode: Work.SORTS.indexOf(opts.sort) >= 0 ? opts.sort : Work.DEFAULT_SORT
+    // What a tab's X does to an open window: "ask", "minimize" or "close".
+    readonly property string closeMode: Work.CLOSES.indexOf(opts.close) >= 0 ? opts.close : "ask"
 
     readonly property string monitorName: {
         var m = root.screen ? Hyprland.monitorFor(root.screen) : null;
@@ -35,7 +46,33 @@ Island {
         var m = root.screen ? Hyprland.monitorFor(root.screen) : null;
         return m && m.activeWorkspace ? m.activeWorkspace.id : -1;
     }
-    readonly property string focusedAddr: Hyprland.activeToplevel ? (Work.normAddr(Hyprland.activeToplevel.address) || "") : ""
+    // The focused window, once focus has held for a moment: resizing a column (ResizeGrips, the
+    // bridge's `columns`) focuses each column in turn and gives focus back within a few
+    // milliseconds, and those flips mustn't move the highlight or regrow the tabs. Followed
+    // through activeToplevel, not the activewindowv2 event: Hyprland sends that again, for the
+    // same window, on every title change of the focused window.
+    function activeAddr() {
+        return Hyprland.activeToplevel ? (Work.normAddr(Hyprland.activeToplevel.address) || "") : "";
+    }
+    // Set by focusSettle only (not a binding, which would follow every flip at once).
+    property string focusedAddr: ""
+    Timer {
+        id: focusSettle
+        interval: 60
+        onTriggered: {
+            var a = root.activeAddr();
+            if (a === root.focusedAddr)
+                return;
+            root.focusedAddr = a;
+            root.pruneAlerts();
+            // Focus moved: the scrolling layout may have moved the columns too.
+            root.refresh();
+        }
+    }
+    Connections {
+        target: Hyprland
+        function onActiveToplevelChanged() { focusSettle.restart(); }
+    }
 
     // Every open window, as logic/work.js reads them; rebuilt when Hyprland's list changes.
     property var windows: []
@@ -48,12 +85,14 @@ Island {
     property var usageByPid: ({})
 
     function rebuild() {
-        var out = [], vals = Hyprland.toplevels.values, seq = Object.assign({}, openedSeq);
+        // Opening order of the windows still open: closed ones drop out, so the map stays small.
+        var out = [], vals = Hyprland.toplevels.values, seq = ({});
         for (var i = 0; i < vals.length; i++) {
             var t = vals[i], o = t.lastIpcObject || ({});
+            var wo = t.workspace && t.workspace.lastIpcObject ? t.workspace.lastIpcObject : null;
             var a = Work.normAddr(t.address);
-            if (a !== null && seq[a] === undefined)
-                seq[a] = nextSeq++;
+            if (a !== null)
+                seq[a] = openedSeq[a] !== undefined ? openedSeq[a] : nextSeq++;
             var minimised = t.workspace ? t.workspace.name === "special:minimized" : false;
             out.push({
                 address: t.address,
@@ -63,21 +102,99 @@ Island {
                 minimised: minimised,
                 minimisedFrom: minimised ? Min.wsFromTags(o.tags) : null,
                 monitor: t.monitor ? t.monitor.name : "",
-                pid: typeof o.pid === "number" ? o.pid : 0
+                pid: typeof o.pid === "number" ? o.pid : 0,
+                x: o.at ? Number(o.at[0]) || 0 : 0,
+                y: o.at ? Number(o.at[1]) || 0 : 0,
+                w: o.size ? Number(o.size[0]) || 0 : 0,
+                h: o.size ? Number(o.size[1]) || 0 : 0,
+                floating: o.floating === true,
+                fullscreen: typeof o.fullscreen === "number" ? o.fullscreen : 0,
+                full: Work.spansScreen(o, t.monitor ? t.monitor.lastIpcObject : null),
+                scrolling: !!wo && wo.tiledLayout === "scrolling"
             });
         }
-        openedSeq = seq;
-        windows = out;
+        // Unchanged (a refresh after a focus change often is): keep the lists, so the tabs and
+        // everything sorted from them aren't recomputed.
+        var key = JSON.stringify(out);
+        if (key !== windowsKey) {
+            windowsKey = key;
+            openedSeq = seq;
+            windows = out;
+            pruneAlerts();
+        }
     }
-    Component.onCompleted: { rebuild(); refreshTimer.restart(); }
+    property string windowsKey: ""
+    Component.onCompleted: {
+        focusedAddr = activeAddr();
+        noteSeen = Work.noteArrived(null, NotifBackend.latest, NotifBackend.count).seen;
+        rebuild();
+        refresh();
+    }
 
+    // Windows that want attention, address → true: a dot on their tab's icon until focused.
+    property var alerts: ({})
+    // The notifications already seen (Work.noteArrived), so only new ones mark windows.
+    property var noteSeen: null
+    function pruneAlerts() {
+        alerts = Work.keepAlerts(alerts, windows.map(function (w) { return w.address; }), focusedAddr);
+    }
+    function alertFor(addr) {
+        alerts = Work.withAlerts(alerts, [addr], activeAddr());
+    }
+    // A new notification marks its app's windows, on every workspace, unless that app is the one
+    // in use (its window is focused).
+    function checkNote() {
+        var l = NotifBackend.latest;
+        var r = Work.noteArrived(noteSeen, l, NotifBackend.count);
+        noteSeen = r.seen;
+        if (!r.fresh)
+            return;
+        // "Last activity": only a notification that is really new (a backend re-sends `latest`
+        // on every state change, which isn't activity).
+        if (l.appName || l.appIcon)
+            notes = Work.withNote(notes, l, Date.now());
+        var f = activeAddr(), hits = [];
+        for (var i = 0; i < windows.length; i++) {
+            var w = windows[i];
+            if (!Work.notifMatches(l, appOf(w.cls)))
+                continue;
+            if (Work.normAddr(w.address) === f)
+                return;
+            hits.push(w.address);
+        }
+        alerts = Work.withAlerts(alerts, hits, f);
+    }
+    readonly property bool alertHere: ordered.some(function (w) { return root.alerts[w.address] === true; })
+    // A window out of view in the scrolled strip wants attention: a dot on "+N".
+    readonly property bool alertHidden: fit.mode === "scroll" && ordered.some(function (w, i) {
+        return root.alerts[w.address] === true && (i < root.start || i >= root.start + root.fit.shown);
+    })
+    // Set when this asked for fresh windows, so the settle after it rebuilds.
+    property bool asked: false
+    function refresh() {
+        root.asked = true;
+        HyprRefresh.request();
+    }
+
+    // The app for a window class, looked up once per class (every sort and tab asks): emptied
+    // when the installed apps change.
+    property var appCache: ({})
     function appOf(cls) {
+        var hit = appCache[cls];
+        if (hit !== undefined)
+            return hit;
         var d = cls ? DesktopEntries.heuristicLookup(cls) : null;
-        return { cls: cls, id: d ? String(d.id) : "", name: d && d.name ? String(d.name) : cls, icon: d && d.icon ? d.icon : "" };
+        hit = { cls: cls, id: d ? String(d.id) : "", name: d && d.name ? String(d.name) : cls, icon: d && d.icon ? d.icon : "" };
+        appCache[cls] = hit;
+        return hit;
+    }
+    Connections {
+        target: DesktopEntries.applications
+        function onValuesChanged() { root.appCache = {}; }
     }
     readonly property var here: Work.windowsHere(windows, monitorName, wsId, focusedAddr)
     readonly property var ordered: {
-        var ctx = { opened: openedSeq, activity: {}, pinIndex: {}, usage: {}, name: {} };
+        var ctx = { opened: openedSeq, activity: {}, pinIndex: {}, usage: {}, name: {}, lastOrder: memo.order };
         var pins = Settings.values.pinned || [];
         for (var i = 0; i < here.length; i++) {
             var w = here[i], app = appOf(w.cls);
@@ -97,14 +214,26 @@ Island {
         return Work.sortWindows(here, sortMode, opts.descending === true, ctx);
     }
 
+    // The order last shown, for "Screen order" to keep minimised windows in their place. Held
+    // inside an object so updating it doesn't re-run `ordered`.
+    readonly property var memo: ({ order: [] })
+    onOrderedChanged: memo.order = ordered.map(function (w) { return w.address; })
+
     // --- the strip ---
     readonly property real closeW: Theme.fontSize + Theme.gapIn
+    // The narrowest width of each tab size (Work.tabTier): the icon with its margins, then a
+    // button more each step, then room for a short title.
+    readonly property real tabPad: 6
+    readonly property var tiers: ({
+        small: tabPad * 2 + iconSize + Theme.gapIn + closeW * 2 + 2,
+        medium: tabPad * 2 + iconSize + Theme.gapIn + closeW * 3 + 4,
+        large: tabPad * 2 + iconSize + Theme.gapIn * 2 + closeW * 3 + 4 + Theme.fontSize * 4
+    })
     readonly property var metrics: ({
-        minPill: 8 + iconSize + Theme.gapIn + closeW, maxPill: BarLayout.unit * 5, gap: 2,
+        minPill: tabPad * 2 + iconSize, maxPill: BarLayout.unit * 5, gap: 2, medium: tiers.medium,
         arrow: Theme.fontSize + Theme.gapIn, chip: Theme.fontSize * 2 + Theme.gapIn * 2
     })
-    readonly property var fit: Work.strip(ordered.length, room, metrics)
-    readonly property bool showTitles: fit.pillW >= metrics.minPill + Theme.fontSize * 3
+    readonly property var fit: Work.strip(ordered.length, room, metrics, focusedIndex)
     readonly property int focusedIndex: {
         for (var i = 0; i < ordered.length; i++)
             if (ordered[i].focused)
@@ -113,9 +242,32 @@ Island {
     }
     property int offset: 0
     readonly property int start: fit.mode === "scroll" ? Work.scrollOffset(offset, ordered.length, fit.shown, -1) : 0
+    // What the strip's tabs draw: each window by address, and the addresses in order, the
+    // latter replaced only when it really changes.
+    readonly property var tabInfo: {
+        var m = {};
+        for (var i = 0; i < shownWindows.length; i++)
+            m[shownWindows[i].address] = shownWindows[i];
+        return m;
+    }
+    property var tabKeys: []
+    onShownWindowsChanged: {
+        var keys = shownWindows.map(function (w) { return w.address; });
+        if (JSON.stringify(keys) !== JSON.stringify(tabKeys))
+            tabKeys = keys;
+    }
     readonly property var shownWindows: fit.mode === "pills" ? ordered
         : (fit.mode === "scroll" ? ordered.slice(start, start + fit.shown) : [])
-    onFocusedIndexChanged: if (fit.mode === "scroll") offset = Work.scrollOffset(offset, ordered.length, fit.shown, focusedIndex)
+    // A window out of view got focus (from the "+N" list, a key or a click on screen): centre
+    // the strip on it, so its neighbours on screen show beside it.
+    function keepFocusShown() {
+        if (!fit || fit.mode !== "scroll" || focusedIndex < 0)
+            return;
+        if (focusedIndex < start || focusedIndex >= start + fit.shown)
+            offset = Work.centreOffset(ordered.length, fit.shown, focusedIndex);
+    }
+    onFocusedIndexChanged: keepFocusShown()
+    onFitChanged: keepFocusShown()
     readonly property var lead: focusedIndex >= 0 ? ordered[focusedIndex] : (ordered.length > 0 ? ordered[0] : null)
 
     Accessible.role: Accessible.PageTabList
@@ -137,7 +289,9 @@ Island {
                 ws = root.wsId > 0 ? root.wsId : 1;
             Bridge.call("Dispatch", ["restore", { address: w.address, to_ws: ws }]);
         } else if (!w.focused) {
-            Bridge.call("Dispatch", ["focus_window", { address: w.address }]);
+            // The pointer stays put; a window out of view (a scrolled-away column) is brought
+            // into view by the focus itself.
+            Bridge.call("Dispatch", ["focus_window", { address: w.address, keep_pointer: true }]);
         }
     }
     function act(w, name, args) {
@@ -145,12 +299,82 @@ Island {
         if (d !== null)
             Bridge.call("Dispatch", d);
     }
+    // A tiled window in the scrolling layout, sized by its column (not real fullscreen, 2).
+    function inColumn(w) {
+        return w.scrolling && !w.floating && w.fullscreen !== 2;
+    }
+    // --- dragging tabs into a new order (the windows' columns follow) ---
+    // The tab being dragged (its index among the tabs shown), -1 for none; how far it has moved;
+    // its width; and where it would land.
+    property int dragIndex: -1
+    property real dragDx: 0
+    property real dragWidth: 0
+    property int dropIndex: -1
+    // The tabs' left edges and widths as they were when the drag started.
+    property var dragLefts: []
+    property var dragWidths: []
+    function startDrag(i) {
+        var lefts = [], widths = [];
+        for (var k = 0; k < tabsRep.count; k++) {
+            var it = tabsRep.itemAt(k);
+            lefts.push(it ? it.x : 0);
+            widths.push(it ? it.width : 0);
+        }
+        dragLefts = lefts;
+        dragWidths = widths;
+        dragWidth = widths[i] || 0;
+        dragDx = 0;
+        dropIndex = i;
+        dragIndex = i;
+    }
+    function moveDrag(dx) {
+        dragDx = dx;
+        var centre = dragLefts[dragIndex] + dragWidth / 2 + dx;
+        dropIndex = Work.dropIndex(dragLefts, dragWidths, dragIndex, centre);
+    }
+    function cancelDrag() {
+        dragIndex = -1;
+        dropIndex = -1;
+        dragDx = 0;
+    }
+    // Dropped: move the window's column as many places as the tab moved past other columns.
+    function endDrag() {
+        var off = fit.mode === "scroll" ? start : 0;
+        var from = dragIndex + off, to = dropIndex + off, w = ordered[from];
+        cancelDrag();
+        var steps = Work.columnSteps(ordered, from, to);
+        if (steps === 0 || !w)
+            return;
+        Bridge.call("Dispatch", ["move_column", { address: w.address, steps: steps }])
+            .catch(function (e) { console.warn("uq: move column: " + e); });
+        refresh();
+    }
+
+    // Full: the window spans its screen. In the scrolling layout that is a maximized column
+    // (Hyprland's own Full: fullscreen 1) or one as wide as the screen; elsewhere, maximized or
+    // fullscreen.
+    function isFull(w) {
+        return root.inColumn(w) ? (w.fullscreen === 1 || w.full === true) : w.fullscreen > 0;
+    }
+    // Make the window Full (the screen's width) or Half (half of it). Outside the scrolling
+    // layout, Full maximizes and Half puts a maximized window back.
+    function setFull(w, full) {
+        if (w.minimised)
+            return;
+        if (root.inColumn(w))
+            PageActions.setWidth(w.address, full)
+                .catch(function (e) { console.warn("uq: window width: " + e); });
+        else if (full !== root.isFull(w))
+            root.act(w, "fullscreen", { mode: "maximized" });
+        // The scrolling layout resizes columns without an event.
+        root.refresh();
+    }
     function iconFor(cls) {
         if (cls === "")
-            return Quickshell.iconPath("application-x-executable");
-        var d = DesktopEntries.heuristicLookup(cls);
-        var name = d && d.icon ? d.icon : cls.toLowerCase();
-        return Quickshell.iconPath(name, true) || Quickshell.iconPath("application-x-executable");
+            return Quickshell.iconPath("application-x-executable", true);
+        var a = root.appOf(cls);
+        var name = a.icon ? a.icon : cls.toLowerCase();
+        return Quickshell.iconPath(name, true) || Quickshell.iconPath("application-x-executable", true);
     }
     function togglePin(w) {
         var pins = Dock.togglePin(Settings.values.pinned || [], appOf(w.cls).id, Settings.loaded);
@@ -169,6 +393,33 @@ Island {
         else
             listPopup.show(anchor, listBody);
     }
+    // A tab's X: minimise the window to its tab or close it, as the island's close option says,
+    // asking first ("Minimize to Tab?") until an answer is kept. A minimised window's X closes it.
+    function closePressed(anchor, w) {
+        var a = Work.closeAction(root.closeMode, w.minimised);
+        if (a === "ask") {
+            askWindow = w;
+            askPopup.show(anchor, askBody);
+        } else {
+            root.act(w, a);
+        }
+    }
+    function closeLabel(w) {
+        var a = Work.closeAction(root.closeMode, w.minimised);
+        return (a === "close" ? "Close " : "Minimise ") + (w.title || w.cls);
+    }
+    // The window the "Minimize to Tab?" popup is about; the answer is kept as the close option.
+    property var askWindow: null
+    function answerAsk(mode) {
+        var w = askWindow;
+        askPopup.hide();
+        askWindow = null;
+        if (!w || mode === "")
+            return;
+        BarLayout.setOptions("work", Object.assign({}, root.opts, { close: mode }));
+        root.act(w, mode === "minimize" ? "minimise" : "close");
+    }
+
     // The window menu, for window `w` under `anchor`.
     property var menuWindow: null
     function openMenu(anchor, w) {
@@ -183,39 +434,42 @@ Island {
     Connections {
         target: Hyprland
         function onRawEvent(event) {
-            if (event.name === "activewindowv2" || event.name === "windowtitlev2"
-                    || event.name === "changefloatingmode" || event.name === "pin"
+            if (event.name === "changefloatingmode" || event.name === "pin"
                     || event.name === "openwindow" || event.name === "closewindow"
                     || event.name === "movewindowv2" || event.name === "workspacev2")
-                refreshTimer.restart();
+                root.refresh();
+            // Quickshell sets the title itself from this event: no need to ask Hyprland again.
+            // Throttled, not debounced: a title that never stops changing still shows.
+            else if (event.name === "windowtitlev2") {
+                if (!titleTimer.running)
+                    titleTimer.start();
+            }
+            // A window asked for attention (urgency hint, or an activation request not honoured).
+            else if (event.name === "urgent")
+                root.alertFor(String(event.data));
         }
     }
     Timer {
-        id: refreshTimer
-        interval: 60
-        onTriggered: {
-            Hyprland.refreshToplevels();
-            rebuildTimer.restart();
-        }
-    }
-    // lastIpcObject (the class, tags, pid) arrives a moment after the refresh.
-    Timer {
-        id: rebuildTimer
-        interval: 120
+        id: titleTimer
+        interval: 100
         onTriggered: root.rebuild()
     }
-    // "Last activity": every new notification, matched to its app's windows.
+    // lastIpcObject (the class, tags, pid) arrives a moment after the refresh.
+    Connections {
+        target: HyprRefresh
+        function onSettled() {
+            if (!root.asked)
+                return;
+            root.asked = false;
+            root.rebuild();
+        }
+    }
+    // A new notification: once latest and count have both been updated.
     Connections {
         target: NotifBackend
         ignoreUnknownSignals: true
-        function onLatestChanged() {
-            var l = NotifBackend.latest;
-            if (!l || (!l.appName && !l.appIcon))
-                return;
-            var n = root.notes.slice(Math.max(0, root.notes.length - 49));
-            n.push({ appName: String(l.appName || ""), appIcon: String(l.appIcon || ""), at: Date.now() });
-            root.notes = n;
-        }
+        function onLatestChanged() { Qt.callLater(root.checkNote); }
+        function onCountChanged() { Qt.callLater(root.checkNote); }
     }
     // "By system usage": the windows' processes, every 5 s while that is the order.
     Timer {
@@ -232,6 +486,87 @@ Island {
                     root.usageByPid = u;
             }).catch(function () {});
         }
+    }
+
+    // A tab's small round button: Half, Full or close. The marks are drawn, not font glyphs (whose
+    // sizes and baselines differ from font to font), all in the same box, so they sit level.
+    component TabButton: Rectangle {
+        id: tb
+        // "half", "full" or "close".
+        property string mark: "close"
+        property string label: ""
+        // The window is already this way (Full on a Full window): drawn as on.
+        property bool on: false
+        signal pressed()
+        implicitWidth: root.closeW
+        implicitHeight: root.closeW
+        radius: width / 2
+        color: tbMouse.containsMouse ? Theme.overlay : "transparent"
+        Accessible.role: Accessible.Button
+        Accessible.name: label
+        Accessible.onPressAction: tb.pressed()
+        // The way the window is now (Full or Half) in the accent colour.
+        readonly property color ink: tb.on ? Theme.accent : (tbMouse.containsMouse ? Theme.text : Theme.textMuted)
+        readonly property real box: Math.round(root.closeW * 0.46)
+        readonly property real line: Math.max(1, Math.round(root.closeW / 14))
+        Item {
+            width: tb.box
+            height: tb.box
+            anchors.centerIn: parent
+            // Half and Full: a window's outline, Half with its left half filled.
+            Rectangle {
+                visible: tb.mark !== "close"
+                anchors.fill: parent
+                radius: tb.line
+                color: "transparent"
+                border.width: tb.line
+                border.color: tb.ink
+            }
+            Rectangle {
+                visible: tb.mark === "half"
+                width: Math.round(parent.width / 2)
+                height: parent.height
+                radius: tb.line
+                color: tb.ink
+            }
+            // Close: two crossed strokes.
+            Repeater {
+                model: tb.mark === "close" ? [45, -45] : []
+                delegate: Rectangle {
+                    required property real modelData
+                    anchors.centerIn: parent
+                    width: parent.width * 1.2
+                    height: tb.line * 1.5
+                    radius: height / 2
+                    rotation: modelData
+                    color: tb.ink
+                }
+            }
+        }
+        MouseArea {
+            id: tbMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            onClicked: tb.pressed()
+        }
+    }
+
+    // The dot on a window's icon when it wants attention: the theme's accent, ringed in the
+    // island's colour so it stands off any icon. Sits on its parent's top right corner.
+    component AlertDot: Rectangle {
+        property bool shown: false
+        visible: shown
+        width: Math.round(root.iconSize * 0.45)
+        height: width
+        radius: width / 2
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.rightMargin: -Math.round(width / 4)
+        anchors.topMargin: -Math.round(width / 4)
+        color: Theme.accent
+        border.width: Math.max(1, Math.round(width / 5))
+        border.color: Theme.surface
+        z: 1
     }
 
     component Arrow: Rectangle {
@@ -296,6 +631,7 @@ Island {
                     anchors.verticalCenter: parent.verticalCenter
                     implicitSize: root.iconSize
                     source: root.lead ? root.iconFor(root.lead.cls) : ""
+                    AlertDot { shown: root.alertHere }
                 }
                 UqText {
                     anchors.verticalCenter: parent.verticalCenter
@@ -327,76 +663,231 @@ Island {
         }
 
         Repeater {
-            model: root.shownWindows
+            id: tabsRep
+            // The windows' addresses: replaced only when windows come, go or change places, so
+            // tabs aren't rebuilt (and their widths re-animated) every time a window moves.
+            model: root.tabKeys
             delegate: Rectangle {
                 id: pill
                 required property var modelData
-                Layout.preferredWidth: root.fit.pillW
+                required property int index
+                // This tab's window, as last read.
+                readonly property var win: root.tabInfo[modelData] || ({ address: modelData, title: "", cls: "" })
+                // Dragging: this tab follows the pointer; the tabs it passes step aside.
+                transform: Translate {
+                    x: root.dragIndex < 0 ? 0
+                        : pill.index === root.dragIndex ? root.dragDx
+                        : (pill.index > root.dragIndex && pill.index <= root.dropIndex) ? -(root.dragWidth + root.metrics.gap)
+                        : (pill.index < root.dragIndex && pill.index >= root.dropIndex) ? root.dragWidth + root.metrics.gap
+                        : 0
+                    Behavior on x {
+                        enabled: !Settings.reduceMotion && pill.index !== root.dragIndex
+                        NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
+                    }
+                }
+                z: pill.index === root.dragIndex ? 1 : 0
+                readonly property real tabW: win.focused ? root.fit.focusW : root.fit.pillW
+                readonly property string tier: Work.tabTier(tabW, root.tiers)
+                readonly property bool full: root.isFull(win)
+                readonly property string name: win.title || win.cls
+                Layout.preferredWidth: tabW
                 Layout.fillHeight: true
                 radius: Theme.radius - 2
-                color: modelData.focused ? Theme.surfaceAlt : (pillMouse.containsMouse ? Theme.overlay : "transparent")
-                border.color: modelData.focused ? Theme.accent : "transparent"
-                border.width: modelData.focused ? 1 : 0
-                opacity: modelData.minimised ? 0.55 : 1
+                color: win.focused ? Theme.surfaceAlt : (pillHover.hovered ? Theme.overlay : "transparent")
+                border.color: win.focused ? Theme.accent : "transparent"
+                border.width: win.focused ? 1 : 0
+                opacity: win.minimised ? 0.55 : 1
                 Accessible.role: Accessible.PageTab
-                Accessible.name: (modelData.title || modelData.cls) + (modelData.minimised ? ", minimised" : "")
-                    + (modelData.focused ? ", focused" : "")
-                Accessible.onPressAction: root.choose(modelData)
+                readonly property bool alert: root.alerts[modelData] === true
+                Accessible.name: name + (win.minimised ? ", minimised" : "")
+                    + (win.focused ? ", focused" : "") + (full ? ", full width" : "")
+                    + (alert ? ", wants attention" : "")
+                Accessible.onPressAction: root.choose(win)
+                Behavior on Layout.preferredWidth {
+                    enabled: !Settings.reduceMotion
+                    NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
+                }
 
+                HoverHandler {
+                    id: pillHover
+                }
                 MouseArea {
                     id: pillMouse
                     anchors.fill: parent
-                    hoverEnabled: true
                     acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
+                    property real pressX: 0
+                    property real pressY: 0
+                    property bool dragged: false
+                    // Dragged below the bar, onto the screen: dropped there, the window joins the
+                    // page shown (PageActions); along the bar, the tabs are reordered.
+                    property bool overScreen: false
+                    property real screenX: 0
+                    // Where in the tab it was taken hold of, so the floating copy keeps that spot
+                    // under the pointer.
+                    property real holdX: 0
+                    property real holdY: 0
+                    cursorShape: dragged && pressed ? Qt.ClosedHandCursor : Qt.ArrowCursor
+                    onPressed: function (m) {
+                        var p = mapToItem(null, m.x, m.y);
+                        pressX = p.x;
+                        pressY = p.y;
+                        holdX = m.x;
+                        holdY = m.y;
+                        dragged = false;
+                        overScreen = false;
+                    }
+                    onPositionChanged: function (m) {
+                        if (!(pressedButtons & Qt.LeftButton))
+                            return;
+                        var reorder = Work.canDrag(pill.win, root.sortMode), drop = Work.canDropOnScreen(pill.win);
+                        if (!reorder && !drop)
+                            return;
+                        var p = mapToItem(null, m.x, m.y), dx = p.x - pressX, dy = p.y - pressY;
+                        if (!dragged && Math.max(Math.abs(dx), Math.abs(dy)) < Theme.gapIn * 2)
+                            return;
+                        if (!dragged) {
+                            dragged = true;
+                            if (reorder)
+                                root.startDrag(pill.index);
+                        }
+                        var bar = pill.QsWindow.window;
+                        var below = bar !== null && p.y > bar.height + Theme.gapIn;
+                        overScreen = drop && below;
+                        screenX = p.x + WindowLook.edgeLeft;
+                        // Off the bar (or where the tab can't follow), a see-through copy of the
+                        // tab rides under the pointer; over the screen, where the window would go
+                        // is outlined (PageActions, drawn by ScreenPages).
+                        PageActions.dropHint = below || !reorder ? {
+                            screen: root.screen ? root.screen.name : "", address: pill.win.address,
+                            x: screenX, y: p.y + WindowLook.gapTop, drop: overScreen,
+                            holdX: holdX, holdY: holdY, width: pill.width, height: pill.height,
+                            title: pill.name, icon: root.iconFor(pill.win.cls)
+                        } : null;
+                        if (reorder)
+                            root.moveDrag(overScreen ? 0 : dx);
+                    }
+                    onReleased: {
+                        if (!dragged)
+                            return;
+                        PageActions.dropHint = null;
+                        if (overScreen) {
+                            root.cancelDrag();
+                            PageActions.drop(root.screen ? root.screen.name : "", pill.win.address, screenX);
+                        } else if (root.dragIndex >= 0) {
+                            root.endDrag();
+                        }
+                        overScreen = false;
+                    }
+                    onCanceled: {
+                        PageActions.dropHint = null;
+                        overScreen = false;
+                        if (dragged)
+                            root.cancelDrag();
+                    }
                     onClicked: function (m) {
+                        if (dragged)
+                            return;
                         if (m.button === Qt.MiddleButton)
-                            root.act(pill.modelData, "close");
+                            root.act(pill.win, "close");
                         else if (m.button === Qt.RightButton)
-                            root.openMenu(pill, pill.modelData);
+                            root.openMenu(pill, pill.win);
                         else
-                            root.choose(pill.modelData);
+                            root.choose(pill.win);
                     }
                 }
                 RowLayout {
                     anchors.fill: parent
-                    anchors.leftMargin: 4
-                    anchors.rightMargin: 2
+                    anchors.leftMargin: pill.tier === "icon" ? 0 : root.tabPad
+                    anchors.rightMargin: pill.tier === "icon" ? 0 : 2
                     spacing: Theme.gapIn
-                    IconImage {
-                        implicitSize: root.iconSize
+                    // Icon size: the icon, centred, turns into the close button under the pointer.
+                    Item {
                         Layout.preferredWidth: root.iconSize
                         Layout.preferredHeight: root.iconSize
-                        backer.sourceSize.width: root.iconSize * root.dpr
-                        backer.sourceSize.height: root.iconSize * root.dpr
-                        source: root.iconFor(pill.modelData.cls)
-                    }
-                    UqText {
-                        visible: root.showTitles
-                        Layout.fillWidth: true
-                        text: pill.modelData.title || pill.modelData.cls
-                        color: pill.modelData.focused ? Theme.text : Theme.textMuted
-                    }
-                    Item {
-                        visible: !root.showTitles
-                        Layout.fillWidth: true
-                    }
-                    Rectangle {
-                        Layout.preferredWidth: root.closeW
-                        Layout.preferredHeight: root.closeW
-                        radius: width / 2
-                        color: closeMouse.containsMouse ? Theme.overlay : "transparent"
-                        Accessible.role: Accessible.Button
-                        Accessible.name: "Close " + (pill.modelData.title || pill.modelData.cls)
-                        UqText {
-                            anchors.centerIn: parent
-                            text: "✕"
-                            color: closeMouse.containsMouse ? Theme.text : Theme.textMuted
+                        Layout.alignment: Qt.AlignVCenter | (pill.tier === "icon" ? Qt.AlignHCenter : Qt.AlignLeft)
+                        Layout.fillWidth: pill.tier === "icon"
+                        Layout.maximumWidth: root.iconSize
+                        IconImage {
+                            anchors.fill: parent
+                            visible: !(pill.tier === "icon" && iconClose.containsMouse)
+                            implicitSize: root.iconSize
+                            backer.sourceSize.width: root.iconSize * root.dpr
+                            backer.sourceSize.height: root.iconSize * root.dpr
+                            source: root.iconFor(pill.win.cls)
+                        }
+                        AlertDot {
+                            shown: pill.alert && !(pill.tier === "icon" && iconClose.containsMouse)
+                        }
+                        Rectangle {
+                            anchors.fill: parent
+                            visible: pill.tier === "icon" && iconClose.containsMouse
+                            radius: width / 2
+                            color: Theme.overlay
+                            UqText {
+                                anchors.centerIn: parent
+                                text: "✕"
+                            }
                         }
                         MouseArea {
-                            id: closeMouse
+                            id: iconClose
                             anchors.fill: parent
+                            enabled: pill.tier === "icon"
                             hoverEnabled: true
-                            onClicked: root.act(pill.modelData, "close")
+                            Accessible.role: Accessible.Button
+                            Accessible.name: root.closeLabel(pill.win)
+                            onClicked: root.closePressed(pill, pill.win)
+                        }
+                    }
+                    UqText {
+                        visible: pill.tier === "large"
+                        Layout.fillWidth: true
+                        text: pill.name
+                        color: pill.win.focused ? Theme.text : Theme.textMuted
+                    }
+                    // The buttons, kept together at the right end, 2 px apart: the widths in
+                    // root.tiers allow one gap between the icon (or title) and this group, and
+                    // 2 px between buttons, so a tab at its narrowest still holds them all.
+                    Item {
+                        visible: pill.tier !== "icon"
+                        Layout.fillWidth: pill.tier !== "large"
+                        Layout.fillHeight: true
+                        Layout.preferredWidth: buttonRow.implicitWidth
+                        Layout.minimumWidth: buttonRow.implicitWidth
+                        Row {
+                            id: buttonRow
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            spacing: 2
+                            // Small: whichever the window isn't, under the pointer (its place is kept).
+                            TabButton {
+                                visible: pill.tier === "small" && !pill.win.minimised
+                                opacity: pillHover.hovered ? 1 : 0
+                                enabled: pillHover.hovered
+                                mark: pill.full ? "half" : "full"
+                                label: (pill.full ? "Half width: " : "Full width: ") + pill.name
+                                onPressed: root.setFull(pill.win, !pill.full)
+                            }
+                            TabButton {
+                                visible: (pill.tier === "medium" || pill.tier === "large") && !pill.win.minimised
+                                mark: "half"
+                                label: "Half width: " + pill.name
+                                on: !pill.full
+                                onPressed: root.setFull(pill.win, false)
+                            }
+                            TabButton {
+                                visible: (pill.tier === "medium" || pill.tier === "large") && !pill.win.minimised
+                                mark: "full"
+                                label: "Full width: " + pill.name
+                                on: pill.full
+                                onPressed: root.setFull(pill.win, true)
+                            }
+                            TabButton {
+                                id: closeButton
+                                visible: pill.tier !== "icon"
+                                mark: "close"
+                                label: root.closeLabel(pill.win)
+                                onPressed: root.closePressed(closeButton, pill.win)
+                            }
                         }
                     }
                 }
@@ -419,12 +910,18 @@ Island {
             radius: Theme.radius - 2
             color: moreMouse.containsMouse ? Theme.surfaceAlt : "transparent"
             Accessible.role: Accessible.Button
-            Accessible.name: (root.ordered.length - root.fit.shown) + " more windows; list them all"
+            Accessible.name: (root.ordered.length - root.fit.shown) + " more windows"
+                + (root.alertHidden ? ", one wants attention" : "") + "; list them all"
             UqText {
                 anchors.centerIn: parent
                 text: "+" + (root.ordered.length - root.fit.shown)
                 color: Theme.textMuted
                 elide: Text.ElideNone
+            }
+            AlertDot {
+                shown: root.alertHidden
+                anchors.rightMargin: 1
+                anchors.topMargin: 1
             }
             MouseArea {
                 id: moreMouse
@@ -460,13 +957,60 @@ Island {
                     required property int index
                     Layout.fillWidth: true
                     text: modelData.title || modelData.cls
-                    detail: modelData.focused ? "Focused" : (modelData.minimised ? "Minimised" : "")
+                    detail: modelData.focused ? "Focused"
+                        : (root.alerts[modelData.address] === true ? "Wants attention"
+                        : (modelData.minimised ? "Minimised" : ""))
                     onActivated: {
                         root.choose(modelData);
                         listPopup.hide();
                     }
                     Component.onCompleted: if (index === 0) forceActiveFocus()
                 }
+            }
+        }
+    }
+
+    // "Minimize to Tab?": a tab's X, until an answer is kept (the island's close option).
+    LazyPopup {
+        id: askPopup
+        onOpenChanged: if (!open) root.askWindow = null
+    }
+    Component {
+        id: askBody
+        ColumnLayout {
+            spacing: 2
+            width: Theme.fontSize * 20
+            UqText {
+                text: "Minimize to Tab?"
+                baseBold: true
+                Layout.fillWidth: true
+            }
+            UqText {
+                text: root.askWindow ? (root.askWindow.title || root.askWindow.cls) : ""
+                color: Theme.textMuted
+                Layout.fillWidth: true
+            }
+            MenuRow {
+                Layout.fillWidth: true
+                text: "Always minimize instead of close"
+                onActivated: root.answerAsk("minimize")
+                Component.onCompleted: forceActiveFocus()
+            }
+            MenuRow {
+                Layout.fillWidth: true
+                text: "Never minimize instead of close"
+                onActivated: root.answerAsk("close")
+            }
+            MenuRow {
+                Layout.fillWidth: true
+                text: "Cancel"
+                onActivated: root.answerAsk("")
+            }
+            UqText {
+                text: "Change it later in this island's settings."
+                color: Theme.textMuted
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
             }
         }
     }
@@ -488,7 +1032,7 @@ Island {
 
             UqText {
                 text: mcol.w ? (mcol.w.title || mcol.w.cls) : ""
-                font.bold: true
+                baseBold: true
                 Layout.fillWidth: true
             }
             MenuRow {
@@ -507,8 +1051,8 @@ Island {
             MenuRow {
                 visible: mcol.w !== null && !mcol.w.minimised
                 Layout.fillWidth: true
-                text: "Maximise"
-                onActivated: { root.act(mcol.w, "fullscreen", { mode: "maximized" }); mcol.done(); }
+                text: mcol.w && root.isFull(mcol.w) ? "Half width" : "Full width"
+                onActivated: { root.setFull(mcol.w, !root.isFull(mcol.w)); mcol.done(); }
             }
             MenuRow {
                 visible: mcol.w !== null && !mcol.w.minimised

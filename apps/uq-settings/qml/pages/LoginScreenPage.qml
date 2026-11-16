@@ -137,8 +137,12 @@ SettingsPage {
             help: "Changes here ask for an administrator password."
             wide: true
 
-            RowLayout {
-                spacing: Kirigami.Units.largeSpacing * 2
+            // The preview beside its controls, or above them in a narrow window.
+            GridLayout {
+                id: appearanceRow
+                columns: appearanceRow.width >= Kirigami.Units.gridUnit * 44 ? 2 : 1
+                columnSpacing: Kirigami.Units.largeSpacing * 2
+                rowSpacing: Kirigami.Units.largeSpacing
                 Layout.fillWidth: true
 
                 Rectangle {
@@ -146,7 +150,7 @@ SettingsPage {
                     objectName: "greeterPreview"
                     readonly property color bg: page.previewDark ? page.darkEnd : page.lightEnd
                     readonly property color fg: page.previewDark ? page.lightEnd : page.darkEnd
-                    Layout.preferredWidth: Kirigami.Units.gridUnit * 24
+                    Layout.preferredWidth: Math.min(Kirigami.Units.gridUnit * 24, appearanceRow.width)
                     Layout.preferredHeight: Layout.preferredWidth * 9 / 16
                     Layout.alignment: Qt.AlignTop
                     radius: Kirigami.Units.cornerRadius * 2
@@ -269,6 +273,7 @@ SettingsPage {
                             enabled: page.idle
                             Accessible.name: "Login screen theme"
                             Layout.preferredWidth: Kirigami.Units.gridUnit * 18
+                            Layout.maximumWidth: appearanceRow.width
                             onActivated: index => {
                                 if (index === 0)
                                     page.saveLook("", "", !!page.greeter.hide_users, !!page.greeter.reduce_motion);

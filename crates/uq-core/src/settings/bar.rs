@@ -10,13 +10,14 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// Every island the bar knows, in the order Settings offers them, with its display name.
-pub const ISLANDS: [(&str, &str); 13] = [
+pub const ISLANDS: [(&str, &str); 14] = [
     ("system", "App menu, workspaces and dock"),
     ("work", "Open windows"),
     ("clock", "Clock and calendar"),
     ("weather", "Weather"),
     ("notif", "Notifications"),
     ("status", "Status (network, sound, battery)"),
+    ("tray", "Tray icons of other apps"),
     ("media", "Now playing"),
     ("stocks", "Stock ticker"),
     ("news", "News headlines"),
@@ -34,6 +35,14 @@ pub const MAX_SYMBOLS: usize = 12;
 pub const MAX_FEEDS: usize = 8;
 pub const MAX_ZONES: usize = 4;
 const MAX_URL: usize = 512;
+/// A Custom island's width in Icon sizes: one more than Large, up to this.
+pub const MIN_CUSTOM: u32 = 7;
+pub const MAX_CUSTOM: u32 = 24;
+/// An island's text size, in percent of the theme's, in steps of [`TEXT_SIZE_STEP`].
+pub const MIN_TEXT_SIZE: u16 = 70;
+pub const MAX_TEXT_SIZE: u16 = 150;
+pub const TEXT_SIZE_STEP: u16 = 10;
+const MAX_FONT_NAME: usize = 64;
 
 pub fn known_island(id: &str) -> bool {
     ISLANDS.iter().any(|(i, _)| *i == id)
@@ -44,7 +53,9 @@ pub fn island_name(id: &str) -> Option<&'static str> {
 }
 
 /// How big an island is, in multiples of the Icon size (a square island as tall as the bar):
-/// Icon 1x, Small 2x, Medium 4x, Large 6x. Each island decides what it shows at each size.
+/// Icon 1x, Small 2x, Medium 4x, Large 6x, and Custom: wider than Large, in whole Icon sizes
+/// ([`BarItem::units`], [`MIN_CUSTOM`] to [`MAX_CUSTOM`]). Each island decides what it shows at
+/// each size; a Custom island shows what it shows at Large, with more room.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Size {
@@ -56,16 +67,19 @@ pub enum Size {
     /// `wide` before there were four sizes.
     #[serde(alias = "wide")]
     Large,
+    /// Its width is the item's `units`.
+    Custom,
 }
 
 impl Size {
-    /// Width in Icon sizes.
+    /// Width in Icon sizes; for Custom, the narrowest it can be (the item's `units` say more).
     pub fn units(self) -> u32 {
         match self {
             Size::Icon => 1,
             Size::Small => 2,
             Size::Medium => 4,
             Size::Large => 6,
+            Size::Custom => MIN_CUSTOM,
         }
     }
 }
@@ -74,7 +88,7 @@ impl Size {
 pub fn default_size(id: &str) -> Size {
     match id {
         "system" | "work" | "status" | "news" => Size::Large,
-        "clock" | "media" | "stocks" | "worldclock" => Size::Medium,
+        "clock" | "media" | "stocks" | "worldclock" | "tray" => Size::Medium,
         "keyboard" => Size::Icon,
         _ => Size::Small,
     }
@@ -91,6 +105,91 @@ fn size_field<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Size>, D:
     }
 }
 
+/// How an island's text looks, in place of the theme's: the font, bold, italic, all capitals
+/// and the size. The default (nothing set) is the theme's text; only the island's face changes,
+/// not its popup.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct TextStyle {
+    /// A font family name, `monospace` for the theme's monospaced font, or `None` for the
+    /// theme's interface font.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub font: Option<String>,
+    #[serde(skip_serializing_if = "is_false")]
+    pub bold: bool,
+    #[serde(skip_serializing_if = "is_false")]
+    pub italic: bool,
+    /// All capitals.
+    #[serde(skip_serializing_if = "is_false")]
+    pub caps: bool,
+    /// Percent of the theme's text size ([`MIN_TEXT_SIZE`]..=[`MAX_TEXT_SIZE`], in steps of
+    /// [`TEXT_SIZE_STEP`]).
+    #[serde(skip_serializing_if = "is_hundred")]
+    pub size: u16,
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
+}
+
+fn is_hundred(n: &u16) -> bool {
+    *n == 100
+}
+
+impl Default for TextStyle {
+    fn default() -> Self {
+        Self {
+            font: None,
+            bold: false,
+            italic: false,
+            caps: false,
+            size: 100,
+        }
+    }
+}
+
+impl TextStyle {
+    pub const FIELDS: [&str; 5] = ["font", "bold", "italic", "caps", "size"];
+
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+
+    /// A font name: 1 to 64 characters, no control characters, not only spaces.
+    pub fn valid_font(f: &str) -> bool {
+        !f.trim().is_empty()
+            && f.chars().count() <= MAX_FONT_NAME
+            && !f.chars().any(char::is_control)
+    }
+
+    fn check(&self) -> Result<(), String> {
+        if let Some(f) = &self.font
+            && !Self::valid_font(f)
+        {
+            return Err(format!("invalid font name {f:?}"));
+        }
+        if !(MIN_TEXT_SIZE..=MAX_TEXT_SIZE).contains(&self.size)
+            || !self.size.is_multiple_of(TEXT_SIZE_STEP)
+        {
+            return Err(format!(
+                "text size {} is not {MIN_TEXT_SIZE} to {MAX_TEXT_SIZE} in steps of {TEXT_SIZE_STEP}",
+                self.size
+            ));
+        }
+        Ok(())
+    }
+
+    /// Load-time repair: a bad font is dropped, the size rounded to a step and clamped.
+    fn repaired(mut self) -> Self {
+        if self.font.as_deref().is_some_and(|f| !Self::valid_font(f)) {
+            self.font = None;
+        }
+        let step = (self.size + TEXT_SIZE_STEP / 2) / TEXT_SIZE_STEP * TEXT_SIZE_STEP;
+        self.size = step.clamp(MIN_TEXT_SIZE, MAX_TEXT_SIZE);
+        self
+    }
+}
+
 /// One island in a zone.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BarItem {
@@ -102,21 +201,110 @@ pub struct BarItem {
         deserialize_with = "size_field"
     )]
     pub size: Option<Size>,
+    /// A Custom island's width in Icon sizes ([`MIN_CUSTOM`]..=[`MAX_CUSTOM`]); only with
+    /// `size = "custom"`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub units: Option<u32>,
+    /// Its text's look; `None` is the theme's. Not for separators.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<TextStyle>,
+    /// It grows to fill the bar's empty space beside its zone; `None` is the island's default
+    /// ([`default_fill`]: only Open windows). Not for separators.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill: Option<bool>,
+}
+
+/// Whether an island fills the empty space beside its zone when its item doesn't say.
+pub fn default_fill(id: &str) -> bool {
+    id == "work"
 }
 
 impl BarItem {
-    pub const FIELDS: [&str; 2] = ["id", "size"];
+    pub const FIELDS: [&str; 5] = ["id", "size", "units", "text", "fill"];
 
     pub fn new(id: &str) -> Self {
         Self {
             id: id.into(),
             size: None,
+            units: None,
+            text: None,
+            fill: None,
         }
+    }
+
+    fn check_text(&self) -> Result<(), String> {
+        match &self.text {
+            Some(_) if self.id == SEPARATOR => Err("a separator has no text".into()),
+            Some(t) => t.check(),
+            None => Ok(()),
+        }
+    }
+
+    fn check_fill(&self) -> Result<(), String> {
+        match self.fill {
+            Some(_) if self.id == SEPARATOR => Err("a separator doesn't fill".into()),
+            _ => Ok(()),
+        }
+    }
+
+    /// Whether it fills the empty space beside its zone.
+    pub fn fills(&self) -> bool {
+        self.id != SEPARATOR && self.fill.unwrap_or_else(|| default_fill(&self.id))
     }
 
     /// The size it is drawn at, before the bar steps it down to fit.
     pub fn size(&self) -> Size {
         self.size.unwrap_or_else(|| default_size(&self.id))
+    }
+
+    /// Its width in Icon sizes, before the bar steps it down to fit.
+    pub fn width_units(&self) -> u32 {
+        match self.size() {
+            Size::Custom => self.units.unwrap_or(MIN_CUSTOM),
+            s => s.units(),
+        }
+    }
+
+    fn check_units(&self) -> Result<(), String> {
+        match (self.size(), self.units) {
+            (Size::Custom, Some(u)) if (MIN_CUSTOM..=MAX_CUSTOM).contains(&u) => Ok(()),
+            (Size::Custom, Some(u)) => Err(format!(
+                "custom width {u} is outside {MIN_CUSTOM} to {MAX_CUSTOM}"
+            )),
+            (Size::Custom, None) => Err("a custom size needs units".into()),
+            (_, Some(_)) => Err("units are only for a custom size".into()),
+            (_, None) => Ok(()),
+        }
+    }
+
+    /// Load-time repair of the size: a Custom width is clamped (missing, it is the narrowest
+    /// Custom), stray units are dropped, and a separator has no size.
+    fn repair_units(&mut self) {
+        if self.id == SEPARATOR {
+            self.size = None;
+            self.units = None;
+            self.text = None;
+            self.fill = None;
+            return;
+        }
+        // The island's own default is stored as "not set".
+        if self.fill == Some(default_fill(&self.id)) {
+            self.fill = None;
+        }
+        self.text = self
+            .text
+            .take()
+            .map(TextStyle::repaired)
+            .filter(|t| !t.is_default());
+        if self.size() == Size::Custom {
+            self.units = Some(
+                self.units
+                    .unwrap_or(MIN_CUSTOM)
+                    .clamp(MIN_CUSTOM, MAX_CUSTOM),
+            );
+        } else {
+            self.units = None;
+        }
     }
 }
 
@@ -169,8 +357,11 @@ pub struct WorldClockOptions {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum WindowSort {
-    /// When each window opened (oldest first unless `descending`).
+    /// Where the windows sit on screen: left to right, as the scrolling layout's columns run.
+    /// Minimised windows keep their place. One order (`descending` is ignored).
     #[default]
+    Screen,
+    /// When each window opened (oldest first unless `descending`).
     Opened,
     /// The last notification from each window's app.
     Activity,
@@ -182,12 +373,28 @@ pub enum WindowSort {
     Name,
 }
 
+/// What a tab's close button (X) does to an open window. A minimised window's X always closes it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CloseButton {
+    /// Ask ("Minimize to Tab?"), where the answer can become `minimize` or `close`.
+    #[default]
+    Ask,
+    /// Minimise the window to its tab.
+    Minimize,
+    /// Close the window.
+    Close,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct WorkOptions {
     pub sort: WindowSort,
-    /// Reverse the order (newest, most active, busiest or Z first). Ignored for `pin`.
+    /// Reverse the order (newest, most active, busiest or Z first). Ignored for `screen` and
+    /// `pin`.
     pub descending: bool,
+    /// What a tab's X does to an open window.
+    pub close: CloseButton,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -215,9 +422,17 @@ pub struct BarLayout {
 }
 
 impl Default for BarLayout {
-    /// A new user's bar: today's islands, weather left out until a location is chosen.
+    /// A new user's bar: today's islands, weather left out until a location is chosen, and the
+    /// other apps' tray icons in their own island before Status.
     fn default() -> Self {
-        BarLayout::from_islands(&super::Islands::default(), false)
+        let mut b = BarLayout::from_islands(&super::Islands::default(), false);
+        let at = b
+            .end
+            .iter()
+            .position(|i| i.id == "status")
+            .unwrap_or(b.end.len());
+        b.end.insert(at, BarItem::new("tray"));
+        b
     }
 }
 
@@ -324,6 +539,10 @@ impl BarLayout {
             if !known_island(&item.id) {
                 return Err(invalid(KEY, format!("unknown island {:?}", item.id)));
             }
+            item.check_units()
+                .and_then(|()| item.check_text())
+                .and_then(|()| item.check_fill())
+                .map_err(|e| invalid(KEY, format!("island {:?}: {e}", item.id)))?;
             if item.id != SEPARATOR {
                 if seen.contains(&item.id.as_str()) {
                     return Err(invalid(
@@ -374,6 +593,7 @@ impl BarLayout {
                 }
                 keep
             });
+            zone.iter_mut().for_each(BarItem::repair_units);
         }
         let o = &mut self.options;
         let mut syms: Vec<String> = Vec::new();
@@ -411,6 +631,9 @@ impl BarLayout {
                 .ok_or_else(|| invalid(&key, "expected an array"))?;
             for item in arr {
                 check_known(&key, item, &BarItem::FIELDS)?;
+                if let Some(t) = item.get("text") {
+                    check_known(&format!("{key}.text"), t, &TextStyle::FIELDS)?;
+                }
                 let it: BarItem = serde_json::from_value(item.clone())
                     .map_err(|e| invalid(&key, e.to_string()))?;
                 out.zone_mut(zone).expect("known zone").push(it);
@@ -458,6 +681,9 @@ pub enum BarEdit {
         zone: String,
         index: usize,
         size: Size,
+        /// The width for a Custom size, in Icon sizes.
+        #[serde(default)]
+        units: Option<u32>,
     },
     /// Replace `options.<island>`.
     Options { island: String, value: Value },
@@ -516,10 +742,12 @@ impl BarLayout {
                 zone,
                 index,
                 size,
+                units,
             } => {
                 next.check_at(id, zone, *index)?;
-                next.zone_mut(zone).expect("checked")[*index].size =
-                    (*size != default_size(id)).then_some(*size);
+                let it = &mut next.zone_mut(zone).expect("checked")[*index];
+                it.size = (*size != default_size(id)).then_some(*size);
+                it.units = *units;
             }
             BarEdit::Options { island, value } => {
                 let mut opts = serde_json::to_value(&next.options).expect("options serialise");
@@ -578,6 +806,22 @@ fn dedup_valid(list: &mut Vec<String>, max: usize, ok: impl Fn(&str) -> bool) {
     *list = out;
 }
 
+/// A text style from a file, field by field: a field of the wrong type is its default.
+fn lenient_text(v: &Value) -> Option<TextStyle> {
+    let o = v.as_object()?;
+    let flag = |k: &str| o.get(k).and_then(Value::as_bool).unwrap_or(false);
+    Some(TextStyle {
+        font: o.get("font").and_then(Value::as_str).map(String::from),
+        bold: flag("bold"),
+        italic: flag("italic"),
+        caps: flag("caps"),
+        size: o
+            .get("size")
+            .and_then(Value::as_u64)
+            .map_or(100, |n| n.min(u64::from(u16::MAX)) as u16),
+    })
+}
+
 /// Lenient load of `shell.bar`: anything that isn't a table loads as `None` (so the old
 /// switches decide); a table loads field by field, then is sanitised.
 pub(super) fn lenient_bar<'de, D: serde::Deserializer<'de>>(
@@ -597,7 +841,19 @@ pub(super) fn lenient_bar<'de, D: serde::Deserializer<'de>>(
                     let size = v
                         .get("size")
                         .and_then(|s| serde_json::from_value::<Size>(s.clone()).ok());
-                    Some(BarItem { id, size })
+                    let units = v
+                        .get("units")
+                        .and_then(Value::as_u64)
+                        .map(|u| u.min(u64::from(MAX_CUSTOM)) as u32);
+                    let text = v.get("text").and_then(lenient_text);
+                    let fill = v.get("fill").and_then(Value::as_bool);
+                    Some(BarItem {
+                        id,
+                        size,
+                        units,
+                        text,
+                        fill,
+                    })
                 })
                 .collect(),
             _ => Vec::new(),
@@ -659,7 +915,7 @@ mod tests {
         let b = BarLayout::default();
         assert_eq!(ids(&b.start), ["system", "work"]);
         assert!(b.center.is_empty());
-        assert_eq!(ids(&b.end), ["clock", "notif", "status"]);
+        assert_eq!(ids(&b.end), ["clock", "notif", "tray", "status"]);
         assert!(b.validate().is_ok());
         assert_eq!(b.options.stocks.symbols, ["^GSPC", "AAPL", "MSFT"]);
     }
@@ -793,7 +1049,8 @@ mod tests {
 
     #[test]
     fn edits() {
-        let mut b = BarLayout::default();
+        // The bar of a file from before the Tray island (the edits don't depend on it).
+        let mut b = BarLayout::from_islands(&Islands::default(), false);
         let e = |v: serde_json::Value| -> BarEdit { serde_json::from_value(v).unwrap() };
         b.apply(&e(
             json!({"op": "move", "id": "clock", "zone": "end", "index": 0,
@@ -858,7 +1115,7 @@ mod tests {
         }
         assert!(serde_json::from_value::<BarEdit>(json!({"op": "fly"})).is_err());
         b.apply(&BarEdit::Reset).unwrap();
-        assert_eq!(ids(&b.end), ["clock", "notif", "status"]);
+        assert_eq!(ids(&b.end), ["clock", "notif", "tray", "status"]);
         assert_eq!(b.options.stocks.symbols, ["TSLA"], "reset keeps options");
     }
 
@@ -881,10 +1138,149 @@ mod tests {
         let v = serde_json::to_value(BarItem {
             id: "news".into(),
             size: Some(Size::Icon),
+            units: None,
+            text: None,
+            fill: None,
         })
         .unwrap();
         assert_eq!(v, json!({"id": "news", "size": "icon"}));
         assert_eq!(island_name("system"), Some("App menu, workspaces and dock"));
+    }
+
+    #[test]
+    fn fill() {
+        let b = BarLayout::from_value(&json!({"start": [
+            {"id": "work"}, {"id": "clock", "fill": true}, {"id": "status", "fill": false}
+        ]}))
+        .unwrap();
+        assert!(b.start[0].fills(), "Open windows fills by default");
+        assert!(b.start[1].fills());
+        assert!(!b.start[2].fills());
+        let off =
+            BarLayout::from_value(&json!({"start": [{"id": "work", "fill": false}]})).unwrap();
+        assert!(!off.start[0].fills());
+        assert!(
+            BarLayout::from_value(&json!({"start": [{"id": "separator", "fill": true}]})).is_err(),
+            "a separator doesn't fill"
+        );
+        assert!(BarLayout::from_value(&json!({"start": [{"id": "work", "fill": "yes"}]})).is_err());
+        assert_eq!(
+            serde_json::to_value(BarItem::new("clock")).unwrap(),
+            json!({"id": "clock"}),
+            "not set is not written"
+        );
+    }
+
+    #[test]
+    fn text_style() {
+        let ok = BarLayout::from_value(&json!({"start": [
+            {"id": "clock", "text": {"font": "Iosevka", "bold": true, "caps": true, "size": 130}},
+            {"id": "work", "text": {"font": "monospace", "italic": true}}
+        ]}))
+        .unwrap();
+        let t = ok.start[0].text.clone().unwrap();
+        assert_eq!(
+            (t.font.as_deref(), t.bold, t.italic, t.caps, t.size),
+            (Some("Iosevka"), true, false, true, 130)
+        );
+        assert_eq!(ok.start[1].text.as_ref().unwrap().size, 100);
+        // Only what differs from the theme is written.
+        assert_eq!(
+            serde_json::to_value(&ok.start[1]).unwrap(),
+            json!({"id": "work", "text": {"font": "monospace", "italic": true}})
+        );
+        for bad in [
+            json!({"start": [{"id": "clock", "text": {"size": 135}}]}),
+            json!({"start": [{"id": "clock", "text": {"size": 60}}]}),
+            json!({"start": [{"id": "clock", "text": {"size": 160}}]}),
+            json!({"start": [{"id": "clock", "text": {"font": ""}}]}),
+            json!({"start": [{"id": "clock", "text": {"font": "A\nB"}}]}),
+            json!({"start": [{"id": "clock", "text": {"font": "x".repeat(65)}}]}),
+            json!({"start": [{"id": "clock", "text": {"bold": "yes"}}]}),
+            json!({"start": [{"id": "clock", "text": {"colour": "red"}}]}),
+            json!({"start": [{"id": "separator", "text": {"bold": true}}]}),
+        ] {
+            assert!(BarLayout::from_value(&bad).is_err(), "{bad}");
+        }
+        // Lenient load: repaired, or dropped when nothing is left.
+        let set: Settings = serde_json::from_value(json!({"shell": {"bar": {"start": [
+            {"id": "clock", "text": {"size": 134, "font": "\u{7}", "bold": "yes"}},
+            {"id": "work", "text": {"size": 999, "italic": true}},
+            {"id": "system", "text": {"size": 100}},
+            {"id": "separator", "text": {"bold": true}}
+        ]}}}))
+        .unwrap();
+        let b = set.shell.bar.unwrap();
+        let t = b.start[0].text.clone().unwrap();
+        assert_eq!((t.font, t.bold, t.size), (None, false, 130));
+        assert_eq!(b.start[1].text.as_ref().unwrap().size, MAX_TEXT_SIZE);
+        assert_eq!(b.start[2].text, None, "the theme's look is stored as none");
+        assert_eq!(b.start[3].text, None);
+        assert!(b.validate().is_ok());
+    }
+
+    #[test]
+    fn custom_size() {
+        let ok = BarLayout::from_value(&json!({
+            "start": [{"id": "work", "size": "custom", "units": 9}]
+        }))
+        .unwrap();
+        assert_eq!(ok.start[0].size(), Size::Custom);
+        assert_eq!(ok.start[0].width_units(), 9);
+        assert_eq!(BarItem::new("work").width_units(), 6);
+        for bad in [
+            json!({"start": [{"id": "work", "size": "custom"}]}),
+            json!({"start": [{"id": "work", "size": "custom", "units": 6}]}),
+            json!({"start": [{"id": "work", "size": "custom", "units": 25}]}),
+            json!({"start": [{"id": "work", "size": "large", "units": 9}]}),
+            json!({"start": [{"id": "work", "units": 9}]}),
+        ] {
+            assert!(BarLayout::from_value(&bad).is_err(), "{bad}");
+        }
+        // Lenient load: clamped, filled in, or dropped.
+        let set: Settings = serde_json::from_value(json!({"shell": {"bar": {"start": [
+            {"id": "work", "size": "custom", "units": 99},
+            {"id": "system", "size": "custom"},
+            {"id": "clock", "size": "small", "units": 9},
+            {"id": "separator", "size": "custom", "units": 8}
+        ]}}}))
+        .unwrap();
+        let b = set.shell.bar.unwrap();
+        assert_eq!(b.start[0].units, Some(MAX_CUSTOM));
+        assert_eq!(b.start[1].units, Some(MIN_CUSTOM));
+        assert_eq!(b.start[2].units, None);
+        assert_eq!((b.start[3].size, b.start[3].units), (None, None));
+        assert!(b.validate().is_ok());
+        // The Size edit stores the width; a tier clears it.
+        let mut l = ok.clone();
+        l.apply(&BarEdit::Size {
+            id: "work".into(),
+            zone: "start".into(),
+            index: 0,
+            size: Size::Custom,
+            units: Some(12),
+        })
+        .unwrap();
+        assert_eq!(l.start[0].width_units(), 12);
+        l.apply(&BarEdit::Size {
+            id: "work".into(),
+            zone: "start".into(),
+            index: 0,
+            size: Size::Large,
+            units: None,
+        })
+        .unwrap();
+        assert_eq!((l.start[0].size, l.start[0].units), (None, None));
+        assert!(
+            l.apply(&BarEdit::Size {
+                id: "work".into(),
+                zone: "start".into(),
+                index: 0,
+                size: Size::Custom,
+                units: None,
+            })
+            .is_err()
+        );
     }
 
     #[test]
@@ -895,7 +1291,9 @@ mod tests {
         .unwrap();
         assert_eq!(b.options.work.sort, WindowSort::Usage);
         assert!(b.options.work.descending);
-        assert_eq!(BarOptions::default().work.sort, WindowSort::Opened);
+        assert_eq!(BarOptions::default().work.sort, WindowSort::Screen);
+        let s = BarLayout::from_value(&json!({"options": {"work": {"sort": "screen"}}})).unwrap();
+        assert_eq!(s.options.work.sort, WindowSort::Screen);
         for bad in [
             json!({"options": {"work": {"sort": "random"}}}),
             json!({"options": {"work": {"descending": "yes"}}}),
@@ -921,6 +1319,22 @@ mod tests {
         )
         .unwrap();
         assert_eq!(b.options.work.sort, WindowSort::Name);
+    }
+
+    #[test]
+    fn work_close_button() {
+        assert_eq!(WorkOptions::default().close, CloseButton::Ask);
+        let b =
+            BarLayout::from_value(&json!({"options": {"work": {"close": "minimize"}}})).unwrap();
+        assert_eq!(b.options.work.close, CloseButton::Minimize);
+        assert_eq!(
+            b.options.work.sort,
+            WindowSort::Screen,
+            "the rest as default"
+        );
+        let b = BarLayout::from_value(&json!({"options": {"work": {"close": "close"}}})).unwrap();
+        assert_eq!(b.options.work.close, CloseButton::Close);
+        assert!(BarLayout::from_value(&json!({"options": {"work": {"close": "hide"}}})).is_err());
     }
 
     #[test]

@@ -18,12 +18,11 @@ QtObject {
     property var activePopup: null
 
     // Sizes: the Icon size is a square island as tall as the bar; the other sizes are multiples
-    // of it (barlayout.js UNITS).
+    // of it (barlayout.js UNITS), laid on a grid of columns about this wide that spans each
+    // screen's bar exactly (barlayout.js grid). Islands are as far apart as windows are
+    // (WindowLook.windowGap), so the bar fits together with the windows below it.
     readonly property int unit: 36
-    readonly property var metrics: ({
-        unit: unit, gap: Theme.gapIn, zoneGap: Theme.gapOut,
-        sep: Theme.borderWidth + Theme.gapIn * 2
-    })
+    readonly property var metrics: ({ unit: unit, gap: WindowLook.windowGap })
 
     // --- edit mode ---
     // While on, islands can be dragged, resized and set up; their own clicks are off. Every
@@ -131,8 +130,19 @@ QtObject {
         return at !== null ? add(id, at.zone, at.index) : add(id, "end");
     }
 
-    function setSize(zone, index, size) {
-        return save(L.setSize(layout, zone, index, size));
+    // `units` only for a Custom size (its width in Icon sizes).
+    function setSize(zone, index, size, units) {
+        return save(L.setSize(layout, zone, index, size, units));
+    }
+
+    // Change the text style of the island at zone/index (barlayout.js setText).
+    // Turn "Fill the rest" on or off for the island at zone/index (barlayout.js fillOf).
+    function setFill(zone, index, on) {
+        return save(L.setFill(layout, zone, index, on));
+    }
+
+    function setText(zone, index, t) {
+        return save(L.setText(layout, zone, index, t));
     }
 
     function setOptions(island, opts) {
@@ -144,7 +154,7 @@ QtObject {
         selected = "";
         return save({
             start: [{ id: "system" }, { id: "work" }], center: [],
-            end: [{ id: "clock" }, { id: "notif" }, { id: "status" }],
+            end: [{ id: "clock" }, { id: "notif" }, { id: "tray" }, { id: "status" }],
             options: layout.options
         });
     }

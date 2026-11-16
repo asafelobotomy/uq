@@ -90,7 +90,7 @@ Island {
 
             UqText {
                 text: "Headlines"
-                font.bold: true
+                baseBold: true
             }
             UqText {
                 visible: root.note !== ""

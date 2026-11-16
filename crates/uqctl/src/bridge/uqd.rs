@@ -61,7 +61,9 @@ async fn subscribe_unbounded(addr: Option<&str>) -> Option<(Connection, Subs)> {
     let owner = DBusProxy::new(&conn)
         .await
         .ok()?
-        .receive_name_owner_changed()
+        // Only uqd's own name: unfiltered, every client joining or leaving the bus would wake
+        // this, and a full queue of them stalls the whole connection (zbus stops reading).
+        .receive_name_owner_changed_with_args(&[(0, NAME)])
         .await
         .ok()?;
     let rule = MatchRule::builder()
@@ -226,7 +228,10 @@ impl Link {
             }
             tokio::select! {
                 _ = stop.cancelled() => break 'outer,
-                _ = poll.tick() => {
+                // Only while there is something to retry: subscribing again (no owner stream)
+                // or asking whether uqd is up. While up and subscribed, nothing wakes this loop
+                // but the bus, so an idle bridge stays asleep.
+                _ = poll.tick(), if owner.is_none() || !self.is_up() => {
                     // Belt and braces while down; NameOwnerChanged covers the normal case.
                     if !self.is_up()
                         && let Some(conn) = self.connection().await
@@ -325,8 +330,9 @@ async fn forward(
         };
         match parsed {
             Ok(data) => {
+                // Read from the borrowed value: no deep copy of the settings per change.
                 if member.as_str() == "SettingsChanged"
-                    && let Ok(s) = serde_json::from_value::<Settings>(data.clone())
+                    && let Ok(s) = <Settings as serde::Deserialize>::deserialize(&data)
                 {
                     settings.send_replace(Some(s));
                 }

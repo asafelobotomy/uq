@@ -33,13 +33,14 @@ const SETTING_KEYS: [&str; 11] = [
 ];
 
 /// The `shell` section's fields (`islands.<id>` patches one island).
-const SHELL_FIELDS: [&str; 6] = [
+const SHELL_FIELDS: [&str; 7] = [
     "providers",
     "clock_24h",
     "terminal",
     "edge_indicators",
     "edge_titles",
     "edge_style",
+    "fit_windows",
 ];
 
 #[derive(Debug, Clone)]

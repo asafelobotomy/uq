@@ -110,7 +110,11 @@ function titleWidth(barWidth, count) {
 // The windows the strip shows: on monitor `monitor` ("" for any), on its active workspace
 // `wsId`, and the windows minimised from that workspace (shown dimmed). windows: [{address, cls,
 // title, wsId, minimised, minimisedFrom, monitor, pid}] as the bar reads them from Hyprland.
-// Returns [{address, cls, title, minimised, focused, pid}] in Hyprland's order.
+// Optional geometry is passed through for "Screen order" and the Full/Half buttons: x, y, w, h
+// (Hyprland's `at` and `size`), floating, fullscreen (Hyprland's state number), full (the window
+// spans its screen's width), scrolling (its workspace uses the scrolling layout).
+// Returns [{address, cls, title, minimised, focused, pid, x, y, w, h, floating, fullscreen, full,
+// scrolling}] in Hyprland's order.
 function windowsHere(windows, monitor, wsId, focused) {
     var out = [];
     var list = windows || [];
@@ -133,15 +137,26 @@ function windowsHere(windows, monitor, wsId, focused) {
             title: typeof w.title === "string" ? w.title : "",
             minimised: w.minimised === true,
             focused: addr === f,
-            pid: typeof w.pid === "number" && w.pid > 0 ? w.pid : 0
+            pid: typeof w.pid === "number" && w.pid > 0 ? w.pid : 0,
+            x: typeof w.x === "number" ? w.x : 0,
+            y: typeof w.y === "number" ? w.y : 0,
+            w: typeof w.w === "number" ? w.w : 0,
+            h: typeof w.h === "number" ? w.h : 0,
+            floating: w.floating === true,
+            fullscreen: typeof w.fullscreen === "number" ? w.fullscreen : 0,
+            full: w.full === true,
+            scrolling: w.scrolling === true
         });
     }
     return out;
 }
 
-var SORTS = ["opened", "activity", "pin", "usage", "name"];
+// "screen" (the default) is the order the windows sit in on screen: left to right, as the
+// scrolling layout's columns run.
+var SORTS = ["screen", "opened", "activity", "pin", "usage", "name"];
+var DEFAULT_SORT = "screen";
 var SORT_NAMES = {
-    opened: "Last opened", activity: "Last activity", pin: "By pin",
+    screen: "Screen order", opened: "Last opened", activity: "Last activity", pin: "By pin",
     usage: "By system usage", name: "By name"
 };
 // The two directions, in words, for the modes that have them (not "pin").
@@ -154,6 +169,22 @@ var ORDER_NAMES = {
 
 function sortHasOrder(mode) {
     return ORDER_NAMES[mode] !== undefined;
+}
+
+// What a tab's X does to an open window (shell.bar.options.work.close): ask first ("Minimize to
+// Tab?"), minimise it to its tab, or close it.
+var CLOSES = ["ask", "minimize", "close"];
+var CLOSE_NAMES = { ask: "Ask each time", minimize: "Minimise to the tab", close: "Close the window" };
+
+// What pressing a tab's X does now: "close", "minimise" or "ask". A minimised window's X closes it.
+function closeAction(mode, minimised) {
+    if (minimised === true)
+        return "close";
+    if (mode === "minimize")
+        return "minimise";
+    if (mode === "close")
+        return "close";
+    return "ask";
 }
 
 // The windows in the island's order. ctx: {opened: {addr: n} (lower opened earlier), activity:
@@ -190,6 +221,8 @@ function sortWindows(list, mode, descending, ctx) {
                 d = ta < tb ? -1 : (ta > tb ? 1 : 0);
             }
             break;
+        case "screen":
+            return 0; // screenOrder() places these
         default:
             d = opened(a) - opened(b);
         }
@@ -198,7 +231,57 @@ function sortWindows(list, mode, descending, ctx) {
         var o = opened(a) - opened(b);
         return o !== 0 ? o : x.i - y.i;
     });
-    return keyed.map(function (k) { return k.w; });
+    var out = keyed.map(function (k) { return k.w; });
+    return mode === "screen" ? screenOrder(out, c.lastOrder) : out;
+}
+
+// "Screen order": the windows left to right as they sit on screen (top to bottom within a
+// column), as the scrolling layout's columns run and any layout's tiles sit. A minimised window
+// has left the layout, so it keeps its place from `lastOrder` (the addresses in the order last
+// shown): right after the window that was before it. One never shown goes last.
+function screenOrder(list, lastOrder) {
+    var prev = Array.isArray(lastOrder) ? lastOrder : [];
+    var live = [], mins = [];
+    for (var i = 0; i < list.length; i++)
+        (list[i].minimised === true ? mins : live).push({ w: list[i], i: i });
+    live.sort(function (a, b) {
+        var ax = typeof a.w.x === "number" ? a.w.x : 0, bx = typeof b.w.x === "number" ? b.w.x : 0;
+        if (ax !== bx)
+            return ax - bx;
+        var ay = typeof a.w.y === "number" ? a.w.y : 0, by = typeof b.w.y === "number" ? b.w.y : 0;
+        return ay !== by ? ay - by : a.i - b.i;
+    });
+    var out = live.map(function (k) { return k.w; });
+    mins.sort(function (a, b) {
+        var pa = prev.indexOf(a.w.address), pb = prev.indexOf(b.w.address);
+        if (pa < 0) pa = 1e9;
+        if (pb < 0) pb = 1e9;
+        return pa !== pb ? pa - pb : a.i - b.i;
+    });
+    for (var j = 0; j < mins.length; j++) {
+        var m = mins[j].w, at = prev.indexOf(m.address);
+        if (at < 0) {
+            out.push(m);
+            continue;
+        }
+        var put = 0;
+        for (var p = at - 1; p >= 0; p--) {
+            var k = indexOfAddr(out, prev[p]);
+            if (k >= 0) {
+                put = k + 1;
+                break;
+            }
+        }
+        out.splice(put, 0, m);
+    }
+    return out;
+}
+
+function indexOfAddr(list, addr) {
+    for (var i = 0; i < list.length; i++)
+        if (list[i].address === addr)
+            return i;
+    return -1;
 }
 
 // A notification's app matches a window's app: the notification's app name or icon against the
@@ -218,23 +301,140 @@ function notifMatches(note, app) {
     return false;
 }
 
-// How `n` pills fit a strip `width` wide. m: {minPill (icon and close only), maxPill, gap,
-// arrow (a scroll arrow), chip (the "+N" button)}. Returns {mode, pillW, shown}: "empty" (no
-// windows); "pills" (all fit, sharing the width evenly, each at most maxPill); "scroll" (only
-// `shown` fit at a time, between two arrows, with "+N" listing the rest); "compact" (not even
-// one pill fits: the lead window's icon, which lists them all).
-function strip(n, width, m) {
+// --- windows that want attention (a dot on their tab's icon) ---
+// A notification backend's `latest` ({appName, appIcon, summary}) is re-sent with every state
+// update, and falls back to an older one when the newest is dismissed: neither is a new
+// notification. seen: {keys (the recent ones, newest last), count} from the last call, or null.
+// Returns {fresh (a new notification arrived), seen (to pass next time)}.
+var SEEN_KEYS = 20;
+function noteArrived(seen, latest, count) {
+    var s = seen && Array.isArray(seen.keys) ? seen : { keys: [], count: 0 };
+    var c = typeof count === "number" ? count : 0;
+    if (!latest)
+        return { fresh: false, seen: { keys: s.keys, count: c } };
+    // Without a summary (hidden while the screen is shared or captured, or never sent) the text
+    // can't tell one notification from another: only a rise in the count says it is new. It
+    // isn't remembered, so the full one coming back isn't new either.
+    if (typeof latest.summary !== "string" || latest.summary === "")
+        return { fresh: c > s.count, seen: { keys: s.keys, count: c } };
+    var key = [latest.appName, latest.appIcon, latest.summary].map(function (x) { return typeof x === "string" ? x : ""; }).join("\u0001");
+    var last = s.keys.length > 0 ? s.keys[s.keys.length - 1] : null;
+    // The same as last time is new only when the count rose (the same text again); one seen a
+    // little earlier is the newest dismissed.
+    var fresh = key === last ? c > s.count : s.keys.indexOf(key) < 0;
+    var keys = s.keys.filter(function (k) { return k !== key; });
+    keys.push(key);
+    return { fresh: fresh, seen: { keys: keys.slice(-SEEN_KEYS), count: c } };
+}
+
+// "Last activity": the recent notifications ({appName, appIcon, at}), newest last, with one
+// more from `latest` at `now`; at most NOTES_MAX kept.
+var NOTES_MAX = 50;
+function withNote(notes, latest, now) {
+    var n = Array.isArray(notes) ? notes.slice(Math.max(0, notes.length - (NOTES_MAX - 1))) : [];
+    n.push({ appName: String(latest && latest.appName || ""), appIcon: String(latest && latest.appIcon || ""), at: now });
+    return n;
+}
+
+// The alerts (address → true) with `addrs` added, leaving out the focused window (it is already
+// being looked at); the same object when nothing changes.
+function withAlerts(alerts, addrs, focused) {
+    var out = null, f = normAddr(focused);
+    for (var i = 0; i < (addrs || []).length; i++) {
+        var a = normAddr(addrs[i]);
+        if (a === null || a === f || (out || alerts)[a] === true)
+            continue;
+        out = out || Object.assign({}, alerts);
+        out[a] = true;
+    }
+    return out || alerts;
+}
+
+// The alerts kept: those of windows still open (`live`, addresses) that aren't focused; the same
+// object when nothing changes.
+function keepAlerts(alerts, live, focused) {
+    var f = normAddr(focused), open = {}, out = {}, dropped = false;
+    for (var i = 0; i < (live || []).length; i++)
+        open[normAddr(live[i])] = true;
+    for (var a in alerts) {
+        if (a !== f && open[a] === true)
+            out[a] = true;
+        else
+            dropped = true;
+    }
+    return dropped ? out : alerts;
+}
+
+// How `n` pills fit a strip `width` wide. m: {minPill (the narrowest tab: Icon), maxPill, gap,
+// arrow (a scroll arrow), chip (the "+N" button), medium (optional: a Medium tab's width)}. With
+// `focus` (the focused pill's index, -1 for none) and m.medium, the focused pill grows to Medium
+// (or as near as the strip allows) and the others share what is left. Returns {mode, pillW,
+// focusW, shown}: "empty" (no windows); "pills" (all fit: each pillW wide, at most maxPill, the
+// focused one focusW); "scroll" (only `shown` fit at a time, between two arrows, with "+N"
+// listing the rest); "compact" (not even one pill fits: the lead window's icon, which lists them
+// all).
+function strip(n, width, m, focus) {
     if (n <= 0)
-        return { mode: "empty", pillW: 0, shown: 0 };
-    if (n * m.minPill + (n - 1) * m.gap <= width)
-        return { mode: "pills", shown: n,
-                 pillW: Math.min(m.maxPill, Math.floor((width - (n - 1) * m.gap) / n)) };
+        return { mode: "empty", pillW: 0, focusW: 0, shown: 0 };
+    var hasF = typeof focus === "number" && focus >= 0 && focus < n
+        && typeof m.medium === "number" && m.medium > m.minPill;
+    if (n * m.minPill + (n - 1) * m.gap <= width) {
+        var even = Math.min(m.maxPill, Math.floor((width - (n - 1) * m.gap) / n));
+        if (!hasF || n === 1 || even >= m.medium)
+            return { mode: "pills", shown: n, pillW: even, focusW: even };
+        var fw = Math.min(m.medium, width - (n - 1) * (m.minPill + m.gap));
+        var rest = Math.min(m.maxPill, Math.floor((width - fw - (n - 1) * m.gap) / (n - 1)));
+        return { mode: "pills", shown: n, pillW: rest, focusW: fw };
+    }
     var avail = width - 2 * (m.arrow + m.gap) - (m.chip + m.gap);
+    if (hasF) {
+        var f = Math.min(m.medium, avail);
+        if (f < m.minPill)
+            return { mode: "compact", pillW: 0, focusW: 0, shown: 0 };
+        var others = Math.min(n - 1, Math.floor((avail - f) / (m.minPill + m.gap)));
+        var pw = others > 0 ? Math.min(m.maxPill, Math.floor((avail - f - others * m.gap) / others)) : 0;
+        return { mode: "scroll", shown: others + 1, pillW: pw, focusW: f };
+    }
     var k = Math.floor((avail + m.gap) / (m.minPill + m.gap));
     if (k < 1)
-        return { mode: "compact", pillW: 0, shown: 0 };
+        return { mode: "compact", pillW: 0, focusW: 0, shown: 0 };
     k = Math.min(k, n);
-    return { mode: "scroll", shown: k, pillW: Math.floor((avail - (k - 1) * m.gap) / k) };
+    var w = Math.floor((avail - (k - 1) * m.gap) / k);
+    return { mode: "scroll", shown: k, pillW: w, focusW: w };
+}
+
+// Whether window `o` (a toplevel's lastIpcObject) spans most of the usable width of its monitor
+// `mon` (that monitor's lastIpcObject: physical width, scale and reserved [left, top, right,
+// bottom]): a Full column in the scrolling layout.
+function spansScreen(o, mon) {
+    if (!o || !o.size || !mon || !(mon.width > 0))
+        return false;
+    var r = mon.reserved && mon.reserved.length >= 4 ? mon.reserved : [0, 0, 0, 0];
+    var usable = mon.width / (mon.scale > 0 ? mon.scale : 1) - (Number(r[0]) || 0) - (Number(r[2]) || 0);
+    return Number(o.size[0]) >= usable * 0.8;
+}
+
+// Which controls a tab `w` wide has room for. m: {small, medium, large} (the narrowest width of
+// each). "icon": the app icon, which turns into a close button under the pointer; "small": icon,
+// Full or Half (whichever the window isn't, under the pointer) and close; "medium": icon, Half,
+// Full and close; "large": Medium plus the title.
+function tabTier(w, m) {
+    if (w >= m.large)
+        return "large";
+    if (w >= m.medium)
+        return "medium";
+    if (w >= m.small)
+        return "small";
+    return "icon";
+}
+
+// The first pill shown while scrolling to show the focused pill `keep` when it was out of view:
+// centred, so the windows on both sides of it show as they sit on screen. Kept in range.
+function centreOffset(n, shown, keep) {
+    var max = Math.max(0, n - shown);
+    if (keep < 0 || keep >= n)
+        return 0;
+    return Math.max(0, Math.min(keep - Math.floor((shown - 1) / 2), max));
 }
 
 // The first pill shown while scrolling, kept in range and moved just enough to show pill
@@ -249,4 +449,62 @@ function scrollOffset(offset, n, shown, keep) {
             o = keep - shown + 1;
     }
     return o;
+}
+
+// --- Dragging tabs into a new order ---
+
+// Whether the tab for window `w` can be dragged: a tiled window in the scrolling layout (its
+// column is what moves), while the island shows windows in screen order.
+// A tab that can be dragged down onto the screen to join the page shown there: a tiled window in
+// the scrolling layout (any order).
+function canDropOnScreen(w) {
+    return !!w && w.scrolling === true && w.floating !== true && w.minimised !== true;
+}
+
+function canDrag(w, sortMode) {
+    return !!w && sortMode === "screen" && w.scrolling === true && w.floating !== true
+        && w.minimised !== true;
+}
+
+// How many columns the window at `from` in `list` (the island's windows in screen order) moves
+// when its tab is dropped at `to` (its index in the list once moved): the other columns before
+// it after the move, less those before it now. Windows stacked in one column (same x) are one
+// column; minimised and floating windows are no column. Negative: left.
+function columnSteps(list, from, to) {
+    if (!list || from < 0 || from >= list.length || to < 0 || to >= list.length || from === to)
+        return 0;
+    var me = list[from];
+    function colsBefore(order, upto) {
+        var xs = [];
+        for (var i = 0; i < upto; i++) {
+            var w = order[i];
+            if (w.minimised === true || w.floating === true || Math.abs(w.x - me.x) <= 2)
+                continue;
+            var seen = false;
+            for (var j = 0; j < xs.length && !seen; j++)
+                seen = Math.abs(xs[j] - w.x) <= 2;
+            if (!seen)
+                xs.push(w.x);
+        }
+        return xs.length;
+    }
+    var moved = list.slice();
+    moved.splice(from, 1);
+    moved.splice(to, 0, me);
+    return colsBefore(moved, to) - colsBefore(list, from);
+}
+
+// The index a tab dragged from `from` lands at when its centre is at `x` along a strip of tabs
+// whose left edges are `lefts` and widths `widths` (as drawn before the drag): the slot whose
+// tab centre it passed last.
+function dropIndex(lefts, widths, from, x) {
+    var to = from;
+    for (var i = 0; i < lefts.length; i++) {
+        var c = lefts[i] + widths[i] / 2;
+        if (i < from && x < c)
+            return i;
+        if (i > from && x > c)
+            to = i;
+    }
+    return to;
 }

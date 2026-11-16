@@ -8,11 +8,14 @@ import "../core"
 import "../logic/edges.js" as Edges
 
 // One screen edge's indicator (EdgeIndicators.qml makes two per screen). It exists only while
-// there is something on its side, and only on the part of the edge no other screen touches.
+// there is something out of view on its side (a window wholly on screen can be clicked where it
+// is, so it gets no indicator), and only on the part of the edge no other screen touches.
 // Hidden, it is a transparent strip Theme.borderWidth wide that takes pointer input only there
-// and never keyboard focus; reaching it lights the edge and slides out a tab, at the pointer's
-// height, with the neighbour's app icon (and its workspace number when it is on another
-// workspace). With shell.edge_titles the tab shows the window's title too, except while the
+// and never keyboard focus; reaching it brings in the near edge of a window frame, as if that
+// window sat just off screen (at the neighbour's own top and height, framed with the live window
+// look: Hyprland's border width, rounding, gaps and border colours, see core/WindowLook), and
+// slides out a tab at the pointer's height with the neighbour's app icon (and its workspace
+// number when it is on another workspace). With shell.edge_titles the tab shows the window's title too, except while the
 // screen is shared. With shell.edge_style "peek" there is no tab: a slice of the neighbour
 // window itself sits at the edge, like the frame the scrolling layout leaves of a half-width
 // column; it stands there while the current window is fullscreen (or maximized) and hides the
@@ -42,10 +45,10 @@ PanelWindow {
     function recompute() {
         var ids = win.edge.monitorWorkspaces(win.monitor ? win.monitor.name : "");
         var ref = win.stepRef === "" ? null : win.stepRef;
-        var t = Edges.neighbour(win.edge.windows, win.wsId, win.side, ids, ref);
-        win.target = t;
         var d = win.display;
         var mon = d ? { x: d.x, y: d.y, width: d.width, height: d.height } : null;
+        var t = Edges.neighbour(win.edge.windows, win.wsId, win.side, ids, ref, mon);
+        win.target = t;
         win.standing = win.peekStyle && Edges.peekWanted(win.edge.windows, win.wsId, t, mon, ref);
         win.targetToplevel = win.peekStyle && t ? win.edge.toplevelFor(t.address) : null;
     }
@@ -80,6 +83,32 @@ PanelWindow {
     // The slice: like the part of a half-width column the scrolling layout leaves in view, a gap
     // and then the window's near edge, framed as Hyprland frames windows.
     readonly property int peekWidth: Theme.gapOut * 8
+    // Where this surface's top sits on the screen, in global layout pixels: below the space the
+    // bar reserves (Hyprland's `reserved`, [left, top, right, bottom]) unless it ignores it.
+    readonly property real layerTop: {
+        var d = win.display, sp = win.span, top = (d ? d.y : 0) + (sp ? sp.top : 0);
+        if (exclusionMode === ExclusionMode.Ignore)
+            return top;
+        var o = win.monitor ? win.monitor.lastIpcObject : null;
+        var r = o && o.reserved && o.reserved.length >= 2 ? Number(o.reserved[1]) || 0 : 0;
+        return top + Math.max(0, r - (sp ? sp.top : 0));
+    }
+    // The neighbour's frame (its border included) top and bottom on this surface: where the
+    // window really is, or inside the screen's gaps when its size isn't known.
+    readonly property real frameTop: {
+        var t = win.target, b = WindowLook.border;
+        if (t && t.h > 0)
+            return Math.max(0, Math.min(t.y - b - win.layerTop, win.height - WindowLook.gapBottom - b * 2));
+        return WindowLook.gapTop;
+    }
+    readonly property real frameBottom: {
+        var t = win.target, b = WindowLook.border;
+        if (t && t.h > 0)
+            return Math.max(frameTop + b * 2, Math.min(t.y + t.h + b - win.layerTop, win.height));
+        return win.height - WindowLook.gapBottom;
+    }
+    // Tab style: how much of the off-screen window's frame comes into view.
+    readonly property int sliverWidth: Theme.gapIn * 2
 
     screen: display
     visible: edge.enabled && target !== null && span !== null
@@ -105,10 +134,11 @@ PanelWindow {
     }
     implicitWidth: win.stripWidth + win.iconSize + win.titleMax + Theme.fontSize * 4 + win.pad * 6
 
-    // Input only on the strip, plus the tab or the slice while it is out.
+    // Input only on the strip, plus the tab, the window's edge or the slice while it is out.
     mask: Region {
         item: strip
         Region { item: tabHit }
+        Region { item: sliverHit }
         Region { item: peek }
     }
 
@@ -143,18 +173,45 @@ PanelWindow {
         onTriggered: win.stepRef = ""
     }
 
-    // The lit edge, shown while the tab is out.
-    Rectangle {
+    // Where the pointer reaches the edge (always there, never drawn).
+    Item {
         id: strip
         width: win.stripWidth
         height: parent.height
         x: win.left ? 0 : parent.width - width
-        color: Theme.accent
-        opacity: win.revealed && !win.peekStyle ? 1 : 0
-        Behavior on opacity {
+    }
+
+    // Tab style, while out: the near edge of the neighbour's frame, as if the window sat just
+    // past the edge of the screen, drawn as Hyprland draws window frames (WindowLook) at the
+    // neighbour's own top and height.
+    Rectangle {
+        id: sliver
+        visible: !win.peekStyle
+        readonly property bool hovered: win.revealed && area.containsMouse && !tab.hovered
+            && area.mouseY >= y && area.mouseY < y + height
+            && (win.left ? area.mouseX < win.sliverWidth : area.mouseX >= win.width - win.sliverWidth)
+        y: win.frameTop
+        height: win.frameBottom - win.frameTop
+        // The far side (and far corners) stay off-screen.
+        width: win.sliverWidth + radius * 2
+        x: win.left ? (win.revealed ? win.sliverWidth - width : -width)
+                    : (win.revealed ? parent.width - win.sliverWidth : parent.width)
+        radius: WindowLook.frameRadius
+        color: hovered ? Theme.overlay : Theme.surface
+        border.color: hovered || tab.hovered ? WindowLook.activeBorder : WindowLook.inactiveBorder
+        border.width: WindowLook.border
+        Behavior on x {
             enabled: !Settings.reduceMotion
-            NumberAnimation { duration: 120 }
+            NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
         }
+    }
+    // The window edge's input area while it is out.
+    Item {
+        id: sliverHit
+        x: win.left ? 0 : parent.width - width
+        y: sliver.y
+        width: win.revealed && !win.peekStyle ? win.sliverWidth : 0
+        height: win.revealed && !win.peekStyle ? sliver.height : 0
     }
 
     // The tab's input area: the tab's box while it is out, nothing while hidden.
@@ -215,16 +272,17 @@ PanelWindow {
         // off-screen, past the slice.
         ClippingRectangle {
             id: frame
-            readonly property int gap: Theme.gapOut
+            // The gap between columns, as Hyprland leaves it.
+            readonly property int gap: WindowLook.gapsIn
             width: win.peekWidth - gap + radius * 2
-            y: gap
-            height: parent.height - gap * 2
+            y: win.frameTop
+            height: win.frameBottom - win.frameTop
             x: win.left ? (win.peekShown ? -radius * 2 : -win.peekWidth)
                         : (win.peekShown ? gap : win.peekWidth)
-            radius: Theme.radius
+            radius: WindowLook.frameRadius
             color: Theme.surface
-            border.color: peek.hovered ? Theme.accent : Theme.border
-            border.width: Theme.borderWidth
+            border.color: peek.hovered ? WindowLook.activeBorder : WindowLook.inactiveBorder
+            border.width: WindowLook.border
             contentUnderBorder: true
 
             Behavior on x {
@@ -319,9 +377,9 @@ PanelWindow {
 
     function iconFor(cls) {
         if (cls === "")
-            return Quickshell.iconPath("application-x-executable");
+            return Quickshell.iconPath("application-x-executable", true);
         var d = DesktopEntries.heuristicLookup(cls);
         var name = d && d.icon ? d.icon : cls.toLowerCase();
-        return Quickshell.iconPath(name, true) || Quickshell.iconPath("application-x-executable");
+        return Quickshell.iconPath(name, true) || Quickshell.iconPath("application-x-executable", true);
     }
 }

@@ -40,7 +40,7 @@ Item {
     Timer {
         interval: root.stepMs
         repeat: true
-        running: root.stepping && !root.hovered && root.count > 1
+        running: root.stepping && !root.hovered && root.count > 1 && root.visible
         onTriggered: root.stepIndex = (root.stepIndex + 1) % root.count
     }
 
@@ -87,7 +87,9 @@ Item {
         to: -(root.stripWidth + root.gap)
         duration: T.scrollMs(root.stripWidth + root.gap, root.speed)
         loops: Animation.Infinite
-        running: root.overflows && !root.stepping
+        // Off screen (a hidden island, a closed popup) nothing ticks: an animation keeps the
+        // animation driver, and so the CPU, awake even when nothing it moves is drawn.
+        running: root.overflows && !root.stepping && root.visible
         paused: running && !root.moving
     }
 

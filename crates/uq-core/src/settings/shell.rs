@@ -170,6 +170,11 @@ pub struct ShellSettings {
     pub edge_titles: bool,
     #[serde(deserialize_with = "lenient_edge_style")]
     pub edge_style: EdgeStyle,
+    /// Keep every floating window inside the usable part of its screen: one that opens (or is
+    /// moved, or whose screen changes) bigger than that is shrunk to fit, and one that hangs
+    /// over an edge is moved back (`shell/windows/`).
+    #[serde(deserialize_with = "lenient_true")]
+    pub fit_windows: bool,
 }
 
 impl Default for ShellSettings {
@@ -183,6 +188,7 @@ impl Default for ShellSettings {
             edge_indicators: true,
             edge_titles: false,
             edge_style: EdgeStyle::Tab,
+            fit_windows: true,
         }
     }
 }
@@ -203,7 +209,7 @@ fn expect_bool(key: &str, v: &Value) -> Result<bool, SettingError> {
 
 impl ShellSettings {
     /// Every key of the `shell` section.
-    pub const FIELDS: [&str; 8] = [
+    pub const FIELDS: [&str; 9] = [
         "islands",
         "bar",
         "providers",
@@ -212,6 +218,7 @@ impl ShellSettings {
         "edge_indicators",
         "edge_titles",
         "edge_style",
+        "fit_windows",
     ];
 
     /// Rules shared by the API and the loader: ids valid, unique, at most 64, terminal valid.
@@ -327,6 +334,9 @@ impl ShellSettings {
         }
         if let Some(e) = obj.get("edge_titles") {
             out.edge_titles = expect_bool("shell.edge_titles", e)?;
+        }
+        if let Some(f) = obj.get("fit_windows") {
+            out.fit_windows = expect_bool("shell.fit_windows", f)?;
         }
         if let Some(e) = obj.get("edge_style") {
             out.edge_style = serde_json::from_value(e.clone()).map_err(|_| {
@@ -495,6 +505,22 @@ mod tests {
         let v = set.section("shell").unwrap();
         assert_eq!(v["clock_24h"], true);
         assert_eq!(v["islands"]["status"], true);
+    }
+
+    #[test]
+    fn fit_windows_switch() {
+        let mut set = Settings::default();
+        assert!(set.shell.fit_windows, "on for a new user");
+        set.set_section("shell", json!({"fit_windows": false}))
+            .unwrap();
+        assert!(!set.shell.fit_windows);
+        assert_eq!(set.section("shell").unwrap()["fit_windows"], false);
+        assert!(
+            set.set_section("shell", json!({"fit_windows": "no"}))
+                .is_err()
+        );
+        let s: ShellSettings = serde_json::from_value(json!({"fit_windows": 3})).unwrap();
+        assert!(s.fit_windows, "a wrong type keeps the default");
     }
 
     #[test]

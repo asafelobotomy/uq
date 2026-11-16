@@ -264,6 +264,9 @@ GridLayout {
                 placeholderText: "No image"
                 Accessible.name: "Image path"
                 Layout.preferredWidth: Kirigami.Units.gridUnit * 14
+                // Gives way first in a narrow window.
+                Layout.fillWidth: true
+                Layout.minimumWidth: Kirigami.Units.gridUnit * 6
                 onEditingFinished: root.applyPath("image", text)
             }
             QQC2.Button {
@@ -292,13 +295,15 @@ GridLayout {
             enabled: root.enabled
             Layout.fillWidth: true
 
-            RowLayout {
+            // Wraps onto a second line when the row is too narrow for every fit.
+            Flow {
                 id: fitBox
                 objectName: "fitBox"
                 /// The fits' names, in order; `currentIndex` is the one in use.
                 readonly property var model: root.fits.map(f => f.name)
                 property int currentIndex: 0
                 spacing: Kirigami.Units.smallSpacing
+                Layout.fillWidth: true
                 Accessible.role: Accessible.Grouping
                 Accessible.name: "Fit"
 
@@ -419,6 +424,9 @@ GridLayout {
                 placeholderText: "No folder"
                 Accessible.name: "Slideshow folder path"
                 Layout.preferredWidth: Kirigami.Units.gridUnit * 14
+                // Gives way first in a narrow window.
+                Layout.fillWidth: true
+                Layout.minimumWidth: Kirigami.Units.gridUnit * 6
                 onEditingFinished: root.applyPath("folder", text)
             }
             QQC2.Button {

@@ -1,5 +1,5 @@
-// A Settings page: its icon and title with the tab bar beside them, any page-wide messages under
-// that, then the current SettingsTab. The page remembers its tab between runs. A page with one tab
+// A Settings page: its icon and title with the tab bar beside them (under them when the window
+// is too narrow for both), any page-wide messages under that, then the current SettingsTab. The page remembers its tab between runs. A page with one tab
 // shows no tab bar. Ctrl+Tab and Ctrl+Shift+Tab (or Ctrl+PgDown and Ctrl+PgUp) change tabs.
 import QtCore as QtCore
 import QtQuick
@@ -99,9 +99,23 @@ FocusScope {
         anchors.fill: parent
         spacing: 0
 
-        // The title row: icon, title, tabs, then the page's own items.
-        RowLayout {
-            spacing: Kirigami.Units.largeSpacing
+        // The title row: icon, title, tabs, then the page's own items. When the tabs don't fit
+        // beside the title (a narrow window), they go on a row of their own under it, wrapping
+        // onto more lines if they must; the title elides rather than push anything off.
+        GridLayout {
+            id: titleRow
+            // Whether icon, title, tabs and the page's items all fit on one line.
+            readonly property bool oneLine: {
+                const sp = Kirigami.Units.largeSpacing;
+                const need = (pageIcon.visible ? pageIcon.implicitWidth + sp : 0)
+                    + pageTitle.implicitWidth
+                    + (bar.visible ? bar.oneLineWidth + sp * 2 : 0)
+                    + (headerExtra.implicitWidth > 0 ? headerExtra.implicitWidth + sp : 0);
+                return need <= titleRow.width;
+            }
+            columns: oneLine ? 5 : 3
+            columnSpacing: Kirigami.Units.largeSpacing
+            rowSpacing: Kirigami.Units.smallSpacing
             Layout.fillWidth: true
             Layout.leftMargin: Kirigami.Units.largeSpacing * 2
             Layout.rightMargin: Kirigami.Units.largeSpacing * 2
@@ -109,31 +123,57 @@ FocusScope {
             Layout.bottomMargin: Kirigami.Units.smallSpacing
 
             Kirigami.Icon {
+                id: pageIcon
                 visible: page.iconName !== ""
                 source: page.iconName
                 implicitWidth: Kirigami.Units.iconSizes.medium
                 implicitHeight: Kirigami.Units.iconSizes.medium
+                Layout.row: 0
+                Layout.column: 0
                 Accessible.ignored: true
             }
             UqLabel {
+                id: pageTitle
                 objectName: "pageTitle"
                 text: page.title
                 font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.4
                 font.bold: true
+                elide: Text.ElideRight
+                Layout.row: 0
+                Layout.column: 1
+                Layout.fillWidth: !titleRow.oneLine
+                Layout.minimumWidth: Math.min(implicitWidth, Kirigami.Units.gridUnit * 4)
                 Accessible.role: Accessible.Heading
             }
             // The tabs: a row of buttons sized to their own icon and name. (QQC2.TabBar
             // squeezed its buttons over each other when they carried their own contentItem.)
-            RowLayout {
+            Flow {
                 id: bar
                 objectName: "pageTabs"
+                // The width of every tab side by side.
+                readonly property real oneLineWidth: {
+                    let w = 0;
+                    for (let i = 0; i < tabRepeater.count; i++) {
+                        const b = tabRepeater.itemAt(i);
+                        if (b)
+                            w += b.implicitWidth + (w > 0 ? bar.spacing : 0);
+                    }
+                    return w;
+                }
                 visible: page.shownTabs.length > 1
                 spacing: Kirigami.Units.smallSpacing
-                Layout.leftMargin: Kirigami.Units.largeSpacing
+                Layout.row: titleRow.oneLine ? 0 : 1
+                Layout.column: titleRow.oneLine ? 2 : 0
+                Layout.columnSpan: titleRow.oneLine ? 1 : 3
+                Layout.leftMargin: titleRow.oneLine ? Kirigami.Units.largeSpacing : 0
+                Layout.fillWidth: !titleRow.oneLine
+                Layout.preferredWidth: titleRow.oneLine ? oneLineWidth : -1
+                Layout.preferredHeight: implicitHeight
                 Accessible.role: Accessible.PageTabList
                 Accessible.name: page.title + " tabs"
 
                 Repeater {
+                    id: tabRepeater
                     model: page.shownTabs
                     QQC2.ToolButton {
                         id: tabButton
@@ -176,11 +216,16 @@ FocusScope {
                 }
             }
             Item {
+                visible: titleRow.oneLine
+                Layout.row: 0
+                Layout.column: 3
                 Layout.fillWidth: true
             }
             RowLayout {
                 id: headerExtra
                 spacing: Kirigami.Units.largeSpacing
+                Layout.row: 0
+                Layout.column: titleRow.oneLine ? 4 : 2
             }
         }
         ColumnLayout {

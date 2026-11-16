@@ -183,4 +183,91 @@ TestCase {
         verify(!N.parseDunstPaused("false\n"));
         verify(!N.parseDunstPaused(""));
     }
+    function test_parse_version() {
+        compare(N.parseVersion("1.13.2 (2026-03-18)"), [1, 13, 2]);
+        compare(N.parseVersion("v1.13.1-12-gabc123"), [1, 13, 1]);
+        compare(N.parseVersion("1.10"), [1, 10, 0]);
+        compare(N.parseVersion("dunst"), null);
+        compare(N.parseVersion(""), null);
+        compare(N.parseVersion(null), null);
+        verify(N.versionAtLeast([1, 13, 1], [1, 13, 1]));
+        verify(N.versionAtLeast([1, 14, 0], [1, 13, 1]));
+        verify(N.versionAtLeast([2, 0, 0], [1, 13, 1]));
+        verify(!N.versionAtLeast([1, 13, 0], [1, 13, 1]));
+        verify(!N.versionAtLeast([1, 9, 9], [1, 10, 0]));
+        verify(!N.versionAtLeast(null, [1, 0, 0]));
+    }
+
+    function test_parse_server_info() {
+        var i = N.parseServerInfo("('dunst', 'knopwob', '1.13.2 (2026-03-18)', '1.2')\n");
+        compare(i.name, "dunst");
+        compare(i.vendor, "knopwob");
+        compare(i.version, "1.13.2 (2026-03-18)");
+        compare(N.parseServerInfo("('dunst', 'knopwob')"), null);
+        compare(N.parseServerInfo("junk"), null);
+        compare(N.parseServerInfo(null), null);
+        compare(N.parseServerInfo("('" + "x".repeat(5000) + "', 'a', '1.0', '1.2')"), null);
+    }
+
+    function test_dunst_events() {
+        function info(v) { return "('dunst', 'knopwob', '" + v + "', '1.2')"; }
+        compare(N.dunstEvents(info("1.13.2 (2026-03-18)")), { dnd: true, count: true });
+        compare(N.dunstEvents(info("1.13.1")), { dnd: true, count: true });
+        compare(N.dunstEvents(info("v1.13.0-40-gdeadbee")), { dnd: false, count: true });
+        compare(N.dunstEvents(info("1.10.0")), { dnd: false, count: true });
+        compare(N.dunstEvents(info("1.9.2")), { dnd: false, count: false });
+        compare(N.dunstEvents(info("unknown")), { dnd: false, count: false });
+        compare(N.dunstEvents("('mako', 'emersion', '1.13.2', '1.2')"), { dnd: false, count: false });
+        compare(N.dunstEvents(""), { dnd: false, count: false });
+    }
+
+    function test_mako_events() {
+        function xml(props) {
+            return "('<!DOCTYPE node>\\n<node>\\n <interface name=\"org.freedesktop.DBus.Peer\">\\n"
+                + " <property name=\"Modes\" type=\"as\" access=\"read\"/></interface>\\n"
+                + " <interface name=\"fr.emersion.Mako\">\\n  <method name=\"ListModes\"/>\\n"
+                + props + " </interface>\\n</node>\\n',)";
+        }
+        var modes = "  <property name=\"Modes\" type=\"as\" access=\"read\">\\n   <annotation/>\\n  </property>\\n";
+        var notifs = "  <property name=\"Notifications\" type=\"aa{sv}\" access=\"read\">\\n  </property>\\n";
+        compare(N.makoEvents(xml(modes + notifs)), { dnd: true, count: true });
+        compare(N.makoEvents(xml(modes)), { dnd: true, count: false });
+        compare(N.makoEvents(xml("")), { dnd: false, count: false });
+        // Only the fr.emersion.Mako interface counts.
+        compare(N.makoEvents("<interface name=\"x\"><property name=\"Modes\" type=\"as\"/></interface>"),
+            { dnd: false, count: false });
+        compare(N.makoEvents(null), { dnd: false, count: false });
+    }
+
+    function test_monitor_line() {
+        var name = "org.freedesktop.Notifications";
+        var path = "/org/freedesktop/Notifications";
+        var iface = "org.dunstproject.cmd0";
+        compare(N.monitorLine("The name " + name + " is owned by :1.42", name, path, iface), "owner");
+        compare(N.monitorLine("The name " + name + " does not have an owner", name, path, iface), "lost");
+        compare(N.monitorLine(path + ": org.freedesktop.DBus.Properties.PropertiesChanged ('" + iface
+            + "', {'paused': <true>, 'pauseLevel': <uint32 100>}, @as [])", name, path, iface), "change");
+        compare(N.monitorLine("/fr/emersion/Mako: org.freedesktop.DBus.Properties.PropertiesChanged "
+            + "('fr.emersion.Mako', @a{sv} {}, ['Modes'])", name, "/fr/emersion/Mako", "fr.emersion.Mako"), "change");
+        // Other interfaces, signals and paths are not changes.
+        compare(N.monitorLine(path + ": org.freedesktop.DBus.Properties.PropertiesChanged ('other', {}, @as [])",
+            name, path, iface), null);
+        compare(N.monitorLine(path + ": org.freedesktop.Notifications.NotificationClosed (uint32 3, uint32 2)",
+            name, path, iface), null);
+        compare(N.monitorLine("/elsewhere: org.freedesktop.DBus.Properties.PropertiesChanged ('" + iface + "', {}, @as [])",
+            name, path, iface), null);
+        compare(N.monitorLine("Monitoring signals on object " + path + " owned by " + name, name, path, iface), null);
+        compare(N.monitorLine("The name other.Name is owned by :1.2", name, path, iface), null);
+        compare(N.monitorLine(path + ": org.freedesktop.DBus.Properties.PropertiesChanged ('" + iface + "', "
+            + "x".repeat(5000), name, path, iface), null);
+        compare(N.monitorLine(null, name, path, iface), null);
+    }
+
+    function test_poll_needs() {
+        compare(N.pollNeeds({ dnd: true, count: true }, true), { dnd: false, count: false });
+        compare(N.pollNeeds({ dnd: true, count: false }, true), { dnd: false, count: true });
+        compare(N.pollNeeds({ dnd: true, count: true }, false), { dnd: true, count: true });
+        compare(N.pollNeeds(N.NO_EVENTS, true), { dnd: true, count: true });
+        compare(N.pollNeeds(null, true), { dnd: true, count: true });
+    }
 }

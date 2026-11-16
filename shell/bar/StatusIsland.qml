@@ -2,7 +2,6 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Hyprland
-import Quickshell.Io
 import Quickshell.Widgets
 import Quickshell.Networking
 import Quickshell.Services.Mpris
@@ -10,20 +9,22 @@ import Quickshell.Services.Pipewire
 import Quickshell.Services.SystemTray
 import Quickshell.Services.UPower
 import "../core"
+import "../services"
 import "../widgets"
 import "../logic/net.js" as Net
 import "../logic/tray.js" as Tray
 import "../notif"
+import "islands"
 
 // Widgets from other apps, tray, media, network/VPN, audio, battery and the quick-settings
-// button.
+// button. Other apps' tray icons move to the Tray island while it is on the bar (as media
+// moves to Now playing).
 // Tray tooltips, track titles, SSIDs and VPN names are untrusted: they only reach UqText.
 Island {
     id: root
     property var screen: null
     readonly property int iconSize: 18
     readonly property int cell: 26
-    readonly property int retryMs: 300000
 
     // Sizes: Icon is the quick settings button; Small adds the battery (else the network);
     // Medium shows network, sound, battery (with its level) and the button; Large adds the
@@ -54,14 +55,11 @@ Island {
         && afterWidgets >= cell + Theme.gapIn
     readonly property int trayRoom: Math.max(0, Math.floor((afterWidgets - (showMedia ? cell + Theme.gapIn : 0)) / (cell + Theme.gapIn)))
     readonly property var trayShown: {
-        if (size !== "large")
+        if (size !== "large" || BarLayout.placed("tray"))
             return [];
-        var out = [], all = SystemTray.items.values;
+        var all = SystemTray.items.values;
         var bell = Tray.notifiBell(NotifBackend.backend, Tray.find(all, Tray.NOTIFI));
-        for (var i = 0; i < all.length && out.length < trayRoom; i++)
-            if (all[i].status !== Status.Passive && !Tray.hiddenInTray(all[i].id, { notifiBell: bell }))
-                out.push(all[i]);
-        return out;
+        return Tray.shownItems(all, { notifiBell: bell }).slice(0, trayRoom);
     }
 
     // --- media ---
@@ -98,156 +96,11 @@ Island {
     readonly property string netIcon: !netDevice ? "network-offline-symbolic"
         : (netDevice.type === DeviceType.Wifi ? Net.wifiIcon(wifiStrength) : "network-wired-symbolic")
 
-    property var vpnConn: null          // string | null, from nmcli
-    property var exitNode: null         // string | null, from tailscale
-    readonly property bool vpnActive: Net.vpnActive(vpnConn, exitNode)
-    readonly property string vpnLabel: vpnConn ? String(vpnConn) : (exitNode ? String(exitNode) : "")
+    // The VPN, read once for every screen (services/VpnStatus.qml).
+    readonly property bool vpnActive: VpnStatus.vpnActive
+    readonly property string vpnLabel: VpnStatus.vpnLabel
     readonly property var ip: Bridge.publicIp
     readonly property string country: ip && ip.country_code && !Bridge.sharing ? String(ip.country_code) : ""
-
-    property double nmFailedAt: 0
-    property double tsFailedAt: 0
-    property var lastSent: null         // identity string last sent, null = nothing sent
-    readonly property string vpnId: Net.vpnIdentity(vpnConn, exitNode)
-
-    function pollNetwork() {
-        var now = Date.now();
-        if (!nm.running && Net.retryDue(nmFailedAt, now, retryMs))
-            nm.running = true;
-        if (!ts.running && Net.retryDue(tsFailedAt, now, retryMs))
-            ts.running = true;
-    }
-    function sendVpn() {
-        var id = vpnId;
-        if (!Net.identityChanged(lastSent, id))
-            return;
-        lastSent = id;
-        Bridge.call("NetworkChanged", [{ vpn_active: vpnActive }]).catch(function () {});
-    }
-    onVpnIdChanged: settle.restart()
-
-    Component.onCompleted: {
-        pollNetwork();
-        settle.restart();      // once at startup with the current value
-    }
-
-    Timer {
-        interval: 10000
-        running: true
-        repeat: true
-        onTriggered: root.pollNetwork()
-    }
-    Timer {
-        id: settle
-        interval: 3000
-        onTriggered: root.sendVpn()
-    }
-    Connections {
-        target: Bridge
-        function onConnectedChanged() {
-            if (Bridge.connected) {
-                root.lastSent = null;
-                settle.restart();
-            }
-        }
-    }
-
-    // A failed start (missing tool) emits runningChanged(false) without started(); a non-zero
-    // exit is an ordinary result. Only the failed start is cached for 5 minutes by pollNetwork().
-    Process {
-        id: nm
-        property bool didStart: false
-        property bool gotExit: false
-        property bool gotOut: false
-        property int exitCode: 0
-        property string outText: ""
-        // Exit code and stdout arrive in either order; decide once both are in.
-        function conclude() {
-            if (!gotExit || !gotOut)
-                return;
-            gotExit = false;
-            gotOut = false;
-            var res = Net.finishRun(exitCode, outText);
-            if (res.ok) {
-                root.nmFailedAt = 0;
-                root.vpnConn = Net.vpnName(Net.parseNmcliActive(res.text));
-            } else {
-                // Non-zero exit (NetworkManager not ready, restarting): polled again in 10 s.
-                root.nmFailedAt = 0;
-                root.vpnConn = null;
-            }
-        }
-        command: ["nmcli", "-t", "-f", "NAME,TYPE", "con", "show", "--active"]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                nm.outText = text;
-                nm.gotOut = true;
-                nm.conclude();
-            }
-        }
-        onStarted: { didStart = true; gotExit = false; gotOut = false; }
-        onExited: function (code) {
-            exitCode = code;
-            gotExit = true;
-            conclude();
-        }
-        onRunningChanged: {
-            if (running)
-                return;
-            if (Net.failedStart(didStart)) {
-                root.nmFailedAt = Date.now();
-                root.vpnConn = null;
-            }
-            didStart = false;
-        }
-    }
-    Process {
-        id: ts
-        property bool didStart: false
-        property bool gotExit: false
-        property bool gotOut: false
-        property int exitCode: 0
-        property string outText: ""
-        // Exit code and stdout arrive in either order; decide once both are in.
-        function conclude() {
-            if (!gotExit || !gotOut)
-                return;
-            gotExit = false;
-            gotOut = false;
-            var res = Net.finishRun(exitCode, outText);
-            if (res.ok) {
-                root.tsFailedAt = 0;
-                root.exitNode = Net.parseTailscale(res.text).exitNode;
-            } else {
-                // Non-zero exit (tailscaled not ready, restarting): polled again in 10 s.
-                root.tsFailedAt = 0;
-                root.exitNode = null;
-            }
-        }
-        command: ["tailscale", "status", "--json"]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                ts.outText = text;
-                ts.gotOut = true;
-                ts.conclude();
-            }
-        }
-        onStarted: { didStart = true; gotExit = false; gotOut = false; }
-        onExited: function (code) {
-            exitCode = code;
-            gotExit = true;
-            conclude();
-        }
-        onRunningChanged: {
-            if (running)
-                return;
-            if (Net.failedStart(didStart)) {
-                root.tsFailedAt = Date.now();
-                root.exitNode = null;
-            }
-            didStart = false;
-        }
-    }
 
     // --- audio ---
     readonly property var sink: Pipewire.defaultAudioSink
@@ -323,71 +176,15 @@ Island {
             }
         }
 
-        // tray: as many as fit at Large (icons uQ already shows elsewhere stay out, logic/tray.js)
+        // tray: as many as fit at Large (icons uQ already shows elsewhere stay out, logic/tray.js),
+        // unless the Tray island is on the bar
         Repeater {
             model: root.trayShown
-            delegate: Item {
-                id: trayItem
-                required property var modelData
+            delegate: TrayIcon {
+                cell: root.cell
+                iconSize: root.iconSize
                 Layout.preferredWidth: root.cell
                 Layout.preferredHeight: root.cell
-
-                IconImage {
-                    anchors.centerIn: parent
-                    implicitSize: root.iconSize
-                    width: root.iconSize
-                    height: root.iconSize
-                    source: Net.safeIconSource(trayItem.modelData.icon,
-                        Quickshell.iconPath("application-x-executable", true))
-                }
-                QsMenuAnchor {
-                    id: trayMenu
-                    menu: trayItem.modelData.menu
-                    anchor.item: trayItem
-                    anchor.edges: Edges.Bottom
-                    anchor.gravity: Edges.Bottom
-                }
-                MouseArea {
-                    id: trayMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
-                    onClicked: function (mouse) {
-                        if (mouse.button === Qt.RightButton || trayItem.modelData.onlyMenu) {
-                            if (trayItem.modelData.hasMenu)
-                                trayMenu.open();
-                        } else if (mouse.button === Qt.MiddleButton) {
-                            trayItem.modelData.secondaryActivate();
-                        } else {
-                            trayItem.modelData.activate();
-                        }
-                    }
-                    onWheel: function (w) {
-                        trayItem.modelData.scroll(w.angleDelta.y, false);
-                    }
-                }
-                PopupWindow {
-                    anchor.item: trayItem
-                    anchor.edges: Edges.Bottom
-                    anchor.gravity: Edges.Bottom
-                    implicitWidth: tipText.implicitWidth + Theme.gapIn * 2
-                    implicitHeight: tipText.implicitHeight + Theme.gapIn * 2
-                    color: "transparent"
-                    visible: trayMouse.containsMouse && !trayMenu.visible && tipText.text !== ""
-                    Rectangle {
-                        anchors.fill: parent
-                        color: Theme.surface
-                        radius: Theme.radius
-                        border.color: Theme.border
-                        border.width: Theme.borderWidth
-                        UqText {
-                            id: tipText
-                            anchors.centerIn: parent
-                            width: Math.min(implicitWidth, 260)
-                            text: trayItem.modelData.tooltipTitle || trayItem.modelData.title || ""
-                        }
-                    }
-                }
             }
         }
 

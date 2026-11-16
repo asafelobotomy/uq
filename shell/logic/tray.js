@@ -35,3 +35,29 @@ function find(items, id) {
 function notifiBell(backend, notifiItem) {
     return backend === "notifi" && notifiItem !== null && notifiItem !== undefined;
 }
+
+// The tray items to show, in order: not Passive (an app saying it has nothing to show) and not
+// one uQ shows elsewhere (hiddenInTray). `items` is any array-like; ctx as hiddenInTray's.
+function shownItems(items, ctx) {
+    var out = [];
+    for (var i = 0; items && i < items.length; i++) {
+        var it = items[i];
+        if (it && it.status !== PASSIVE && !hiddenInTray(it.id, ctx))
+            out.push(it);
+    }
+    return out;
+}
+
+// Quickshell's Status.Passive, so this file needs no Quickshell import.
+var PASSIVE = 0;
+
+// How `count` icons fit in `room` pixels, each `cell` wide with `gap` between: {shown, more},
+// where `more` is how many go in the "more" list. When they don't all fit, one cell is kept for
+// the button that opens it.
+function fit(count, room, cell, gap) {
+    var n = Math.max(0, Math.floor((room + gap) / (cell + gap)));
+    if (count <= n)
+        return { shown: count, more: 0 };
+    var shown = Math.max(0, n - 1);
+    return { shown: shown, more: count - shown };
+}

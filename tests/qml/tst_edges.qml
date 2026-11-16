@@ -69,6 +69,49 @@ TestCase {
         compare(Edges.neighbour(ws, 1, "left", [1], "0xp"), null);
     }
 
+    function test_only_windows_out_of_view() {
+        var mon = { x: 0, y: 0, width: 1920, height: 1080 };
+        // Dwindle halves, both on screen: no indicator either way.
+        var dw = wins([
+            { address: "0xa", workspace: { id: 1 }, at: [12, 60], size: [942, 1008], focusHistoryID: 1 },
+            { address: "0xb", workspace: { id: 1 }, at: [966, 60], size: [942, 1008], focusHistoryID: 0 }
+        ]);
+        compare(Edges.neighbour(dw, 1, "left", [1], null, mon), null);
+        compare(Edges.neighbour(dw, 1, "left", [1], null).address, "0xa", "without a monitor, as before");
+        verify(Edges.onScreen(dw[0], mon));
+        // Scrolling: two half columns in view, the next ones out of view. The indicator skips
+        // the visible column and points at the first one out of view.
+        var sc = wins([
+            ipc("0xp", 1, -940, 934, { focusHistoryID: 4 }),
+            ipc("0xa", 1, 12, 934, { focusHistoryID: 1 }),
+            ipc("0xb", 1, 966, 934, { focusHistoryID: 0 }),
+            ipc("0xq", 1, 1920, 934, { focusHistoryID: 2 })
+        ]);
+        compare(Edges.neighbour(sc, 1, "left", [1], null, mon).address, "0xp");
+        compare(Edges.neighbour(sc, 1, "right", [1], null, mon).address, "0xq");
+        // A column partly in view still counts as out of view.
+        var part = wins([
+            ipc("0xa", 1, 12, 1882, { focusHistoryID: 0 }),
+            ipc("0xb", 1, 1915, 1882, { focusHistoryID: 1 })
+        ]);
+        compare(Edges.neighbour(part, 1, "right", [1], null, mon).address, "0xb");
+        // The neighbour carries its height, for drawing its edge.
+        var n = Edges.neighbour(part, 1, "right", [1], null, mon);
+        compare([n.y, n.h], [74, 992]);
+        // Behind a fullscreen window every other window is out of view.
+        var full = wins([
+            { address: "0xf", workspace: { id: 1 }, at: [0, 0], size: [1920, 1080], fullscreen: 2, focusHistoryID: 0 },
+            { address: "0xb", workspace: { id: 1 }, at: [966, 60], size: [942, 1008], focusHistoryID: 1 }
+        ]);
+        compare(Edges.neighbour(full, 1, "right", [1], null, mon).address, "0xb");
+        // Another workspace is always out of view.
+        var other = wins([
+            { address: "0xa", workspace: { id: 1 }, at: [12, 60], size: [1896, 1008], focusHistoryID: 0 },
+            { address: "0xz", workspace: { id: 2 }, at: [12, 60], size: [1896, 1008], focusHistoryID: 1 }
+        ]);
+        compare(Edges.neighbour(other, 1, "right", [1, 2], null, mon).workspace, 2);
+    }
+
     function test_fullscreen_reference() {
         // A fullscreen window covers the monitor; the neighbours are still the columns beside.
         var ws = wins([

@@ -158,6 +158,13 @@ Item {
     // --- fingerprint ---
     // When fprintd-list was last run or the context last started: both are throttled by it.
     property double fprintAttemptMs: -L.FPRINT_RETRY_MS
+    // fprintd-list runs in a row that found no finger (failed, no reader, none enrolled, not
+    // installed). Each one doubles the wait before the next, up to fprintMaxWaitMs, so a machine
+    // without a fingerprint reader doesn't start a process (and wake fprintd) every 10 s for as
+    // long as the lock lasts. A finger listed resets it; the first retry is still after 10 s, so
+    // fprintd coming back late after resume is still caught quickly.
+    property int fprintMisses: 0
+    property int fprintMaxWaitMs: 300000
 
     PamContext {
         id: fp
@@ -196,12 +203,13 @@ Item {
 
     // The context ended (failure, error, max tries, timeout, an aborted prompt), or fprintd-list
     // failed to start, exited non-zero or listed no finger: poll fprintd-list again, at most once
-    // every FPRINT_RETRY_MS, for as long as the lock lasts. This also covers resume (fprintd
-    // often isn't back yet on the first try).
+    // every FPRINT_RETRY_MS (longer after several misses in a row, see fprintMisses), for as long
+    // as the lock lasts. This also covers resume (fprintd often isn't back yet on the first try).
     function fprintEnded() {
         if (done || fp.active)
             return;
-        var wait = L.FPRINT_RETRY_MS - (Date.now() - fprintAttemptMs);
+        var gap = Math.min(L.FPRINT_RETRY_MS * Math.pow(2, Math.max(0, fprintMisses - 1)), fprintMaxWaitMs);
+        var wait = Math.max(L.FPRINT_RETRY_MS, gap) - (Date.now() - fprintAttemptMs);
         fpRetry.interval = Math.max(0, wait);
         fpRetry.restart();
     }
@@ -238,10 +246,13 @@ Item {
                 return;
             gotExit = false;
             gotOut = false;
-            if (L.fprintListed(outText, exitCode))
+            if (L.fprintListed(outText, exitCode)) {
+                auth.fprintMisses = 0;
                 auth.startFprint();
-            else
+            } else {
+                auth.fprintMisses += 1;
                 auth.fprintEnded();
+            }
         }
         command: ["fprintd-list", auth.user]
         stdout: StdioCollector {
@@ -259,8 +270,10 @@ Item {
         }
         // A failed start (fprintd not installed) reports only runningChanged: poll again later.
         onRunningChanged: {
-            if (!running && !didStart)
+            if (!running && !didStart) {
+                auth.fprintMisses += 1;
                 auth.fprintEnded();
+            }
         }
     }
 

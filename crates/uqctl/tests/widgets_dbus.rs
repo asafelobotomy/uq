@@ -315,6 +315,32 @@ async fn calls_reach_only_listed_members_within_limits() {
         json!({"widget": "fake", "member": "Finished", "args": ["job", true]})
     );
 
+    // Off screen: no WidgetProps (signals still come); back on screen, the current values.
+    let r = b.call(20, "WidgetShown", json!(["fake", false])).await;
+    assert_eq!(r["ok"], Value::Null, "{r}");
+    iface.get_mut().await.count = 30;
+    iface
+        .get()
+        .await
+        .count_changed(iface.signal_emitter())
+        .await
+        .unwrap();
+    Fake::finished(iface.signal_emitter(), "off", true)
+        .await
+        .unwrap();
+    let s = wait_for(&mut b, "WidgetSignal", Duration::from_secs(10), |_| true).await;
+    assert_eq!(s["args"], json!(["off", true]));
+    let quiet = Instant::now() + Duration::from_millis(800);
+    while let Ok(v) = tokio::time::timeout_at(quiet, b.next()).await {
+        assert_ne!(v["event"], "WidgetProps", "props while off screen: {v}");
+    }
+    let r = b.call(21, "WidgetShown", json!(["fake", true])).await;
+    assert_eq!(r["ok"], Value::Null, "{r}");
+    let p = wait_for(&mut b, "WidgetProps", Duration::from_secs(10), |_| true).await;
+    assert_eq!(p["props"], json!({"Count": 30, "Name": "fake"}), "{p}");
+    let r = b.call(22, "WidgetShown", json!(["fake"])).await;
+    assert!(r["err"].is_string(), "{r}");
+
     // Deadline: a call that takes 10 s ends with an error after 2 s.
     let t = Instant::now();
     let r11 = b.call(11, "WidgetCall", json!(["fake", "Slow", []])).await;

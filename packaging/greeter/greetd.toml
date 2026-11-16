@@ -5,7 +5,8 @@
 
 [general]
 # The PAM service for the sessions people log in to: /etc/pam.d/uq-greetd, greetd's stack plus
-# the keyring, so the login password also unlocks saved passwords.
+# the keyring, so the login password also unlocks saved passwords. The greeter itself uses
+# uq-greeter ([default_session] below).
 service = "uq-greetd"
 
 [terminal]
@@ -17,3 +18,6 @@ vt = 1
 # to agreety (greetd's text greeter) if it fails 3 times in 60 seconds.
 command = "/usr/lib/uq/uq-greeter-session"
 user = "greeter"
+# The greeter's own PAM service: /etc/pam.d/uq-greeter, greetd's stack without the keyring, so
+# no keyring daemon starts for the `greeter` user.
+service = "uq-greeter"

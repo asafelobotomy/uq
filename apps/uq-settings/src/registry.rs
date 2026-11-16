@@ -254,7 +254,7 @@ static LOOK_SETTINGS: [SearchEntry; 16] = [
     ),
 ];
 
-static SHELL_SETTINGS: [SearchEntry; 18] = [
+static SHELL_SETTINGS: [SearchEntry; 19] = [
     entry(
         "pins",
         "Pinned apps",
@@ -300,6 +300,23 @@ static SHELL_SETTINGS: [SearchEntry; 18] = [
         "edge-titles",
         "Window titles at the screen's edges",
         &["edge", "title", "name", "text", "label", "icon only"],
+    ),
+    entry(
+        "fit-windows",
+        "Keep windows on screen",
+        &[
+            "fit",
+            "scale",
+            "scaling",
+            "clipped",
+            "cut off",
+            "off screen",
+            "too big",
+            "shrink",
+            "resize",
+            "floating",
+            "window",
+        ],
     ),
     entry(
         "notif-backend",

@@ -167,18 +167,19 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
 struct DefCache {
     dirs: Vec<PathBuf>,
     stamp: Option<Vec<Option<SystemTime>>>,
-    defs: Vec<ProviderDef>,
+    /// Shared, so a search (one per keystroke) takes it without copying every definition.
+    defs: Arc<Vec<ProviderDef>>,
 }
 
 impl DefCache {
-    fn current(&mut self) -> Vec<ProviderDef> {
+    fn current(&mut self) -> Arc<Vec<ProviderDef>> {
         let now: Vec<Option<SystemTime>> = self
             .dirs
             .iter()
             .map(|d| std::fs::metadata(d).and_then(|m| m.modified()).ok())
             .collect();
         if self.stamp.as_ref() != Some(&now) {
-            self.defs = load_defs(&self.dirs);
+            self.defs = Arc::new(load_defs(&self.dirs));
             self.stamp = Some(now);
         }
         self.defs.clone()
@@ -283,7 +284,7 @@ impl Providers {
             defs: Mutex::new(DefCache {
                 dirs,
                 stamp: None,
-                defs: Vec::new(),
+                defs: Arc::default(),
             }),
             logged: Mutex::default(),
             starts: Mutex::default(),
@@ -317,8 +318,9 @@ impl Providers {
         let prefs = provider_prefs(link);
         let defs: Vec<ProviderDef> = lock(&self.defs)
             .current()
-            .into_iter()
+            .iter()
             .filter(|d| d.activatable && provider_enabled(&prefs, &d.bus_name))
+            .cloned()
             .collect();
         if defs.is_empty() {
             return Ok(Value::Null);
@@ -433,11 +435,10 @@ impl Providers {
         }
 
         let defs = lock(&self.defs).current();
-        let all = defs.clone();
         let routed: Vec<(ProviderDef, String)> = defs
-            .into_iter()
+            .iter()
             .filter(|d| provider_enabled(&prefs, &d.bus_name))
-            .filter_map(|d| route(query, &d, &all).map(|q| (d, q)))
+            .filter_map(|d| route(query, d, &defs).map(|q| (d.clone(), q)))
             .collect();
         if routed.is_empty() {
             return Ok(Value::Null);

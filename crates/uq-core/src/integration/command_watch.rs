@@ -14,7 +14,9 @@
 //! at most [`MAX_WATCH_FILES`] files and [`MAX_WATCH_SIGNALS`] signal matches. Files are
 //! followed with inotify on their folder (so an editor's save-by-rename is seen, and a file or
 //! folder that doesn't exist yet is picked up when it appears). Signals are a match rule on the
-//! given bus: type signal, interface and member, and optionally path and sender. Every burst of
+//! given bus: type signal, interface and member, and optionally path and sender; a
+//! `PropertiesChanged` match may also name `properties`, so only a change to one of them counts.
+//! Every burst of
 //! changes becomes one report once quiet for the debounce time. Nothing is read: the host only
 //! re-runs the declared command.
 
@@ -59,7 +61,16 @@ pub struct SignalMatch {
     pub path: Option<String>,
     /// Only signals from this (well-known) bus name.
     pub sender: Option<String>,
+    /// For `org.freedesktop.DBus.Properties.PropertiesChanged`: only a change to (or
+    /// invalidation of) one of these properties counts. Empty: any.
+    pub properties: Vec<String>,
 }
+
+/// The interface and member that `properties` narrows.
+const PROPERTIES_IFACE: &str = "org.freedesktop.DBus.Properties";
+const PROPERTIES_CHANGED: &str = "PropertiesChanged";
+/// At most this many `properties` per signal match.
+pub const MAX_WATCH_PROPERTIES: usize = 16;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -79,6 +90,8 @@ struct RawSignal {
     member: String,
     path: Option<String>,
     sender: Option<String>,
+    #[serde(default)]
+    properties: Vec<String>,
 }
 
 /// A watched file: absolute or `~/…`, already normalized (no `.`, `..`, `//` or trailing `/`),
@@ -152,12 +165,32 @@ pub(crate) fn watch_from(
         {
             return Err(format!("watch.signals: sender {n:?} is not a bus name"));
         }
+        if !s.properties.is_empty() {
+            if s.interface != PROPERTIES_IFACE || s.member != PROPERTIES_CHANGED {
+                return Err(format!(
+                    "watch.signals: properties narrows only {PROPERTIES_IFACE}.{PROPERTIES_CHANGED}"
+                ));
+            }
+            if s.properties.len() > MAX_WATCH_PROPERTIES {
+                return Err(format!(
+                    "watch.signals: at most {MAX_WATCH_PROPERTIES} properties"
+                ));
+            }
+            if let Some(p) = s
+                .properties
+                .iter()
+                .find(|p| MemberName::try_from(p.as_str()).is_err())
+            {
+                return Err(format!("watch.signals: {p:?} is not a property name"));
+            }
+        }
         signals.push(SignalMatch {
             bus: s.bus,
             interface: s.interface,
             member: s.member,
             path: s.path,
             sender: s.sender,
+            properties: s.properties,
         });
     }
     Ok(WatchSpec {
@@ -275,11 +308,31 @@ async fn watch_signal(
     let mut stream = zbus::MessageStream::for_match_rule(b.build(), conn, Some(16))
         .await
         .map_err(|e| format!("can't follow {}.{}: {e}", s.interface, s.member))?;
+    let wanted = s.properties.clone();
     Ok(tokio::spawn(async move {
-        while stream.next().await.is_some() {
-            let _ = tx.try_send(());
+        while let Some(m) = stream.next().await {
+            if wanted.is_empty() || m.is_err() || names_a_wanted_property(m.as_ref().ok(), &wanted)
+            {
+                let _ = tx.try_send(());
+            }
         }
     }))
+}
+
+/// Whether a `PropertiesChanged` message changes or invalidates one of `wanted`. A body that
+/// can't be read counts (better a needless re-run than a missed change).
+fn names_a_wanted_property(m: Option<&zbus::Message>, wanted: &[String]) -> bool {
+    let Some(m) = m else { return true };
+    let Ok((_, changed, invalidated)) = m.body().deserialize::<(
+        String,
+        HashMap<String, zbus::zvariant::OwnedValue>,
+        Vec<String>,
+    )>() else {
+        return true;
+    };
+    wanted
+        .iter()
+        .any(|w| changed.contains_key(w) || invalidated.iter().any(|i| i == w))
 }
 
 /// Start following `spec`. `home` expands `~/`; `conn(bus)` is the connection for a bus that a

@@ -13,6 +13,8 @@ TestCase {
     id: tc
     name: "widgets"
     when: windowShown
+    // Visible, so a slot's effective visibility (ctx.view.shown) is real here.
+    visible: true
     width: 400
     height: 400
 
@@ -22,6 +24,7 @@ TestCase {
         property var widgets: []
         property var appActions: []
         property var calls: []
+        property bool connected: false
         signal event(string name, var data)
         function call(name, args) {
             var c = calls.slice();
@@ -69,7 +72,10 @@ TestCase {
         fake.widgets = [];
         fake.appActions = [];
         fake.calls = [];
+        fake.connected = false;
         Widgets.revs = ({});
+        Widgets.shownCount = ({});
+        Widgets.reported = ({});
         Widgets.bridge = fake;
         Widgets.failures = W.failures();
         Widgets.log = [];
@@ -259,6 +265,30 @@ TestCase {
         s.ctx.dbus.get(function () {});
         compare(fake.calls[calls], { call: "WidgetGet", args: ["good"] });
         tryVerify(function () { return s.ctx.dbus.props.Count === 1; });
+    }
+
+    // ctx.view.shown follows the slot; the bridge hears when no slot of a widget is on screen.
+    function test_view_shown_follows_the_slot_and_tells_the_bridge() {
+        fake.connected = true;
+        var s = makeSlot("good", "good");
+        tryVerify(function () { return s.loaded; });
+        verify(s.item.ctx.view.shown);
+        wait(0);
+        compare(fake.calls.filter(function (c) { return c.call === "WidgetShown"; }), [],
+            "shown is the bridge's default: nothing to say");
+
+        s.onScreen = false;
+        verify(!s.item.ctx.view.shown);
+        tryVerify(function () { return fake.calls.length > 0; });
+        compare(fake.calls[fake.calls.length - 1], { call: "WidgetShown", args: ["good", false] });
+
+        s.onScreen = true;
+        verify(s.item.ctx.view.shown);
+        tryVerify(function () {
+            var c = fake.calls[fake.calls.length - 1];
+            return c.call === "WidgetShown" && c.args[1] === true;
+        });
+        compare(fake.calls.filter(function (c) { return c.call === "WidgetShown"; }).length, 2);
     }
 
     function test_widget_reloads_when_its_files_change() {

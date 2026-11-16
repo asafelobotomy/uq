@@ -1,6 +1,7 @@
 #%PAM-1.0
 # uQ's login screen. Installed to /etc/pam.d/uq-greetd; /etc/uq/greetd.toml names it
-# ([general] service), so greetd's own /etc/pam.d/greetd is never edited.
+# ([general] service), so greetd's own /etc/pam.d/greetd is never edited. The greeter's own
+# session (user `greeter`) uses /etc/pam.d/uq-greeter instead ([default_session] service).
 #
 # The same as greetd's stack, plus the keyring: the password typed at the login screen unlocks
 # the "login" keyring (GNOME Keyring, the Secret Service Wi-Fi, browsers and apps keep passwords

@@ -36,6 +36,12 @@ function edgeTitles(shell) {
     return !!(shell && shell.edge_titles === true);
 }
 
+// shell.fit_windows: keep floating windows inside their screen (shell/windows/FitWindows.qml).
+// On unless set to false.
+function fitWindows(shell) {
+    return !(shell && shell.fit_windows === false);
+}
+
 // shell.edge_style: "peek" (a slice of the window at the edge) or "tab" (the default, and what
 // any other value means).
 function edgeStyle(shell) {

@@ -1,4 +1,5 @@
-// One setting: a label on the left, its control(s) on the right. When `highlight` (bound to
+// One setting: a label on the left, its control(s) on the right; when the row is too narrow for
+// both side by side (a small window), the controls go under the label instead. When `highlight` (bound to
 // App.highlight by the page) becomes this row's `settingId`, the row scrolls into view and
 // flashes for 2 s. Under the label, `source` (uqd's `{source, detail}` for the row) says where the
 // live value comes from; `uq` or none shows nothing, so the row keeps its height.
@@ -22,6 +23,19 @@ Rectangle {
     property bool wideControls: false
     property string highlight
     readonly property bool flashing: flash.running
+    /// The controls sit under the label: there is no room for them beside it.
+    readonly property bool stacked: {
+        if (row.width <= 0 || slot.children.length === 0)
+            return false;
+        const sp = Kirigami.Units.largeSpacing;
+        const label = labelText.short ? labelText.fullWidth : Kirigami.Units.gridUnit * 10;
+        const help = rowHelp.visible ? rowHelp.implicitWidth + Kirigami.Units.smallSpacing : 0;
+        const icon = rowIcon.visible ? rowIcon.implicitWidth + sp : 0;
+        const controls = row.wideControls ? Kirigami.Units.gridUnit * 10 : slot.implicitWidth;
+        const need = Kirigami.Units.smallSpacing * 2 + icon + (labelColumn.visible ? label + help + sp : 0) + controls;
+        // A little slack: a control can grow a few pixels once its value arrives.
+        return need + Kirigami.Units.largeSpacing > row.width;
+    }
     default property alias content: slot.data
     /// Where the live value comes from: `{source, detail}` from the page's `sources`, or null.
     property var source: null
@@ -107,16 +121,21 @@ Rectangle {
         interval: 2000
     }
 
-    RowLayout {
+    GridLayout {
         id: layout
         anchors.fill: parent
         anchors.leftMargin: Kirigami.Units.smallSpacing
         anchors.rightMargin: Kirigami.Units.smallSpacing
-        spacing: Kirigami.Units.largeSpacing
+        anchors.topMargin: row.stacked ? Kirigami.Units.smallSpacing : 0
+        anchors.bottomMargin: row.stacked ? Kirigami.Units.smallSpacing : 0
+        columns: row.stacked ? 2 : 3
+        columnSpacing: Kirigami.Units.largeSpacing
+        rowSpacing: Kirigami.Units.smallSpacing
 
         // The icon column is kept on rows without an icon too, so every label in a card starts
         // at the same place.
         Kirigami.Icon {
+            id: rowIcon
             objectName: "rowIcon"
             opacity: row.iconName !== "" ? 1 : 0
             visible: !(row.wideControls && row.iconName === "")
@@ -127,10 +146,11 @@ Rectangle {
             Accessible.ignored: true
         }
         ColumnLayout {
+            id: labelColumn
             spacing: 0
             // Wide controls: the label column shows only when there is a label or a source.
             visible: !row.wideControls || row.label !== "" || row.sourceText !== ""
-            Layout.fillWidth: !row.wideControls
+            Layout.fillWidth: !row.wideControls || row.stacked
 
             RowLayout {
                 spacing: Kirigami.Units.smallSpacing
@@ -142,13 +162,13 @@ Rectangle {
                     readonly property bool short: fullWidth <= Kirigami.Units.gridUnit * 14
                     // A short label stays on one line (the controls give way first); a long one
                     // may wrap down to a readable width.
-                    wrapMode: short ? Text.NoWrap : Text.Wrap
+                    wrapMode: short && !row.stacked ? Text.NoWrap : Text.Wrap
                     Layout.fillWidth: true
                     // The text's own width, measured unwrapped: a wrapped Text's implicitWidth
                     // follows its wrapped width, which squeezed short labels a letter a line.
                     // TextMetrics (not a FontMetrics call) so it follows the font once it's set.
                     Layout.maximumWidth: fullWidth
-                    Layout.minimumWidth: short ? fullWidth : Kirigami.Units.gridUnit * 10
+                    Layout.minimumWidth: row.stacked ? 0 : (short ? fullWidth : Kirigami.Units.gridUnit * 10)
                     TextMetrics {
                         id: labelMetrics
                         font: labelText.font
@@ -156,6 +176,7 @@ Rectangle {
                     }
                 }
                 HelpTip {
+                    id: rowHelp
                     objectName: "rowHelp"
                     tip: row.help
                 }
@@ -208,10 +229,14 @@ Rectangle {
                 }
             }
         }
+        // Stacked: under the label, lined up with it, as wide as the row allows.
         RowLayout {
             id: slot
             spacing: Kirigami.Units.smallSpacing
-            Layout.fillWidth: row.wideControls
+            Layout.fillWidth: row.wideControls || row.stacked
+            Layout.columnSpan: row.stacked ? 2 : 1
+            Layout.leftMargin: row.stacked && rowIcon.visible ? rowIcon.implicitWidth + Kirigami.Units.largeSpacing : 0
+            Layout.maximumWidth: row.stacked ? Math.max(0, layout.width - Layout.leftMargin) : -1
         }
     }
 }

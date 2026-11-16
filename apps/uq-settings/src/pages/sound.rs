@@ -93,6 +93,65 @@ fn props_of(o: &Value) -> Value {
         .unwrap_or(Value::Null)
 }
 
+/// The object types [`parse`] reads: a change to anything else doesn't change the page.
+const SHOWN_TYPES: [&str; 4] = [
+    "PipeWire:Interface:Node",
+    "PipeWire:Interface:Device",
+    "PipeWire:Interface:Link",
+    "PipeWire:Interface:Metadata",
+];
+
+/// The largest single `pw-dump --monitor` update kept while it is read (a whole graph is a few
+/// hundred KiB); past it the update counts as a change and is dropped.
+const MAX_UPDATE: usize = 32 << 20;
+
+/// Splits `pw-dump --monitor`'s output into its updates (one pretty-printed JSON array each,
+/// closed by a `]` line) and says which concern the page.
+#[derive(Default)]
+pub struct MonitorUpdates {
+    text: String,
+    /// The ids of the objects of [`SHOWN_TYPES`] seen so far, so their removal counts.
+    shown: std::collections::HashSet<u64>,
+}
+
+impl MonitorUpdates {
+    /// Take one line of output; true when it ends an update that adds, changes or removes an
+    /// object the page shows (or one that can't be read, to be safe).
+    pub fn line(&mut self, line: &str) -> bool {
+        self.text.push_str(line);
+        self.text.push('\n');
+        if line != "]" {
+            if self.text.len() > MAX_UPDATE {
+                self.text.clear();
+                return true;
+            }
+            return false;
+        }
+        let text = std::mem::take(&mut self.text);
+        let Ok(objects) = serde_json::from_str::<Vec<Value>>(&text) else {
+            return true;
+        };
+        let mut concerns = false;
+        for o in &objects {
+            let Some(id) = o["id"].as_u64() else {
+                continue;
+            };
+            let kind = o.get("type").and_then(Value::as_str);
+            if kind.is_some_and(|k| SHOWN_TYPES.contains(&k)) {
+                self.shown.insert(id);
+                concerns = true;
+            } else if kind.is_none() && o.get("info").is_some_and(Value::is_null) {
+                // `{"id": N, "info": null}`: object N is gone.
+                concerns |= self.shown.remove(&id);
+            } else {
+                // A client, port, module…; an id once used by a shown object can be reused.
+                self.shown.remove(&id);
+            }
+        }
+        concerns
+    }
+}
+
 /// Parse `pw-dump`'s output.
 pub fn parse(text: &str) -> Result<Graph, String> {
     let all: Vec<Value> = serde_json::from_str(text)
@@ -521,10 +580,15 @@ impl PageLogic for SoundState {
     }
 
     async fn watch(&self, changed: Arc<Notify>) {
-        // pw-dump prints the graph once, then each change; any line means "read again".
+        // pw-dump prints the graph once, then each change; a change to what the page shows
+        // means "read again". Clients and ports don't count: each refresh's own `pw-dump` is a
+        // client coming and going, which made the open page read itself again every ~300 ms.
         let mut lines = self.tools.lines(argv(&["pw-dump", "--monitor"]));
-        while lines.next().await.is_some() {
-            changed.notify_one();
+        let mut updates = MonitorUpdates::default();
+        while let Some(line) = lines.next().await {
+            if updates.line(&line) {
+                changed.notify_one();
+            }
         }
         std::future::pending::<()>().await;
     }

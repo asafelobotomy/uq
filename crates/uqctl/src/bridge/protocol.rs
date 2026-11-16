@@ -1,6 +1,7 @@
 //! Wire format for `uqctl bridge`: one JSON object per line, every message carrying `"v":1`.
 
-use serde_json::{Value, json};
+use serde::Serialize;
+use serde_json::Value;
 use tokio::io::{AsyncBufReadExt, AsyncRead, BufReader};
 use tokio::sync::mpsc;
 
@@ -72,8 +73,8 @@ pub fn decode_line(line: &[u8]) -> Result<Inbound, FrameError> {
     if line.len() > MAX_LINE {
         return Err(FrameError::TooLong);
     }
-    let v: Value = serde_json::from_slice(line).map_err(|_| FrameError::BadJson)?;
-    let obj = v.as_object().ok_or(FrameError::BadJson)?;
+    let mut v: Value = serde_json::from_slice(line).map_err(|_| FrameError::BadJson)?;
+    let obj = v.as_object_mut().ok_or(FrameError::BadJson)?;
     if obj.get("v").and_then(Value::as_u64) != Some(VERSION) {
         return Err(FrameError::BadVersion);
     }
@@ -86,22 +87,47 @@ pub fn decode_line(line: &[u8]) -> Result<Inbound, FrameError> {
         .and_then(Value::as_str)
         .ok_or(FrameError::BadJson)?
         .to_owned();
-    let args = match obj.get("args") {
+    // Taken out of the parsed line, not copied: arguments can be large (a bar layout).
+    let args = match obj.remove("args") {
         None | Some(Value::Null) => Vec::new(),
-        Some(Value::Array(a)) => a.clone(),
+        Some(Value::Array(a)) => a,
         Some(_) => return Err(FrameError::BadJson),
     };
     Ok(Inbound::Request { id, call, args })
 }
 
+/// One outgoing line, serialised straight from the borrowed message (no copy of the payload).
+/// Fields are in the order `json!` gave them (serde_json's map is sorted), so the bytes on the
+/// wire are unchanged.
+#[derive(Serialize)]
+#[serde(untagged)]
+enum Wire<'a> {
+    Ok {
+        id: u64,
+        ok: &'a Value,
+        v: u64,
+    },
+    Err {
+        err: &'a str,
+        id: u64,
+        v: u64,
+    },
+    Event {
+        data: &'a Value,
+        event: &'a str,
+        v: u64,
+    },
+}
+
 pub fn encode(msg: &Outbound) -> Vec<u8> {
-    let v = match msg {
-        Outbound::Ok { id, ok } => json!({"v": VERSION, "id": id, "ok": ok}),
-        Outbound::Err { id, err } => json!({"v": VERSION, "id": id, "err": err}),
-        Outbound::Event { event, data } => json!({"v": VERSION, "event": event, "data": data}),
+    let v = VERSION;
+    let w = match msg {
+        Outbound::Ok { id, ok } => Wire::Ok { id: *id, ok, v },
+        Outbound::Err { id, err } => Wire::Err { err, id: *id, v },
+        Outbound::Event { event, data } => Wire::Event { data, event, v },
     };
     // serde_json escapes control characters, so the output never contains a raw newline.
-    let mut out = serde_json::to_vec(&v).expect("a Value always serialises");
+    let mut out = serde_json::to_vec(&w).expect("a Value always serialises");
     out.push(b'\n');
     out
 }
@@ -177,6 +203,7 @@ async fn read_lines_inner<R: AsyncRead + Unpin>(r: R, tx: mpsc::Sender<Item>, pe
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
     use std::pin::Pin;
     use std::task::{Context, Poll};
     use tokio::io::{AsyncRead, ReadBuf};
@@ -202,6 +229,40 @@ mod tests {
         }))
         .unwrap();
         assert_eq!(ev, json!({"v":1,"event":"UqdUp","data":null}));
+    }
+
+    #[test]
+    fn encode_bytes_match_a_json_value() {
+        // The same bytes as serialising the whole message as one `Value` (sorted keys).
+        let data = json!({"b": [1, 2.5, "x\n"], "a": {"z": null, "y": true}});
+        let cases = [
+            (
+                Outbound::Ok {
+                    id: 3,
+                    ok: data.clone(),
+                },
+                json!({"v": VERSION, "id": 3, "ok": data}),
+            ),
+            (
+                Outbound::Err {
+                    id: 4,
+                    err: "bad \"thing\"".into(),
+                },
+                json!({"v": VERSION, "id": 4, "err": "bad \"thing\""}),
+            ),
+            (
+                Outbound::Event {
+                    event: "Hello".into(),
+                    data: data.clone(),
+                },
+                json!({"v": VERSION, "event": "Hello", "data": data}),
+            ),
+        ];
+        for (msg, v) in cases {
+            let mut want = serde_json::to_vec(&v).unwrap();
+            want.push(b'\n');
+            assert_eq!(encode(&msg), want);
+        }
     }
 
     #[test]

@@ -96,7 +96,7 @@ Island {
                         text: root.hasWeather ? Weather.format(root.wx.temp_c)
                             + (root.wx.location_name && !root.sharing ? " · " + root.wx.location_name : "")
                             : ""
-                        font.pixelSize: Math.round(Theme.fontSize * 1.4)
+                        baseSize: Math.round(Theme.fontSize * 1.4)
                         Layout.maximumWidth: Theme.fontSize * 20
                     }
                     UqText {

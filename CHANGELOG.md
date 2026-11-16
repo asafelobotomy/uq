@@ -7,8 +7,120 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **Packaging: `uq` depends on the pin it is tested with** (`uq-hyprland-pin>=0.56.2`, from
+  `_pin` in the PKGBUILD), so an updated uQ can't be installed beside an older pin that allows a
+  Hyprland its config doesn't support. After an upgrade, pacman now says to log out and back in:
+  uqd and the shell keep running the old version until then.
+
+## [0.3.0-rc.5] - 2026-11-15
+
+### Fixed
+
+- **"Last activity" order in Open windows** no longer counts a notification backend's state
+  updates as new notifications, so the newest app isn't shown as always active.
+- **"By system usage" with more than one screen**: each screen's island no longer wipes the
+  others' readings, which made most windows read 0% processor.
+- **Window titles in Open windows tabs** keep updating while a title changes quickly (a progress
+  bar in a terminal); before, they froze until it stopped.
+- **Progress notifications** (built-in server) update their card in place instead of recreating
+  every popup and centre card on each update.
+- **uqd** no longer retries a failing file write about every second (its own temporary file
+  woke it again); it waits the minute it was meant to.
+- **Fewer wakeups**: the bridge follows only uqd's and the notification server's names on the
+  bus, not every client joining and leaving; edge indicators do no work while switched off; a
+  focus change asks Hyprland only for the window list; the opening-order map of Open windows
+  forgets closed windows; Settings' Welcome page reaps the programs it starts; no "Could not
+  load icon" warning per tab when the icon theme lacks the fallback icon.
+
+## [0.3.0-rc.4] - 2026-11-15
+
 ### Added
 
+- **Full and Half windows.** In the scrolling layout, Open windows tabs have **Full** (the
+  screen's width) and **Half** buttons, as the tab's width allows: an Icon-size tab turns into a
+  close button under the pointer; Small shows Full or Half (whichever the window isn't) under the
+  pointer; Medium shows both; Large adds the title. The focused window's tab grows to Medium.
+  A window opened from a Full window gets a screen of its own right after it; one opened from a
+  Half window opens Half beside it; the last window left on a workspace becomes Full.
+- **Resize windows by dragging the gap between them.** Between two columns, the gap moves and
+  only the gap: one column widens by what the other gives up, and their outer edges stay put.
+  Between two windows stacked in a column, the upper one's height changes and the lower one gets
+  the rest. A small grip and a resize cursor show in the gap under the pointer.
+- **Drag tabs to reorder windows.** In the scrolling layout, dragging a tab in Open windows to a
+  new place moves its window's column to match, so the tabs and the windows stay in the same
+  order.
+- **Drop a tab on the screen.** Drag an Open windows tab down onto the screen below and its
+  window joins the screen shown there, as half of it: beside a Half window alone it fills the
+  empty half; on a Full window both become Half; on two Half windows it takes the half it is
+  dropped on, pushing that window out to that side. Dropped on its own screen, a Half window on
+  its own moves to the other half (the tabs keep their order) and two Halves swap. While
+  dragging, a see-through copy of the tab rides under the pointer and the place the window would
+  take is outlined.
+- **Windows sharing a screen are framed.** Two Half windows on one screen get a light frame
+  round them together; a window on its own has none.
+- **Minimise from the tab's close button.** A tab's X first asks "Minimize to Tab?" (Always
+  minimize instead of close / Never minimize instead of close / Cancel), and the answer is kept;
+  change it in the Open windows island's settings (**A tab's close button**). X on a minimised
+  window's tab closes it.
+- **Whole screen pages.** In the scrolling layout, windows fall into pages a screen wide (a Full
+  window, two Half ones, or a Half on its own), and the view always shows one whole page: no
+  window is left cut by the screen's edge. Beside a Half window alone on its page the rest of the
+  screen stays empty: the next page's window is hidden until its own page is shown, so it doesn't
+  show there or while the view slides past.
+- **Fill the rest.** An island can grow into the bar's empty space beside its zone (edit mode →
+  the island's settings → **Fill the rest**). Open windows does unless you turn it off; the
+  centre zone stays centred.
+- **Windows that want attention get a dot.** When a window's app sends a notification, or the
+  window asks for attention (Hyprland marks it urgent), its Open windows tab gets a dot in the
+  theme's accent colour on the app icon until you focus the window. A window scrolled out of the
+  strip marks **+N** instead, and the window list says **Wants attention**. Notifications from
+  the app you are using mark nothing.
+
+### Changed
+
+- **Open windows follows the screen.** Tabs are in the order windows sit on screen (the new
+  default order, **Screen order**); a minimised window keeps its place, dimmed. Choosing a
+  window from **+N** centres the strip on it.
+- **The bar fits every screen exactly.** Islands sit on a grid that spans each screen's bar,
+  from a laptop to 4K, and keep about the width of their size. They are as far apart as windows
+  are, and the bar lines up with the windows below it, following Settings → Look. A separator
+  leaves a little more room between its neighbours.
+
+### Fixed
+
+- The screen-edge indicator's window frame matches real windows (their top, height, border,
+  rounding and colours) instead of sitting lower and shorter.
+- An Open windows tab's close button no longer pokes out past the tab's frame when the tab is
+  at its narrowest Medium width.
+
+## [0.3.0-rc.3] - 2026-11-14
+
+### Added
+
+- **A Tray island for other apps' icons.** Other apps' tray icons (Steam, Discord, password
+  managers…) can have an island of their own, apart from uQ's Status island (network, sound,
+  battery, quick settings). It shows as many icons as fit its size and a **+N** button listing
+  the rest; clicks, menus, the wheel and tooltips work as before. While it is on the bar, Status
+  shows no tray icons. A new user's bar has it before Status; on your own bar, add **Tray icons
+  of other apps** from **Add an Island** (until then Status keeps showing them).
+- **Each island's text, your way.** In edit mode, an island's settings now have a **Text**
+  section: the **font** (the theme's, its monospaced font, or any installed font, found by
+  name), **formatting** (bold, italic, all capitals) and the **text size** (70% to 150% of the
+  theme's, in steps of 10%). **Use the theme's** puts it back. Only the island itself changes;
+  its popup keeps the theme's text.
+- **Keep windows on screen.** A floating window that opens bigger than its screen, or hanging
+  under the bar or off an edge, is shrunk and moved so all of it shows, on whichever screen it
+  is on (any size or scale). This also happens when it turns floating, moves to another
+  workspace, or screens are added or rearranged. A window you drag part-way off screen yourself
+  stays where you put it. On by default; Settings → Shell → Windows → **Keep windows on
+  screen**.
+- **Custom island size.** Drag an island's edge past Large and it becomes **Custom**, growing
+  one Icon size at a time (up to 24 wide); drag it back in to shrink it, step by step, back to
+  Large. + and − in edit mode and **Narrower**/**Wider** in the island's settings do the same.
+  A Custom island shows what it shows at Large, with more room, and still steps down to fit a
+  small screen.
 - **Edit the bar on the bar.** Right-click any island for the **uQ Island Menu**: **Edit
   Islands**, **Add an Island** and **Remove**. In edit mode (also Super+Alt+B, or **Edit the bar**
   in Settings → Shell) drag islands between the left, centre and right of the bar, drag an
@@ -82,11 +194,19 @@ All notable changes to uQ are listed here. The format follows
 
 ### Changed
 
-- **Packaging: `uq` depends on the pin it is tested with** (`uq-hyprland-pin>=0.56.2`, from
-  `_pin` in the PKGBUILD), so an updated uQ can't be installed beside an older pin that allows a
-  Hyprland its config doesn't support. After an upgrade, pacman now says to log out and back in:
-  uqd and the shell keep running the old version until then.
-
+- **No second count beside noti-fi's bell.** With noti-fi, the Notifications island shows only
+  noti-fi's icon, which already carries the count, not a number beside it.
+- **Screen-edge indicators only point at windows out of view.** A window already wholly on
+  screen gets no indicator (click it where it is); one partly or wholly off screen, behind a
+  fullscreen window, or on another workspace still does.
+- **The screen-edge indicator looks like a window just off screen.** Reaching the edge brings in
+  the near edge of a window frame (at that window's own height when it is in this layout) in
+  place of the thin line, with the app tab beside it as before.
+- **Settings fits small windows.** In a narrow window the page list becomes a column of icons
+  (names in tooltips), a page's tabs move under its title and wrap, a setting's controls go under
+  its label when they don't fit beside it, and cards that span two columns stack instead of
+  overlapping. The login screen preview and the clock on Date and time shrink or wrap to fit.
+  Nothing is cut off at the smallest window size.
 - **Weather has its own island.** The city is chosen in edit mode (or from the Weather island's
   popup), and the clock's popup keeps the calendar. The old on/off switches for the five islands
   in Settings are replaced by edit mode on the bar, and the Windows island lists the windows it
@@ -120,6 +240,18 @@ All notable changes to uQ are listed here. The format follows
 
 ### Fixed
 
+- **Choosing a window in Open windows no longer moves the pointer.** The pointer stays where it
+  is; a window out of view (a scrolled-away column) is scrolled into view. The screen-edge
+  indicators no longer move the pointer for a moment either: Hyprland's pointer warp is now
+  switched off for the focus instead of the pointer being put back afterwards.
+- **The login screen no longer starts a keyring for itself.** greetd ran the greeter's own
+  session (user `greeter`) through `/etc/pam.d/uq-greetd` too, so GNOME Keyring started a daemon
+  for `greeter` that failed to create `/.local/share/keyrings` and logged "couldn't unlock the
+  login keyring". The greeter now has its own PAM service, `/etc/pam.d/uq-greeter` (greetd's
+  stack without the keyring), named by `[default_session] service = "uq-greeter"` in
+  `/etc/uq/greetd.toml`; logging in still unlocks your keyring through `uq-greetd`. An
+  `/etc/uq/greetd.toml` you changed yourself (auto-login) keeps its `.pacnew`; add
+  `service = "uq-greeter"` under its `[default_session]`.
 - **Settings fixes:** adding a pointing device under Input → Devices no longer resets its speed
   to 0; keyboard, mouse and touchpad rows show when `user.lua` overrides them; the Login screen
   page's theme box is never blank; deleting a restore point asks first; the Login screen page

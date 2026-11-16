@@ -14,6 +14,9 @@
 //     layout reports columns out of view at their real, off-screen positions, and dwindle and
 //     master tiles sit side by side. Windows that overlap the reference vertically come first,
 //     then the nearest centre, then the nearest vertically, then the most recently focused.
+//   - Given the monitor's rectangle, a window already wholly on screen is left out: it can be
+//     clicked where it is, so the indicator only points at windows out of view (partly or
+//     wholly). While the reference is fullscreen, every window behind it counts as out of view.
 //   - With no such window, the neighbour is the nearest workspace on the same monitor in that
 //     direction (by id, normal workspaces only) that has a window; going there focuses its most
 //     recently focused window.
@@ -89,16 +92,29 @@ function reference(wins, ws, refAddr) {
     return _mostRecent(on.filter(_tiled));
 }
 
+// Whether window `w` lies wholly inside monitor rectangle `mon` ({x, y, width, height}).
+function onScreen(w, mon) {
+    if (!w || !mon)
+        return false;
+    var t = SIDE_TOLERANCE;
+    return w.x >= mon.x - t && w.y >= mon.y - t && w.x + w.w <= mon.x + mon.width + t
+        && w.y + w.h <= mon.y + mon.height + t;
+}
+
 // The tiled window on `side` ("left" | "right") of the reference on workspace `ws`, or null.
-function windowBeside(wins, ws, side, refAddr) {
+// With `mon`, windows wholly on screen are skipped (unless the reference is fullscreen).
+function windowBeside(wins, ws, side, refAddr, mon) {
     var ref = reference(wins, ws, refAddr);
     if (ref === null)
         return null;
     var rc = _cx(ref), ry = _cy(ref);
+    var skipVisible = !!mon && !(ref.fullscreen > 0);
     var best = null, bestKey = null;
     for (var i = 0; i < wins.length; i++) {
         var w = wins[i];
         if (w === ref || w.ws !== ws || w.hidden || !_tiled(w))
+            continue;
+        if (skipVisible && onScreen(w, mon))
             continue;
         var dx = side === "left" ? rc - _cx(w) : _cx(w) - rc;
         if (dx <= SIDE_TOLERANCE)
@@ -147,11 +163,13 @@ function workspaceBeside(wins, ws, side, monitorWs) {
     return { ws: bestId, win: _mostRecent(on) };
 }
 
-// What the indicator on `side` shows and goes to: {address, cls, title, workspace} where
+// What the indicator on `side` shows and goes to: {address, cls, title, workspace, y, h} where
 // `workspace` is the id when it is another workspace's window and 0 when it is a window in the
-// same layout. Null when there is nothing on that side. `ws` is the monitor's active workspace;
-// with `refAddr` the reference's own workspace is used instead.
-function neighbour(wins, ws, side, monitorWs, refAddr) {
+// same layout, and y/h are that window's top and height (global, as Hyprland gives them). Null
+// when there is nothing on that side. `ws` is the monitor's active workspace; with `refAddr`
+// the reference's own workspace is used instead. With `mon` (the monitor's rectangle) only
+// windows out of view count (see onScreen).
+function neighbour(wins, ws, side, monitorWs, refAddr, mon) {
     if (side !== "left" && side !== "right" || !Array.isArray(wins))
         return null;
     if (refAddr) {
@@ -161,13 +179,14 @@ function neighbour(wins, ws, side, monitorWs, refAddr) {
     }
     if (typeof ws !== "number" || ws < 1)
         return null;
-    var w = windowBeside(wins, ws, side, refAddr);
+    var w = windowBeside(wins, ws, side, refAddr, mon);
     if (w !== null)
-        return { address: w.address, cls: w.cls, title: w.title, workspace: 0 };
+        return { address: w.address, cls: w.cls, title: w.title, workspace: 0, y: w.y, h: w.h };
     var o = workspaceBeside(wins, ws, side, Array.isArray(monitorWs) ? monitorWs : []);
     if (o === null || o.win === null)
         return null;
-    return { address: o.win.address, cls: o.win.cls, title: o.win.title, workspace: o.ws };
+    return { address: o.win.address, cls: o.win.cls, title: o.win.title, workspace: o.ws,
+             y: o.win.y, h: o.win.h };
 }
 
 function _intersect(a, b) {

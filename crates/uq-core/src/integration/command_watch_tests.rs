@@ -31,6 +31,30 @@ fn a_page_command_takes_a_watch() {
 }
 
 #[test]
+fn a_properties_changed_watch_may_name_its_properties() {
+    let p = page_with(
+        "watch = { signals = [{ interface = \"org.freedesktop.DBus.Properties\", \
+         member = \"PropertiesChanged\", path = \"/org/x\", properties = [\"State\"] }] }\n",
+    )
+    .unwrap();
+    let w = p.commands[0].watch.clone().unwrap();
+    assert_eq!(w.signals[0].properties, ["State"]);
+    for (why, extra) in [
+        (
+            "not PropertiesChanged",
+            "watch = { signals = [{ interface = \"org.x.X\", member = \"C\", properties = [\"A\"] }] }\n",
+        ),
+        (
+            "not a property name",
+            "watch = { signals = [{ interface = \"org.freedesktop.DBus.Properties\", \
+             member = \"PropertiesChanged\", properties = [\"a.b\"] }] }\n",
+        ),
+    ] {
+        assert!(page_with(extra).is_err(), "{why}");
+    }
+}
+
+#[test]
 fn bad_watches_are_refused() {
     let many: Vec<String> = (0..=MAX_WATCH_FILES)
         .map(|i| format!("\"/f{i}\""))
@@ -165,6 +189,7 @@ async fn a_signal_bus_that_is_not_there_is_an_error() {
             member: "C".into(),
             path: None,
             sender: None,
+            properties: Vec::new(),
         }],
     };
     let r = start(&spec, Path::new("/"), None, None, WATCH_DEBOUNCE).await;

@@ -14,6 +14,7 @@ import "power"
 import "pick"
 import "wallpaper"
 import "edge"
+import "windows"
 import "desktop"
 
 ShellRoot {
@@ -72,6 +73,21 @@ ShellRoot {
 
     // The screen-edge tabs for the window or workspace beside this one (shell.edge_indicators).
     EdgeIndicators {}
+
+    // Floating windows kept inside their screen, never cut off (shell.fit_windows).
+    FitWindows {}
+
+    // Screens in the scrolling layout: a window opened from a Full column gets a Full screen of
+    // its own after it, one opened from a Half column is Half, and a lone window is Full.
+    ColumnPolicy {}
+
+    // The gaps between tiled windows can be dragged to resize them.
+    ResizeGrips {
+        id: resizeGrips
+    }
+    ScreenPages {
+        paused: resizeGrips.dragging
+    }
 
     // The full-screen "click a window" overlay for the rules editor's Pick a window.
     PickOverlay {}

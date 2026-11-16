@@ -12,6 +12,8 @@ ColumnLayout {
 
     property var registry: Widgets
     property var bridge: Bridge
+    // Whether the quick-settings panel is showing (its window hides; the items stay "visible").
+    property bool onScreen: true
     // The slot whose detail view is open, or null.
     property var detailSlot: null
     readonly property int loadedCount: host.loadedCount
@@ -37,6 +39,7 @@ ColumnLayout {
         kind: "quick"
         registry: root.registry
         bridge: root.bridge
+        onScreen: root.onScreen
         onPopupRequested: function (slot, open) {
             if (open && slot.popup)
                 root.detailSlot = slot;

@@ -20,6 +20,7 @@ mod procusage;
 pub mod protocol;
 mod providers;
 pub(crate) mod run;
+pub(crate) mod stdio;
 mod stocks;
 mod sysmon;
 pub(crate) mod uqd;
@@ -125,6 +126,7 @@ async fn handle(s: &Services, call: &str, args: &[Value]) -> Result<Value, Strin
         "Search" => s.providers.search(link, runs, args).await,
         "Activate" => s.providers.activate(link, runs, args).await,
         "LauncherOpened" => s.providers.launcher_opened(link, args).await,
+        "WidgetShown" => s.widgets.as_ref().ok_or(NO_INTEGRATIONS)?.set_shown(args),
         "WidgetCall" | "WidgetGet" | "WidgetRun" => {
             let w = s.widgets.as_ref().ok_or(NO_INTEGRATIONS)?;
             match call {
@@ -134,6 +136,8 @@ async fn handle(s: &Services, call: &str, args: &[Value]) -> Result<Value, Strin
             }
         }
         "Dispatch" => dispatch::dispatch(args).await,
+        "WindowLook" if args.is_empty() => dispatch::window_look().await,
+        "WindowLook" => Err("WindowLook takes no arguments".into()),
         "DefaultApps" => defaultapps::default_apps(link, args),
         "Power" => power::power(args).await,
         "Lock" => logind::lock(args).await,
@@ -213,6 +217,8 @@ async fn write_loop<W: AsyncWrite + Unpin>(mut w: W, mut rx: mpsc::Receiver<Outb
             break;
         }
     }
+    // Everything handed over is written (ThreadStdout writes on its own thread).
+    let _ = w.shutdown().await;
 }
 
 /// Run the bridge on the real buses. `roots`: where integrations are read from.
@@ -585,7 +591,7 @@ mod tests {
         let ev = json!({"v":1,"event":"LockState","data":{"locked":false}});
         assert_eq!(next(&mut out).await, ev);
         drop(in_w);
-        task.await.unwrap();
+        let _ = task.await.unwrap();
 
         // Nothing reported yet: Hello says unlocked and no LockState is sent.
         let (lock_tx, locks) = mpsc::unbounded_channel();
@@ -609,7 +615,7 @@ mod tests {
         let ev = json!({"v":1,"event":"LockState","data":{"locked":true}});
         assert_eq!(next(&mut out).await, ev);
         drop(in_w);
-        task.await.unwrap();
+        let _ = task.await.unwrap();
     }
 
     #[tokio::test]
@@ -634,7 +640,7 @@ mod tests {
             json!({"v":1,"id":4,"err":"unknown call Nope"})
         );
         drop(in_w);
-        task.await.unwrap();
+        let _ = task.await.unwrap();
     }
 
     #[tokio::test]
@@ -663,7 +669,7 @@ mod tests {
             json!({"v":1,"id":2,"err":"SleepLockReady takes no arguments"})
         );
         drop(in_w);
-        task.await.unwrap();
+        let _ = task.await.unwrap();
     }
 
     #[tokio::test]
@@ -688,7 +694,7 @@ mod tests {
             json!({"v":1,"id":1,"err":"uqd is not running"})
         );
         drop(in_w);
-        task.await.unwrap();
+        let _ = task.await.unwrap();
 
         // A reply over MAX_LINE becomes an error for the same id.
         let (w, r) = duplex(1 << 20);

@@ -3,6 +3,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Hyprland
 import "../core"
+import "../services"
 import "../logic/edges.js" as Edges
 import "../logic/shellprefs.js" as ShellPrefs
 import "../logic/work.js" as Work
@@ -29,20 +30,32 @@ Scope {
     property int wsSerial: 0
 
     function rebuild() {
+        // Off (or locked): no edges to feed, so no work on every title change.
+        if (!root.enabled)
+            return;
         var out = [], vals = Hyprland.toplevels.values;
         for (var i = 0; i < vals.length; i++) {
             var w = Edges.fromIpc(vals[i].lastIpcObject, vals[i].title);
             if (w !== null)
                 out.push(w);
         }
-        root.windows = out;
+        // Every refresh touches each window's lastIpcObject; only a real change goes on to
+        // every edge's bindings.
+        var key = JSON.stringify(out);
+        if (key !== root.windowsKey) {
+            root.windowsKey = key;
+            root.windows = out;
+        }
     }
+    property string windowsKey: ""
 
     // Ask Hyprland for fresh window positions now (an edge was reached, or a step was taken):
     // the scrolling layout moves columns without an event.
     function refresh() {
-        refreshTimer.restart();
+        if (root.enabled)
+            HyprRefresh.request();
     }
+    onEnabledChanged: if (root.enabled) { root.rebuild(); root.refresh(); }
 
     // Focus `n` (a neighbour from Edges.neighbour). Returns whether a dispatch was sent.
     function go(n) {
@@ -77,20 +90,24 @@ Scope {
     }
 
     Timer {
-        id: refreshTimer
-        interval: 40
-        onTriggered: Hyprland.refreshToplevels()
-    }
-    Timer {
         id: debounce
         interval: 30
         onTriggered: root.rebuild()
+    }
+    // Focus moved. Not the activewindowv2 event: Hyprland sends that again, for the same window,
+    // on every title change of the focused window.
+    Connections {
+        target: Hyprland
+        function onActiveToplevelChanged() { root.refresh(); }
     }
     Connections {
         target: Hyprland
         function onRawEvent(event) {
             switch (event.name) {
-            case "activewindowv2":
+            case "configreloaded":
+                // The window look (border, rounding, gaps) may have changed.
+                WindowLook.soon();
+                break;
             case "openwindow":
             case "closewindow":
             case "movewindowv2":
@@ -116,7 +133,7 @@ Scope {
         function onValuesChanged() { debounce.restart(); }
     }
     Instantiator {
-        model: Hyprland.toplevels.values
+        model: root.enabled ? Hyprland.toplevels.values : []
         delegate: QtObject {
             required property var modelData
             property Connections watch: Connections {
