@@ -15,6 +15,13 @@ All notable changes to uQ are listed here. The format follows
   wider than 44 grid units (about 800 px), a second column appears once there is room for two
   (about 1400 px), and a card that spans both columns puts its plain rows two to a line.
   `SettingRow` also caps itself at that width wherever it is used.
+- **Open-window tabs keep their titles until they are icons.** A tab used to drop its title as
+  soon as it narrowed below Large. Now the title stays (elided) at every size but Icon, and an
+  icon-sized tab shows the title in a tooltip when you hover it.
+- **A minimised window's tab is an icon, greyed, at the end of the tabs.** Whatever the tab order,
+  minimised windows come last, the one minimised most recently at the very end. Choosing one brings
+  the window back as the last column on the workspace, focused. (Its icon no longer closes the
+  window when clicked; middle click and the menu still do.)
 
 ## [0.3.1] - 2026-11-16
 

@@ -379,4 +379,47 @@ TestCase {
         compare(many[many.length - 1].appName, "a79", "newest last");
         compare(many[0].appName, "a30", "oldest dropped");
     }
+
+    function test_minimised_tabs_go_last() {
+        var ids = function (l) { return l.map(function (w) { return w.address; }); };
+        var list = [
+            { address: "0x1", title: "", x: 0, y: 0, minimised: true },
+            { address: "0x2", title: "", x: 100, y: 0 },
+            { address: "0x3", title: "", x: 200, y: 0, minimised: true },
+            { address: "0x4", title: "", x: 300, y: 0 }
+        ];
+        var ctx = { opened: { "0x1": 0, "0x2": 1, "0x3": 2, "0x4": 3 }, lastOrder: ["0x1", "0x2", "0x3", "0x4"] };
+        compare(ids(Work.sortWindows(list, "screen", false, ctx)), ["0x2", "0x4", "0x1", "0x3"], "screen order");
+        compare(ids(Work.sortWindows(list, "opened", false, ctx)), ["0x2", "0x4", "0x1", "0x3"], "opening order");
+        compare(ids(Work.sortWindows(list, "opened", true, ctx)), ["0x4", "0x2", "0x3", "0x1"], "newest first");
+        // Already minimised ones keep their order; the one minimised just now goes last.
+        ctx.lastMin = ["0x3"];
+        compare(ids(Work.sortWindows(list, "opened", false, ctx)), ["0x2", "0x4", "0x3", "0x1"]);
+    }
+    function test_strip_with_minimised_icons() {
+        var m = { minPill: 28, maxPill: 150, gap: 2, medium: 100, arrow: 16, chip: 30 };
+        // Two live tabs and two minimised: the minimised take 28 each, the live share the rest.
+        var s = Work.strip(4, 400, m, 0, 2);
+        compare(s.mode, "pills");
+        compare(s.shown, 4);
+        verify(s.focusW >= 100, "the focused tab is still Medium");
+        verify(2 * s.pillW + 2 * 28 + 3 * 2 <= 400 + 100, "fits");
+        var all = Work.strip(2, 100, m, -1, 2);
+        compare(all.mode, "pills", "all minimised: nothing to share");
+        // Not everything fits: the old scroll/compact decision.
+        compare(Work.strip(9, 120, m, 0, 3).mode, Work.strip(9, 120, m, 0).mode);
+    }
+    function test_lastLive_is_the_rightmost_tiled_window() {
+        var w = [
+            { address: "0x1", wsId: 1, x: 0, y: 0 },
+            { address: "0x2", wsId: 1, x: 900, y: 0 },
+            { address: "0x3", wsId: 1, x: 900, y: 400 },
+            { address: "0x4", wsId: 2, x: 5000, y: 0 },
+            { address: "0x5", wsId: 1, x: 9000, y: 0, minimised: true },
+            { address: "0x6", wsId: 1, x: 9000, y: 0, floating: true }
+        ];
+        compare(Work.lastLive(w, 1, "0x7"), "0x3");
+        compare(Work.lastLive(w, 1, "0x3"), "0x2", "never itself");
+        compare(Work.lastLive(w, 3, "0x7"), null);
+    }
 }

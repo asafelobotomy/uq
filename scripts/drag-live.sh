@@ -3,7 +3,7 @@
 # layout: what the shell does while the window is held. Super+drag is played through a virtual
 # keyboard and pointer (tests/live/tools/uqinput).
 #
-#   scripts/drag-live.sh [--scenario half-pair|full-edge|keys|drop|restore] [--unguarded]
+#   scripts/drag-live.sh [--scenario half-pair|full-edge|keys|drop|restore|tabs] [--unguarded]
 #
 # It starts Hyprland on uQ's base.lua and the shell, opens windows, drags one and prints what
 # happened between the drag's start and end events: the focus changes, and where the dragged window
@@ -149,6 +149,12 @@ case "$scenario" in
         # A window minimised to its tab, then chosen from the bar: it must end up focused.
         open_window w1; settle 1.5
         open_window w2; settle 2 ;;
+    tabs)
+        # The Work island's tabs: titles until a tab is an icon; a minimised window's tab is an
+        # icon, greyed, at the end, and restoring it puts the window at the end, focused.
+        open_window "one long title"; settle 1
+        open_window "two long title"; settle 1
+        open_window "three long title"; settle 1.5 ;;
     *) fail "unknown scenario $scenario" ;;
 esac
 echo "--- before"
@@ -209,6 +215,57 @@ if [ "$scenario" = restore ]; then
     [ "$(active)" = w1 ] || { echo "FAIL: the restored window lost focus (active is '$(active)', not w1)"; bad=1; }
     echo "--- focus events after the restore"; grep activewindow "$tmp/events.log" | tail -n 6
     [ "$bad" = 0 ] && echo "drag-live restore: all checks held"
+    exit "$bad"
+fi
+
+if [ "$scenario" = tabs ]; then
+    active() { hc activewindow -j | jq -r '.title // ""'; }
+    d() { bridge_call "{\"v\":1,\"id\":1,\"call\":\"Dispatch\",\"args\":$1}" >/dev/null; }
+    xs() { hc clients -j | jq -r '[.[] | select(.workspace.id == 1)] | sort_by(.at[0]) | map(.title) | join(" | ")'; }
+    cap=${UQ_CAPTURE_DIR:-}; grabber=""; bad=0
+    if [ -n "$cap" ] && command -v grim >/dev/null 2>&1; then
+        mkdir -p "$cap/frames"
+        shot() { env XDG_RUNTIME_DIR="$rt" WAYLAND_DISPLAY="$wl" grim "$@" 2>/dev/null; }
+        # Frames of the bar only (the top strip), ~5 a second, for the GIF.
+        (n=0; while :; do shot -g "0,0 1280x60" "$cap/frames/$(printf %04d $n).png"; n=$((n + 1)); sleep 0.2; done) &
+        grabber=$!; pids+=($!)
+    else
+        shot() { :; }
+    fi
+    echo "bar layers:"; hc layers -j | jq -c '.. | objects | select(.namespace? | tostring | test("bar")) | {namespace, x, y, w, h}'
+    settle 1; shot -g "0,0 1280x60" "$cap/tabs-1-titles.png"
+    # More windows: the tabs narrow until each is an icon.
+    for n in 4 5 6 7 8; do open_window "window $n long title"; settle 1.2; done
+    settle 1; shot -g "0,0 1280x60" "$cap/tabs-2-icons.png"
+    # The pointer, for the tooltip and a real click on the tab.
+    mkfifo "$tmp/in"
+    env XDG_RUNTIME_DIR="$rt" WAYLAND_DISPLAY="$wl" "$tmp/uqinput" 1280 720 <"$tmp/in" >"$tmp/uqinput.out" 2>&1 &
+    pids+=($!)
+    exec 7>"$tmp/in"
+    for _ in $(seq 1 50); do grep -q ready "$tmp/uqinput.out" && break; sleep 0.1; done
+    grep -q ready "$tmp/uqinput.out" || fail "uqinput: $(cat "$tmp/uqinput.out")"
+    # Over an icon-sized tab (the second): its title shows in a tooltip.
+    printf '%s\n' "move 300 30" "sleep 200" "move 339 30" >&7; settle 2
+    shot -g "0,0 1280x100" "$cap/tabs-3-tooltip.png"
+    printf '%s\n' "move 700 300" >&7; settle 1
+    a1=$(addr_of "one long title")
+    d "[\"minimise\",{\"address\":\"$a1\",\"from_ws\":1}]"; settle 2
+    shot -g "0,0 1280x60" "$cap/tabs-4-minimised.png"
+    # Click the minimised tab (the last, greyed icon): the window comes back as the last column.
+    printf '%s\n' "move 781 30" "sleep 400" "button 272 down" "sleep 80" "button 272 up" >&7; settle 3
+    shot -g "0,0 1280x60" "$cap/tabs-5-restored.png"
+    echo "--- after"; snap after; echo "order: $(xs)"
+    [ "$(active)" = "one long title" ] || { echo "FAIL: the restored window lost focus (active is '$(active)')"; bad=1; }
+    [ "$(hc clients -j | jq -r '[.[] | select(.workspace.id == 1)] | max_by(.at[0]) | .title')" = "one long title" ] \
+        || { echo "FAIL: the restored window is not the last column"; bad=1; }
+    if [ -n "$grabber" ]; then
+        sleep 0.5; kill "$grabber" 2>/dev/null
+        command -v ffmpeg >/dev/null 2>&1 && ffmpeg -loglevel error -y -framerate 5 -i "$cap/frames/%04d.png" \
+            -vf "split[a][b];[a]palettegen[p];[b][p]paletteuse" "$cap/tabs.gif" 2>&1 | tail -n 3
+        rm -rf "$cap/frames"; ls -l "$cap"
+    fi
+    echo "--- qs.log (tail)"; tail -n 8 "$tmp/qs.log"
+    [ "$bad" = 0 ] && echo "drag-live tabs: all checks held"
     exit "$bad"
 fi
 
