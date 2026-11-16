@@ -2,9 +2,8 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Hyprland
-import "../core"
+import Quickshell.Io
 import "../logic/mousehold.js" as Hold
-import "../logic/work.js" as Work
 
 // Whether the pointer has hold of a window: a mouse bind (Super+drag to move, Super+right-drag to
 // resize) is down. Hyprland lifts a tiled window out of its layout for the whole move, so the
@@ -27,8 +26,18 @@ Singleton {
     // What Hyprland did to the held window meanwhile (Hold.note).
     property var seen: Hold.fresh()
 
+    // While a tiled window is lifted by the move: where the pointer is ({x, y}, the layout's
+    // coordinates; null before the first reading), read now and then with `hyprctl cursorpos`.
+    property var cursor: null
+    // What the screen pages (ScreenPages) take from a move that has ended, once, as {address
+    // (the window moved, "" if none), x, y (the pointer where it let go, or null), full (the
+    // window that was Full before the move, "" if none)}: null when nothing was moved.
+    property var drop: null
+
     function begin() {
         root.seen = Hold.fresh();
+        root.cursor = null;
+        root.drop = null;
         root.active = true;
         guard.restart();
     }
@@ -37,13 +46,42 @@ Singleton {
         if (!root.active)
             return;
         root.active = false;
-        // Hyprland un-maximized a Full window to lift it, and re-tiled it as a Half column.
-        var a = Work.normAddr(root.seen.full);
-        if (a !== null)
-            Bridge.call("Dispatch", ["column_width", { address: a, width: "full", keep_focus: false }])
-                .catch(function (e) { console.warn("uq: drag: " + e); });
+        // Hyprland un-maximized a Full window to lift it, and re-tiled it as a Half column:
+        // the pages put it back (Full), or place it on the page it was dropped on.
+        var lifted = Hold.address(root.seen.lifted), full = Hold.address(root.seen.full);
+        var at = root.cursor;
+        root.drop = lifted === "" && full === "" ? null : {
+            address: lifted, full: full, x: at ? at.x : null, y: at ? at.y : null
+        };
         root.seen = Hold.fresh();
+        root.cursor = null;
         root.ended();
+    }
+
+    // The pointer, about every 70 ms, while a lifted window is held.
+    property Timer poll: Timer {
+        interval: 70
+        repeat: true
+        running: root.active && root.seen.lifted !== ""
+        onTriggered: {
+            if (!reader.running)
+                reader.running = true;
+        }
+    }
+    property Process reader: Process {
+        command: ["hyprctl", "cursorpos", "-j"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                if (!root.active)
+                    return;
+                try {
+                    var p = JSON.parse(text);
+                    if (typeof p.x === "number" && typeof p.y === "number")
+                        root.cursor = { x: p.x, y: p.y };
+                } catch (e) {
+                }
+            }
+        }
     }
 
     property Timer guard: Timer {
