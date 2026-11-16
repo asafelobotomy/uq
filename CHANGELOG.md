@@ -17,7 +17,14 @@ All notable changes to uQ are listed here. The format follows
   the window back as the last column on the workspace, focused. (Its icon no longer closes the
   window when clicked; middle click and the menu still do.)
 
+## [0.3.1] - 2026-11-16
+
 ### Fixed
+
+- **Terminals themed by uQ no longer print a foot error.** foot 1.28 refuses the `[colors]` section
+  uQ wrote to `foot.ini` (`invalid section name: colors`), so every new foot window opened with an
+  error line. uQ now writes `[colors-dark]`, which foot 1.26 and newer read. foot 1.25 and older do not
+  know that name.
 
 - **Choosing a minimised window's tab now leaves that window focused.** The window came back and
   took focus for a moment, then focus snapped back to the window you had been in: the shell's
