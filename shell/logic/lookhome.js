@@ -9,10 +9,10 @@ var MAX_RECENTS = 8;
 var SHOWN_RECENTS = 5;
 var MAX_ID = 256;
 
+// The same rule as the bridge's valid_pinned_id: letters, digits, `.`, `_` and `-`, up to 128 long
+// (Quickshell's desktop ids come without `.desktop`).
 function validId(id) {
-    return typeof id === "string" && id !== "" && id.length <= MAX_ID
-        && id.indexOf("/") < 0 && id.indexOf("\0") < 0 && id.charAt(0) !== "-"
-        && id.slice(-8) === ".desktop";
+    return typeof id === "string" && /^[A-Za-z0-9._-]{1,128}$/.test(id);
 }
 
 // Exactly SLOTS entries: a desktop id, or "" for an empty square. Bad or repeated ids are empty.

@@ -135,8 +135,9 @@ still 1-home
 # Square 2: the squares sit under the pill (44), the Recent list and the Pinned heading.
 read -r lx ly < <(hc layers -j | jq -r '.. | objects | select(.namespace? == "uq-lookseedo") | "\(.x) \(.y)"' | head -n1)
 echo "layer at $lx,$ly"
-# Row of five squares: x = layer x + 12 + n*(76+59), y found from the screenshot-checked layout.
-sqy=$((ly + 44 + 5 + 12 + 5 * 40 + 5 + 22 + 5 + 38 + 22))
+# The squares sit under the pill (44), the Recent list (a heading and one row: foot is the only seeded
+# app installed) and the Pinned heading; square 2 is the second of five.
+sqy=$((ly + 44 + 5 + 12 + 57 + 5 + 22 + 5 + 38))
 send "move $((lx + 12 + 135 + 38)) $sqy" "sleep 300" "button 272 down" "sleep 80" "button 272 up" "sleep 600"
 drain; still 2-picker
 send "type fo" "sleep 600"; drain; still 3-picker-typed

@@ -9,7 +9,7 @@ TestCase {
 
     function test_pins_are_five_valid_distinct_ids() {
         compare(H.normalisePins(null).length, 5);
-        compare(H.normalisePins(["a.desktop", "a.desktop", "../x.desktop", "-x.desktop", "b.desktop", "c.desktop"]),
+        compare(H.normalisePins(["a.desktop", "a.desktop", "../x.desktop", "a b", "b.desktop", "c.desktop"]),
                 ["a.desktop", "", "", "", "b.desktop"]);
     }
 
@@ -22,7 +22,7 @@ TestCase {
         compare(H.setPin(p, 2, ""), ["", "", "", "", "a.desktop"]);
         compare(H.setPin(p, 5, "c.desktop"), p);
         compare(H.setPin(p, -1, "c.desktop"), p);
-        compare(H.setPin(p, 1, "bad"), p);
+        compare(H.setPin(p, 1, "bad id"), p);
     }
 
     function test_recents_newest_first_capped_no_repeats() {
@@ -34,7 +34,8 @@ TestCase {
         r = H.pushRecent(r, "app9.desktop");
         compare(r[0], "app9.desktop");
         compare(r.filter(function (x) { return x === "app9.desktop"; }).length, 1);
-        compare(H.pushRecent(r, "nope"), r);
+        compare(H.pushRecent(r, "no/pe"), r);
+        compare(H.pushRecent([], "firefox")[0], "firefox");
     }
 
     function test_recent_entries_skip_uninstalled_and_cap_at_five() {
