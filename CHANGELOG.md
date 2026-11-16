@@ -7,6 +7,13 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **Terminals themed by uQ no longer print a foot error.** foot 1.28 refuses the `[colors]` section
+  uQ wrote to `foot.ini` (`invalid section name: colors`), so every new foot window opened with an
+  error line. uQ now writes `[colors-dark]`, which foot 1.26 and newer read. foot 1.25 and older do not
+  know that name.
+
 ## [0.3.0] - 2026-11-16
 
 ### Fixed
