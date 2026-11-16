@@ -117,7 +117,7 @@ SH
     # QS_ICON_THEME once, at start): the sandbox's from the last run, else the real one's.
     local icons="" f
     for f in "$sb/state/uq/theme/shell.env" "${XDG_STATE_HOME:-$HOME/.local/state}/uq/theme/shell.env"; do
-        icons=$(sed -n 's/^QS_ICON_THEME="\([A-Za-z0-9._-]*\)"$/\1/p' "$f" 2>/dev/null)
+        icons=$(sed -n 's/^QS_ICON_THEME="\([A-Za-z0-9._-]*\)"$/\1/p' "$f" 2>/dev/null) || true
         [ -n "$icons" ] && break
     done
     {
