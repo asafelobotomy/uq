@@ -204,7 +204,7 @@ async fn concurrent_pin_edits_both_land() {
 #[tokio::test]
 async fn pin_ops_apply_to_the_fresh_list() {
     let (r, page) = rig().await;
-    // Pinned elsewhere (Spotlight) since the page last read.
+    // Pinned elsewhere (look=see>do_) since the page last read.
     r.state.lock().unwrap().settings.pinned =
         vec!["new.desktop".into(), "a.desktop".into(), "b.desktop".into()];
     let out = run(&page, pin_move("b.desktop", 1, 0)).await;

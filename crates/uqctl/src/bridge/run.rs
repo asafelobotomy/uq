@@ -1,4 +1,4 @@
-//! Run provider for the Spotlight `>` queries.
+//! Run provider for the look=see>do_ `>` queries.
 //!
 //! The command text never leaves the bridge in a result: the shell only sees a per-generation
 //! id, and `Launch {run_id}` looks the command up here.

@@ -34,20 +34,20 @@ fn custom_id(st: &State) -> String {
 #[test]
 fn keybinds_tree_validation() {
     let p = Profile::parse(&with(
-        "[keybinds]\n\"uq.spotlight\" = false\n\"k-3f9c\" = true\n",
+        "[keybinds]\n\"uq.lookseedo\" = false\n\"k-3f9c\" = true\n",
     ))
     .unwrap();
     assert_eq!(
         p.values["keybinds"],
-        json!({"uq.spotlight": false, "k-3f9c": true})
+        json!({"uq.lookseedo": false, "k-3f9c": true})
     );
     let text = p.to_toml();
     assert!(text.contains("[keybinds]"), "{text}");
     assert_eq!(Profile::parse(&text), Ok(p));
     for (body, key, reason) in [
         (
-            "[keybinds]\n\"uq.spotlight\" = \"SUPER + K\"\n",
-            "keybinds.uq.spotlight",
+            "[keybinds]\n\"uq.lookseedo\" = \"SUPER + K\"\n",
+            "keybinds.uq.lookseedo",
             ONLY_ON_OFF,
         ),
         (
@@ -56,8 +56,8 @@ fn keybinds_tree_validation() {
             ONLY_ON_OFF,
         ),
         (
-            "[keybinds]\n\"uq.spotlight\" = [true]\n",
-            "keybinds.uq.spotlight",
+            "[keybinds]\n\"uq.lookseedo\" = [true]\n",
+            "keybinds.uq.lookseedo",
             ONLY_ON_OFF,
         ),
         ("[keybinds]\n\"uq.nope\" = true\n", "!uq.nope", NOT_AN_ID),
@@ -117,7 +117,7 @@ fn read_and_write_bind_leaves() {
         Some(json!(true))
     );
     assert_eq!(
-        read_leaf(&st, "keybinds", &s(&["uq.spotlight"])),
+        read_leaf(&st, "keybinds", &s(&["uq.lookseedo"])),
         Some(json!(true))
     );
     assert_eq!(
@@ -131,7 +131,7 @@ fn read_and_write_bind_leaves() {
         &mut st,
         "keybinds",
         &[
-            (s(&["uq.spotlight"]), Some(json!(false))),
+            (s(&["uq.lookseedo"]), Some(json!(false))),
             (s(&["uq.close"]), Some(json!(true))),
             (s(&["uq.float"]), Some(json!(false))),
             (vec![id.clone()], Some(json!(false))),
@@ -147,7 +147,7 @@ fn read_and_write_bind_leaves() {
                 enabled: Some(false)
             },
             Override {
-                id: "uq.spotlight".into(),
+                id: "uq.lookseedo".into(),
                 combo: None,
                 enabled: Some(false)
             },
@@ -181,11 +181,11 @@ fn read_and_write_bind_leaves() {
 #[test]
 fn a_switch_that_would_share_keys_is_refused_with_both_names() {
     let mut st = state();
-    // Spotlight off, then one of your own takes Super + Space.
+    // look=see>do_ off, then one of your own takes Super + Space.
     write_leaves(
         &mut st,
         "keybinds",
-        &[(s(&["uq.spotlight"]), Some(json!(false)))],
+        &[(s(&["uq.lookseedo"]), Some(json!(false)))],
     )
     .unwrap();
     let mut section = st.section("keybinds").unwrap();
@@ -198,15 +198,15 @@ fn a_switch_that_would_share_keys_is_refused_with_both_names() {
     let e = write_leaves(
         &mut st,
         "keybinds",
-        &[(s(&["uq.spotlight"]), Some(json!(true)))],
+        &[(s(&["uq.lookseedo"]), Some(json!(true)))],
     )
     .unwrap_err();
     let SettingError::Invalid { key, reason } = e else {
         panic!("{e:?}")
     };
-    assert_eq!(key, "keybinds.uq.spotlight");
+    assert_eq!(key, "keybinds.uq.lookseedo");
     assert!(
-        reason.contains("Mine") && reason.contains("Open Spotlight"),
+        reason.contains("Mine") && reason.contains("Open look=see>do_"),
         "{reason}"
     );
     assert_eq!(st, before);
@@ -227,7 +227,7 @@ fn bind_keys_and_labels() {
             .map(|k| k.value.clone())
     };
     assert_eq!(get("uq.close"), Some(json!(false)));
-    assert_eq!(get("uq.spotlight"), Some(json!(true)));
+    assert_eq!(get("uq.lookseedo"), Some(json!(true)));
     assert_eq!(get(&custom_id(&st)), Some(json!(true)));
     // uQ's in table order, then yours.
     assert_eq!(keys[0].path[0], crate::keybinds::defaults::defaults()[0].id);
@@ -312,7 +312,7 @@ fn mark_binds_only_overrides_uq_and_default() {
     let id = custom_id(&st);
     let mut rows = json!({
         "binds.uq.close": {"source": "uq", "detail": null},
-        "binds.uq.spotlight": {"source": "default", "detail": null},
+        "binds.uq.lookseedo": {"source": "default", "detail": null},
         "binds.uq.float": {"source": "user_lua", "detail": {"line": 3}},
         "binds.uq.pin": {"source": "runtime", "detail": null},
         "binds.uq.fullscreen": {"source": "error", "detail": {"message": "x"}},
@@ -330,7 +330,7 @@ fn mark_binds_only_overrides_uq_and_default() {
         since: 0,
         keys: vec![
             memo("uq.close", false),
-            memo("uq.spotlight", true),
+            memo("uq.lookseedo", true),
             memo("uq.float", true),
             memo("uq.pin", true),
             memo("uq.fullscreen", true),
@@ -341,7 +341,7 @@ fn mark_binds_only_overrides_uq_and_default() {
     mark_binds(&mut rows, &st.keybinds, &active);
     assert_eq!(rows["binds.uq.close"]["source"], "profile");
     assert_eq!(rows["binds.uq.close"]["detail"], json!({"name": "Quiet"}));
-    assert_eq!(rows["binds.uq.spotlight"]["source"], "profile");
+    assert_eq!(rows["binds.uq.lookseedo"]["source"], "profile");
     // user.lua, runtime and error say what they say.
     assert_eq!(rows["binds.uq.float"]["source"], "user_lua");
     assert_eq!(rows["binds.uq.pin"]["source"], "runtime");

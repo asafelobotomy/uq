@@ -7,7 +7,7 @@ import "../notif"
 import "../session"
 
 // Everything that opens the launchers from outside the bar, routed to Surfaces: the Hyprland
-// global shortcuts (base.lua binds `uq:spotlight`, `uq:emoji`, `uq:appmenu`, `uq:quick-settings` and
+// global shortcuts (base.lua binds `uq:lookseedo`, `uq:emoji`, `uq:appmenu`, `uq:quick-settings` and
 // `uq:notif-centre`, the last routed to NotifBackend, `uq:lock`, routed to Session,
 // `uq:power-menu`, and `uq:edit-bar`, routed to BarLayout's edit mode) and the shell IPC target `uq`. No windows in here, so it also loads headless (tests/shell/bar_loads.sh).
 // Shortcuts and IPC pass no screen, so a surface opens on Hyprland.focusedMonitor.
@@ -16,7 +16,7 @@ Scope {
 
     // True once all eight shortcuts and the IPC handler exist with the names base.lua and the
     // README use (tests/shell/bar_loads.sh prints it).
-    readonly property bool routed: spotlightKey.appid === "uq" && spotlightKey.name === "spotlight"
+    readonly property bool routed: lookseedoKey.appid === "uq" && lookseedoKey.name === "lookseedo"
         && emojiKey.appid === "uq" && emojiKey.name === "emoji"
         && appMenuKey.appid === "uq" && appMenuKey.name === "appmenu"
         && quickSettingsKey.appid === "uq" && quickSettingsKey.name === "quick-settings"
@@ -31,21 +31,21 @@ Scope {
 
     // SUPER+Space: Hyprland sends `pressed` on the key press (and `released` after).
     GlobalShortcut {
-        id: spotlightKey
+        id: lookseedoKey
         appid: "uq"
-        name: "spotlight"
-        description: "Open or close Spotlight"
-        onPressed: Surfaces.ipc("toggle", "spotlight")
+        name: "lookseedo"
+        description: "Open or close look=see>do_"
+        onPressed: Surfaces.ipc("toggle", "lookseedo")
     }
 
-    // SUPER+.: Spotlight opened at ":", the emoji search (Phase 4 spec §3.2). Already open, its
+    // SUPER+.: look=see>do_ opened at ":", the emoji search (Phase 4 spec §3.2). Already open, its
     // query becomes ":".
     GlobalShortcut {
         id: emojiKey
         appid: "uq"
         name: "emoji"
-        description: "Open Spotlight to search for emoji"
-        onPressed: Surfaces.openWith("spotlight", ":")
+        description: "Open look=see>do_ to search for emoji"
+        onPressed: Surfaces.openWith("lookseedo", ":")
     }
 
     // Tapping SUPER is a `release = true` bind, which Hyprland fires only on the key release
@@ -98,7 +98,7 @@ Scope {
         onPressed: Surfaces.ipc("toggle", "powermenu")
     }
 
-    // qs ipc -p /usr/share/uq/shell call uq open|close|toggle spotlight|appmenu|quicksettings|powermenu
+    // qs ipc -p /usr/share/uq/shell call uq open|close|toggle lookseedo|appmenu|quicksettings|powermenu
     // Only these three verbs and four names; all ignored while locked. Nothing here unlocks:
     // `lock` only locks and `lockSecure` (from uq-lock) only marks the lock secure.
     // SUPER+ALT+B (and Settings' "Edit the bar"): edit mode on, on the focused screen; again, off.

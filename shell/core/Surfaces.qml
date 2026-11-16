@@ -9,7 +9,7 @@ import "../logic/power.js" as P
 QtObject {
     id: root
 
-    property string open: "closed"      // "closed" | "spotlight" | "appmenu" | "quicksettings" | "notifcentre" | "powermenu" | "desktopmenu"
+    property string open: "closed"      // "closed" | "lookseedo" | "appmenu" | "quicksettings" | "notifcentre" | "powermenu" | "desktopmenu"
     property var screen: null           // ShellScreen, or null for the focused monitor
     property var anchor: null           // Item the app menu hangs from, the desktop menu's {x, y} on its screen, or null
     // The confirm step the power menu opens at ("reboot" | "poweroff", from the app menu's
@@ -34,15 +34,15 @@ QtObject {
         var prev = root.open;
         var next = L.transition({ open: prev }, event);
         root.open = next.open;
-        // Spotlight or the app menu opened: the bridge starts cold activatable providers now,
+        // look=see>do_ or the app menu opened: the bridge starts cold activatable providers now,
         // so they can answer the first queries (Phase 4 spec §2.4.1). Never waited on.
-        if (next.open !== prev && (next.open === "spotlight" || next.open === "appmenu"))
+        if (next.open !== prev && (next.open === "lookseedo" || next.open === "appmenu"))
             Bridge.call("LauncherOpened", []).catch(function () {});
         if (next.open !== "powermenu")
             root.powerConfirm = "";
         if (next.wipe) {
             if (event === "lock") {
-                root.wipe("spotlight");
+                root.wipe("lookseedo");
                 root.wipe("appmenu");
                 root.wipe("quicksettings");
                 root.wipe("notifcentre");
@@ -55,7 +55,7 @@ QtObject {
         return next;
     }
 
-    // name: "spotlight" | "appmenu" | "quicksettings" | "notifcentre" (the built-in notification
+    // name: "lookseedo" | "appmenu" | "quicksettings" | "notifcentre" (the built-in notification
     // centre, toggled by NotifBackend) | "powermenu" | "desktopmenu" (the right-click menu on
     // empty desktop space; `anchor` is the click's {x, y} on `screen`, not an IPC name). initialConfirm (powermenu only): the action
     // whose confirm step it opens at, "reboot" or "poweroff"; anything else opens the plain menu.
@@ -63,7 +63,7 @@ QtObject {
     function toggle(name, screen, anchor, initialConfirm) {
         if (Bridge.locked)
             return;
-        var event = name === "spotlight" ? "toggleSpotlight"
+        var event = name === "lookseedo" ? "toggleLookseedo"
             : (name === "appmenu" ? "toggleAppMenu"
             : (name === "quicksettings" ? "toggleQuickSettings"
             : (name === "notifcentre" ? "toggleNotifCentre"
@@ -86,13 +86,13 @@ QtObject {
         root._apply("close");
     }
 
-    // Shell IPC (`qs ipc ... call uq open|close|toggle spotlight|appmenu|quicksettings|powermenu`) and the keybinds land
+    // Shell IPC (`qs ipc ... call uq open|close|toggle lookseedo|appmenu|quicksettings|powermenu`) and the keybinds land
     // here. open only opens, close only closes that surface; unknown verbs or names, and every
     // call while locked, are ignored. "notifcentre" is not an IPC name: its keybind goes through
     // NotifBackend, which picks the backend's own centre. Always the focused monitor, no anchor. Returns "ok" or
     // "ignored" (what `qs ipc call` prints).
     function ipc(verb, name) {
-        if (Bridge.locked || (name !== "spotlight" && name !== "appmenu" && name !== "quicksettings"
+        if (Bridge.locked || (name !== "lookseedo" && name !== "appmenu" && name !== "quicksettings"
                               && name !== "powermenu"))
             return "ignored";
         switch (verb) {
@@ -114,11 +114,11 @@ QtObject {
         return "ok";
     }
 
-    // Open Spotlight with `text` as its query (the emoji bind, `uq:emoji`, opens it at ":").
-    // Already open, the query is replaced. Only "spotlight"; ignored while locked. Always the
+    // Open look=see>do_ with `text` as its query (the emoji bind, `uq:emoji`, opens it at ":").
+    // Already open, the query is replaced. Only "lookseedo"; ignored while locked. Always the
     // focused monitor, no anchor. Returns "ok" or "ignored".
     function openWith(name, text) {
-        if (Bridge.locked || name !== "spotlight")
+        if (Bridge.locked || name !== "lookseedo")
             return "ignored";
         if (root.open !== name)
             root.toggle(name, null, null);

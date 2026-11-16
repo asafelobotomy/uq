@@ -48,22 +48,22 @@ async fn rebind_disable_reset_round_trip() {
     let first = op(&page, Op::Refresh).await;
     assert_eq!(first.error, None);
     assert_eq!(
-        row(&first.state, "uq.spotlight")["combo_text"],
+        row(&first.state, "uq.lookseedo")["combo_text"],
         "Super + Space"
     );
-    assert_eq!(row(&first.state, "uq.spotlight")["changed"], false);
-    assert_eq!(row(&first.state, "uq.spotlight")["is_default"], true);
+    assert_eq!(row(&first.state, "uq.lookseedo")["changed"], false);
+    assert_eq!(row(&first.state, "uq.lookseedo")["is_default"], true);
 
     let out = op(
         &page,
         Op::SetCombo {
-            id: "uq.spotlight".into(),
+            id: "uq.lookseedo".into(),
             combo: "win + k".into(),
         },
     )
     .await;
     assert_eq!(out.error, None);
-    let s = row(&out.state, "uq.spotlight");
+    let s = row(&out.state, "uq.lookseedo");
     assert_eq!(s["combo"], "SUPER + K");
     assert_eq!(s["combo_text"], "Super + K");
     assert_eq!(s["default_combo_text"], "Super + Space");
@@ -103,13 +103,13 @@ async fn rebind_disable_reset_round_trip() {
     let out = op(
         &page,
         Op::Reset {
-            id: "uq.spotlight".into(),
+            id: "uq.lookseedo".into(),
         },
     )
     .await;
     assert_eq!(out.error, None);
     assert_eq!(
-        row(&out.state, "uq.spotlight")["combo_text"],
+        row(&out.state, "uq.lookseedo")["combo_text"],
         "Super + Space"
     );
     assert!(r.state.lock().unwrap().keybinds.overrides.is_empty());
@@ -120,7 +120,7 @@ async fn rebind_disable_reset_round_trip() {
     let entries = r.history.entries.lock().unwrap();
     assert!(entries.iter().all(|e| e.domain == "keybinds"));
     assert!(
-        entries[0].summary.contains("Open Spotlight"),
+        entries[0].summary.contains("Open look=see>do_"),
         "{}",
         entries[0].summary
     );
@@ -139,7 +139,7 @@ async fn reset_all_keeps_custom() {
     op(
         &page,
         Op::SetCombo {
-            id: "uq.spotlight".into(),
+            id: "uq.lookseedo".into(),
             combo: "SUPER + K".into(),
         },
     )
@@ -159,7 +159,7 @@ async fn reset_all_keeps_custom() {
     assert_eq!(out.state["custom"].as_array().unwrap().len(), 1);
     assert_eq!(out.state["custom"][0]["name"], "Terminal too");
     assert_eq!(
-        row(&out.state, "uq.spotlight")["combo_text"],
+        row(&out.state, "uq.lookseedo")["combo_text"],
         "Super + Space"
     );
     assert!(
@@ -227,12 +227,12 @@ async fn check_warns_as_you_type() {
     for combo in ["SUPER + Space", "WIN + space"] {
         let v = page.check(&json!({"combo": combo, "name": "Mine"}));
         assert_eq!(v["valid"], false, "{combo}");
-        assert_eq!(v["conflicts"][0]["label"], "Open Spotlight");
-        assert_eq!(v["conflicts"][0]["id"], "uq.spotlight");
+        assert_eq!(v["conflicts"][0]["label"], "Open look=see>do_");
+        assert_eq!(v["conflicts"][0]["id"], "uq.lookseedo");
         assert_eq!(v["combo_text"], "Super + Space");
         let error = v["error"].as_str().unwrap();
         assert!(
-            error.contains("Open Spotlight") && error.contains("Super + Space"),
+            error.contains("Open look=see>do_") && error.contains("Super + Space"),
             "{error}"
         );
     }
@@ -242,9 +242,9 @@ async fn check_warns_as_you_type() {
     assert_eq!(free["conflicts"], json!([]));
     assert_eq!(free["combo_text"], "Super + Shift + F9");
     // Editing a default: its own keys are no conflict, another's are.
-    let own = page.check(&json!({"id": "uq.spotlight", "combo": "SUPER + Space"}));
+    let own = page.check(&json!({"id": "uq.lookseedo", "combo": "SUPER + Space"}));
     assert_eq!(own["valid"], true);
-    let other = page.check(&json!({"id": "uq.spotlight", "combo": "SUPER + Q"}));
+    let other = page.check(&json!({"id": "uq.lookseedo", "combo": "SUPER + Q"}));
     assert_eq!(other["valid"], false);
     assert_eq!(other["conflicts"][0]["label"], "Close the window");
     // A bare letter, nothing typed yet, a key that doesn't exist.
@@ -320,7 +320,7 @@ async fn uqd_refusal_shows_plain_reason() {
     .await;
     let error = out.error.unwrap();
     assert!(
-        error.contains("Mine") && error.contains("Open Spotlight"),
+        error.contains("Mine") && error.contains("Open look=see>do_"),
         "{error}"
     );
     assert!(r.state.lock().unwrap().keybinds.custom.is_empty());

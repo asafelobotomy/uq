@@ -82,7 +82,7 @@ fn rules_tree_validation() {
         assert_eq!(text, format!("A rule: {reason}"), "{body:?}");
     }
     // `[keybinds]` is shortcut switches now (`profile::keybinds`).
-    assert!(Profile::parse(&with("[keybinds]\n\"uq.spotlight\" = false\n")).is_ok());
+    assert!(Profile::parse(&with("[keybinds]\n\"uq.lookseedo\" = false\n")).is_ok());
 }
 
 #[test]

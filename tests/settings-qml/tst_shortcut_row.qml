@@ -21,8 +21,8 @@ Item {
 
     function sample(extra) {
         return Object.assign({
-            id: "uq.spotlight",
-            label: "Open Spotlight",
+            id: "uq.lookseedo",
+            label: "Open look=see>do_",
             combo: "SUPER + Space",
             combo_text: "Super + Space",
             default_combo_text: "Super + Space",
@@ -30,7 +30,7 @@ Item {
             is_default: true,
             changed: false,
             can_disable: true,
-            action_text: "Open Spotlight",
+            action_text: "Open look=see>do_",
             source: "default",
             line: null,
             path: null,
@@ -55,7 +55,7 @@ Item {
 
         function test_shows_name_and_keys_in_words() {
             const r = make(root.sample());
-            compare(r.title, "Open Spotlight");
+            compare(r.title, "Open look=see>do_");
             compare(child(r, "comboText").text, "Super + Space");
             verify(!child(r, "reset").visible, "Reset only for a changed shortcut");
             verify(!child(r, "delete").visible);

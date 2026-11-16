@@ -26,7 +26,7 @@ fn term() -> Value {
 #[test]
 fn spec_shape_parses_and_round_trips() {
     let v = json!({
-        "overrides": [{"id": "uq.spotlight", "combo": "SUPER + K"},
+        "overrides": [{"id": "uq.lookseedo", "combo": "SUPER + K"},
                       {"id": "uq.close", "enabled": false}],
         "custom": [{"id": "k-3f9c", "name": "Screenshot", "combo": "SUPER + SHIFT + P",
                     "enabled": true, "locked": false, "repeating": false,
@@ -93,7 +93,7 @@ fn override_equal_to_default_is_dropped() {
     let mut st = State::default();
     write(
         &mut st,
-        json!({"overrides": [{"id": "uq.spotlight", "combo": "WIN + space"},
+        json!({"overrides": [{"id": "uq.lookseedo", "combo": "WIN + space"},
                              {"id": "uq.close", "enabled": true}]}),
     )
     .unwrap();
@@ -183,10 +183,10 @@ fn lock_recovery_stays_on() {
 #[test]
 fn conflicts_refused_with_both_names() {
     let e = err(json!({"custom": [custom("Shot", "SUPER + Space", term())]}));
-    assert!(e.contains("Shot") && e.contains("Open Spotlight"), "{e}");
+    assert!(e.contains("Shot") && e.contains("Open look=see>do_"), "{e}");
     assert!(e.contains("keybinds.custom[0].combo"), "{e}");
     let e = err(json!({"custom": [custom("Shot", "WIN + space", term())]}));
-    assert!(e.contains("Open Spotlight"), "{e}");
+    assert!(e.contains("Open look=see>do_"), "{e}");
     let e = err(json!({"custom": [custom("One", "CTRL + ALT + T", term()),
                                   custom("Two", "ALT + CONTROL + t", term())]}));
     assert!(
@@ -202,7 +202,7 @@ fn conflicts_refused_with_both_names() {
     // An override equal to its default is dropped, so the error key still names the entry as
     // written: here [1], not [0].
     let e = err(
-        json!({"overrides": [{"id": "uq.spotlight", "combo": "SUPER + Space"},
+        json!({"overrides": [{"id": "uq.lookseedo", "combo": "SUPER + Space"},
                                      {"id": "uq.close", "combo": "SUPER + V"}]}),
     );
     assert!(e.contains("keybinds.overrides[1].combo"), "{e}");
@@ -229,7 +229,7 @@ fn conflicts_ignore_disabled_and_unbound() {
     let mut st = State::default();
     write(
         &mut st,
-        json!({"overrides": [{"id": "uq.spotlight", "enabled": false}],
+        json!({"overrides": [{"id": "uq.lookseedo", "enabled": false}],
                "custom": [custom("Mine", "SUPER + Space", term())]}),
     )
     .unwrap();
@@ -270,7 +270,7 @@ fn lock_and_repeat_limits() {
     b["repeating"] = json!(true);
     write(&mut State::default(), json!({"custom": [b]})).unwrap();
     for action in [
-        shell("spotlight"),
+        shell("lookseedo"),
         term(),
         json!({"kind": "launch", "app": "firefox"}),
         json!({"kind": "command", "command": "ls"}),
@@ -440,7 +440,7 @@ fn effective_lists_defaults_then_custom() {
     let mut st = State::default();
     write(
         &mut st,
-        json!({"overrides": [{"id": "uq.spotlight", "combo": "SUPER + K"}, {"id": "uq.close", "enabled": false}],
+        json!({"overrides": [{"id": "uq.lookseedo", "combo": "SUPER + K"}, {"id": "uq.close", "enabled": false}],
                "custom": [custom("Mine", "SUPER + F1", term())]}),
     )
     .unwrap();
@@ -448,10 +448,22 @@ fn effective_lists_defaults_then_custom() {
     assert_eq!(eff.len(), 61);
     let by = |id: &str| eff.iter().find(|e| e.id == id).unwrap();
     assert_eq!(
-        combo::canonical(by("uq.spotlight").combo.unwrap()),
+        combo::canonical(by("uq.lookseedo").combo.unwrap()),
         "SUPER + K"
     );
     assert!(!by("uq.close").enabled && by("uq.terminal").enabled);
     assert!(by("uq.appmenu").release && by("uq.window.drag").mouse);
     assert!(!eff.last().unwrap().is_default);
+}
+
+#[test]
+fn spotlight_names_migrate_to_lookseedo() {
+    let kb: Keybinds = serde_json::from_value(serde_json::json!({
+        "overrides": [{"id": "uq.spotlight", "combo": "SUPER + K"}],
+        "custom": [{"id": "k-abcd", "name": "Mine", "combo": "SUPER + F9",
+                    "action": {"kind": "shell", "name": "spotlight"}}],
+    }))
+    .unwrap();
+    assert_eq!(kb.overrides[0].id, "uq.lookseedo");
+    assert_eq!(kb.custom[0].action, Action::Shell { name: "lookseedo".into() });
 }

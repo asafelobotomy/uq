@@ -1,7 +1,7 @@
 //! Pausing uQ's shortcuts while the page listens for a new one (R11).
 //!
 //! Hyprland sees keys before any app, so pressing a combo that is already bound (Super + Space)
-//! would open Spotlight instead of reaching the editor. `generated.lua` defines an empty submap,
+//! would open look=see>do_ instead of reaching the editor. `generated.lua` defines an empty submap,
 //! `uq_capture`; in it no bind matches and keys go to the focused app. `pause` switches to it
 //! and `resume` (or 15 s passing, or a second `pause`) switches back. While paused every
 //! shortcut, the lock recovery bind included, is off.

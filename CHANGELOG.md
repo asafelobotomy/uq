@@ -24,6 +24,12 @@ All notable changes to uQ are listed here. The format follows
 
 ### Changed
 
+- **Spotlight is now look=see>do_.** The launcher on Super + Space has a new name, and its
+  names inside uQ follow: the shortcut is `uq.lookseedo`, the layer namespace `uq-lookseedo`, the
+  IPC surface and the Hyprland global `uq:lookseedo`, and the four-finger gesture action
+  `uq:lookseedo`. Stored shortcut overrides, custom shortcuts, profiles and gestures using the
+  old names are converted when uQ loads them. Scripts calling `qs ipc ... call uq open
+  spotlight` need the new name.
 - **Tiled windows can't be resized from the screen's outer sides.** Super + right-drag took a
   tiled window by whichever edge was nearest, the outer ones too, moving the window off its side
   of the screen. It is now unbound by default: tiled windows resize only by the grips in the gaps

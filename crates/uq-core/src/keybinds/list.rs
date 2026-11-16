@@ -142,7 +142,7 @@ mod tests {
     #[test]
     fn lists_defaults_overrides_and_custom_in_order() {
         let k = kb(json!({
-            "overrides": [{"id": "uq.spotlight", "combo": "SUPER + K"},
+            "overrides": [{"id": "uq.lookseedo", "combo": "SUPER + K"},
                           {"id": "uq.lock-recovery", "combo": "SUPER + CTRL + R"},
                           {"id": "uq.close", "enabled": false}],
             "custom": [{"name": "Screenshot", "combo": "SUPER + SHIFT + P",
@@ -153,7 +153,7 @@ mod tests {
         assert_eq!(b.len(), 61);
         assert_eq!(b[0]["id"], "uq.terminal");
         assert_eq!(b[60]["name"], "Screenshot");
-        let s = row(&v, "uq.spotlight");
+        let s = row(&v, "uq.lookseedo");
         assert_eq!(s["combo"], "SUPER + K");
         assert_eq!(s["combo_text"], "Super + K");
         assert_eq!(s["default_combo"], "SUPER + Space");
@@ -221,7 +221,7 @@ mod tests {
         };
         assert_eq!(find("shell", "vol-up")["may_lock"], true);
         assert_eq!(find("shell", "vol-up")["may_repeat"], true);
-        assert_eq!(find("shell", "spotlight")["may_lock"], false);
+        assert_eq!(find("shell", "lookseedo")["may_lock"], false);
         assert_eq!(find("uq", "terminal")["may_repeat"], false);
         assert_eq!(find("uq", "media")["may_lock"], true);
         assert_eq!(

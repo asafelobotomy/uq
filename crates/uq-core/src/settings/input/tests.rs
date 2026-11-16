@@ -270,7 +270,7 @@ fn input_section_round_trips() {
                 "devices": {"Logitech G502": {"sensitivity": -0.3}},
                 "gestures": [
                     {"fingers": 3, "direction": "horizontal", "action": "workspace", "enabled": true},
-                    {"fingers": 4, "direction": "up", "action": "uq:spotlight", "enabled": false},
+                    {"fingers": 4, "direction": "up", "action": "uq:lookseedo", "enabled": false},
                     {"fingers": 3, "direction": "down", "action": "special", "workspace": "magic",
                      "modifier": "SUPER", "enabled": true},
                     {"fingers": 4, "direction": "pinch_in", "action": "uq:quick-settings",
@@ -340,7 +340,7 @@ fn lenient_load_drops_only_bad_gestures() {
         [[input.gestures]]\nfingers = 9\ndirection = \"left\"\naction = \"close\"\n\
         [[input.gestures]]\nfingers = 4\ndirection = \"diagonal\"\naction = \"close\"\n\
         [[input.gestures]]\nfingers = 3\ndirection = \"left\"\naction = \"close\"\n\
-        [[input.gestures]]\nfingers = 4\ndirection = \"up\"\naction = \"uq:spotlight\"\nfuture = 1\n\
+        [[input.gestures]]\nfingers = 4\ndirection = \"up\"\naction = \"uq:lookseedo\"\nfuture = 1\n\
         [input.swipe]\ndistance = 9000\ninvert = false\n";
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path().join("state.toml");

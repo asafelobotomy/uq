@@ -19,7 +19,7 @@ import "../logic/failure.js" as F
 PanelWindow {
     id: root
 
-    readonly property bool shown: Surfaces.open === "spotlight" && !Bridge.locked
+    readonly property bool shown: Surfaces.open === "lookseedo" && !Bridge.locked
     // The focused monitor at the moment the surface opened, so an open surface stays put when
     // the cursor (and Hyprland's focus) crosses to another output. Followed live only while hidden.
     property var openedOn: null
@@ -53,7 +53,7 @@ PanelWindow {
     screen: target
     color: "transparent"
     WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.namespace: "uq-spotlight"
+    WlrLayershell.namespace: "uq-lookseedo"
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
     exclusionMode: ExclusionMode.Ignore
     anchors.top: true
@@ -61,7 +61,7 @@ PanelWindow {
     implicitWidth: Math.min(640, Math.round((screen ? screen.width : 1280) * 0.5))
     // The tallest the panel can get, fixed: the panel grows and shrinks inside it as rows arrive,
     // so it never outruns the compositor's resize (a clipped panel with no bottom edge). Only the
-    // panel takes input; a click below it falls through to what's underneath and closes Spotlight.
+    // panel takes input; a click below it falls through to what's underneath and closes look=see>do_.
     readonly property int maxListHeight: Math.round((screen ? screen.height : 1080) * 0.55)
     implicitHeight: maxListHeight + 200
     mask: Region { item: panel }
@@ -137,7 +137,7 @@ PanelWindow {
         return reply;
     }
 
-    // The open windows, read when a search runs (not kept up to date while Spotlight is shut).
+    // The open windows, read when a search runs (not kept up to date while look=see>do_ is shut).
     function windowList() {
         var out = [], vals = Hyprland.toplevels.values;
         var mon = Hyprland.focusedMonitor;
@@ -226,7 +226,7 @@ PanelWindow {
         var label = String(item.name || item.title || item.id || "");
         var what = a.kind === "launch" ? "Couldn't open " + label
             : a.kind === "copy" ? "Couldn't copy that" : "Couldn't do that";
-        // A refusal keeps Spotlight open and says why; it closes once the call worked (or after
+        // A refusal keeps look=see>do_ open and says why; it closes once the call worked (or after
         // activateClose, if that takes long).
         var fail = function (e) {
             activateClose.stop();
@@ -309,12 +309,12 @@ PanelWindow {
     Connections {
         target: Surfaces
         function onWipe(surface) {
-            if (surface === "spotlight")
+            if (surface === "lookseedo")
                 root.wipe();
         }
         // The emoji bind: start at ":" as if typed, so the search runs as usual.
         function onPrefill(surface, text) {
-            if (surface !== "spotlight")
+            if (surface !== "lookseedo")
                 return;
             field.text = text;
             root.edited(field.text);
@@ -353,7 +353,7 @@ PanelWindow {
                 implicitHeight: 36
                 maximumLength: 256
                 placeholder: "Search apps, files, settings, windows, or type a web address"
-                Accessible.name: "Spotlight search"
+                Accessible.name: "look=see>do_ search"
                 onEdited: function (text) { root.edited(text); }
                 Keys.onPressed: function (event) {
                     if (event.key === Qt.Key_Escape) {
@@ -521,7 +521,7 @@ PanelWindow {
                 color: Theme.success
             }
             UqText {
-                objectName: "spotlightError"
+                objectName: "lookseedoError"
                 Layout.fillWidth: true
                 visible: text !== ""
                 text: root.error !== "" ? root.error : root.searchError

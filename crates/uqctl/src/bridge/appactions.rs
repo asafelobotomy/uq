@@ -1,5 +1,5 @@
 //! App actions (Phase 4 spec §2.4.2): `/usr/share/uq/launcher/actions/<id>.appaction` files,
-//! shown in the right-click menu of matching app rows in Spotlight and the app menu.
+//! shown in the right-click menu of matching app rows in look=see>do_ and the app menu.
 //!
 //! The bridge reads the directory at start and on every change (inotify, 1 s debounce) and
 //! sends the actions the shell may show in an `AppActions` event. Running one goes through

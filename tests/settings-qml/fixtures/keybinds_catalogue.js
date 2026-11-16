@@ -8,9 +8,9 @@ var catalogue = {
       {
         "action": {
           "kind": "shell",
-          "name": "spotlight"
+          "name": "lookseedo"
         },
-        "label": "Opens Spotlight",
+        "label": "Opens look=see>do_",
         "may_lock": false,
         "may_repeat": true
       },

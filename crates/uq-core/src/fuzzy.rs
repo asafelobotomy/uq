@@ -1,4 +1,4 @@
-//! Fuzzy matching shared by Settings' search and Spotlight's Settings results: a
+//! Fuzzy matching shared by Settings' search and look=see>do_'s Settings results: a
 //! case-insensitive subsequence match where word starts and runs of consecutive characters score
 //! higher.
 

@@ -1,4 +1,4 @@
-//! Spotlight's Contents group (`files:contents`): files whose text holds the query.
+//! look=see>do_'s Contents group (`files:contents`): files whose text holds the query.
 //!
 //! When KDE's Baloo indexes the files (its index exists, it isn't switched off and
 //! `baloosearch6` is installed), the matches come from Baloo, which also reads PDFs and office
