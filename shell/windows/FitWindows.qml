@@ -11,7 +11,10 @@ import "../logic/shellprefs.js" as ShellPrefs
 // floating or moves to another workspace, and when screens are added, removed or rearranged, any
 // floating window that hangs over its screen's usable area is moved back inside, and one bigger
 // than it is shrunk to fit, so none of its UI is cut off. The rules are in logic/fit.js. A window
-// the user drags partly off screen afterwards is left there: only those events are acted on.
+// the user drags partly off screen afterwards is left there: only those events are acted on. While
+// the pointer has hold of a window (WindowDrag) nothing is moved: the window it lifted out of its
+// layout is floating for the length of the move, and fitting it then would pull it out of the
+// user's hand. What opened or was moved to a workspace meanwhile is looked at afterwards.
 Scope {
     id: root
 
@@ -60,7 +63,7 @@ Scope {
         target: HyprRefresh
         function onSettled() {
             var which = root.pending;
-            if (Object.keys(which).length === 0)
+            if (Object.keys(which).length === 0 || WindowDrag.active)
                 return;
             root.pending = {};
             root.check(which);
@@ -78,6 +81,15 @@ Scope {
         }
     }
 
+    // Let go: what waited is looked at now.
+    Connections {
+        target: WindowDrag
+        function onEnded() {
+            if (Object.keys(root.pending).length > 0)
+                HyprRefresh.request({ monitors: true });
+        }
+    }
+
     Connections {
         target: Hyprland
         function onRawEvent(event) {
@@ -85,6 +97,10 @@ Scope {
                 root.want("*", false);
                 return;
             }
+            // The move's own floating and workspace events are the user's: a window left partly
+            // off screen by it stays there. A window that opens meanwhile still gets fitted.
+            if (WindowDrag.active && event.name !== "openwindow")
+                return;
             var addr = Fit.eventAddress(event.name, event.data);
             if (addr !== null)
                 root.want(addr, event.name === "openwindow");

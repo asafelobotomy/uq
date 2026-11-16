@@ -11,7 +11,9 @@ import "../logic/work.js" as Work
 // own right after it, one opened from a Half column is Half beside it, and a lone window is made
 // Full. The rules are in logic/columns.js; the
 // widths are set with the bridge's column_width action (Full is Hyprland's maximize), which
-// gives focus back afterwards.
+// gives focus back afterwards. Nothing is done while the pointer has hold of a window (WindowDrag):
+// Hyprland lifts it out of its column for the move, which is not a window closing, and the others
+// are looked at once it is let go.
 Scope {
     id: root
 
@@ -71,6 +73,9 @@ Scope {
     }
 
     function look() {
+        // Left as it is, so the look after the drag compares with the windows from before it.
+        if (WindowDrag.active)
+            return;
         var now = read();
         if (root.enabled) {
             var todo = [];
@@ -111,6 +116,11 @@ Scope {
             root.asked = false;
             root.look();
         }
+    }
+    // The pointer let go of a window: look at the windows as they are now.
+    Connections {
+        target: WindowDrag
+        function onEnded() { root.refresh(true); }
     }
     // A workspace switched to or from the scrolling layout.
     Connections {

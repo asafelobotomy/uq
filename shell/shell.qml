@@ -15,6 +15,7 @@ import "pick"
 import "wallpaper"
 import "edge"
 import "windows"
+import "services"
 import "desktop"
 
 ShellRoot {
@@ -85,8 +86,9 @@ ShellRoot {
     ResizeGrips {
         id: resizeGrips
     }
+    // Paused while a gap grip is dragged or the pointer has hold of a window (Super+drag).
     ScreenPages {
-        paused: resizeGrips.dragging
+        paused: resizeGrips.dragging || WindowDrag.active
     }
 
     // The full-screen "click a window" overlay for the rules editor's Pick a window.

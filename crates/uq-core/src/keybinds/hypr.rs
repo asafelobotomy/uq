@@ -99,7 +99,8 @@ pub const SHELL_NAMES: [&str; 14] = [
 ];
 
 /// The dispatchers uQ renders (`hl.dsp.<name>`), from `LuaBindingsDispatchers.cpp`.
-pub const DISPATCHERS: [&str; 11] = [
+pub const DISPATCHERS: [&str; 12] = [
+    "event",
     "exec_cmd",
     "global",
     "focus",
@@ -121,6 +122,11 @@ pub const CAPTURE_SUBMAP: &str = "uq_capture";
 pub const CAPTURE_PLACEHOLDER: &str =
     "hl.bind(\"SUPER + SHIFT + CTRL + ALT + XF86Launch9\", hl.dsp.submap(\"reset\"))";
 pub const UNBIND_ALL: &str = "hl.unbind(\"all\")";
+/// Custom IPC events (`custom>>...` on Hyprland's event socket) sent when a mouse bind (move or
+/// resize with the pointer) is pressed and when its button is let go. The shell listens (see
+/// `shell/services/WindowDrag.qml`) and keeps its own window rearranging still meanwhile.
+pub const MOUSE_BEGIN_EVENT: &str = "uq-mouse:begin";
+pub const MOUSE_END_EVENT: &str = "uq-mouse:end";
 
 #[cfg(test)]
 mod tests {

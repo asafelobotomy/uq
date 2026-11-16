@@ -100,6 +100,8 @@ hl.bind("SUPER + S", hl.dsp.workspace.toggle_special("magic"), { description = "
 hl.bind("SUPER + SHIFT + S", hl.dsp.window.move({ workspace = "special:magic" }), { description = "uq:uq.special.move" })
 hl.bind("SUPER + mouse_down", hl.dsp.focus({ workspace = "e+1" }), { description = "uq:uq.ws.next" })
 hl.bind("SUPER + mouse_up", hl.dsp.focus({ workspace = "e-1" }), { description = "uq:uq.ws.prev" })
+hl.bind("SUPER + mouse:272", hl.dsp.event("uq-mouse:begin"), { non_consuming = true })
+hl.bind("SUPER + mouse:272", hl.dsp.event("uq-mouse:end"), { release = true, ignore_mods = true, non_consuming = true })
 hl.bind("SUPER + mouse:272", hl.dsp.window.drag(), { mouse = true, description = "uq:uq.window.drag" })
 hl.bind("SUPER + CTRL + L", hl.dsp.exec_cmd("systemctl --user restart uq-lock.service || hyprlock"), { locked = true, description = "uq:uq.lock-recovery" })
 hl.bind("XF86AudioRaiseVolume", hl.dsp.global("uq:vol-up"), { locked = true, repeating = true, description = "uq:uq.vol-up" })

@@ -3,7 +3,8 @@
 use super::lua_string;
 use crate::keybinds::combo::canonical;
 use crate::keybinds::hypr::{
-    BIND_OPTIONS, CAPTURE_PLACEHOLDER, CAPTURE_SUBMAP, DESCRIPTION_PREFIX, UNBIND_ALL,
+    BIND_OPTIONS, CAPTURE_PLACEHOLDER, CAPTURE_SUBMAP, DESCRIPTION_PREFIX, MOUSE_BEGIN_EVENT,
+    MOUSE_END_EVENT, UNBIND_ALL,
 };
 use crate::keybinds::{Effective, Keybinds};
 use std::fmt::Write as _;
@@ -25,11 +26,35 @@ pub fn emit_binds(kb: &Keybinds) -> String {
     );
     for e in kb.effective() {
         if e.enabled && e.combo.is_some() {
+            if e.mouse {
+                for hook in emit_mouse_hooks(&e) {
+                    out.push_str(&hook);
+                    out.push('\n');
+                }
+            }
             out.push_str(&emit_bind(&e));
             out.push('\n');
         }
     }
     out
+}
+
+/// The two lines that go before a mouse bind's own: one tells the shell the button went down, the
+/// other that it came up. Both leave the click to the bind (`non_consuming`); the release one
+/// ignores modifiers, since Super may be let go before the button. They are what lets the shell
+/// hold still while a window is being moved or resized with the pointer.
+pub fn emit_mouse_hooks(e: &Effective) -> [String; 2] {
+    let keys = lua_string(&e.combo.map(canonical).unwrap_or_default());
+    [
+        format!(
+            "hl.bind({keys}, hl.dsp.event({}), {{ non_consuming = true }})",
+            lua_string(MOUSE_BEGIN_EVENT)
+        ),
+        format!(
+            "hl.bind({keys}, hl.dsp.event({}), {{ release = true, ignore_mods = true, non_consuming = true }})",
+            lua_string(MOUSE_END_EVENT)
+        ),
+    ]
 }
 
 /// One `hl.bind` line (no newline). Options come in `BIND_OPTIONS` order and only when true;
@@ -104,7 +129,7 @@ mod tests {
             l[3],
             "hl.bind(\"SUPER + Return\", hl.dsp.exec_cmd(\"systemd-run --user --scope --quiet --collect --slice=app.slice --unit=app-uq-kitty-$$ -- kitty\"), { description = \"uq:uq.terminal\" })"
         );
-        assert_eq!(out.matches("hl.bind(").count(), 59);
+        assert_eq!(out.matches("hl.bind(").count(), 61);
         assert!(!out.contains("uq.profile.next"));
         assert!(out.ends_with('\n'));
     }
@@ -132,6 +157,42 @@ mod tests {
     }
 
     #[test]
+    fn mouse_binds_get_hooks_before_them() {
+        let out = emit_binds(&Keybinds::default());
+        let l = lines(&out);
+        let at = l
+            .iter()
+            .position(|x| x.contains("\"uq:uq.window.drag\""))
+            .unwrap();
+        assert_eq!(
+            l[at - 2],
+            "hl.bind(\"SUPER + mouse:272\", hl.dsp.event(\"uq-mouse:begin\"), { non_consuming = true })"
+        );
+        assert_eq!(
+            l[at - 1],
+            "hl.bind(\"SUPER + mouse:272\", hl.dsp.event(\"uq-mouse:end\"), { release = true, ignore_mods = true, non_consuming = true })"
+        );
+        // Only mouse binds get them: one (move), a begin and an end.
+        assert_eq!(out.matches("uq-mouse:begin").count(), 1);
+        assert_eq!(out.matches("uq-mouse:end").count(), 1);
+    }
+
+    #[test]
+    fn a_disabled_mouse_bind_leaves_no_hooks() {
+        let kb = Keybinds {
+            overrides: vec![Override {
+                id: "uq.window.drag".into(),
+                combo: None,
+                enabled: Some(false),
+            }],
+            custom: vec![],
+        };
+        let out = emit_binds(&kb);
+        assert!(!out.contains("mouse:272"));
+        assert!(!out.contains("uq-mouse:"));
+    }
+
+    #[test]
     fn override_rebinds_and_disables() {
         let kb = Keybinds {
             overrides: vec![
@@ -152,7 +213,7 @@ mod tests {
         assert!(out.contains("hl.bind(\"SUPER + K\", hl.dsp.global(\"uq:lookseedo\")"));
         assert!(!out.contains("\"SUPER + Space\""));
         assert!(!out.contains("uq:uq.close"));
-        assert_eq!(out.matches("hl.bind(").count(), 58);
+        assert_eq!(out.matches("hl.bind(").count(), 60);
     }
 
     #[test]
@@ -169,7 +230,7 @@ mod tests {
         assert!(out.contains(
             "hl.bind(\"SUPER + ALT + P\", hl.dsp.exec_cmd(\"uqctl profile next\"), { description = \"uq:uq.profile.next\" })"
         ));
-        assert_eq!(out.matches("hl.bind(").count(), 60);
+        assert_eq!(out.matches("hl.bind(").count(), 62);
     }
 
     #[test]
@@ -253,7 +314,7 @@ mod tests {
             let out = emit_binds(&kb);
             let l = lines(&out);
             let base = l.len() - 2;
-            assert_eq!(out.matches("hl.bind(").count(), 61, "{h:?}");
+            assert_eq!(out.matches("hl.bind(").count(), 63, "{h:?}");
             for (line, is_command) in [(l[base], true), (l[base + 1], false)] {
                 assert!(line.starts_with("hl.bind(\"SUPER + F"), "{line}");
                 let arg_at = line.find("hl.dsp.exec_cmd(").unwrap() + "hl.dsp.exec_cmd(".len();
