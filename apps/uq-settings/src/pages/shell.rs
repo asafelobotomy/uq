@@ -18,7 +18,7 @@ use crate::desktop_entries;
 use crate::pages::runner::{ORIGIN, PageLogic, parse_json, patch_section};
 
 /// The `SetSetting` keys this page may send.
-const SETTING_KEYS: [&str; 11] = [
+const SETTING_KEYS: [&str; 12] = [
     "pinned",
     "idle.dim",
     "idle.lock",
@@ -30,6 +30,7 @@ const SETTING_KEYS: [&str; 11] = [
     "notif.show_summary",
     "privacy.public_ip_lookup",
     "privacy.record_launches",
+    "ui.print_action",
 ];
 
 /// The `shell` section's fields (`islands.<id>` patches one island).
