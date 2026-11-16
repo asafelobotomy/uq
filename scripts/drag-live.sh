@@ -237,12 +237,23 @@ if [ "$scenario" = tabs ]; then
     # More windows: the tabs narrow until each is an icon.
     for n in 4 5 6 7 8; do open_window "window $n long title"; settle 1.2; done
     settle 1; shot -g "0,0 1280x60" "$cap/tabs-2-icons.png"
+    # The pointer, for the tooltip and a real click on the tab.
+    mkfifo "$tmp/in"
+    env XDG_RUNTIME_DIR="$rt" WAYLAND_DISPLAY="$wl" "$tmp/uqinput" 1280 720 <"$tmp/in" >"$tmp/uqinput.out" 2>&1 &
+    pids+=($!)
+    exec 7>"$tmp/in"
+    for _ in $(seq 1 50); do grep -q ready "$tmp/uqinput.out" && break; sleep 0.1; done
+    grep -q ready "$tmp/uqinput.out" || fail "uqinput: $(cat "$tmp/uqinput.out")"
+    # Over an icon-sized tab (the second): its title shows in a tooltip.
+    printf '%s\n' "move 300 30" "sleep 200" "move 339 30" >&7; settle 2
+    shot -g "0,0 1280x100" "$cap/tabs-3-tooltip.png"
+    printf '%s\n' "move 700 300" >&7; settle 1
     a1=$(addr_of "one long title")
     d "[\"minimise\",{\"address\":\"$a1\",\"from_ws\":1}]"; settle 2
-    shot -g "0,0 1280x60" "$cap/tabs-3-minimised.png"
-    last=$(hc clients -j | jq -r '[.[] | select(.workspace.id == 1)] | max_by(.at[0]) | .address')
-    d "[\"restore\",{\"address\":\"$a1\",\"to_ws\":1,\"after\":\"$last\"}]"; settle 3
-    shot -g "0,0 1280x60" "$cap/tabs-4-restored.png"
+    shot -g "0,0 1280x60" "$cap/tabs-4-minimised.png"
+    # Click the minimised tab (the last, greyed icon): the window comes back as the last column.
+    printf '%s\n' "move 781 30" "sleep 400" "button 272 down" "sleep 80" "button 272 up" >&7; settle 3
+    shot -g "0,0 1280x60" "$cap/tabs-5-restored.png"
     echo "--- after"; snap after; echo "order: $(xs)"
     [ "$(active)" = "one long title" ] || { echo "FAIL: the restored window lost focus (active is '$(active)')"; bad=1; }
     [ "$(hc clients -j | jq -r '[.[] | select(.workspace.id == 1)] | max_by(.at[0]) | .title')" = "one long title" ] \
