@@ -1,24 +1,21 @@
 pragma Singleton
 import QtQuick
-import Quickshell.Io
 import "../logic/lookhome.js" as H
 
 // look=see>do_'s own memory: the five pinned squares and the apps opened most recently, as plain
-// desktop ids in `<state>/uq/lookseedo.json`. Nothing here launches anything; logic/lookhome.js
-// checks every id read back. A file that is missing or unreadable just means empty lists, and a
-// save that fails leaves the lists as they are in memory for this session.
+// desktop ids. Pure QML so it loads under qmltestrunner; LauncherStateIo (shell.qml) reads and
+// writes the file. logic/lookhome.js checks every id read back, and a file that is missing or
+// unreadable just means empty lists.
 QtObject {
     id: root
 
     property var pins: H.normalisePins(null)
     property var recents: []
+    // True once the file has been read (or found missing): nothing is saved before that.
     property bool loaded: false
 
-    // Empty until ThemeIo has told Theme where $HOME is, so nothing is read or written at a
-    // made-up path.
-    readonly property bool dirKnown: Theme.stateDir.charAt(0) === "/" && Theme.stateDir.indexOf("undefined") < 0
-        && Theme.stateDir !== "/.local/state"
-    readonly property string path: dirKnown ? Theme.uqDir + "/lookseedo.json" : ""
+    // The text LauncherStateIo should write; it listens for this.
+    signal saveRequested(string text)
 
     function setPin(slot, id) {
         root.pins = H.setPin(root.pins, slot, id);
@@ -35,19 +32,14 @@ QtObject {
 
     function save() {
         if (root.loaded)
-            file.setText(H.serialise(root.pins, root.recents));
+            root.saveRequested(H.serialise(root.pins, root.recents));
     }
 
-    property FileView file: FileView {
-        path: root.path
-        printErrors: false
-        atomicWrites: true
-        onLoaded: {
-            var s = H.parse(text());
-            root.pins = s.pins;
-            root.recents = s.recents;
-            root.loaded = true;
-        }
-        onLoadFailed: root.loaded = true
+    // Called by LauncherStateIo with the file's text, or "" when there is none.
+    function load(text) {
+        var s = H.parse(text);
+        root.pins = s.pins;
+        root.recents = s.recents;
+        root.loaded = true;
     }
 }

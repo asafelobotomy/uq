@@ -1025,6 +1025,7 @@ PanelWindow {
                 UqText {
                     objectName: "lookseedoHint"
                     Layout.fillWidth: true
+                    Layout.topMargin: Theme.gapIn
                     visible: root.termState !== "sent"
                     text: root.pinSlot >= 0 ? "Enter pins the app   Esc goes back"
                         : (root.runMode ? "Enter runs it in " + root.termName + "   Shift+Enter runs it in the background"
