@@ -227,22 +227,22 @@ if [ "$scenario" = tabs ]; then
         mkdir -p "$cap/frames"
         shot() { env XDG_RUNTIME_DIR="$rt" WAYLAND_DISPLAY="$wl" grim "$@" 2>/dev/null; }
         # Frames of the bar only (the top strip), ~5 a second, for the GIF.
-        (n=0; while :; do shot -g "0,0 1280 60" "$cap/frames/$(printf %04d $n).png"; n=$((n + 1)); sleep 0.2; done) &
+        (n=0; while :; do shot -g "0,0 1280x60" "$cap/frames/$(printf %04d $n).png"; n=$((n + 1)); sleep 0.2; done) &
         grabber=$!; pids+=($!)
     else
         shot() { :; }
     fi
     echo "bar layers:"; hc layers -j | jq -c '.. | objects | select(.namespace? | tostring | test("bar")) | {namespace, x, y, w, h}'
-    settle 1; shot -g "0,0 1280 60" "$cap/tabs-1-titles.png"
+    settle 1; shot -g "0,0 1280x60" "$cap/tabs-1-titles.png"
     # More windows: the tabs narrow until each is an icon.
     for n in 4 5 6 7 8; do open_window "window $n long title"; settle 1.2; done
-    settle 1; shot -g "0,0 1280 60" "$cap/tabs-2-icons.png"
+    settle 1; shot -g "0,0 1280x60" "$cap/tabs-2-icons.png"
     a1=$(addr_of "one long title")
     d "[\"minimise\",{\"address\":\"$a1\",\"from_ws\":1}]"; settle 2
-    shot -g "0,0 1280 60" "$cap/tabs-3-minimised.png"
+    shot -g "0,0 1280x60" "$cap/tabs-3-minimised.png"
     last=$(hc clients -j | jq -r '[.[] | select(.workspace.id == 1)] | max_by(.at[0]) | .address')
     d "[\"restore\",{\"address\":\"$a1\",\"to_ws\":1,\"after\":\"$last\"}]"; settle 3
-    shot -g "0,0 1280 60" "$cap/tabs-4-restored.png"
+    shot -g "0,0 1280x60" "$cap/tabs-4-restored.png"
     echo "--- after"; snap after; echo "order: $(xs)"
     [ "$(active)" = "one long title" ] || { echo "FAIL: the restored window lost focus (active is '$(active)')"; bad=1; }
     [ "$(hc clients -j | jq -r '[.[] | select(.workspace.id == 1)] | max_by(.at[0]) | .title')" = "one long title" ] \

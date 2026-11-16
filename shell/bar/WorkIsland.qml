@@ -877,7 +877,7 @@ Island {
                             backer.sourceSize.width: root.iconSize * root.dpr
                             backer.sourceSize.height: root.iconSize * root.dpr
                             source: root.iconFor(pill.win.cls)
-                            layer.enabled: pill.win.minimised
+                            layer.enabled: pill.win.minimised === true
                             layer.effect: MultiEffect {
                                 saturation: -1.0
                             }
