@@ -80,6 +80,9 @@ pub enum Action {
     Restore {
         address: String,
         to_ws: i64,
+        /// The window to land after: the last one (rightmost column) on the workspace, so the
+        /// restored window joins at the end of the queue. None: where Hyprland puts it.
+        after: Option<String>,
     },
     /// Give a floating window this size and put its top-left corner here (layout coordinates,
     /// as Hyprland reports `at`): the shell's "keep windows on screen".
@@ -152,10 +155,14 @@ pub enum Action {
 type PageWorkspace = (i64, String, Vec<(String, Vec<String>)>);
 
 fn address(o: &Value) -> Result<String, String> {
+    address_at(o, "address")
+}
+
+fn address_at(o: &Value, key: &str) -> Result<String, String> {
     let a = o
-        .get("address")
+        .get(key)
         .and_then(Value::as_str)
-        .ok_or("address must be a string")?;
+        .ok_or_else(|| format!("{key} must be a string"))?;
     if valid_address(a) {
         Ok(a.to_string())
     } else {
@@ -236,6 +243,10 @@ impl Action {
             "restore" => Action::Restore {
                 address: address(a)?,
                 to_ws: ws_id(a, "to_ws")?,
+                after: match a.get("after") {
+                    None | Some(Value::Null) => None,
+                    Some(_) => Some(address_at(a, "after")?),
+                },
             },
             "resize" => Action::Resize {
                 windows: match a.get("windows").and_then(Value::as_array) {
@@ -460,11 +471,22 @@ impl Action {
             // Focus goes to the window last: a restore is the user choosing it, and the shell's
             // column policy treats it as a new window and focuses it briefly to size it, then
             // gives focus back to whatever had it. Without this the window lost to that.
-            Action::Restore { address, to_ws } => vec![
-                move_lua(address, &WsTarget::Id(*to_ws)),
-                tag_lua(address, &format!("-uq_ws_{to_ws}")),
-                d(format!("hl.dsp.focus({{ window = {} }})", win(address))),
-            ],
+            // Focusing `after` first makes the scrolling layout put the window next to it: the
+            // end of the queue.
+            Action::Restore {
+                address,
+                to_ws,
+                after,
+            } => {
+                let mut steps = Vec::new();
+                if let Some(after) = after {
+                    steps.push(d(format!("hl.dsp.focus({{ window = {} }})", win(after))));
+                }
+                steps.push(move_lua(address, &WsTarget::Id(*to_ws)));
+                steps.push(tag_lua(address, &format!("-uq_ws_{to_ws}")));
+                steps.push(d(format!("hl.dsp.focus({{ window = {} }})", win(address))));
+                steps
+            }
             // The rest depends on the window's state once focused: see `run` and `column_lua`.
             Action::ColumnWidth { address, .. } => {
                 vec![d(format!("hl.dsp.focus({{ window = {} }})", win(address)))]
@@ -1399,6 +1421,14 @@ mod tests {
         let s = script(&Action::from_call("restore", &json!({"address": A, "to_ws": 4})).unwrap());
         assert!(s.find("uq_ws_4").unwrap() < s.find("hl.dsp.focus").unwrap());
         assert!(s.contains("no_warps = true"), "the pointer stays put");
+        // With `after`, the last window on the workspace is focused first, so the restored
+        // window lands behind it.
+        let a2 = "0x55d0c0ffe2";
+        let s = script(
+            &Action::from_call("restore", &json!({"address": A, "to_ws": 4, "after": a2})).unwrap(),
+        );
+        assert!(s.find(a2).unwrap() < s.find("uq_ws_4").unwrap());
+        assert!(Action::from_call("restore", &json!({"address": A, "to_ws": 4, "after": "x"})).is_err());
         // keep_pointer: no_warps switched on, and back after the steps whatever they did.
         let s = script(
             &Action::from_call("focus_window", &json!({"address": A, "keep_pointer": true}))
