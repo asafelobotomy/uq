@@ -12,6 +12,9 @@ Rectangle {
     id: row
 
     property string settingId
+    /// Marks a row for SettingsCard, which lays rows out two to a line in a card that spans both
+    /// columns of a wide tab.
+    readonly property bool isSettingRow: true
     property string label
     /// An icon before the label: what the setting is about, at a glance.
     property string iconName: ""
@@ -94,6 +97,10 @@ Rectangle {
     }
 
     implicitWidth: layout.implicitWidth + Kirigami.Units.largeSpacing * 2
+    // A label and its control never end up further apart than a column of cards (see
+    // SettingsTab.columnWidth), wherever the row is: a wide card, a page with no tab. Controls
+    // that fill the row (a gallery, a canvas) take all the room they are given.
+    Layout.maximumWidth: row.wideControls ? -1 : Kirigami.Units.gridUnit * 44
     // Every row at least one control tall, so a card's rows sit on an even rhythm.
     implicitHeight: Math.max(layout.implicitHeight + Kirigami.Units.smallSpacing * 2, Kirigami.Units.gridUnit * 2.25)
     radius: Kirigami.Units.cornerRadius
