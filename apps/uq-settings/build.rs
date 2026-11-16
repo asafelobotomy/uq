@@ -11,6 +11,7 @@ fn main() {
         QmlFile::from("qml/components/CommandConfirmDialog.qml"),
         QmlFile::from("qml/components/UqLabel.qml"),
         QmlFile::from("qml/components/UqAvatar.qml"),
+        QmlFile::from("qml/components/UqAppIcon.qml"),
         QmlFile::from("qml/components/ScrollReveal.qml"),
         QmlFile::from("qml/components/SettingRow.qml"),
         QmlFile::from("qml/components/HelpTip.qml"),
