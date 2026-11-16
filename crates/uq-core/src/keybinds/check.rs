@@ -37,9 +37,11 @@ pub fn override_(i: usize, o: &Override) -> Result<Option<Override>, SettingErro
         let c = parse(&at("combo"), text)?;
         let own = d.combo.and_then(|t| combo::parse(t).ok());
         // An unbound mouse row (resize) still takes a mouse button, not a key.
-        let own_kind = own
-            .map(combo::kind)
-            .unwrap_or(if d.mouse { KeyKind::Button } else { KeyKind::Key });
+        let own_kind = own.map(combo::kind).unwrap_or(if d.mouse {
+            KeyKind::Button
+        } else {
+            KeyKind::Key
+        });
         let k = combo::kind(c);
         // The app menu is a release bind on a lone Super key; it may also take a plain key.
         let fits = k == own_kind || (d.id == "uq.appmenu" && k == KeyKind::Key);
