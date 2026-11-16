@@ -10,6 +10,7 @@ pub mod fuzzy;
 pub mod gestures;
 pub mod history;
 pub mod integration;
+pub mod kdeglobals;
 pub mod keybinds;
 pub mod launcher_providers;
 pub mod lua;

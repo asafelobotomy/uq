@@ -6,13 +6,17 @@
 # The same as greetd's stack, plus the keyring: the password typed at the login screen unlocks
 # the "login" keyring (GNOME Keyring, the Secret Service Wi-Fi, browsers and apps keep passwords
 # in), and a password change re-encrypts it. Without this, every login asked to unlock it again.
-# The leading `-` skips a line quietly when gnome-keyring isn't installed.
+# KDE Wallet (Dolphin, Plasma and KDE apps keep passwords there) is opened the same way, placed as
+# KDE's own sddm PAM file places it. It needs kwallet-pam, and a wallet named `kdewallet` with the
+# login password. The leading `-` skips a line quietly when its module isn't installed.
 auth       required     pam_securetty.so
 auth       requisite    pam_nologin.so
 auth       include      system-local-login
 -auth      optional     pam_gnome_keyring.so
+-auth      optional     pam_kwallet5.so
 account    include      system-local-login
 password   include      system-local-login
 -password  optional     pam_gnome_keyring.so use_authtok
 session    include      system-local-login
 -session   optional     pam_gnome_keyring.so auto_start
+-session   optional     pam_kwallet5.so auto_start

@@ -23,6 +23,11 @@ All notable changes to uQ are listed here. The format follows
   a minimised one back.
 - **Type a web address in Spotlight** (`example.com`, `https://…`, `localhost:3000`) to open
   it in your default browser.
+- **KDE Wallet unlocks at login.** The login screen's PAM file, `/etc/pam.d/uq-greetd`, opens
+  KDE Wallet with your password the way KDE's own login screen does, so Dolphin and other KDE
+  apps stop asking for it. It needs `kwallet-pam` (now an optional dependency) and a wallet
+  named `kdewallet` with your login password; without them, logging in works as before. If you
+  changed that file yourself, pacman keeps yours and leaves a `.pacnew` to merge.
 
 ### Changed
 
@@ -34,8 +39,12 @@ All notable changes to uQ are listed here. The format follows
 
 - **Spotlight no longer looks broken while you type.** The window resized after the panel did,
   so while results arrived the panel was cut off with no bottom edge; now it grows inside a
-  window that stays put. A long list fades out instead of ending on half a row, the type label is shown
-  only on the top hit, and a search with no results says "No matches".
+  window that stays put. A long list fades out instead of ending on half a row, the type label
+  is shown only on the top hit, and a search with no results says "No matches".
+- **Dolphin's "Open Terminal Here" opens kitty.** KDE apps look for a terminal in
+  `~/.config/kdeglobals` and fall back to Konsole, so without Konsole the action did nothing.
+  uQ now sets `TerminalApplication=kitty` there when kitty is installed and no terminal is named;
+  a terminal you chose yourself is kept.
 
 ## [0.3.0-rc.6] - 2026-11-15
 

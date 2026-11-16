@@ -1268,6 +1268,10 @@ impl Desktop {
                     {
                         tracing::warn!("qt6ct icon theme: {e}");
                     }
+                    // KDE apps' terminal (Dolphin's "Open Terminal Here"), unless one is named.
+                    if let Err(e) = uq_core::kdeglobals::ensure_terminal(&self.paths) {
+                        tracing::warn!("kdeglobals terminal: {e}");
+                    }
                     let cursor = self
                         .comp
                         .set_cursor(&theme.icons.cursor_theme, theme.icons.cursor_size)
@@ -1464,6 +1468,38 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(fs::read_to_string(&conf).unwrap(), ours);
+    }
+
+    #[tokio::test]
+    async fn kde_terminal_is_named_while_hyprland_runs_and_never_replaced() {
+        let kitty = std::env::var_os("PATH")
+            .is_some_and(|ps| std::env::split_paths(&ps).any(|d| d.join("kitty").is_file()));
+        let mut r = rig();
+        r.desktop.startup().await;
+        let conf = uq_core::kdeglobals::conf_path(r.desktop.paths());
+        if kitty {
+            assert_eq!(
+                fs::read_to_string(&conf).unwrap(),
+                "[General]\nTerminalApplication=kitty\n"
+            );
+        } else {
+            assert!(!conf.exists(), "no kitty: nothing to name");
+        }
+        // A terminal the user chose stays.
+        fs::write(&conf, "[General]\nTerminalApplication=konsole\n").unwrap();
+        r.desktop
+            .set_theme("gruvbox", Variant::Dark, Origin::Settings)
+            .await
+            .unwrap();
+        assert_eq!(
+            fs::read_to_string(&conf).unwrap(),
+            "[General]\nTerminalApplication=konsole\n"
+        );
+
+        // Without Hyprland (a uqd left running in another desktop) nothing is written.
+        let mut off = rig_with(false, |_| {});
+        off.desktop.startup().await;
+        assert!(!uq_core::kdeglobals::conf_path(off.desktop.paths()).exists());
     }
 
     #[tokio::test]

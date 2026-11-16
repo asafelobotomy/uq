@@ -69,9 +69,10 @@ it says so; enable one with `run0 systemctl enable <name>.service`.
     `hl.monitor` lines; if it is missing, doesn't pass, or turns every screen off, the login
     screen arranges the screens automatically. **Use automatic layout** removes it.
 - **Passwords and messages.** PAM runs inside greetd. Logins use `/etc/pam.d/uq-greetd`
-  (`[general] service` in `/etc/uq/greetd.toml`): greetd's stack plus GNOME Keyring, so the
-  password also unlocks your keyring. The greeter's own session, as the `greeter` user, uses
-  `/etc/pam.d/uq-greeter` (`[default_session] service`): the same stack without the keyring, so
+  (`[general] service` in `/etc/uq/greetd.toml`): greetd's stack plus GNOME Keyring and KDE
+  Wallet, so the password also unlocks your keyring and, with `kwallet-pam` installed, a wallet
+  named `kdewallet` that has your login password. The greeter's own session, as the `greeter` user, uses
+  `/etc/pam.d/uq-greeter` (`[default_session] service`): the same stack without the keyring or wallet, so
   no keyring daemon starts for `greeter`. greetd's own `/etc/pam.d/greetd` is never edited.
   Password fields are cleared after every attempt and nothing the greeter logs contains a
   password or a PAM message. A wrong password, a locked account ("The account is locked due to 3 failed logins.") and every other PAM message are shown

@@ -19,6 +19,14 @@ has "$p/greeter/greetd.toml" 'service = "uq-greetd"'
 has "$p/pam/uq-greetd" 'auth       include      system-local-login'
 has "$p/pam/uq-greetd" '-auth      optional     pam_gnome_keyring.so'
 has "$p/pam/uq-greetd" '-session   optional     pam_gnome_keyring.so auto_start'
+# KDE Wallet, as KDE's sddm file does it: auth after the auth stack, session last; both optional.
+has "$p/pam/uq-greetd" '-auth      optional     pam_kwallet5.so'
+has "$p/pam/uq-greetd" '-session   optional     pam_kwallet5.so auto_start'
+[ "$(grep -v '^#' "$p/pam/uq-greetd" | grep '^-*session' | tail -n1)" = '-session   optional     pam_kwallet5.so auto_start' ] \
+    || bad "pam/uq-greetd: the kwallet session line must end the session stack"
+grep -v '^#' "$p/pam/uq-greetd" | grep 'pam_kwallet' | grep -qv 'optional' && bad "pam/uq-greetd: kwallet lines must be optional"
+grep -v '^#' "$p/pam/uq-greeter" | grep -q 'pam_kwallet' && bad "pam/uq-greeter must not open a wallet"
+grep -q "'kwallet-pam: " "$p/uq/PKGBUILD" || bad "kwallet-pam is not an optdepend"
 has "$p/uq/PKGBUILD" '  install -Dm644 packaging/pam/uq-greetd "$pkgdir/etc/pam.d/uq-greetd"'
 # The greeter's own session (user `greeter`) has its own service, without the keyring: no keyring
 # daemon for `greeter`. The user sessions' service above keeps it.
