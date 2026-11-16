@@ -24,6 +24,11 @@ All notable changes to uQ are listed here. The format follows
 
 ### Changed
 
+- **Tiled windows can't be resized from the screen's outer sides.** Super + right-drag took a
+  tiled window by whichever edge was nearest, the outer ones too, moving the window off its side
+  of the screen. It is now unbound by default: tiled windows resize only by the grips in the gaps
+  between them (side by side, or stacked). To resize floating windows with the mouse, bind
+  **Resize the window with the mouse** again in Settings → Shortcuts.
 - **Dependencies updated:** zbus 6, minijinja 3, quick-xml 0.42 and toml 1.2, and the CI
   actions (checkout 7, upload-artifact 7, download-artifact 8). No change in behaviour.
 - **Packaging: `uq` depends on the pin it is tested with** (`uq-hyprland-pin>=0.56.2`, from
