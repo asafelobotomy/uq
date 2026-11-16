@@ -23,12 +23,12 @@ fn all_set_binds() -> Keybinds {
     vol["repeating"] = true.into();
     let v = serde_json::json!({
         "overrides": [
-            {"id": "uq.spotlight", "combo": "SUPER + K"},
+            {"id": "uq.lookseedo", "combo": "SUPER + K"},
             {"id": "uq.close", "enabled": false},
         ],
         "custom": [
-            custom("k-0001", "Spotlight too", "SUPER + F1",
-                serde_json::json!({"kind": "shell", "name": "spotlight"})),
+            custom("k-0001", "look=see>do_ too", "SUPER + F1",
+                serde_json::json!({"kind": "shell", "name": "lookseedo"})),
             custom("k-0002", "Float", "SUPER + F2",
                 serde_json::json!({"kind": "window", "name": "float"})),
             custom("k-0003", "Workspace nine", "SUPER + F3",
@@ -109,7 +109,7 @@ fn all_set() -> Settings {
     s.input.gestures = Some(
         serde_json::from_value(serde_json::json!([
             {"fingers": 3, "direction": "horizontal", "action": "workspace", "enabled": true},
-            {"fingers": 4, "direction": "up", "action": "uq:spotlight", "enabled": false},
+            {"fingers": 4, "direction": "up", "action": "uq:lookseedo", "enabled": false},
             {"fingers": 4, "direction": "down", "action": "uq:quick-settings", "enabled": true},
             {"fingers": 3, "direction": "down", "action": "special", "workspace": "notes",
              "modifier": "SUPER", "enabled": true},

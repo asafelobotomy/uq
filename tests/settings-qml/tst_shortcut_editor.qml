@@ -10,16 +10,16 @@ Item {
 
     property var asked: []
 
-    // KeybindsModel.check for the tests: Super + Space is Spotlight's, Super + T is a marked
+    // KeybindsModel.check for the tests: Super + Space is look=see>do_'s, Super + T is a marked
     // line of user.lua; every other combo is free.
     function check(draftJson) {
         const d = JSON.parse(draftJson);
         root.asked.push(d);
-        if (d.combo === "SUPER + Space" && d.id !== "uq.spotlight") {
+        if (d.combo === "SUPER + Space" && d.id !== "uq.lookseedo") {
             return JSON.stringify({
                 valid: false,
-                error: "“" + (d.name || "Open Spotlight") + "” and “Open Spotlight” both use Super + Space.",
-                conflicts: [{ id: "uq.spotlight", label: "Open Spotlight" }],
+                error: "“" + (d.name || "Open look=see>do_") + "” and “Open look=see>do_” both use Super + Space.",
+                conflicts: [{ id: "uq.lookseedo", label: "Open look=see>do_" }],
                 user_lua: [],
                 combo_text: "Super + Space"
             });
@@ -66,8 +66,8 @@ Item {
             verify(c, "no control " + name);
             return c;
         }
-        function spotlightRow() {
-            return { id: "uq.spotlight", label: "Open Spotlight", combo: "SUPER + Space", combo_text: "Super + Space", enabled: true };
+        function lookseedoRow() {
+            return { id: "uq.lookseedo", label: "Open look=see>do_", combo: "SUPER + Space", combo_text: "Super + Space", enabled: true };
         }
         function fillNew(e, name, combo) {
             e.nameField.text = name;
@@ -80,7 +80,7 @@ Item {
             verify(!control(e, "conflictWarning").visible, "nothing to warn about yet");
             fillNew(e, "Mine", "SUPER + Space");
             verify(control(e, "conflictWarning").visible);
-            compare(control(e, "conflictWarning").text, "“Mine” and “Open Spotlight” both use Super + Space.");
+            compare(control(e, "conflictWarning").text, "“Mine” and “Open look=see>do_” both use Super + Space.");
             verify(!e.saveEnabled, "Save is disabled while the keys are taken");
             // Changing the keys clears the warning.
             e.setFromCombo("SUPER + K");
@@ -150,9 +150,9 @@ Item {
 
         function test_new_shortcut_builds_json_for_each_kind() {
             const e = make();
-            fillNew(e, "  Spotlight too ", "SUPER + F9");
+            fillNew(e, "  look=see>do_ too ", "SUPER + F9");
             let b = JSON.parse(JSON.stringify(e.draft()));
-            compare(b.name, "Spotlight too");
+            compare(b.name, "look=see>do_ too");
             compare(b.combo, "SUPER + F9");
             compare(b.action, { kind: "uq", name: "terminal" });
             verify(!("id" in b));
@@ -177,7 +177,7 @@ Item {
             // A uQ panel.
             kind.currentIndex = 0;
             kind.activated(0);
-            compare(e.draft().action, { kind: "shell", name: "spotlight" });
+            compare(e.draft().action, { kind: "shell", name: "lookseedo" });
         }
 
         function test_lock_and_repeat_switches_only_where_allowed() {
@@ -186,7 +186,7 @@ Item {
             const choice = control(e, "actionChoice");
             kind.currentIndex = 0;
             kind.activated(0);
-            // Spotlight: no lock screen. The volume keys: both.
+            // look=see>do_: no lock screen. The volume keys: both.
             choice.currentIndex = 0;
             choice.activated(0);
             verify(!control(e, "lockedSwitch").visible);
@@ -207,7 +207,7 @@ Item {
         }
 
         function test_changing_one_of_uqs_edits_only_the_keys() {
-            const e = make(spotlightRow(), false);
+            const e = make(lookseedoRow(), false);
             verify(!e.custom);
             verify(!control(e, "shortcutName").visible);
             verify(!control(e, "actionKind").visible);
@@ -217,7 +217,7 @@ Item {
             const accepted = createTemporaryObject(spyComp, root, { target: e, signalName: "comboAccepted" });
             e.save();
             compare(accepted.count, 1);
-            compare(accepted.signalArguments[0][0], "uq.spotlight");
+            compare(accepted.signalArguments[0][0], "uq.lookseedo");
             compare(accepted.signalArguments[0][1], "SUPER + K");
             verify(e.saving);
             verify(!e.saveEnabled, "not twice");

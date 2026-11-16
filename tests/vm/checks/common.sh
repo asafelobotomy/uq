@@ -116,7 +116,7 @@ settle() {
     fi
     dpms_on || { qmp key shift; wait_for 3 dpms_on; }
     local s
-    for s in spotlight appmenu quicksettings powermenu; do ipc close "$s" >/dev/null; done
+    for s in lookseedo appmenu quicksettings powermenu; do ipc close "$s" >/dev/null; done
     qmp key esc >/dev/null
     # Headless outputs added by the noti-fi checks go, so every check starts on one monitor.
     local m

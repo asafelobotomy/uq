@@ -2,7 +2,7 @@
 //! id. It can't set keys, add a shortcut or carry a command, so an imported profile never adds a
 //! command (spec §4).
 //!
-//! `[keybinds]` holds `"<id>" = true|false`, one leaf per shortcut: one of uQ's (`uq.spotlight`)
+//! `[keybinds]` holds `"<id>" = true|false`, one leaf per shortcut: one of uQ's (`uq.lookseedo`)
 //! or one of your own (`k-3f9c`). Ids of your own are random per computer, so a profile's id may
 //! have no shortcut here: `apply` skips it (with [`missing_binds_notice`]) and the file keeps it.
 

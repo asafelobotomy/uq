@@ -96,6 +96,9 @@ hl.config({
     misc = {
         force_default_wallpaper = 0,
         disable_hyprland_logo   = true,
+        -- An app that asks to be activated (a notification's View/Activate action, a tray
+        -- click, xdg-activation) gets focus and its workspace instead of only an urgent mark.
+        focus_on_activate = true,
         -- Session lock (slice 5): survive a lock client crash, keep the lock opaque, and wake
         -- the screen on input.
         allow_session_lock_restore = true,
@@ -145,8 +148,8 @@ hl.bind(mainMod .. " + SHIFT + M", hl.dsp.exec_cmd("command -v hyprshutdown >/de
 -- Launchers, quick settings, the notification centre, the lock and the power menu: Quickshell GlobalShortcuts (appid "uq"). Never locked, so they
 -- don't work over the lock screen. The app menu bind fires when a tap of left SUPER is released; Hyprland shadows it
 -- once another key or button has been pressed and released while SUPER is held.
-hl.bind(mainMod .. " + Space",   hl.dsp.global("uq:spotlight"))
--- SUPER+.: Spotlight opened at ":", the emoji search (an emoji provider such as emobie answers it).
+hl.bind(mainMod .. " + Space",   hl.dsp.global("uq:lookseedo"))
+-- SUPER+.: look=see>do_ opened at ":", the emoji search (an emoji provider such as emobie answers it).
 hl.bind(mainMod .. " + period",  hl.dsp.global("uq:emoji"))
 hl.bind(mainMod .. " + SUPER_L", hl.dsp.global("uq:appmenu"), { release = true })
 hl.bind(mainMod .. " + A",       hl.dsp.global("uq:quick-settings"))
@@ -187,9 +190,10 @@ hl.bind(mainMod .. " + SHIFT + S", hl.dsp.window.move({ workspace = "special:mag
 hl.bind(mainMod .. " + mouse_down", hl.dsp.focus({ workspace = "e+1" }))
 hl.bind(mainMod .. " + mouse_up",   hl.dsp.focus({ workspace = "e-1" }))
 
--- Move/resize with the mouse
+-- Move with the mouse. Resizing is not bound: a mouse resize would take tiled windows from any
+-- edge, the screen's outer ones too. Tiled windows resize by the grips in the gaps between them
+-- (shell/windows/ResizeGrips.qml); bind hl.dsp.window.resize() in user.lua for floating ones.
 hl.bind(mainMod .. " + mouse:272", hl.dsp.window.drag(),   { mouse = true })
-hl.bind(mainMod .. " + mouse:273", hl.dsp.window.resize(), { mouse = true })
 
 -- Lock recovery: if the lock surface dies, this restarts it (locked = true, so it works over the
 -- lock screen). uq-lock.service arrives in a later slice; until then hyprlock takes over.

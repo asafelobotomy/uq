@@ -40,18 +40,18 @@ TestCase {
     function test_state_machine_single_surface() {
         var s = L.initialState();
         compare(s.open, "closed");
-        s = L.transition(s, "toggleSpotlight");
-        compare(s.open, "spotlight");
+        s = L.transition(s, "toggleLookseedo");
+        compare(s.open, "lookseedo");
         verify(!s.wipe);
         // Opening one surface closes the other, which wipes.
         s = L.transition(s, "toggleAppMenu");
         compare(s.open, "appmenu");
         verify(s.wipe);
-        s = L.transition(s, "toggleSpotlight");
-        compare(s.open, "spotlight");
+        s = L.transition(s, "toggleLookseedo");
+        compare(s.open, "lookseedo");
         verify(s.wipe);
         // Toggling the open surface closes it.
-        s = L.transition(s, "toggleSpotlight");
+        s = L.transition(s, "toggleLookseedo");
         compare(s.open, "closed");
         verify(s.wipe);
         s = L.transition(s, "toggleAppMenu");
@@ -60,8 +60,8 @@ TestCase {
         s = L.transition(s, "close");
         compare(s.open, "closed");
         verify(s.wipe);
-        // Quick settings is a third surface: opening it closes Spotlight and reports the wipe.
-        s = L.transition({ open: "spotlight", wipe: false }, "toggleQuickSettings");
+        // Quick settings is a third surface: opening it closes look=see>do_ and reports the wipe.
+        s = L.transition({ open: "lookseedo", wipe: false }, "toggleQuickSettings");
         compare(s.open, "quicksettings");
         verify(s.wipe);
         s = L.transition(s, "toggleAppMenu");
@@ -79,14 +79,14 @@ TestCase {
         compare(s.open, "closed");
         verify(s.wipe);
         // Unknown events and a bad state leave things closed or unchanged.
-        compare(L.transition(L.transition(L.initialState(), "toggleSpotlight"), "bogus").open,
-                "spotlight");
+        compare(L.transition(L.transition(L.initialState(), "toggleLookseedo"), "bogus").open,
+                "lookseedo");
         compare(L.transition(null, "bogus").open, "closed");
         compare(L.transition({ open: "weird" }, "close").open, "closed");
     }
 
     function test_close_and_wipe_on_lock() {
-        var states = ["closed", "spotlight", "appmenu", "quicksettings"];
+        var states = ["closed", "lookseedo", "appmenu", "quicksettings"];
         for (var i = 0; i < states.length; i++) {
             var s = L.transition({ open: states[i], wipe: false }, "lock");
             compare(s.open, "closed", states[i]);
@@ -103,7 +103,7 @@ TestCase {
         s = L.transition(s, "toggleNotifCentre");
         compare(s.open, "closed");
         verify(s.wipe);
-        var others = ["spotlight", "appmenu", "quicksettings"];
+        var others = ["lookseedo", "appmenu", "quicksettings"];
         for (var i = 0; i < others.length; i++) {
             s = L.transition({ open: others[i], wipe: false }, "toggleNotifCentre");
             compare(s.open, "notifcentre", others[i]);
@@ -129,14 +129,14 @@ TestCase {
         s = L.transition(s, "togglePowerMenu");
         compare(s.open, "closed");
         verify(s.wipe);
-        var others = ["spotlight", "appmenu", "quicksettings", "notifcentre"];
+        var others = ["lookseedo", "appmenu", "quicksettings", "notifcentre"];
         for (var i = 0; i < others.length; i++) {
             s = L.transition({ open: others[i], wipe: false }, "togglePowerMenu");
             compare(s.open, "powermenu", others[i]);
             verify(s.wipe, others[i]);
         }
-        s = L.transition({ open: "powermenu", wipe: false }, "toggleSpotlight");
-        compare(s.open, "spotlight");
+        s = L.transition({ open: "powermenu", wipe: false }, "toggleLookseedo");
+        compare(s.open, "lookseedo");
         verify(s.wipe);
         s = L.transition({ open: "powermenu", wipe: false }, "close");
         compare(s.open, "closed");
@@ -161,7 +161,7 @@ TestCase {
         s = L.transition({ open: "desktopmenu", wipe: false }, "togglePowerMenu");
         compare(s.open, "powermenu");
         verify(s.wipe);
-        s = L.transition({ open: "spotlight", wipe: false }, "toggleDesktopMenu");
+        s = L.transition({ open: "lookseedo", wipe: false }, "toggleDesktopMenu");
         compare(s.open, "desktopmenu");
         verify(s.wipe);
         s = L.transition({ open: "desktopmenu", wipe: false }, "lock");

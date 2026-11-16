@@ -1,11 +1,11 @@
-//! Spotlight's files: an in-memory index of the user's files and folders, searched by name and
+//! look=see>do_'s files: an in-memory index of the user's files and folders, searched by name and
 //! shown grouped by type (Folders, Documents, Images, Audio, Video, Code, Archives, Other files),
 //! plus files elsewhere on the system through `plocate` when it is installed ("System files").
 //!
 //! The index covers the home folder and the drives mounted under `/mnt`, `/media` and
 //! `/run/media/<user>`. Hidden files and folders, symbolic links and build or package folders
 //! (`node_modules`, `target`, `__pycache__`, …) are left out, and it stops at [`MAX_ENTRIES`]. It
-//! is built on a blocking thread, off the request path, when Spotlight opens and the last build
+//! is built on a blocking thread, off the request path, when look=see>do_ opens and the last build
 //! is older than [`STALE_AFTER`]; searches use the last finished build meanwhile. One search is a
 //! linear pass over pre-lowercased names: a few milliseconds for 100 000 entries.
 
@@ -18,7 +18,7 @@ use std::time::{Duration, Instant, SystemTime};
 pub const MAX_ENTRIES: usize = 400_000;
 /// No deeper than this below a root.
 const MAX_DEPTH: usize = 24;
-/// A build older than this is redone when Spotlight next opens.
+/// A build older than this is redone when look=see>do_ next opens.
 pub const STALE_AFTER: Duration = Duration::from_secs(5 * 60);
 /// Rows per type.
 pub const PER_KIND: usize = 5;
@@ -43,7 +43,7 @@ const SKIP_DIRS: &[&str] = &[
 /// Files and folders modified within this many days rank a little higher.
 const RECENT_DAYS: u64 = 7;
 
-/// The types Spotlight groups files by, in the order it shows them.
+/// The types look=see>do_ groups files by, in the order it shows them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Kind {
     Folder,
@@ -71,7 +71,7 @@ impl Kind {
         Kind::System,
     ];
 
-    /// The provider id Spotlight groups by (`files:<kind>`).
+    /// The provider id look=see>do_ groups by (`files:<kind>`).
     pub fn provider(self) -> &'static str {
         match self {
             Kind::Folder => "files:folders",

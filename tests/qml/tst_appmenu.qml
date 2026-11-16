@@ -113,7 +113,7 @@ TestCase {
     function test_avatar_sources() {
         compare(M.avatarSources("/home/me", "me"),
                 ["file:///home/me/.face", "file:///var/lib/AccountsService/icons/me"]);
-        // Paths are percent-encoded per segment, as Spotlight does for local icons.
+        // Paths are percent-encoded per segment, as look=see>do_ does for local icons.
         compare(M.avatarSources("/home/a b", "a#b"),
                 ["file:///home/a%20b/.face", "file:///var/lib/AccountsService/icons/a%23b"]);
         // A relative or missing HOME and a USER with a slash or dots are skipped.

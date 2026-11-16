@@ -9,7 +9,7 @@ Item {
 
     readonly property var rowsData: [
         { label: "3 fingers, swipe sideways", action_label: "Switch workspace", enabled: true, gesture: { fingers: 3, direction: "horizontal", action: "workspace", enabled: true } },
-        { label: "4 fingers, swipe up", action_label: "Open Spotlight", enabled: true, gesture: { fingers: 4, direction: "up", action: "uq:spotlight", enabled: true } }
+        { label: "4 fingers, swipe up", action_label: "Open look=see>do_", enabled: true, gesture: { fingers: 4, direction: "up", action: "uq:lookseedo", enabled: true } }
     ]
 
     Component {
@@ -59,7 +59,7 @@ Item {
             const c = make();
             compare(c.rows.count, 2);
             compare(c.rows.itemAt(0).nameLabel.text, "3 fingers, swipe sideways");
-            compare(findChild(c.rows.itemAt(1), "gestureAction").text, "Open Spotlight");
+            compare(findChild(c.rows.itemAt(1), "gestureAction").text, "Open look=see>do_");
             verify(c.rows.itemAt(0).toggle.checked);
             verify(!findChild(c, "noGestures").visible);
             verify(!c.rows.itemAt(0).clashLine.visible);
@@ -93,10 +93,10 @@ Item {
         }
 
         function test_conflict_line_under_its_row() {
-            const c = make({ clashes: { "1": "“Open Spotlight” and “Switch workspace” both use 4 fingers, swipe up." } });
+            const c = make({ clashes: { "1": "“Open look=see>do_” and “Switch workspace” both use 4 fingers, swipe up." } });
             verify(!c.rows.itemAt(0).clashLine.visible);
             verify(c.rows.itemAt(1).clashLine.visible);
-            compare(c.rows.itemAt(1).clashLine.text, "“Open Spotlight” and “Switch workspace” both use 4 fingers, swipe up.");
+            compare(c.rows.itemAt(1).clashLine.text, "“Open look=see>do_” and “Switch workspace” both use 4 fingers, swipe up.");
             compare(c.rows.itemAt(1).clashLine.textFormat, Text.PlainText);
         }
 

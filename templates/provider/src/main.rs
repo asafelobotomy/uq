@@ -1,4 +1,4 @@
-//! A uQ launcher provider: answers Spotlight queries over D-Bus and exits after 60 s without a
+//! A uQ launcher provider: answers look=see>do_ queries over D-Bus and exits after 60 s without a
 //! call. The session bus starts it again when uQ's launcher opens (`Activatable=true` in the
 //! `.provider` file and a D-Bus service file), so nothing runs while it isn't needed.
 //!

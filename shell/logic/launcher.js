@@ -1,6 +1,8 @@
 .pragma library
 
-// Launcher logic shared by Spotlight and the app menu: query classification, the surface state
+.import "commands.js" as Commands
+
+// Launcher logic shared by look=see>do_ and the app menu: query classification, the surface state
 // machine, keyboard selection, and what Enter does with a row. Pure data in, data out; nothing
 // here runs anything, and provider strings are passed through untouched for UqText to render.
 
@@ -22,10 +24,10 @@ function nextGeneration(g) {
 }
 
 // --- surface state machine ---
-// state: { open: "closed" | "spotlight" | "appmenu" | "quicksettings" | "notifcentre" | "powermenu" | "desktopmenu", wipe: bool }. `wipe` is true when the
+// state: { open: "closed" | "lookseedo" | "appmenu" | "quicksettings" | "notifcentre" | "powermenu" | "desktopmenu", wipe: bool }. `wipe` is true when the
 // transition closed a surface (or locked), so that surface must clear its query and results.
 
-var SURFACES = ["closed", "spotlight", "appmenu", "quicksettings", "notifcentre", "powermenu", "desktopmenu"];
+var SURFACES = ["closed", "lookseedo", "appmenu", "quicksettings", "notifcentre", "powermenu", "desktopmenu"];
 
 function initialState() {
     return { open: "closed", wipe: false };
@@ -35,7 +37,7 @@ function transition(state, event) {
     var open = state && SURFACES.indexOf(state.open) >= 0 ? state.open : "closed";
     var target;
     switch (event) {
-    case "toggleSpotlight": target = open === "spotlight" ? "closed" : "spotlight"; break;
+    case "toggleLookseedo": target = open === "lookseedo" ? "closed" : "lookseedo"; break;
     case "toggleAppMenu": target = open === "appmenu" ? "closed" : "appmenu"; break;
     case "toggleQuickSettings": target = open === "quicksettings" ? "closed" : "quicksettings"; break;
     case "toggleNotifCentre": target = open === "notifcentre" ? "closed" : "notifcentre"; break;
@@ -117,7 +119,7 @@ function move(selection, groups, key) {
     }
 }
 
-// Turns rank.merge() output into the rows Spotlight draws: a top-hit section (top: true), then
+// Turns rank.merge() output into the rows look=see>do_ draws: a top-hit section (top: true), then
 // the groups, with the top hit taken out of its own group and empty groups dropped.
 function sections(merged) {
     var out = [];
@@ -153,14 +155,24 @@ function resultsStale(searchPending, query, searched) {
 
 // What Enter does with a row: { kind: "launch"|"copy"|"activate", call, args, close }.
 // Only bridge calls; provider data is never executed. null when the row can't be activated.
-function activation(provider, item) {
+// `alt` is Shift+Enter: the row's second action, where it has one (Run in a terminal, an emoji
+// provider's "type it").
+function activation(provider, item, alt) {
     var p = String(provider === undefined || provider === null ? "" : provider);
     if (p === "" || !item || typeof item.id !== "string" || item.id === "")
         return null;
     if (p === "apps")
         return { kind: "launch", call: "Launch", args: [{ desktop_id: item.id }], close: true };
-    if (p === "run")
-        return { kind: "launch", call: "Launch", args: [{ run_id: item.id }], close: true };
+    if (p === "run") {
+        var terminal = alt === true && Array.isArray(item.actions) && item.actions[1] === "terminal";
+        return { kind: "launch", call: "Launch",
+                 args: [terminal ? { run_id: item.id, terminal: true } : { run_id: item.id }],
+                 close: true };
+    }
+    if (p === "commands") {
+        var c = Commands.activation(item.id);
+        return c === null ? null : { kind: "command", call: c.call, args: c.args, close: true };
+    }
     if (p === "calc")
         return { kind: "copy", call: "Activate", args: ["calc", item.id, "copy"], close: false };
     // An open window: focus it (the pointer stays put), or bring a minimised one back to the
@@ -174,7 +186,8 @@ function activation(provider, item) {
                  args: ["focus_window", { address: item.id, keep_pointer: true }], close: true };
     }
     var acts = item.actions;
-    var action = acts && acts.length > 0 && typeof acts[0] === "string" ? acts[0] : "";
+    var at = alt === true && acts && acts.length > 1 ? 1 : 0;
+    var action = acts && acts.length > at && typeof acts[at] === "string" ? acts[at] : "";
     return { kind: "activate", call: "Activate", args: [p, item.id, action], close: true };
 }
 

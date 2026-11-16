@@ -378,7 +378,7 @@ mod tests {
         st.set_section(
             "keybinds",
             serde_json::json!({"overrides": [
-                    {"id": "uq.spotlight", "combo": "SUPER + K"},
+                    {"id": "uq.lookseedo", "combo": "SUPER + K"},
                     {"id": "uq.close", "enabled": false}],
                 "custom": [{"id": "k-3f9c", "name": "Screenshot",
                     "combo": "SUPER + SHIFT + P", "action":
@@ -529,7 +529,7 @@ mod tests {
         let mut new = old.clone();
         new.set_section(
             "keybinds",
-            serde_json::json!({"overrides": [{"id": "uq.spotlight", "combo": "SUPER + K"}],
+            serde_json::json!({"overrides": [{"id": "uq.lookseedo", "combo": "SUPER + K"}],
                 "custom": [{"name": "Screenshot", "combo": "SUPER + SHIFT + P",
                     "action": {"kind": "command", "command": "grim shot.png"}}]}),
         )
@@ -538,7 +538,7 @@ mod tests {
         let lines: Vec<_> = changes.iter().map(|c| c.summary.as_str()).collect();
         assert_eq!(
             lines,
-            ["“Open Spotlight” now uses Super + K, Shortcut “Screenshot” added"]
+            ["“Open look=see>do_” now uses Super + K, Shortcut “Screenshot” added"]
         );
     }
 }

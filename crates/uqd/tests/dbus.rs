@@ -1008,7 +1008,7 @@ async fn rules_section_and_list_windows_over_dbus() {
 #[tokio::test]
 async fn keybinds_section_and_list_binds_over_dbus() {
     let s = served().await;
-    let kb = r#"{"overrides":[{"id":"uq.spotlight","combo":"SUPER + K"}],"custom":[
+    let kb = r#"{"overrides":[{"id":"uq.lookseedo","combo":"SUPER + K"}],"custom":[
         {"name":"Screenshot","combo":"SUPER + SHIFT + P",
          "action":{"kind":"command","command":"grim shot.png"}}]}"#;
     let () = s

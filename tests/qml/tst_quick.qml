@@ -8,7 +8,7 @@ TestCase {
     // While quick settings is open its sliders show the level, so no OSD is drawn over it.
     function test_osd_allowed() {
         compare(Q.osdAllowed("closed"), true);
-        compare(Q.osdAllowed("spotlight"), true);
+        compare(Q.osdAllowed("lookseedo"), true);
         compare(Q.osdAllowed("appmenu"), true);
         compare(Q.osdAllowed("quicksettings"), false);
     }

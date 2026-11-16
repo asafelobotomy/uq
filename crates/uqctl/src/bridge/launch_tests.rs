@@ -288,3 +288,20 @@ async fn dispatch_sends_eval_and_maps_errors() {
         "Hyprland is not running"
     );
 }
+
+#[test]
+fn run_in_terminal_keeps_the_window_and_passes_the_command_as_an_argument() {
+    let d = Dirs::new(None, vec![]);
+    let mut runs = RunState::default();
+    run_item("> ls", 9, &mut runs).unwrap();
+    let arg = json!({"run_id": "run-9", "terminal": true});
+    let p = plan(Some(&arg), &d, 4, &runs, None, None).unwrap();
+    assert!(
+        p.command.contains("-- 'kitty' '-e' 'sh' '-c' 'eval \"$1\""),
+        "{}",
+        p.command
+    );
+    assert!(p.command.ends_with("'sh' 'ls'"), "{}", p.command);
+    let bad = json!({"run_id": "run-9", "terminal": "yes"});
+    assert!(plan(Some(&bad), &d, 4, &runs, None, None).is_err());
+}

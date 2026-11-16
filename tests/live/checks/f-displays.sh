@@ -312,7 +312,7 @@ sf7_solo() { [ "$(fd_stored_scale "$1")" = 1.0 ] && fd_scale_is "$1" 1 && ! sf7_
 sf7_pair() { [ "$(fd_stored_scale "$1")" = 2.0 ] && fd_scale_is "$1" 2 && sf7_has; }
 
 # --- touchpad gestures (the Input page) ---------------------------------------------------------
-GESTURE_DEFAULTS='[{"fingers":3,"direction":"horizontal","action":"workspace"},{"fingers":4,"direction":"up","action":"uq:spotlight"}]'
+GESTURE_DEFAULTS='[{"fingers":3,"direction":"horizontal","action":"workspace"},{"fingers":4,"direction":"up","action":"uq:lookseedo"}]'
 in_merge() { merge input "$1"; }
 swipe_opt() { hc getoption "gestures:$1" -j 2>/dev/null | jq -c '.int // .float // .bool // .' 2>/dev/null; }
 
@@ -325,8 +325,8 @@ sf8() {
     base=${UQ_DATA_DIR:-/usr/share/uq}/hypr/base.lua
     if [ -r "$base" ]; then grep -q 'hl\.gesture' "$base" && bad "$base has a gesture; uQ's own belong in generated.lua"; fi
     grep -qF 'hl.gesture({ fingers = 3, direction = "horizontal", action = "workspace" })' <<<"$g" || bad "generated.lua has no three-finger workspace swipe"
-    grep -qF 'hl.gesture({ fingers = 4, direction = "up", action = function() hl.dispatch(hl.dsp.global("uq:spotlight")) end })' <<<"$g" ||
-        bad "generated.lua has no four-finger Spotlight gesture as function() hl.dispatch(hl.dsp.global(...)) end"
+    grep -qF 'hl.gesture({ fingers = 4, direction = "up", action = function() hl.dispatch(hl.dsp.global("uq:lookseedo")) end })' <<<"$g" ||
+        bad "generated.lua has no four-finger look=see>do_ gesture as function() hl.dispatch(hl.dsp.global(...)) end"
     # The editor's changes: scratch workspace, pinch with a modifier, quick settings.
     r=$(in_merge ".gestures = $GESTURE_DEFAULTS + [{fingers:3,direction:\"down\",action:\"special\"}, {fingers:4,direction:\"pinch_in\",action:\"float\",modifier:\"SUPER\"}, {fingers:4,direction:\"left\",action:\"uq:quick-settings\"}]") || { bad "adding gestures: $r"; return; }
     g=$(gen_lua)

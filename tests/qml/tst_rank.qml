@@ -146,6 +146,16 @@ TestCase {
         compare(Rank.merge([], pg, 3, []).groups[0].provider, "calc");
     }
 
+    function test_files_groups_follow_the_files_preference() {
+        var g = function (id, name) {
+            return { provider: id, provider_name: name, generation: 1, items: [{ id: id, score: 0.5 }] };
+        };
+        var pg = { a: g("files:images", "Images"), b: g("settings", "Settings"), c: g("files:contents", "Contents") };
+        var m = Rank.merge([], pg, 1, ["files", "settings"]);
+        compare(m.groups.map(function (x) { return x.provider; }),
+                ["files:images", "files:contents", "settings"]);
+    }
+
     function test_builtin_groups_in_type_order() {
         var g = function (id, name) {
             return { provider: id, provider_name: name, generation: 1, items: [{ id: id, score: 0.5 }] };

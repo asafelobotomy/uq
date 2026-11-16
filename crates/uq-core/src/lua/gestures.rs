@@ -114,8 +114,8 @@ mod tests {
         );
         // A shell action is a function: a bare `hl.dsp.global(…)` fails at Hyprland 0.57.
         assert_eq!(
-            emit_gesture(&g(4, Direction::Up, Action::Spotlight)),
-            r#"hl.gesture({ fingers = 4, direction = "up", action = function() hl.dispatch(hl.dsp.global("uq:spotlight")) end })"#
+            emit_gesture(&g(4, Direction::Up, Action::LookSeeDo)),
+            r#"hl.gesture({ fingers = 4, direction = "up", action = function() hl.dispatch(hl.dsp.global("uq:lookseedo")) end })"#
         );
         assert_eq!(
             emit_gesture(&g(4, Direction::Left, Action::QuickSettings)),
@@ -144,7 +144,7 @@ mod tests {
         let out = emit_gestures(&InputSettings::default());
         assert!(out.starts_with("\n-- Touchpad gestures\n"), "{out}");
         assert_eq!(out.matches("hl.gesture(").count(), 2);
-        assert!(out.find("horizontal") < out.find("uq:spotlight"));
+        assert!(out.find("horizontal") < out.find("uq:lookseedo"));
         // A disabled gesture renders nothing; nothing enabled renders no block.
         let mut off = g(3, Direction::Left, Action::Close);
         off.enabled = false;

@@ -141,11 +141,11 @@ static DEFAULTS: [Default; 60] = [
         mouse: false,
     },
     Default {
-        id: "uq.spotlight",
-        label: "Open Spotlight",
+        id: "uq.lookseedo",
+        label: "Open look=see>do_",
         group: Group::AppsAndDesktop,
         combo: Some("SUPER + Space"),
-        action: DefaultAction::Global("spotlight"),
+        action: DefaultAction::Global("lookseedo"),
         locked: false,
         repeating: false,
         release: false,
@@ -153,7 +153,7 @@ static DEFAULTS: [Default; 60] = [
     },
     Default {
         id: "uq.emoji",
-        label: "Open Spotlight for emoji",
+        label: "Open look=see>do_ for emoji",
         group: Group::AppsAndDesktop,
         combo: Some("SUPER + period"),
         action: DefaultAction::Global("emoji"),
@@ -617,7 +617,10 @@ static DEFAULTS: [Default; 60] = [
         id: "uq.window.resize",
         label: "Resize the window with the mouse",
         group: Group::Windows,
-        combo: Some("SUPER + mouse:273"),
+        // Unbound: it resizes tiled windows from any edge, including the screen's outer
+        // ones. Tiled windows resize by their grips (shell/windows/ResizeGrips.qml); bind
+        // it again here to resize floating windows.
+        combo: None,
         action: DefaultAction::Raw("hl.dsp.window.resize()"),
         locked: false,
         repeating: false,
@@ -782,9 +785,9 @@ mod tests {
     }
 
     #[test]
-    fn table_has_60_rows_59_bound() {
+    fn table_has_60_rows_58_bound() {
         assert_eq!(defaults().len(), 60);
-        assert_eq!(defaults().iter().filter(|d| d.combo.is_some()).count(), 59);
+        assert_eq!(defaults().iter().filter(|d| d.combo.is_some()).count(), 58);
     }
 
     #[test]
@@ -803,7 +806,10 @@ mod tests {
             );
             assert!(!d.label.is_empty());
         }
-        assert_eq!(default_of("uq.spotlight").unwrap().label, "Open Spotlight");
+        assert_eq!(
+            default_of("uq.lookseedo").unwrap().label,
+            "Open look=see>do_"
+        );
         assert!(default_of("uq.nope").is_none());
     }
 
@@ -825,7 +831,7 @@ mod tests {
             let c = parse(d.combo.unwrap()).unwrap_or_else(|e| panic!("{}: {e}", d.id));
             assert!(seen.insert(c), "{} repeats a combo", d.id);
         }
-        assert_eq!(seen.len(), 59);
+        assert_eq!(seen.len(), 58);
     }
 
     #[test]
@@ -887,7 +893,7 @@ mod tests {
         );
         // The launcher rows are never locked; base.lua says the same line by line.
         for id in [
-            "uq.spotlight",
+            "uq.lookseedo",
             "uq.emoji",
             "uq.appmenu",
             "uq.quick-settings",

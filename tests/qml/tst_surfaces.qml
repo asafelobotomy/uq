@@ -22,14 +22,14 @@ TestCase {
 
     function test_one_surface_at_a_time() {
         var scr = { name: "DP-1" };
-        Surfaces.toggle("spotlight", scr, null);
-        compare(Surfaces.open, "spotlight");
+        Surfaces.toggle("lookseedo", scr, null);
+        compare(Surfaces.open, "lookseedo");
         compare(Surfaces.screen, scr);
         compare(wipeSpy.count, 0);
         Surfaces.toggle("appmenu", null, null);
         compare(Surfaces.open, "appmenu");
         compare(wipeSpy.count, 1);
-        compare(wipeSpy.signalArguments[0][0], "spotlight");
+        compare(wipeSpy.signalArguments[0][0], "lookseedo");
         Surfaces.toggle("appmenu");
         compare(Surfaces.open, "closed");
         compare(wipeSpy.signalArguments[1][0], "appmenu");
@@ -44,17 +44,17 @@ TestCase {
         var b = Surfaces.nextGeneration();
         verify(b > a, "next > previous");
         compare(Surfaces.generation, b);
-        Surfaces.toggle("spotlight");
+        Surfaces.toggle("lookseedo");
         Surfaces.close();
         verify(Surfaces.nextGeneration() > b, "still increasing after close");
     }
 
     function test_lock_closes_wipes_and_blocks_toggle() {
-        Surfaces.toggle("spotlight");
+        Surfaces.toggle("lookseedo");
         Bridge.locked = true;
         compare(Surfaces.open, "closed");
         compare(wipeSpy.count, 6);   // every surface wipes on lock
-        Surfaces.toggle("spotlight");
+        Surfaces.toggle("lookseedo");
         compare(Surfaces.open, "closed");
         Bridge.locked = false;
         Surfaces.toggle("appmenu");
@@ -68,14 +68,14 @@ TestCase {
     function test_ipc_open_close_toggle() {
         Surfaces.toggle("appmenu", { name: "DP-2" }, { id: "button" });
         Surfaces.close();
-        compare(Surfaces.ipc("open", "spotlight"), "ok");
-        compare(Surfaces.open, "spotlight");
+        compare(Surfaces.ipc("open", "lookseedo"), "ok");
+        compare(Surfaces.open, "lookseedo");
         compare(Surfaces.screen, null);
         compare(Surfaces.anchor, null);
-        compare(Surfaces.ipc("open", "spotlight"), "ignored");
-        compare(Surfaces.open, "spotlight");
+        compare(Surfaces.ipc("open", "lookseedo"), "ignored");
+        compare(Surfaces.open, "lookseedo");
         compare(Surfaces.ipc("close", "appmenu"), "ignored");
-        compare(Surfaces.open, "spotlight");
+        compare(Surfaces.open, "lookseedo");
         compare(Surfaces.ipc("open", "appmenu"), "ok");
         compare(Surfaces.open, "appmenu");
         compare(Surfaces.ipc("close", "appmenu"), "ok");
@@ -87,12 +87,12 @@ TestCase {
     }
 
     function test_quicksettings_surface() {
-        Surfaces.toggle("spotlight");
+        Surfaces.toggle("lookseedo");
         wipeSpy.clear();
         Surfaces.toggle("quicksettings", { name: "DP-1" }, { id: "button" });
         compare(Surfaces.open, "quicksettings");
         compare(wipeSpy.count, 1);
-        compare(wipeSpy.signalArguments[0][0], "spotlight");
+        compare(wipeSpy.signalArguments[0][0], "lookseedo");
         Surfaces.toggle("quicksettings");
         compare(Surfaces.open, "closed");
         compare(wipeSpy.signalArguments[1][0], "quicksettings");
@@ -113,7 +113,7 @@ TestCase {
         compare(Surfaces.screen, null);
         compare(Surfaces.anchor, null);
         compare(Surfaces.ipc("open", "quicksettings"), "ignored");
-        compare(Surfaces.ipc("close", "spotlight"), "ignored");
+        compare(Surfaces.ipc("close", "lookseedo"), "ignored");
         compare(Surfaces.open, "quicksettings");
         compare(Surfaces.ipc("close", "quicksettings"), "ok");
         compare(Surfaces.open, "closed");
@@ -129,12 +129,12 @@ TestCase {
     // The built-in centre opens through toggle() (NotifBackend, SUPER+N) and wipes on lock, but
     // the shell IPC verbs don't take it: its keybind goes through NotifBackend.
     function test_notifcentre_surface() {
-        Surfaces.toggle("spotlight");
+        Surfaces.toggle("lookseedo");
         wipeSpy.clear();
         Surfaces.toggle("notifcentre", null, null);
         compare(Surfaces.open, "notifcentre");
         compare(wipeSpy.count, 1);
-        compare(wipeSpy.signalArguments[0][0], "spotlight");
+        compare(wipeSpy.signalArguments[0][0], "lookseedo");
         Surfaces.toggle("notifcentre");
         compare(Surfaces.open, "closed");
         compare(wipeSpy.signalArguments[1][0], "notifcentre");
@@ -185,7 +185,7 @@ TestCase {
         Surfaces.toggle("powermenu", null, null, "poweroff");
         compare(Surfaces.powerConfirm, "poweroff");
         // Another surface replaces it and clears the pending confirm.
-        Surfaces.toggle("spotlight");
+        Surfaces.toggle("lookseedo");
         compare(Surfaces.powerConfirm, "");
         Surfaces.toggle("powermenu", null, null, "poweroff");
         wipeSpy.clear();
@@ -255,44 +255,44 @@ TestCase {
     function test_ipc_ignores_unknown_names_and_verbs() {
         compare(Surfaces.ipc("open", "bogus"), "ignored");
         compare(Surfaces.ipc("open", ""), "ignored");
-        compare(Surfaces.ipc("lock", "spotlight"), "ignored");
-        compare(Surfaces.ipc("unlock", "spotlight"), "ignored");
+        compare(Surfaces.ipc("lock", "lookseedo"), "ignored");
+        compare(Surfaces.ipc("unlock", "lookseedo"), "ignored");
         compare(Surfaces.open, "closed");
     }
 
     function test_ipc_ignored_while_locked() {
-        Surfaces.ipc("open", "spotlight");
+        Surfaces.ipc("open", "lookseedo");
         Bridge.locked = true;
         compare(Surfaces.open, "closed");
-        compare(Surfaces.ipc("open", "spotlight"), "ignored");
+        compare(Surfaces.ipc("open", "lookseedo"), "ignored");
         compare(Surfaces.ipc("toggle", "appmenu"), "ignored");
-        compare(Surfaces.ipc("close", "spotlight"), "ignored");
+        compare(Surfaces.ipc("close", "lookseedo"), "ignored");
         compare(Surfaces.open, "closed");
     }
-    // The emoji bind (`uq:emoji`, SUPER+.): Spotlight opens on the focused monitor and is told
+    // The emoji bind (`uq:emoji`, SUPER+.): look=see>do_ opens on the focused monitor and is told
     // its query is ":"; already open, it only gets the new query. Other surfaces and anything
     // while locked are ignored.
-    function test_open_with_prefills_spotlight() {
+    function test_open_with_prefills_lookseedo() {
         Surfaces.toggle("appmenu", { name: "DP-2" }, { id: "button" });
-        compare(Surfaces.openWith("spotlight", ":"), "ok");
-        compare(Surfaces.open, "spotlight");
+        compare(Surfaces.openWith("lookseedo", ":"), "ok");
+        compare(Surfaces.open, "lookseedo");
         compare(Surfaces.screen, null);
         compare(Surfaces.anchor, null);
         compare(wipeSpy.count, 1);
         compare(wipeSpy.signalArguments[0][0], "appmenu");
         compare(prefillSpy.count, 1);
-        compare(prefillSpy.signalArguments[0][0], "spotlight");
+        compare(prefillSpy.signalArguments[0][0], "lookseedo");
         compare(prefillSpy.signalArguments[0][1], ":");
         // Pressed again while open: stays open, the query is set again.
-        compare(Surfaces.openWith("spotlight", ":"), "ok");
-        compare(Surfaces.open, "spotlight");
+        compare(Surfaces.openWith("lookseedo", ":"), "ok");
+        compare(Surfaces.open, "lookseedo");
         compare(prefillSpy.count, 2);
         compare(Surfaces.openWith("appmenu", ":"), "ignored");
-        compare(Surfaces.open, "spotlight");
+        compare(Surfaces.open, "lookseedo");
         compare(prefillSpy.count, 2);
         Bridge.locked = true;
         compare(Surfaces.open, "closed");
-        compare(Surfaces.openWith("spotlight", ":"), "ignored");
+        compare(Surfaces.openWith("lookseedo", ":"), "ignored");
         compare(Surfaces.open, "closed");
         compare(prefillSpy.count, 2);
     }

@@ -1,5 +1,5 @@
 //! Opening a link or a file with the user's default app (`xdg-open`), for news links, typed web
-//! addresses and Spotlight's files.
+//! addresses and look=see>do_'s files.
 //!
 //! The opener runs in a scope of its own in `app.slice` (`app-uq-<name>-<rand>.scope`), so the
 //! app it starts is an app, not part of the shell's service, which schedulers such as scdr treat
