@@ -352,6 +352,11 @@ async fn every_field_round_trips() {
             json!(false),
         ),
         (
+            setting("ui.print_action", json!("screen")),
+            "/settings/ui/print_action",
+            json!("screen"),
+        ),
+        (
             shell("clock_24h", json!(true)),
             "/shell/clock_24h",
             json!(true),

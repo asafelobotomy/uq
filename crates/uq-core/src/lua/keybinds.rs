@@ -129,7 +129,7 @@ mod tests {
             l[3],
             "hl.bind(\"SUPER + Return\", hl.dsp.exec_cmd(\"systemd-run --user --scope --quiet --collect --slice=app.slice --unit=app-uq-kitty-$$ -- kitty\"), { description = \"uq:uq.terminal\" })"
         );
-        assert_eq!(out.matches("hl.bind(").count(), 64);
+        assert_eq!(out.matches("hl.bind(").count(), 61);
         assert!(!out.contains("uq.profile.next"));
         assert!(out.ends_with('\n'));
     }
@@ -172,9 +172,9 @@ mod tests {
             l[at - 1],
             "hl.bind(\"SUPER + mouse:272\", hl.dsp.event(\"uq-mouse:end\"), { release = true, ignore_mods = true, non_consuming = true })"
         );
-        // Only mouse binds get them: two (move, resize), a begin and an end each.
-        assert_eq!(out.matches("uq-mouse:begin").count(), 2);
-        assert_eq!(out.matches("uq-mouse:end").count(), 2);
+        // Only mouse binds get them: one (move), a begin and an end.
+        assert_eq!(out.matches("uq-mouse:begin").count(), 1);
+        assert_eq!(out.matches("uq-mouse:end").count(), 1);
     }
 
     #[test]
@@ -189,7 +189,7 @@ mod tests {
         };
         let out = emit_binds(&kb);
         assert!(!out.contains("mouse:272"));
-        assert_eq!(out.matches("uq-mouse:begin").count(), 1);
+        assert!(!out.contains("uq-mouse:"));
     }
 
     #[test]
@@ -213,7 +213,7 @@ mod tests {
         assert!(out.contains("hl.bind(\"SUPER + K\", hl.dsp.global(\"uq:spotlight\")"));
         assert!(!out.contains("\"SUPER + Space\""));
         assert!(!out.contains("uq:uq.close"));
-        assert_eq!(out.matches("hl.bind(").count(), 63);
+        assert_eq!(out.matches("hl.bind(").count(), 60);
     }
 
     #[test]
@@ -230,7 +230,7 @@ mod tests {
         assert!(out.contains(
             "hl.bind(\"SUPER + ALT + P\", hl.dsp.exec_cmd(\"uqctl profile next\"), { description = \"uq:uq.profile.next\" })"
         ));
-        assert_eq!(out.matches("hl.bind(").count(), 65);
+        assert_eq!(out.matches("hl.bind(").count(), 62);
     }
 
     #[test]
@@ -314,7 +314,7 @@ mod tests {
             let out = emit_binds(&kb);
             let l = lines(&out);
             let base = l.len() - 2;
-            assert_eq!(out.matches("hl.bind(").count(), 66, "{h:?}");
+            assert_eq!(out.matches("hl.bind(").count(), 63, "{h:?}");
             for (line, is_command) in [(l[base], true), (l[base + 1], false)] {
                 assert!(line.starts_with("hl.bind(\"SUPER + F"), "{line}");
                 let arg_at = line.find("hl.dsp.exec_cmd(").unwrap() + "hl.dsp.exec_cmd(".len();

@@ -230,10 +230,10 @@ static DEFAULTS: [Default; 60] = [
     },
     Default {
         id: "uq.screenshot.area",
-        label: "Take a screenshot of an area",
+        label: "Take a screenshot",
         group: Group::AppsAndDesktop,
         combo: Some("Print"),
-        action: DefaultAction::Exec("uq-screenshot region"),
+        action: DefaultAction::Exec("uq-screenshot print"),
         locked: false,
         repeating: false,
         release: false,
@@ -617,7 +617,10 @@ static DEFAULTS: [Default; 60] = [
         id: "uq.window.resize",
         label: "Resize the window with the mouse",
         group: Group::Windows,
-        combo: Some("SUPER + mouse:273"),
+        // Unbound: it resizes tiled windows from any edge, including the screen's outer
+        // ones. Tiled windows resize by their grips (shell/windows/ResizeGrips.qml); bind
+        // it again here to resize floating windows.
+        combo: None,
         action: DefaultAction::Raw("hl.dsp.window.resize()"),
         locked: false,
         repeating: false,
@@ -782,9 +785,9 @@ mod tests {
     }
 
     #[test]
-    fn table_has_60_rows_59_bound() {
+    fn table_has_60_rows_58_bound() {
         assert_eq!(defaults().len(), 60);
-        assert_eq!(defaults().iter().filter(|d| d.combo.is_some()).count(), 59);
+        assert_eq!(defaults().iter().filter(|d| d.combo.is_some()).count(), 58);
     }
 
     #[test]
@@ -825,7 +828,7 @@ mod tests {
             let c = parse(d.combo.unwrap()).unwrap_or_else(|e| panic!("{}: {e}", d.id));
             assert!(seen.insert(c), "{} repeats a combo", d.id);
         }
-        assert_eq!(seen.len(), 59);
+        assert_eq!(seen.len(), 58);
     }
 
     #[test]

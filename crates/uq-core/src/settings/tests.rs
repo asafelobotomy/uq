@@ -196,13 +196,27 @@ fn reduce_motion_is_a_bool_default_off_and_loads_leniently() {
     assert_eq!(s.validated().0, s);
     assert_eq!(
         serde_json::to_value(&s).unwrap()["ui"],
-        json!({"reduce_motion": true})
+        json!({"reduce_motion": true, "print_action": "region"})
     );
     // A wrong-typed value costs only the `ui` domain.
     let t: Settings =
         serde_json::from_value(json!({"ui": {"reduce_motion": "x"}, "pinned": ["a"]})).unwrap();
     assert!(!t.ui.reduce_motion);
     assert_eq!(t.pinned, vec!["a".to_string()]);
+}
+
+#[test]
+fn print_action_is_region_screen_or_window() {
+    let mut s = Settings::default();
+    assert_eq!(s.ui.print_action, PrintAction::Region);
+    s.apply("ui.print_action", json!("screen")).unwrap();
+    assert_eq!(s.ui.print_action, PrintAction::Screen);
+    s.apply("ui.print_action", json!("window")).unwrap();
+    assert!(s.apply("ui.print_action", json!("everything")).is_err());
+    assert!(s.apply("ui.print_action", json!(true)).is_err());
+    assert_eq!(s.ui.print_action, PrintAction::Window);
+    assert!(!renders_config("ui.print_action"));
+    assert_eq!(s.validated().0, s);
 }
 
 #[test]

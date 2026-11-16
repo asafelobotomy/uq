@@ -254,7 +254,7 @@ static LOOK_SETTINGS: [SearchEntry; 16] = [
     ),
 ];
 
-static SHELL_SETTINGS: [SearchEntry; 19] = [
+static SHELL_SETTINGS: [SearchEntry; 20] = [
     entry(
         "pins",
         "Pinned apps",
@@ -379,6 +379,19 @@ static SHELL_SETTINGS: [SearchEntry; 19] = [
         "clear-launch-counts",
         "Clear launch history",
         &["privacy", "forget", "reset", "launcher"],
+    ),
+    entry(
+        "print-key",
+        "Print key",
+        &[
+            "screenshot",
+            "print screen",
+            "prtsc",
+            "capture",
+            "snip",
+            "region",
+            "satty",
+        ],
     ),
 ];
 
