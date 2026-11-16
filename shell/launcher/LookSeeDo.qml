@@ -8,6 +8,8 @@ import Quickshell.Widgets
 import "../core"
 import "../logic/launcher.js" as L
 import "../logic/rank.js" as Rank
+import "../logic/commands.js" as Commands
+import "../logic/quickui.js" as QuickUi
 import "../logic/shellprefs.js" as ShellPrefs
 import "../logic/failure.js" as F
 
@@ -41,6 +43,8 @@ PanelWindow {
     // The shared Surfaces counter: the bridge ignores a Search older than the newest it has seen.
     readonly property int generation: Surfaces.generation
     property var providerResults: ({})
+    // ListProfiles' rows, read when this opens, for the Commands group's profile switches.
+    property var profiles: []
     property var apps: []
     property var sections: []
     property var selection: ({ group: -1, index: -1 })
@@ -115,9 +119,15 @@ PanelWindow {
         var wins = q !== "" && L.classify(q) === "search"
             && ShellPrefs.providerEnabled(Settings.values.shell, "windows")
             ? Rank.searchWindows(q, windowList()) : [];
-        if (wins.length > 0) {
+        var cmds = q !== "" && L.classify(q) === "search"
+            && ShellPrefs.providerEnabled(Settings.values.shell, "commands")
+            ? Commands.search(q, profiles) : [];
+        if (wins.length > 0 || cmds.length > 0) {
             var pr = {};
-            pr.windows = { generation: generation, provider: "windows", provider_name: "Windows", items: wins };
+            if (wins.length > 0)
+                pr.windows = { generation: generation, provider: "windows", provider_name: "Windows", items: wins };
+            if (cmds.length > 0)
+                pr.commands = { generation: generation, provider: "commands", provider_name: "Commands", items: cmds };
             providerResults = pr;
         }
         rebuild(true);
@@ -184,7 +194,7 @@ PanelWindow {
     // Enter. If the rows are stale (typed within the debounce), search now and act on the fresh
     // top hit once the bridge replies: it emits the built-in calc/run rows before the reply, so
     // they're in place by then, and the bridge's run state is this generation's.
-    function activate() {
+    function activate(alt) {
         if (Bridge.locked)
             return;
         if (L.resultsStale(debounce.running, query, searched)) {
@@ -194,13 +204,13 @@ PanelWindow {
             gen = generation;
             reply.then(function () {
                 if (root.shown && generation === gen && !L.resultsStale(debounce.running, query, searched))
-                    root.activateSelected();
+                    root.activateSelected(alt);
             }).catch(function () {
                 // runSearch's own handler has logged it and shows it (searchError).
             });
             return;
         }
-        activateSelected();
+        activateSelected(alt);
     }
 
     // A click acts on the row the user clicked, so it's only honoured when the rows are current;
@@ -217,11 +227,11 @@ PanelWindow {
         activateSelected();
     }
 
-    function activateSelected() {
+    function activateSelected(alt) {
         var sec = selectedSection();
         if (!sec || Bridge.locked)
             return;
-        var a = L.activation(sec.provider, sec.items[selection.index]);
+        var a = L.activation(sec.provider, sec.items[selection.index], alt === true);
         if (a === null)
             return;
         var item = sec.items[selection.index];
@@ -281,8 +291,12 @@ PanelWindow {
         openedOn = shown ? (Outputs.primaryScreen(Quickshell.screens)
                             || screenFor(Hyprland.focusedMonitor)) : null;
         wipe();
-        if (shown)
+        if (shown) {
             Qt.callLater(field.forceActiveFocus);
+            Bridge.call("ListProfiles", []).then(function (v) {
+                root.profiles = QuickUi.profileList(v);
+            }).catch(function () { root.profiles = []; });
+        }
     }
 
     Connections {
@@ -361,7 +375,7 @@ PanelWindow {
                     if (event.key === Qt.Key_Escape) {
                         Surfaces.close();
                     } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                        root.activate();
+                        root.activate((event.modifiers & Qt.ShiftModifier) !== 0);
                     } else if (event.key === Qt.Key_Down) {
                         root.moveSelection("down");
                     } else if (event.key === Qt.Key_Up) {

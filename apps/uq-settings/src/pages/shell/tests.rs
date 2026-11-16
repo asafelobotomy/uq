@@ -120,6 +120,7 @@ async fn providers_list_marks_missing() {
             {"id": "calc", "name": "Calculator", "builtin": true},
             {"id": "run", "name": "Run", "builtin": true},
             {"id": "windows", "name": "Open windows", "builtin": true},
+            {"id": "commands", "name": "Commands", "builtin": true},
             {"id": "settings", "name": "Settings", "builtin": true},
             {"id": "files", "name": "Files and folders", "builtin": true},
             {"id": "org.x.Search", "name": "X search", "builtin": false},
@@ -244,7 +245,7 @@ async fn concurrent_provider_edits_both_land() {
     )
     .unwrap();
     let (r, page) = rig_in(vec![], vec![d.path().to_path_buf()]).await;
-    // Rows: run (off), org.gone.P, web, calc, windows, settings, files, org.x.Search.
+    // Rows: run (off), org.gone.P, web, calc, windows, commands, settings, files, org.x.Search.
     let (x, y) = tokio::join!(
         run(
             &page,
@@ -277,6 +278,7 @@ async fn concurrent_provider_edits_both_land() {
             ("org.gone.P", true),
             ("web", true),
             ("windows", true),
+            ("commands", true),
             ("settings", true),
             ("files", true),
             ("org.x.Search", false)

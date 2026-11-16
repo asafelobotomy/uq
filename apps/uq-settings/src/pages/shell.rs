@@ -179,6 +179,7 @@ fn providers_list(defs: &[ProviderDef], shell: &Value) -> Vec<Value> {
                 "calc" => "Calculator",
                 "run" => "Run",
                 "windows" => "Open windows",
+                "commands" => "Commands",
                 "settings" => "Settings",
                 _ => "Files and folders",
             };

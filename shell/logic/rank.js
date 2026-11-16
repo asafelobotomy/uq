@@ -5,7 +5,7 @@
 
 // The built-in groups, in the order they show after Apps (a custom order comes first). Other
 // providers follow them.
-var BUILTIN_ORDER = ["web", "calc", "run", "windows", "settings", "files:folders", "files:documents",
+var BUILTIN_ORDER = ["web", "calc", "run", "windows", "commands", "settings", "files:folders", "files:documents",
                      "files:images", "files:audio", "files:video", "files:code", "files:archives",
                      "files:other", "files:contents", "files:system"];
 
@@ -192,6 +192,9 @@ function merge(apps, providerGroups, generation, order) {
             var its = groups[k].items;
             for (var m = 0; m < its.length; m++) {
                 var s = Number(its[m].score) || 0;
+                // Commands that end the session are never offered as the top hit.
+                if (its[m].noTop === true)
+                    continue;
                 if (s > bestScore) {
                     bestScore = s;
                     topHit = { provider: groups[k].provider, providerName: groups[k].providerName,

@@ -18,8 +18,10 @@ use zbus::names::WellKnownName;
 
 /// Providers the launcher always has, in their default order. The apps group is not one.
 /// The launcher'"'"'s own search groups, in the order they show after Apps: web addresses, the
-/// calculator, Run, open windows, Settings and files (every `files:<type>` group, contents too).
-pub const BUILTIN_PROVIDERS: [&str; 6] = ["web", "calc", "run", "windows", "settings", "files"];
+/// calculator, Run, open windows, Commands, Settings and files (every `files:<type>` group, contents too).
+pub const BUILTIN_PROVIDERS: [&str; 7] = [
+    "web", "calc", "run", "windows", "commands", "settings", "files",
+];
 
 const MAX_PROVIDERS: usize = 64;
 
