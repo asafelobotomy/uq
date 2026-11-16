@@ -22,7 +22,7 @@ QQC2.Dialog {
     readonly property bool refused: dialog.plan !== null && dialog.plan.would_refuse === true
     /// The changes of the plan grouped in order of first appearance:
     /// [{name, bytes, items: [change…]}]; a change without a group goes under "Changes".
-    readonly property var groups: dialog.groupsOf(dialog.plan)
+    property var groups: []
     readonly property alias confirmButton: confirmBtn
     readonly property alias cancelButton: cancelBtn
     readonly property alias closeButton: closeBtn
@@ -32,11 +32,12 @@ QQC2.Dialog {
     signal answered(int request, bool confirmed)
 
     function groupsOf(plan) {
-        if (!plan || !Array.isArray(plan.changes))
+        if (!plan || !plan.changes || typeof plan.changes.length !== "number")
             return [];
         const order = [];
         const byName = {};
-        for (const c of plan.changes) {
+        for (let i = 0; i < plan.changes.length; i++) {
+            const c = plan.changes[i];
             const name = c.group || "Changes";
             if (!(name in byName)) {
                 byName[name] = { name: name, bytes: 0, known: false, items: [] };
@@ -81,6 +82,7 @@ QQC2.Dialog {
         dialog.request = req;
         dialog.question = text;
         dialog.plan = plan || null;
+        dialog.groups = dialog.groupsOf(dialog.plan);
         dialog.open();
     }
 

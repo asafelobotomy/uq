@@ -313,6 +313,8 @@ Item {
             c.ctx.command.run("previewed", ["old"], collect);
             tryCompare(d, "opened", true);
             compare(d.questionLabel.text, "Remove old?");
+            verify(d.plan !== null, "the plan reached the dialog");
+            compare(d.plan.changes.length, 3);
             compare(d.groups.length, 2);
             compare(d.groups[0].name, "Caches");
             compare(d.groups[0].bytes, 1500000);
