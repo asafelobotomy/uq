@@ -7,6 +7,8 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-16
+
 ### Fixed
 
 - **Choosing a minimised window's tab now leaves that window focused.** The window came back and
