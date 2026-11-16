@@ -23,3 +23,22 @@ function kind(name, data) {
     var d = String(data === undefined || data === null ? "" : data);
     return d === BEGIN ? "begin" : d === END ? "end" : null;
 }
+
+// Hyprland un-maximizes a Full window the moment it is lifted for a move (it sends `fullscreen>>0`
+// right after the focus event naming it), and re-tiles it as an ordinary column. What was Full
+// should come back Full. This follows the events of one hold: `focus` is the last window focused
+// (activewindowv2), `full` the one that was un-maximized, "" while none was. Returns the new state.
+function note(state, name, data) {
+    var s = { focus: state.focus, full: state.full };
+    var d = String(data === undefined || data === null ? "" : data);
+    if (name === "activewindowv2" && d !== "")
+        s.focus = d;
+    else if (name === "fullscreen" && d === "0" && s.full === "")
+        s.full = s.focus;
+    return s;
+}
+
+// A fresh state for the start of a hold.
+function fresh() {
+    return { focus: "", full: "" };
+}

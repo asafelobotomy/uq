@@ -17,7 +17,9 @@ All notable changes to uQ are listed here. The format follows
   each in `generated.lua` and `base.lua`), and the shell waits for the end and then looks at the
   windows as they are. Hyprland also now needs the pointer to travel 8 px
   (`binds.drag_threshold`) before a click on a window becomes a move, so a plain Super+click no
-  longer lifts the window and reflows the others. Not yet checked on a live session.
+  longer lifts the window and reflows the others. A Full window that is moved comes back Full
+  (Hyprland un-maximizes it for the move). Checked on a live Hyprland in CI
+  (`scripts/drag-live.sh`).
 
 ### Changed
 
