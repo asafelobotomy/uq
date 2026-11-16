@@ -3,7 +3,7 @@
 # layout: what the shell does while the window is held. Super+drag is played through a virtual
 # keyboard and pointer (tests/live/tools/uqinput).
 #
-#   scripts/drag-live.sh [--scenario half-pair|full-edge] [--unguarded]
+#   scripts/drag-live.sh [--scenario half-pair|full-edge|keys] [--unguarded]
 #
 # It starts Hyprland on uQ's base.lua and the shell, opens windows, drags one and prints what
 # happened between the drag's start and end events: the focus changes, and where the dragged window
@@ -132,10 +132,42 @@ case "$scenario" in
         open_window w1; settle 1.5
         open_window w2; settle 2
         grab=w2; grab_dx=0.93 ;;
+    keys)
+        # Two Half windows; the keyboard actions that do what the mouse does (shortcuts in
+        # Settings): move the column, Full and back, wider and narrower.
+        open_window w1; settle 1.5
+        open_window w2; settle 1.5
+        width w1 half; width w2 half; settle 2 ;;
     *) fail "unknown scenario $scenario" ;;
 esac
 echo "--- before"
 snap before
+
+if [ "$scenario" = keys ]; then
+    # The same Lua the shortcuts in config/hypr/base.lua run, sent as dispatches.
+    x() { hc clients -j | jq -r --arg t "$1" '.[] | select(.title == $t) | .at[0]'; }
+    w() { hc clients -j | jq -r --arg t "$1" '.[] | select(.title == $t) | .size[0]'; }
+    fs() { hc clients -j | jq -r --arg t "$1" '.[] | select(.title == $t) | .fullscreen'; }
+    act() { hc dispatch "$1" >/dev/null; settle 1; }
+    bad=0
+    w2x=$(x w2); w1x=$(x w1)
+    [ "$w1x" -lt "$w2x" ] || { echo "FAIL: w1 should start left of w2 ($w1x, $w2x)"; bad=1; }
+    act 'hl.dsp.layout("swapcol l")'
+    [ "$(x w2)" -lt "$(x w1)" ] || { echo "FAIL: swapcol l did not move w2's column left"; bad=1; }
+    act 'hl.dsp.layout("swapcol r")'
+    [ "$(x w1)" -lt "$(x w2)" ] || { echo "FAIL: swapcol r did not move it back"; bad=1; }
+    before_w=$(w w2)
+    act 'hl.dsp.layout("colresize +0.1")'
+    [ "$(w w2)" -gt "$before_w" ] || { echo "FAIL: colresize +0.1 did not widen ($before_w -> $(w w2))"; bad=1; }
+    act 'hl.dsp.layout("colresize -0.1")'
+    act 'hl.dsp.window.fullscreen({ mode = "maximized" })'
+    [ "$(fs w2)" = 1 ] || { echo "FAIL: the Full shortcut did not make w2 Full"; bad=1; }
+    act 'hl.dsp.window.fullscreen({ mode = "maximized" })'
+    [ "$(fs w2)" = 0 ] || { echo "FAIL: the Full shortcut again did not make w2 Half"; bad=1; }
+    echo "--- after"; snap after
+    [ "$bad" = 0 ] && echo "drag-live keys: all checks held"
+    exit "$bad"
+fi
 
 # Drive the pointer from a fifo, so the state can be read between steps.
 mkfifo "$tmp/in"

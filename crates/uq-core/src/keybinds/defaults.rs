@@ -93,7 +93,7 @@ pub fn default_of(id: &str) -> Option<&'static Default> {
     DEFAULTS.iter().find(|d| d.id == id)
 }
 
-static DEFAULTS: [Default; 60] = [
+static DEFAULTS: [Default; 65] = [
     Default {
         id: "uq.terminal",
         label: "Open a terminal",
@@ -603,6 +603,61 @@ static DEFAULTS: [Default; 60] = [
         mouse: false,
     },
     Default {
+        id: "uq.window.full",
+        label: "Make the window Full, or back to Half",
+        group: Group::Windows,
+        combo: Some("SUPER + F"),
+        action: DefaultAction::Raw("hl.dsp.window.fullscreen({ mode = \"maximized\" })"),
+        locked: false,
+        repeating: false,
+        release: false,
+        mouse: false,
+    },
+    Default {
+        id: "uq.window.column.left",
+        label: "Move the window's column left",
+        group: Group::Windows,
+        combo: Some("SUPER + SHIFT + left"),
+        action: DefaultAction::Raw("hl.dsp.layout(\"swapcol l\")"),
+        locked: false,
+        repeating: false,
+        release: false,
+        mouse: false,
+    },
+    Default {
+        id: "uq.window.column.right",
+        label: "Move the window's column right",
+        group: Group::Windows,
+        combo: Some("SUPER + SHIFT + right"),
+        action: DefaultAction::Raw("hl.dsp.layout(\"swapcol r\")"),
+        locked: false,
+        repeating: false,
+        release: false,
+        mouse: false,
+    },
+    Default {
+        id: "uq.window.column.narrower",
+        label: "Make the window's column narrower",
+        group: Group::Windows,
+        combo: Some("SUPER + CTRL + left"),
+        action: DefaultAction::Raw("hl.dsp.layout(\"colresize -0.1\")"),
+        locked: false,
+        repeating: false,
+        release: false,
+        mouse: false,
+    },
+    Default {
+        id: "uq.window.column.wider",
+        label: "Make the window's column wider",
+        group: Group::Windows,
+        combo: Some("SUPER + CTRL + right"),
+        action: DefaultAction::Raw("hl.dsp.layout(\"colresize +0.1\")"),
+        locked: false,
+        repeating: false,
+        release: false,
+        mouse: false,
+    },
+    Default {
         id: "uq.window.drag",
         label: "Move the window with the mouse",
         group: Group::Windows,
@@ -786,8 +841,8 @@ mod tests {
 
     #[test]
     fn table_has_60_rows_58_bound() {
-        assert_eq!(defaults().len(), 60);
-        assert_eq!(defaults().iter().filter(|d| d.combo.is_some()).count(), 58);
+        assert_eq!(defaults().len(), 65);
+        assert_eq!(defaults().iter().filter(|d| d.combo.is_some()).count(), 63);
     }
 
     #[test]
@@ -831,7 +886,7 @@ mod tests {
             let c = parse(d.combo.unwrap()).unwrap_or_else(|e| panic!("{}: {e}", d.id));
             assert!(seen.insert(c), "{} repeats a combo", d.id);
         }
-        assert_eq!(seen.len(), 58);
+        assert_eq!(seen.len(), 63);
     }
 
     #[test]

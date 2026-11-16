@@ -35,6 +35,11 @@ All notable changes to uQ are listed here. The format follows
 
 ### Added
 
+- **Keyboard shortcuts for windows in the scrolling layout.** Super+F makes the window Full, or
+  back to Half. Super+Shift+Left/Right moves its column, and Super+Ctrl+Left/Right makes the
+  column narrower or wider. They are listed under Windows in Settings → Keyboard shortcuts, so
+  you can change them. Checked on a live Hyprland in CI (`scripts/drag-live.sh --scenario keys`).
+
 - **look=see>do_ can do things: a Commands group.** Type `lock`, `suspend`, `log out`,
   `restart` or `power off` for the power actions, or `profile` / a profile's name to switch
   profiles or go back to normal. The ones that end the session are never the top hit, so a
