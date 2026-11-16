@@ -411,10 +411,20 @@ fn api3_features_need_uq_api_3() {
         "import QtQuick\nItem {\n    property var ctx\n    Component.onCompleted: ctx.command.stream(\"run\", [], e => {}, r => {})\n}\n",
     );
     page(3);
-    let (ok, out) = uqctl(&["integrations", "check", "--no-programs", uq.to_str().unwrap()]);
+    let (ok, out) = uqctl(&[
+        "integrations",
+        "check",
+        "--no-programs",
+        uq.to_str().unwrap(),
+    ]);
     assert!(ok, "{out}");
     page(2);
-    let (ok, out) = uqctl(&["integrations", "check", "--no-programs", uq.to_str().unwrap()]);
+    let (ok, out) = uqctl(&[
+        "integrations",
+        "check",
+        "--no-programs",
+        uq.to_str().unwrap(),
+    ]);
     assert!(!ok, "{out}");
     assert!(out.contains("needs uq_api = 3"), "{out}");
 }
