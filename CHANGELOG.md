@@ -21,6 +21,12 @@ All notable changes to uQ are listed here. The format follows
 - **Settings → Shell → Screenshots → Print key.** Choose what Print captures: an area (the
   default, marked up in satty), the whole screen or the focused window. Shift+Print and
   Super+Print keep taking the screen and the window.
+- **App pages in Settings can look like Settings' own pages.** A page that says `uq_api = 2`
+  may use `SettingsPage`, `SettingsTab`, `SettingsCard` and `HelpTip`, so it gets the same tabs,
+  cards and two-column layout, and `UqAppIcon`, which shows an app's icon from the icon theme
+  (or its first letter). The page test kit has stand-ins for all five, and
+  `uqctl integrations check` refuses a page that uses them while saying `uq_api = 1`. Pages that
+  say `uq_api = 1` work as before.
 
 ### Changed
 

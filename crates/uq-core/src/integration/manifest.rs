@@ -18,8 +18,13 @@ use serde::Deserialize;
 use zbus::names::{InterfaceName, MemberName, WellKnownName};
 use zbus::wire::ObjectPath;
 
-/// The integration API this uQ implements (§2.6).
-pub const UQ_API: u32 = 1;
+/// The integration API this uQ implements (§2.6). 2 adds the layout components settings pages
+/// may use (`SettingsPage`, `SettingsTab`, `SettingsCard`, `HelpTip`, `UqAppIcon`); for widgets
+/// and rules it means the same as 1.
+pub const UQ_API: u32 = 2;
+
+/// The `uq_api` a page that leaves the key out is read as: pages predate it.
+pub const PAGE_DEFAULT_API: u32 = 1;
 
 /// A manifest file over this size is refused unread.
 pub const MAX_MANIFEST_BYTES: u64 = 64 * 1024;
@@ -812,7 +817,7 @@ pub fn parse_page(text: &str) -> Result<PageManifest, ManifestError> {
         dbus_name,
         keywords: m.keywords,
         settings,
-        uq_api: m.uq_api.unwrap_or(UQ_API),
+        uq_api: m.uq_api.unwrap_or(PAGE_DEFAULT_API),
         requires,
         dbus,
     })
