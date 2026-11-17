@@ -7,6 +7,13 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.5] - 2026-11-17
+
+### Changed
+
+- **An unfocused tab's icon no longer shows the close ×.** The × now appears only on the focused
+  tab, so a stray click on a background tab switches to it instead of closing it.
+
 ## [0.3.4] - 2026-11-17
 
 ### Changed
