@@ -9,7 +9,7 @@ import "islands"
 // Edit mode's panel, at the bottom of the screen editing started on: what can be done, how many
 // islands don't fit this screen, Add an Island, Reset and Done. It holds the keyboard while no
 // island popup is open: Left/Right choose an island, Shift+Left/Right move it, + and - change
-// its size, Enter opens its settings, Delete removes it, A adds one, Esc finishes.
+// its size, Enter opens its settings, S opens all the settings, Delete removes it, A adds one, Esc finishes.
 PanelWindow {
     id: panel
 
@@ -18,11 +18,14 @@ PanelWindow {
     property bool active: false
 
     screen: bar ? bar.screen : null
-    visible: active && !Bridge.locked
+    // Unmapped for a moment when the Bar editor closes: a layer surface asking for the keyboard is
+    // only given it when it maps, not when it changes its mind.
+    visible: active && !Bridge.locked && !remap
+    property bool remap: false
     color: "transparent"
     WlrLayershell.layer: WlrLayer.Top
     WlrLayershell.namespace: "uq-bar-edit"
-    WlrLayershell.keyboardFocus: BarLayout.activePopup ? WlrKeyboardFocus.None : WlrKeyboardFocus.Exclusive
+    WlrLayershell.keyboardFocus: BarLayout.activePopup || BarLayout.editorOpen ? WlrKeyboardFocus.None : WlrKeyboardFocus.Exclusive
     exclusionMode: ExclusionMode.Ignore
     anchors.bottom: true
     margins.bottom: Theme.gapOut * 2
@@ -115,6 +118,9 @@ PanelWindow {
             case Qt.Key_A:
                 panel.addIsland();
                 break;
+            case Qt.Key_S:
+                BarLayout.editorOpen = true;
+                break;
             default:
                 return;
             }
@@ -139,7 +145,7 @@ PanelWindow {
                 }
             }
             UqText {
-                text: "← → choose   Shift+← → move   + − size   Enter settings   Delete remove   A add   Esc done"
+                text: "← → choose   Shift+← → move   + − size   Enter settings   Delete remove   A add   S all settings   Esc done"
                 color: Theme.textMuted
             }
             UqText {
@@ -162,6 +168,12 @@ PanelWindow {
                     onActivated: panel.addIsland()
                 }
                 MenuRow {
+                    text: "All settings…"
+                    detail: "S"
+                    activeFocusOnTab: false
+                    onActivated: BarLayout.editorOpen = true
+                }
+                MenuRow {
                     text: "Reset the bar"
                     activeFocusOnTab: false
                     onActivated: BarLayout.reset()
@@ -180,4 +192,20 @@ PanelWindow {
     }
 
     onVisibleChanged: if (visible) box.forceActiveFocus()
+
+    // The Bar editor closed: the keys are the panel's again.
+    Connections {
+        target: BarLayout
+        function onEditorOpenChanged() {
+            if (!BarLayout.editorOpen && panel.visible) {
+                panel.remap = true;
+                refocus.restart();
+            }
+        }
+    }
+    Timer {
+        id: refocus
+        interval: 120
+        onTriggered: panel.remap = false
+    }
 }

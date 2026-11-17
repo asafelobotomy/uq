@@ -46,13 +46,14 @@ var ISLANDS = [
     { id: "worldclock", name: "World clock" },
     { id: "keyboard", name: "Keyboard layout" },
     { id: "security", name: "Security (oysterAV)" },
+    { id: "crumbs", name: "Storage cleanup (crumBS)" },
     { id: SEPARATOR, name: "Separator" }
 ];
 
 // Left out first when even every island at Icon size doesn't fit: separators, then these, in
 // this order. Same idea for which island steps down first among equals.
 var EXPENDABLE = [SEPARATOR, "keyboard", "worldclock", "news", "stocks", "sysmon", "media",
-                  "weather", "tray", "security", "notif", "work", "clock", "system", "status"];
+                  "weather", "tray", "security", "crumbs", "notif", "work", "clock", "system", "status"];
 
 function known(id) {
     for (var i = 0; i < ISLANDS.length; i++)
@@ -366,6 +367,39 @@ function setText(bar, zone, index, t) {
         next.text = stored;
     out[zone][index] = next;
     return out;
+}
+
+// Style `t` (as setText; null for the theme's own) on every island that has a text (not the
+// separators). Null when there is none.
+function setTextAll(bar, t) {
+    var out = bar, changed = false;
+    for (var z = 0; z < ZONES.length; z++)
+        for (var i = 0; i < bar[ZONES[z]].length; i++) {
+            var next = setText(out, ZONES[z], i, t);
+            if (next !== null) {
+                out = next;
+                changed = true;
+            }
+        }
+    return changed ? out : null;
+}
+
+// Size `size` (a tier, not Custom) on every island but the separators; null when there is none.
+function setSizeAll(bar, size) {
+    if (SIZES.indexOf(size) < 0 || size === CUSTOM)
+        return null;
+    var out = bar, changed = false;
+    for (var z = 0; z < ZONES.length; z++)
+        for (var i = 0; i < bar[ZONES[z]].length; i++) {
+            if (bar[ZONES[z]][i].id === SEPARATOR)
+                continue;
+            var next = setSize(out, ZONES[z], i, size);
+            if (next !== null) {
+                out = next;
+                changed = true;
+            }
+        }
+    return changed ? out : null;
 }
 
 // The next size up (dir 1) or down (-1) from `size` (with `units` for Custom), as

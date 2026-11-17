@@ -3,7 +3,7 @@
 # layout: what the shell does while the window is held. Super+drag is played through a virtual
 # keyboard and pointer (tests/live/tools/uqinput).
 #
-#   scripts/drag-live.sh [--scenario half-pair|full-edge|keys|drop|restore|tabs] [--unguarded]
+#   scripts/drag-live.sh [--scenario half-pair|full-edge|keys|drop|restore|tabs|two-screens] [--unguarded]
 #
 # It starts Hyprland on uQ's base.lua and the shell, opens windows, drags one and prints what
 # happened between the drag's start and end events: the focus changes, and where the dragged window
@@ -107,7 +107,7 @@ open_window() { # title
     fail "window $1 never opened"
 }
 snap() { # label: one line per window
-    hc clients -j | jq -r --arg l "$1" '.[] | "\($l) \(.title) at=\(.at|join(",")) size=\(.size|join(",")) floating=\(.floating) ws=\(.workspace.id) fs=\(.fullscreen)"' | sort
+    hc clients -j | jq -r --arg l "$1" '.[] | "\($l) \(.title) at=\(.at|join(",")) size=\(.size|join(",")) floating=\(.floating) ws=\(.workspace.id) mon=\(.monitor) fs=\(.fullscreen)"' | sort
 }
 settle() { sleep "${1:-2}"; }
 
@@ -138,6 +138,20 @@ case "$scenario" in
         open_window w1; settle 1.5
         open_window w2; settle 1.5
         width w1 half; width w2 half; settle 2
+        grab=w2; grab_dx=0.5 ;;
+    two-screens)
+        # Two screens side by side. Two Half windows on the first; take w2 across to the second
+        # screen (empty) and drop it there: it must land there, nothing may switch workspace, and
+        # focus must stay with it. Then bring it back to the first screen's right half.
+        open_window w1; settle 1.5
+        open_window w2; settle 1.5
+        width w1 half; width w2 half; settle 2
+        hc output create headless >/dev/null 2>&1; settle 2
+        echo "monitors:"; hc monitors -j | jq -r '.[] | "  \(.name) \(.width)x\(.height) at \(.x),\(.y) ws=\(.activeWorkspace.id)"'
+        [ "$(hc monitors -j | jq length)" -ge 2 ] || skip "couldn't create a second output"
+        # Put the second screen right of the first.
+        m2=$(hc monitors -j | jq -r '[.[] | select(.x == 0 | not)] | .[0].name // empty')
+        [ -n "$m2" ] || { m2=$(hc monitors -j | jq -r '.[1].name'); hc dispatch "hl.monitor({ output = \"$m2\", mode = \"1280x720\", position = \"1280x0\", scale = 1 })" >/dev/null; settle 1; }
         grab=w2; grab_dx=0.5 ;;
     keys)
         # Two Half windows; the keyboard actions that do what the mouse does (shortcuts in
@@ -271,7 +285,7 @@ fi
 
 # Drive the pointer from a fifo, so the state can be read between steps.
 mkfifo "$tmp/in"
-env XDG_RUNTIME_DIR="$rt" WAYLAND_DISPLAY="$wl" "$tmp/uqinput" 1280 720 <"$tmp/in" >"$tmp/uqinput.out" 2>&1 &
+env XDG_RUNTIME_DIR="$rt" WAYLAND_DISPLAY="$wl" "$tmp/uqinput" $([ "$scenario" = two-screens ] && echo 2560 || echo 1280) 720 <"$tmp/in" >"$tmp/uqinput.out" 2>&1 &
 pids+=($!)
 exec 7>"$tmp/in"
 for _ in $(seq 1 50); do grep -q ready "$tmp/uqinput.out" && break; sleep 0.1; done
@@ -297,6 +311,12 @@ if [ "$scenario" = half-pair ]; then
     send "sleep 1200"
     drain; echo "--- while held"; snap held | tee "$tmp/held.txt"
     for i in 11 10 9 8 7 6 5 4 3 2 1 0; do send "move $((cx + i * 20)) $((cy + i * 10))" "sleep 40"; done
+elif [ "$scenario" = two-screens ]; then
+    # From the first screen across to the middle of the second.
+    ws_before=$(hc monitors -j | jq -c '[.[] | {n: .name, ws: .activeWorkspace.id}]')
+    for i in 1 2 3 4 5 6 7 8 9 10 11 12; do send "move $((cx + (1920 - cx) * i / 12)) $((cy + (360 - cy) * i / 12))" "sleep 50"; done
+    send "sleep 1200"
+    drain; echo "--- while held"; snap held | tee "$tmp/held.txt"
 elif [ "$scenario" = drop ]; then
     # Right across the screen: from the middle of the left half to the right half.
     for i in 1 2 3 4 5 6 7 8 9 10 11 12; do send "move $((cx + i * 55)) $((cy + i * 3))" "sleep 50"; done
@@ -350,6 +370,18 @@ case "$scenario" in
         grep -q '^uq-tab-drop$' "$tmp/layers-held.txt" || { echo "FAIL: no drop preview while w2 was held"; bad=1; }
         hc layers -j | grep -q uq-tab-drop && { echo "FAIL: the drop preview stayed after the drop"; bad=1; }
         [ "$(win w2 at | jq -r '.[0]')" -ge 600 ] || { echo "FAIL: w2 is not on the right half of the screen (x=$(win w2 at | jq -r '.[0]'))"; bad=1; } ;;
+    two-screens)
+        ws_after=$(hc monitors -j | jq -c '[.[] | {n: .name, ws: .activeWorkspace.id}]')
+        echo "active workspaces before: $ws_before"; echo "active workspaces after:  $ws_after"
+        [ "$ws_before" = "$ws_after" ] || { echo "FAIL: a screen switched workspace during the move"; bad=1; }
+        [ "$(win w2 monitor)" = "$(hc monitors -j | jq -r --arg m "$m2" '.[] | select(.name == $m) | .id')" ] || { echo "FAIL: w2 is not on the second screen where it was dropped (monitor $(win w2 monitor))"; bad=1; }
+        [ "$(win w2 at | jq -r '.[0]')" -ge 1280 ] || { echo "FAIL: w2 is not inside the second screen (x=$(win w2 at | jq -r '.[0]'))"; bad=1; }
+        [ "$(win w1 hidden)" = false ] || { echo "FAIL: w1 is hidden"; bad=1; }
+        [ "$(hc activewindow -j | jq -r .title)" = w2 ] || { echo "FAIL: focus is not on the dropped window (it is on '$(hc activewindow -j | jq -r .title)')"; bad=1; }
+        # Focus must not visit the other screen after the drop (the shell making w1 Full there).
+        hops=$(awk -v e="${end:-0}" '$1 > e && $2 ~ /^focusedmonv2>>/' "$tmp/events.log" | wc -l)
+        [ "$hops" = 0 ] || { echo "FAIL: focus hopped between screens $hops time(s) after the drop"; bad=1; }
+        echo "workspace events:"; grep -E ' (workspacev2|activeworkspacev2|focusedmonv2|moveworkspacev2)>>' "$tmp/events.log" | sed 's/^\([0-9]*\.[0-9]\{3\}\)[0-9]* /\1 /' | tail -n 20 ;;
     full-edge)
         # A Full window that was dragged comes back Full, and nothing else changed.
         [ "$(win w2 fullscreen)" = 1 ] || { echo "FAIL: w2 was Full before the drag and is not after it"; bad=1; }

@@ -31,6 +31,9 @@ QtObject {
     property string editScreen: ""
     // The island the keyboard acts on in edit mode, as "zone:index"; "" for none.
     property string selected: ""
+    // The Bar editor dialog (BarEditor.qml) is open: it opens with edit mode and Esc closes it
+    // (edit mode goes on); while it is open it holds the keyboard and the screen is dimmed.
+    property bool editorOpen: false
 
     function startEdit(screenName) {
         if (Bridge.locked)
@@ -38,11 +41,13 @@ QtObject {
         editScreen = screenName || "";
         selected = "";
         editing = true;
+        editorOpen = true;
         if (activePopup)
             activePopup.hide();
     }
     function stopEdit() {
         editing = false;
+        editorOpen = false;
         selected = "";
         if (activePopup)
             activePopup.hide();
@@ -143,6 +148,14 @@ QtObject {
 
     function setText(zone, index, t) {
         return save(L.setText(layout, zone, index, t));
+    }
+
+    // The same text style (barlayout.js setText) or size on every island but the separators.
+    function setTextAll(t) {
+        return save(L.setTextAll(layout, t));
+    }
+    function setSizeAll(size) {
+        return save(L.setSizeAll(layout, size));
     }
 
     function setOptions(island, opts) {

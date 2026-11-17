@@ -488,6 +488,14 @@ impl Action {
                 steps
             }
             // The rest depends on the window's state once focused: see `run` and `column_lua`.
+            // Made Full for the policy, with focus to stay where it is: the window is read and
+            // maximized where it is, with no hop of focus (across screens, a hop would show as
+            // the other screen flashing as the focused one).
+            Action::ColumnWidth {
+                full: true,
+                keep_focus: true,
+                ..
+            } => Vec::new(),
             Action::ColumnWidth { address, .. } => {
                 vec![d(format!("hl.dsp.focus({{ window = {} }})", win(address)))]
             }
@@ -705,8 +713,8 @@ fn script(action: &Action) -> String {
     }
     if let Action::ColumnWidth {
         address,
+        full: false,
         keep_focus: true,
-        ..
     } = action
     {
         s.push_str(&format!(
@@ -742,7 +750,27 @@ end
         Action::PageHiding { workspaces, reset } => s.push_str(&page_hiding_lua(workspaces, reset)),
         _ => {}
     }
-    if let Action::ColumnWidth { address, full, .. } = action {
+    if let Action::ColumnWidth {
+        address,
+        full: true,
+        keep_focus: true,
+    } = action
+    {
+        // Not focused: read where it is. Unreadable counts as 0 (not maximized).
+        s.push_str(&format!(
+            "  local ok, w = pcall(hl.get_window, {})\n  \
+             local fs = ok and w and tonumber(w.fullscreen) or 0\n",
+            lua_string(&format!("address:{address}"))
+        ));
+        for (cond, fs) in [("if fs == 1 or fs == 2 then", 1), ("else", 0)] {
+            s.push_str(&format!("  {cond}\n"));
+            for stmt in column_lua(address, true, fs) {
+                s.push_str("  ");
+                step(&mut s, &stmt);
+            }
+        }
+        s.push_str("  end\n");
+    } else if let Action::ColumnWidth { address, full, .. } = action {
         // Now focused: its state decides what Full or Half takes. Unreadable counts as 0.
         s.push_str(
             "  local ok, w = pcall(hl.get_active_window)\n  \
