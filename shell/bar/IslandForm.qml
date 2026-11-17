@@ -392,6 +392,79 @@ Item {
             }
         }
 
+        // --- system monitor: which readings the island shows ---
+        ColumnLayout {
+            visible: pop.island === "sysmon"
+            spacing: 2
+            Layout.fillWidth: true
+            Layout.topMargin: Theme.gapIn
+            UqText {
+                text: "Show in the bar"
+                color: Theme.textMuted
+            }
+            Repeater {
+                model: pop.island === "sysmon" ? [{ id: "cpu", name: "Processor" }, { id: "mem", name: "Memory" },
+                    { id: "gpu", name: "Graphics card" }, { id: "temp", name: "Temperature" }] : []
+                delegate: MenuRow {
+                    required property var modelData
+                    readonly property bool on: pop.opts[modelData.id] !== false
+                    Layout.fillWidth: true
+                    text: modelData.name
+                    detail: on ? "On" : "Off"
+                    Accessible.checkable: true
+                    Accessible.checked: on
+                    onActivated: {
+                        var o = { cpu: pop.opts.cpu !== false, mem: pop.opts.mem !== false,
+                                  gpu: pop.opts.gpu !== false, temp: pop.opts.temp !== false };
+                        o[modelData.id] = !on;
+                        BarLayout.setOptions("sysmon", o);
+                    }
+                }
+            }
+        }
+
+        // --- storage cleanup: when it turns amber ---
+        ColumnLayout {
+            visible: pop.island === "crumbs"
+            spacing: 2
+            Layout.fillWidth: true
+            Layout.topMargin: Theme.gapIn
+            UqText {
+                text: "Turn amber when you can free"
+                color: Theme.textMuted
+            }
+            Repeater {
+                model: pop.island === "crumbs" ? [{ gb: 0, name: "Never" }, { gb: 2, name: "2 GB" }, { gb: 5, name: "5 GB" },
+                    { gb: 10, name: "10 GB" }, { gb: 20, name: "20 GB" }, { gb: 50, name: "50 GB" }] : []
+                delegate: MenuRow {
+                    required property var modelData
+                    readonly property bool on: (typeof pop.opts.warn_gb === "number" ? pop.opts.warn_gb : 5) === modelData.gb
+                    Layout.fillWidth: true
+                    text: modelData.name
+                    detail: on ? "✓" : ""
+                    Accessible.checkable: true
+                    Accessible.checked: on
+                    onActivated: BarLayout.setOptions("crumbs", { warn_gb: modelData.gb })
+                }
+            }
+        }
+
+        // --- security: notifications ---
+        ColumnLayout {
+            visible: pop.island === "security"
+            spacing: 2
+            Layout.fillWidth: true
+            Layout.topMargin: Theme.gapIn
+            MenuRow {
+                Layout.fillWidth: true
+                text: "Notify when it gets worse"
+                detail: pop.opts.notify !== false ? "On" : "Off"
+                Accessible.checkable: true
+                Accessible.checked: pop.opts.notify !== false
+                onActivated: BarLayout.setOptions("security", { notify: pop.opts.notify === false })
+            }
+        }
+
         // --- open windows: their order ---
         ColumnLayout {
             readonly property string mode: Work.SORTS.indexOf(pop.opts.sort) >= 0 ? pop.opts.sort : Work.DEFAULT_SORT
