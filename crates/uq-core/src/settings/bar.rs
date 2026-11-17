@@ -919,7 +919,10 @@ mod tests {
         let b = BarLayout::default();
         assert_eq!(ids(&b.start), ["system", "work"]);
         assert!(b.center.is_empty());
-        assert_eq!(ids(&b.end), ["clock", "notif", "security", "tray", "status"]);
+        assert_eq!(
+            ids(&b.end),
+            ["clock", "notif", "security", "tray", "status"]
+        );
         assert!(b.validate().is_ok());
         assert_eq!(b.options.stocks.symbols, ["^GSPC", "AAPL", "MSFT"]);
     }
@@ -1119,7 +1122,10 @@ mod tests {
         }
         assert!(serde_json::from_value::<BarEdit>(json!({"op": "fly"})).is_err());
         b.apply(&BarEdit::Reset).unwrap();
-        assert_eq!(ids(&b.end), ["clock", "notif", "security", "tray", "status"]);
+        assert_eq!(
+            ids(&b.end),
+            ["clock", "notif", "security", "tray", "status"]
+        );
         assert_eq!(b.options.stocks.symbols, ["TSLA"], "reset keeps options");
     }
 
