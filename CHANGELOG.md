@@ -16,6 +16,7 @@ All notable changes to uQ are listed here. The format follows
 - **Settings cards are as tall as their rows**, not stretched to match the card beside them, so
   short cards no longer have blank space under them.
 - The look=see>do_ notice after a `>` command now reads "Click the terminal to switch to it."
+- **Minimised tabs are a little less faint** (70% opacity, was 50%), so they stay readable.
 
 ## [0.3.3] - 2026-11-17
 
