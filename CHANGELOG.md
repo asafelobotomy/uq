@@ -7,6 +7,8 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.7] - 2026-11-17
+
 ### Added
 
 - **A text style for every island** (`shell.bar.options.all.text`), set on the Bar editor's "All
