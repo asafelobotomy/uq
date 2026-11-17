@@ -22,6 +22,15 @@ All notable changes to uQ are listed here. The format follows
 
 - The search field is now a pill of its own, with the results card below it.
 
+### Fixed
+
+- **Updating uq can no longer leave Hyprland in emergency mode when `base.lua` is missing for
+  more than a second.** Hyprland reloads when a file it read goes away and not when it comes
+  back, and uqd's recovery looked once, a second after the failed reload: a package that takes a
+  few seconds to unpack left the file missing at that look, and Hyprland stayed on its emergency
+  binds ("a lua config error resulted in no binds") until a manual reload. uqd now keeps looking
+  every second for up to two minutes and reloads once the file is back.
+
 ## [0.3.2] - 2026-11-16
 
 ### Changed

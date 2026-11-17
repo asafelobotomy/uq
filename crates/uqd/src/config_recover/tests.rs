@@ -112,3 +112,40 @@ async fn a_clean_reload_or_a_real_error_is_left_alone() {
     d.config_reloaded().await;
     assert_eq!(reloads(&comp), 0, "a syntax error is the user's to fix");
 }
+
+#[tokio::test(start_paused = true)]
+async fn a_file_that_is_missing_for_seconds_still_gets_its_reload() {
+    let (dir, mut d, comp) = desktop();
+    let base = dir.path().join("base.lua");
+    *comp.config_errors.lock().unwrap() = vec![format!(
+        "hyprland.lua:1: module '{}' not found:",
+        base.display()
+    )];
+    d.config_reloaded().await;
+    assert_eq!(reloads(&comp), 0, "the file is not back yet");
+    tokio::time::sleep(WATCH_EVERY * 3).await;
+    assert_eq!(reloads(&comp), 0, "still missing");
+    std::fs::write(&base, "").unwrap();
+    tokio::time::sleep(WATCH_EVERY * 2).await;
+    assert_eq!(reloads(&comp), 1, "back: reloaded once");
+    tokio::time::sleep(WATCH_FOR).await;
+    assert_eq!(reloads(&comp), 1, "and not again");
+}
+
+#[tokio::test(start_paused = true)]
+async fn waiting_for_a_file_gives_up_and_a_second_wait_does_not_double_up() {
+    let (dir, mut d, comp) = desktop();
+    *comp.config_errors.lock().unwrap() = vec![format!(
+        "hyprland.lua:1: module '{}' not found:",
+        dir.path().join("never.lua").display()
+    )];
+    d.config_reloaded().await;
+    d.config_reloaded().await;
+    assert!(d.recover.watching.load(std::sync::atomic::Ordering::SeqCst));
+    tokio::time::sleep(WATCH_FOR + WATCH_EVERY * 2).await;
+    assert_eq!(reloads(&comp), 0);
+    assert!(
+        !d.recover.watching.load(std::sync::atomic::Ordering::SeqCst),
+        "gave up"
+    );
+}
