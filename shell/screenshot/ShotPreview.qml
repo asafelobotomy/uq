@@ -208,7 +208,9 @@ PanelWindow {
 
             Rectangle {
                 Layout.fillWidth: true
-                Layout.preferredHeight: Math.max(60, Math.min(root.imageMax, img.paintedHeight))
+                // The capture's own shape at the card's width, between 60 and imageMax tall.
+                Layout.preferredHeight: Math.max(60, Math.min(root.imageMax,
+                    img.implicitWidth > 0 ? width * img.implicitHeight / img.implicitWidth : 0))
                 radius: Theme.radius - 4
                 color: Theme.bg
                 clip: true
