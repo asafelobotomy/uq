@@ -865,6 +865,19 @@ Island {
                     spacing: Theme.gapIn
                     // Icon size: the icon, centred, turns into the close button under the pointer.
                     Item {
+                        id: iconSlot
+                        // The × waits for the pointer to rest on the icon, so passing over a
+                        // tab doesn't hide which app it is, and a quick click can't close it.
+                        property bool closeShown: false
+                        Timer {
+                            interval: 400
+                            running: iconClose.containsMouse && pill.tier === "icon" && !pill.win.minimised
+                            onTriggered: iconSlot.closeShown = true
+                        }
+                        Connections {
+                            target: iconClose
+                            function onContainsMouseChanged() { if (!iconClose.containsMouse) iconSlot.closeShown = false; }
+                        }
                         Layout.preferredWidth: root.iconSize
                         Layout.preferredHeight: root.iconSize
                         Layout.alignment: Qt.AlignVCenter | (pill.tier === "icon" ? Qt.AlignHCenter : Qt.AlignLeft)
@@ -872,7 +885,7 @@ Island {
                         Layout.maximumWidth: root.iconSize
                         IconImage {
                             anchors.fill: parent
-                            visible: !(pill.tier === "icon" && iconClose.containsMouse)
+                            visible: !(pill.tier === "icon" && iconSlot.closeShown)
                             implicitSize: root.iconSize
                             backer.sourceSize.width: root.iconSize * root.dpr
                             backer.sourceSize.height: root.iconSize * root.dpr
@@ -883,11 +896,11 @@ Island {
                             }
                         }
                         AlertDot {
-                            shown: pill.alert && !(pill.tier === "icon" && iconClose.containsMouse)
+                            shown: pill.alert && !(pill.tier === "icon" && iconSlot.closeShown)
                         }
                         Rectangle {
                             anchors.fill: parent
-                            visible: pill.tier === "icon" && iconClose.containsMouse
+                            visible: pill.tier === "icon" && iconSlot.closeShown
                             radius: width / 2
                             color: Theme.overlay
                             UqText {
@@ -901,9 +914,16 @@ Island {
                             // A minimised tab's icon isn't a close button: clicking it restores.
                             enabled: pill.tier === "icon" && !pill.win.minimised
                             hoverEnabled: true
+                            // Before the × shows, a click goes on to the tab (it focuses the window).
+                            propagateComposedEvents: true
                             Accessible.role: Accessible.Button
                             Accessible.name: root.closeLabel(pill.win)
-                            onClicked: root.closePressed(pill, pill.win)
+                            onClicked: mouse => {
+                                if (iconSlot.closeShown)
+                                    root.closePressed(pill, pill.win);
+                                else
+                                    mouse.accepted = false;
+                            }
                         }
                     }
                     UqText {

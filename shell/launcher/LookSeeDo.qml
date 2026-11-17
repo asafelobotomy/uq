@@ -978,7 +978,7 @@ PanelWindow {
                         anchors.leftMargin: Theme.gapOut
                         anchors.rightMargin: Theme.gapOut
                         verticalAlignment: Text.AlignVCenter
-                        text: "Running in " + root.termName + ". Click it to switch to it."
+                        text: "Running in " + root.termName + ". Click the terminal to switch to it."
                         color: Theme.accent
                     }
                 }
