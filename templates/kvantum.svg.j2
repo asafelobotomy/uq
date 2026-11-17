@@ -1,0 +1,129 @@
+{#- uQ's own Kvantum artwork: flat, rounded controls drawn from the theme's colour tokens, so
+    buttons, tabs, fields, menus and bars look like uQ's own Settings and shell instead of
+    Kvantum's built-in grey bevel. Written from scratch for uQ (MIT); no Kvantum theme art is
+    copied. Every element is a 9-slice built from three cells (corner, side, centre) that the
+    other pieces mirror or rotate, so a frame's corner size must equal the section's
+    `frame.*` width in kvantum.kvconfig.j2. -#}
+{%- set c = theme.colors -%}
+{%- set r = [[theme.ui.radius, 6]|min, 3]|max -%}
+{%- set p = r + 4 -%}
+{%- macro frame(id, row, fill, stroke, sw, rr) -%}
+{%- set y = row * p -%}
+{%- set k = rr -%}
+<g id="{{ id }}-topleft" transform="translate(0 {{ y }})">
+<rect width="{{ k }}" height="{{ k }}" fill="#000" fill-opacity="0"/>
+{%- if fill != "none" %}
+<path d="M0 {{ k }} A{{ k }} {{ k }} 0 0 1 {{ k }} 0 L{{ k }} {{ k }} Z" fill="{{ fill }}"/>
+{%- endif %}
+{%- if sw > 0 %}
+<path d="M0 {{ k }} A{{ k }} {{ k }} 0 0 1 {{ k }} 0 L{{ k }} {{ sw }} A{{ k - sw }} {{ k - sw }} 0 0 0 {{ sw }} {{ k }} Z" fill="{{ stroke }}"/>
+{%- endif %}
+</g>
+<g id="{{ id }}-left" transform="translate({{ p }} {{ y }})">
+<rect width="{{ k }}" height="{{ k }}" fill="{{ fill if fill != 'none' else '#000' }}" fill-opacity="{{ 1 if fill != 'none' else 0 }}"/>
+{%- if sw > 0 %}
+<rect width="{{ sw }}" height="{{ k }}" fill="{{ stroke }}"/>
+{%- endif %}
+</g>
+<rect id="{{ id }}" x="{{ 2 * p }}" y="{{ y }}" width="{{ k }}" height="{{ k }}" fill="{{ fill if fill != 'none' else '#000' }}" fill-opacity="{{ 1 if fill != 'none' else 0 }}"/>
+<use xlink:href="#{{ id }}-topleft" id="{{ id }}-topright" transform="matrix(-1 0 0 1 {{ k }} 0)"/>
+<use xlink:href="#{{ id }}-topleft" id="{{ id }}-bottomleft" transform="matrix(1 0 0 -1 0 {{ 2 * y + k }})"/>
+<use xlink:href="#{{ id }}-topleft" id="{{ id }}-bottomright" transform="matrix(-1 0 0 -1 {{ k }} {{ 2 * y + k }})"/>
+<use xlink:href="#{{ id }}-left" id="{{ id }}-top" transform="rotate(90 {{ p + k / 2 }} {{ y + k / 2 }})"/>
+<use xlink:href="#{{ id }}-left" id="{{ id }}-right" transform="rotate(180 {{ p + k / 2 }} {{ y + k / 2 }})"/>
+<use xlink:href="#{{ id }}-left" id="{{ id }}-bottom" transform="rotate(-90 {{ p + k / 2 }} {{ y + k / 2 }})"/>
+{%- endmacro -%}
+{#- The state table: (element, fill, border colour, border width, corner size). -#}
+{%- set nf = "none" -%}
+{%- set frames = [
+  ["button-normal", c.surface_alt, c.border, 1, r],
+  ["button-focused", c.overlay, c.accent, 1, r],
+  ["button-pressed", c.bg, c.accent, 1, r],
+  ["button-toggled", c.accent, c.accent, 1, r],
+  ["button-toggled-focused", c.accent, c.text, 1, r],
+  ["button-default", nf, c.accent, 2, r],
+  ["tbutton-normal", nf, nf, 0, r],
+  ["tbutton-focused", c.overlay, nf, 0, r],
+  ["tbutton-pressed", c.surface_alt, c.accent, 1, r],
+  ["tbutton-toggled", c.overlay, c.accent, 1, r],
+  ["lineedit-normal", c.surface, c.border, 1, r],
+  ["lineedit-focused", c.surface, c.accent, 2, r],
+  ["tab-normal", c.surface_alt, c.border, 1, r],
+  ["tab-focused", c.overlay, c.accent, 1, r],
+  ["tab-pressed", c.overlay, c.accent, 1, r],
+  ["tab-toggled", c.accent, c.accent, 1, r],
+  ["tab-toggled-focused", c.accent, c.text, 1, r],
+  ["tabframe-normal", nf, c.border, 1, r],
+  ["group-normal", nf, c.border, 1, r],
+  ["common-normal", nf, c.border, 1, r],
+  ["common-focused", nf, c.accent, 1, r],
+  ["itemview-normal", nf, nf, 0, 4],
+  ["itemview-focused", c.overlay, nf, 0, 4],
+  ["itemview-pressed", c.accent, nf, 0, 4],
+  ["itemview-toggled", c.accent, nf, 0, 4],
+  ["menu-normal", c.surface, c.border, 1, r],
+  ["menuitem-normal", nf, nf, 0, 4],
+  ["menuitem-focused", c.accent, nf, 0, 4],
+  ["menuitem-pressed", c.accent, nf, 0, 4],
+  ["menuitem-toggled", c.accent, nf, 0, 4],
+  ["menubaritem-normal", nf, nf, 0, 4],
+  ["menubaritem-focused", c.overlay, nf, 0, 4],
+  ["menubaritem-pressed", c.accent, nf, 0, 4],
+  ["menubaritem-toggled", c.accent, nf, 0, 4],
+  ["slider-normal", c.overlay, nf, 0, 3],
+  ["slider-toggled", c.accent, nf, 0, 3],
+  ["progress-normal", c.overlay, nf, 0, 3],
+  ["progress-pattern-normal", c.accent, nf, 0, 3],
+  ["progress-pattern-disabled", c.border, nf, 0, 3],
+  ["scrollbarslider-normal", c.border, nf, 0, 4],
+  ["scrollbarslider-focused", c.text_muted, nf, 0, 4],
+  ["scrollbarslider-pressed", c.accent, nf, 0, 4],
+  ["scrollbargroove-normal", nf, nf, 0, 4],
+  ["splitter-normal", nf, nf, 0, 1]
+] -%}
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" width="{{ 3 * p }}" height="{{ (frames|length + 12) * p + 40 }}">
+{%- for f in frames %}
+{{ frame(f[0], loop.index0, f[1], f[2], f[3], f[4]) }}
+{%- endfor %}
+{#- The default button is an accent outline; the small corner mark Kvantum adds is blank. -#}
+<rect id="button-default-indicator" x="0" y="{{ (frames|length + 10) * p }}" width="1" height="1" fill="#000" fill-opacity="0"/>
+{#- Single-piece elements sit below the frames. -#}
+{%- set top = frames|length * p + 4 %}
+{%- macro box(id, x, y, fill, stroke, sw, rx) %}
+<g id="{{ id }}" transform="translate({{ x }} {{ y }})">
+<rect width="16" height="16" fill="#000" fill-opacity="0"/>
+<rect x="{{ sw / 2 }}" y="{{ sw / 2 }}" width="{{ 16 - sw }}" height="{{ 16 - sw }}" rx="{{ rx }}" fill="{{ fill }}"{% if sw > 0 %} stroke="{{ stroke }}" stroke-width="{{ sw }}"{% endif %}/>
+{{ caller() }}
+</g>
+{%- endmacro %}
+{#- Check boxes and radio buttons: normal/focused for each of unchecked, checked and mixed. -#}
+{%- for st in [["normal", c.border], ["focused", c.accent]] %}
+{%- set y = top + loop.index0 * 20 %}
+{%- call box("checkbox-" ~ st[0], 0, y, c.surface, st[1], 1, 4) %}{% endcall %}
+{%- call box("checkbox-checked-" ~ st[0], 20, y, c.accent, c.accent, 1, 4) %}<path d="M4 8.5 L7 11.5 L12 5" fill="none" stroke="{{ c.accent_text }}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>{% endcall %}
+{%- call box("checkbox-tristate-" ~ st[0], 40, y, c.accent, c.accent, 1, 4) %}<path d="M4.5 8 H11.5" stroke="{{ c.accent_text }}" stroke-width="2" stroke-linecap="round"/>{% endcall %}
+{%- call box("radio-" ~ st[0], 60, y, c.surface, st[1], 1, 8) %}{% endcall %}
+{%- call box("radio-checked-" ~ st[0], 80, y, c.accent, c.accent, 1, 8) %}<circle cx="8" cy="8" r="3" fill="{{ c.accent_text }}"/>{% endcall %}
+{%- endfor %}
+{#- Slider handle. -#}
+{%- for st in [["normal", c.text, 0], ["focused", c.accent, 0], ["pressed", c.accent, 0]] %}
+<g id="slidercursor-{{ st[0] }}" transform="translate({{ loop.index0 * 20 }} {{ top + 44 }})">
+<rect width="16" height="16" fill="#000" fill-opacity="0"/>
+<circle cx="8" cy="8" r="7" fill="{{ st[1] }}" stroke="{{ c.bg }}" stroke-width="1"/>
+</g>
+{%- endfor %}
+<g id="slidercursor-disabled" transform="translate(60 {{ top + 44 }})">
+<rect width="16" height="16" fill="#000" fill-opacity="0"/>
+<circle cx="8" cy="8" r="7" fill="{{ c.border }}"/>
+</g>
+{#- Arrows, in the text colour (Kvantum recolours none of these). -#}
+{%- for a in [["up", "M3 10 L8 5 L13 10"], ["down", "M3 6 L8 11 L13 6"], ["left", "M10 3 L5 8 L10 13"], ["right", "M6 3 L11 8 L6 13"]] %}
+{%- set ai = loop.index0 %}
+{%- for st in [["normal", c.text], ["disabled", c.text_muted]] %}
+<g id="arrow-{{ a[0] }}-{{ st[0] }}" transform="translate({{ loop.index0 * 20 }} {{ top + 64 + ai * 20 }})">
+<rect width="16" height="16" fill="#000" fill-opacity="0"/>
+<path d="{{ a[1] }}" fill="none" stroke="{{ st[1] }}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+{%- endfor %}
+{%- endfor %}
+</svg>

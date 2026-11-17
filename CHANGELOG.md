@@ -7,6 +7,16 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **Qt apps no longer show Kvantum's grey bevelled buttons.** uQ's Kvantum theme named a base
+  theme that Kvantum never used, so every Qt app fell back to Kvantum's built-in grey 3D style
+  with a blue accent, whatever the uQ theme. uqd now also writes `Kvantum/uq/uq.svg`, flat rounded
+  artwork drawn from the theme's colours (buttons, the default button, tabs, fields, check boxes,
+  radios, sliders, progress bars, list selections, menus), and a full `uq.kvconfig`. OK, Cancel and
+  Apply, tabs and the rest now match uQ's own windows in every theme, light or dark, and follow
+  theme changes. Apps pick it up when they next start.
+
 ## [0.3.7] - 2026-11-17
 
 ### Added
