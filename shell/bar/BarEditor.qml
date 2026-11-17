@@ -126,10 +126,12 @@ PanelWindow {
 
     Rectangle {
         id: panelBox
-        anchors.centerIn: parent
-        anchors.verticalCenterOffset: -Theme.fontSize * 2
+        // Above the edit panel at the bottom of the screen.
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.top: parent.top
+        anchors.topMargin: Theme.gapOut * 2
         width: Math.min(parent.width - Theme.gapOut * 4, Theme.fontSize * 66)
-        height: Math.min(parent.height - Theme.fontSize * 12, Theme.fontSize * 46)
+        height: Math.min(parent.height - Theme.gapOut * 2 - Theme.fontSize * 13, Theme.fontSize * 46)
         color: Theme.surface
         radius: Theme.radius
         border.color: Theme.accent

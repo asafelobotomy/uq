@@ -189,4 +189,18 @@ PanelWindow {
     }
 
     onVisibleChanged: if (visible) box.forceActiveFocus()
+
+    // The Bar editor closed: the keys are the panel's again.
+    Connections {
+        target: BarLayout
+        function onEditorOpenChanged() {
+            if (!BarLayout.editorOpen && panel.visible)
+                refocus.restart();
+        }
+    }
+    Timer {
+        id: refocus
+        interval: 100
+        onTriggered: box.forceActiveFocus()
+    }
 }
