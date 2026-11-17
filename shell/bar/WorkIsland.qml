@@ -722,7 +722,7 @@ Island {
                 color: win.focused ? Theme.surfaceAlt : (pillHover.hovered ? Theme.overlay : "transparent")
                 border.color: win.focused ? Theme.accent : "transparent"
                 border.width: win.focused ? 1 : 0
-                opacity: win.minimised ? 0.5 : 1
+                opacity: win.minimised ? 0.7 : 1
                 Accessible.role: Accessible.PageTab
                 readonly property bool alert: root.alerts[modelData] === true
                 Accessible.name: name + (win.minimised ? ", minimised" : "")
