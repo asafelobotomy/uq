@@ -5,7 +5,7 @@
 #     editor window); Esc in slurp captures nothing and is not an error; a slurp that fails for
 #     another reason is reported
 #   - every capture is saved to the dated file, copied, and handed to the shell's preview over
-#     `qs ipc call screenshot show <file> copied`; no notification when the preview showed it
+#     `qs ipc call screenshot present <file> copied`; no notification when the preview showed it
 #   - without a shell (qs fails) a notification names the file, with no "Open" action
 #   - print: follows [ui] print_action in state.toml (region when unset or unknown)
 #   - a second run while one is being taken does nothing, but a wl-copy still serving the
@@ -75,7 +75,7 @@ grep -q '^grim -g 10,20 30x40 ' "$calls" || bad "region: grim not on the picked 
 grep -q '^grim -o' "$calls" && bad "region: a full-screen capture was taken first"
 saved || bad "region: nothing saved"
 grep -q '^wl-copy --type image/png' "$calls" || bad "region: not copied"
-grep -q '^qs ipc -p /shell call screenshot show .*/Screenshot_[0-9_]*\.png copied$' "$calls" || bad "region: the preview wasn't asked to show it: $(cat "$calls")"
+grep -q '^qs ipc -p /shell call screenshot present .*/Screenshot_[0-9_]*\.png copied$' "$calls" || bad "region: the preview wasn't asked to show it: $(cat "$calls")"
 grep -q '^notify' "$calls" && bad "region: notified although the preview showed it"
 grep -q 'satty\|xdg-open' "$calls" && bad "region: opened a viewer"
 compgen -G "$tmp/uq-shot.*" >/dev/null && bad "region: scratch files were left behind"
@@ -129,7 +129,7 @@ grep -q -- '--action' "$calls" && bad "no shell: the notification has an action"
 
 # --- no wl-copy: still saved and shown, but not marked copied -----------------------------------
 NOCOPY=1 run window; rc=$?
-grep -q '^qs ipc .* call screenshot show .*\.png $' "$calls" || bad "copy failed: the preview was told it was copied: $(cat "$calls")"
+grep -q '^qs ipc .* call screenshot present .*\.png none$' "$calls" || bad "copy failed: the preview was told it was copied: $(cat "$calls")"
 saved || bad "copy failed: nothing saved"
 
 # --- window / screen / usage --------------------------------------------------------------------

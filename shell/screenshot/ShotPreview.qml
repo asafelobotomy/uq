@@ -10,7 +10,7 @@ import "../logic/screenshot.js" as S
 
 // The floating preview every screenshot ends in (never a new window): the capture, where it was
 // saved, and Copy, Discard and a close button. `uq-screenshot` calls
-//   qs ipc -p /usr/share/uq/shell call screenshot show <file.png> <copied|"">
+//   qs ipc -p /usr/share/uq/shell call screenshot present <file.png> <copied|none>
 // once the file is saved (and, normally, already on the clipboard). It stays for SHOW_MS, or
 // while the pointer is over it, and never takes keyboard focus; the window's input mask covers
 // only the card, so clicks beside it reach the windows below. Hidden while locked.
@@ -87,7 +87,7 @@ PanelWindow {
         target: "screenshot"
 
         // "ok", or "ignored" for a path that isn't an absolute .png path or while locked.
-        function show(path: string, copied: string): string {
+        function present(path: string, copied: string): string {
             if (Bridge.locked)
                 return "ignored";
             return root.open(path, copied) ? "ok" : "ignored";

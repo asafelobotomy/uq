@@ -150,7 +150,7 @@ f=$(newest)
 [ -n "$f" ] && [ -s "$f" ] || check "nothing was saved in $pics"
 wait_layers 1 || { check "the preview never appeared"
     echo "--- uq-screenshot output:"; cat "$tmp/snap.out"
-    echo "--- ipc: $("${shell_env[@]}" timeout 10 qs ipc -p "$root/shell" call screenshot show "$f" copied 2>&1)"
+    echo "--- ipc: $("${shell_env[@]}" timeout 10 qs ipc -p "$root/shell" call screenshot present "$f" copied 2>&1)"
     echo "--- qs.log (screenshot lines)"; grep -i "screenshot\|ShotPreview\|ERROR" "$tmp/qs.log" | tail -n 20
     hc layers -j | jq -c '.. | objects | .namespace? // empty' | sort -u | tr '\n' ' '; echo; }
 sleep 1; still 1-preview
