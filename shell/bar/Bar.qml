@@ -116,6 +116,9 @@ PanelWindow {
         if (s === null || !s.visible)
             return;
         BarLayout.selected = k;
+        // The Bar editor shows the chosen island's settings itself.
+        if (BarLayout.editorOpen)
+            return;
         islandSettings.showFor(s, { zone: s.zone, index: s.index, id: s.islandId, size: s.size, units: s.units });
     }
 
@@ -351,6 +354,12 @@ PanelWindow {
 
     IslandSettings {
         id: islandSettings
+    }
+
+    // The Bar editor dialog: opens with edit mode, on the screen editing started on.
+    BarEditor {
+        bar: bar
+        active: bar.editsHere
     }
 
     // The edit-mode panel under the bar, on the screen editing started on.
