@@ -7,4 +7,9 @@ ignore = [
     { id = "RUSTSEC-2026-0370", reason = "zbus 5 stack; move to zbus 6 after v0.3.0" },
     { id = "RUSTSEC-2026-0371", reason = "zbus 5 stack; move to zbus 6 after v0.3.0" },
     { id = "RUSTSEC-2026-0372", reason = "zbus 5 stack; move to zbus 6 after v0.3.0" },
+    # chrono and chrono-tz are flagged "unmaintained" (all versions, no fix; RustSec gave them IDs on 2026-11-17).
+    # Notices, not vulnerabilities; the replacement (jiff or time) is a change to every crate that
+    # formats a date, so it needs its own release.
+    { id = "RUSTSEC-2026-0543", reason = "chrono unmaintained notice; replace with jiff or time in its own change" },
+    { id = "RUSTSEC-2026-0555", reason = "chrono-tz unmaintained notice; goes with chrono" },
 ]
