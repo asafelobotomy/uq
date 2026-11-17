@@ -5,7 +5,7 @@
 # scripts/bump-version.sh keeps them in step.
 pkgname=uq
 pkgver=0.3.2
-pkgrel=1
+pkgrel=2
 _tag=${pkgver/rc/-rc.}
 # The uq-hyprland-pin this release's config/hypr/base.lua is tested with: equal to
 # packaging/uq-hyprland-pin's pkgver (tests/shell/version_test.sh checks). A versioned dependency
@@ -51,7 +51,9 @@ optdepends=(
   'kate: KWrite, a plain text editor'
 )
 # Keep !lto: rustc links with lld, and makepkg's LTO flags make the cxx-qt C++ objects unreadable to it.
-options=(!lto)
+# !check: the full test suite (cargo + ~950 QML tests, about a minute) runs in CI before every tag, so
+# AUR users skip it. Build with `makepkg --check` (or scripts/build-local-pkg.sh) to run it anyway.
+options=(!lto !check)
 backup=(etc/pam.d/uq-greetd etc/pam.d/uq-greeter etc/pam.d/uq-lock etc/pam.d/uq-lock-fingerprint etc/uq/greetd.toml etc/uq/greeter.toml)
 # The release asset, not GitHub's /archive/ tarball: that one is generated on demand and its bytes
 # (so its checksum) can change. The release workflow uploads exactly this file and prints its sum.
