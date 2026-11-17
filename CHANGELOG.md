@@ -7,6 +7,16 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.6] - 2026-11-17
+
+### Added
+
+- **A Security island in the bar.** A green, amber or red ring shows oysterAV's security state,
+  checked every two minutes. Click it to see the reasons and open oysterAV's Security page in
+  Settings. It sends one notification when the state gets worse, and hides itself when oysterAV
+  isn't installed. It is in the default bar of new users; add it to an existing bar with Edit,
+  Add an Island.
+
 ## [0.3.5] - 2026-11-17
 
 ### Changed
