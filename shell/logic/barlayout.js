@@ -122,6 +122,31 @@ function textOf(item) {
     };
 }
 
+// The text style every island has that has none of its own (`options.all.text`), cleaned up.
+function allText(bar) {
+    var o = bar && bar.options && bar.options.all;
+    return textOf({ text: o && typeof o === "object" ? o.text : null });
+}
+
+// The text style an island is drawn in: its own, else the all-islands text.
+function effectiveText(bar, item) {
+    return item && item.text && typeof item.text === "object" ? textOf(item) : allText(bar);
+}
+
+// The layout with the all-islands text changed to `t` (fields as setText; null for the
+// theme's) and every other option kept.
+function withAllText(bar, t) {
+    var cur = allText(bar);
+    if (t === null)
+        cur = TEXT_DEFAULT;
+    else
+        for (var f in TEXT_DEFAULT)
+            if (t[f] !== undefined)
+                cur[f] = t[f];
+    var stored = _storedText(textOf({ text: cur }));
+    return withOptions(bar, "all", stored === null ? {} : { text: stored });
+}
+
 function isPlainText(t) {
     return !t || (t.font === null && !t.bold && !t.italic && !t.caps && t.size === 100);
 }
@@ -156,8 +181,10 @@ function stepTextSize(size, dir) {
 // when it is not the island's default (see fillOf).
 function _withText(item, out) {
     var t = _storedText(textOf(item));
-    if (t !== null && item.id !== SEPARATOR)
-        out.text = t;
+    // `{}` is the theme's own look on an island, set on purpose (with an all-islands text it
+    // is how an island opts out); no `text` at all takes the all-islands text.
+    if (item.id !== SEPARATOR && (t !== null || (item.text && typeof item.text === "object")))
+        out.text = t === null ? {} : t;
     if (item.id !== SEPARATOR && typeof item.fill === "boolean" && item.fill !== defaultFill(item.id))
         out.fill = item.fill;
     return out;
@@ -357,7 +384,8 @@ function setText(bar, zone, index, t) {
     for (var k in old)
         if (k !== "text")
             next[k] = old[k];
-    var cur = textOf(old);
+    // From what the island shows now: its own text, else the all-islands text.
+    var cur = old.text && typeof old.text === "object" ? textOf(old) : allText(bar);
     if (t !== null)
         for (var f in TEXT_DEFAULT)
             if (t[f] !== undefined)
@@ -365,6 +393,8 @@ function setText(bar, zone, index, t) {
     var stored = t === null ? null : _storedText(textOf({ text: cur }));
     if (stored !== null)
         next.text = stored;
+    else if (t !== null && !isPlainText(allText(bar)))
+        next.text = {};
     out[zone][index] = next;
     return out;
 }

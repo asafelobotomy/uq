@@ -9,6 +9,9 @@ All notable changes to uQ are listed here. The format follows
 
 ### Added
 
+- **A text style for every island** (`shell.bar.options.all.text`), set on the Bar editor's "All
+  islands" page. Islands with no text of their own use it; an island's own text, even the
+  theme's, still wins.
 - **Edit mode opens the Bar editor.** Editing the bar (right-click an island, Edit Islands, or
   SUPER+ALT+B) now also opens a dialog with every island on the bar, every island type to add, the
   chosen island's own settings (size, text and what it shows) and an "All islands" page to set one
