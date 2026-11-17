@@ -7,6 +7,16 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-11-17
+
+### Changed
+
+- **Icon-only tabs keep their icon on hover.** The close × appears after the pointer rests on the
+  tab for 400 ms, and a click before then goes to the tab instead of closing the window.
+- **Settings cards are as tall as their rows**, not stretched to match the card beside them, so
+  short cards no longer have blank space under them.
+- The look=see>do_ notice after a `>` command now reads "Click the terminal to switch to it."
+
 ## [0.3.3] - 2026-11-17
 
 ### Added
