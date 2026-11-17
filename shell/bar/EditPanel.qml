@@ -9,7 +9,7 @@ import "islands"
 // Edit mode's panel, at the bottom of the screen editing started on: what can be done, how many
 // islands don't fit this screen, Add an Island, Reset and Done. It holds the keyboard while no
 // island popup is open: Left/Right choose an island, Shift+Left/Right move it, + and - change
-// its size, Enter opens its settings, Delete removes it, A adds one, Esc finishes.
+// its size, Enter opens its settings, S opens all the settings, Delete removes it, A adds one, Esc finishes.
 PanelWindow {
     id: panel
 
@@ -22,7 +22,7 @@ PanelWindow {
     color: "transparent"
     WlrLayershell.layer: WlrLayer.Top
     WlrLayershell.namespace: "uq-bar-edit"
-    WlrLayershell.keyboardFocus: BarLayout.activePopup ? WlrKeyboardFocus.None : WlrKeyboardFocus.Exclusive
+    WlrLayershell.keyboardFocus: BarLayout.activePopup || BarLayout.editorOpen ? WlrKeyboardFocus.None : WlrKeyboardFocus.Exclusive
     exclusionMode: ExclusionMode.Ignore
     anchors.bottom: true
     margins.bottom: Theme.gapOut * 2
@@ -115,6 +115,9 @@ PanelWindow {
             case Qt.Key_A:
                 panel.addIsland();
                 break;
+            case Qt.Key_S:
+                BarLayout.editorOpen = true;
+                break;
             default:
                 return;
             }
@@ -139,7 +142,7 @@ PanelWindow {
                 }
             }
             UqText {
-                text: "← → choose   Shift+← → move   + − size   Enter settings   Delete remove   A add   Esc done"
+                text: "← → choose   Shift+← → move   + − size   Enter settings   Delete remove   A add   S all settings   Esc done"
                 color: Theme.textMuted
             }
             UqText {
@@ -160,6 +163,12 @@ PanelWindow {
                     text: "Add an Island…"
                     activeFocusOnTab: false
                     onActivated: panel.addIsland()
+                }
+                MenuRow {
+                    text: "All settings…"
+                    detail: "S"
+                    activeFocusOnTab: false
+                    onActivated: BarLayout.editorOpen = true
                 }
                 MenuRow {
                     text: "Reset the bar"

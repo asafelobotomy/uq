@@ -7,6 +7,15 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Edit mode opens the Bar editor.** Editing the bar (right-click an island, Edit Islands, or
+  SUPER+ALT+B) now also opens a dialog with every island on the bar, every island type to add, the
+  chosen island's own settings (size, text and what it shows) and an "All islands" page to set one
+  size or text style for the whole bar. The screen under the bar dims while it is open, so the
+  bar stays lit and shows each change. Esc closes the dialog and edit mode goes on; S on the edit
+  panel opens it again.
+
 ## [0.3.5] - 2026-11-17
 
 ### Changed

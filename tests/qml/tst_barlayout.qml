@@ -344,4 +344,27 @@ TestCase {
         compare(o.options.news.feeds, ["https://x.org/rss"]);
         compare(o.options.stocks.symbols, ["AAPL"]);
     }
+
+    function test_set_text_and_size_on_every_island() {
+        var b = L.add(sample(), "separator", "start");
+        var t = L.setTextAll(b, { bold: true, size: 120 });
+        var all = t.start.concat(t.center, t.end);
+        for (var i = 0; i < all.length; i++) {
+            if (all[i].id === "separator")
+                compare(all[i].text, undefined);
+            else
+                compare(all[i].text, { bold: true, size: 120 }, all[i].id);
+        }
+        // Back to the theme's look everywhere.
+        var plain = L.setTextAll(t, null);
+        compare(plain.start.concat(plain.center, plain.end).filter(function (x) { return x.text !== undefined; }).length, 0);
+        var s = L.setSizeAll(b, "icon");
+        compare(L.sizeOf(s.center[0]), "icon");
+        compare(L.sizeOf(s.end[2]), "icon");
+        compare(s.start.filter(function (x) { return x.id === "separator"; })[0].size, null);
+        compare(L.setSizeAll(b, "custom"), null);
+        compare(L.setSizeAll(b, "huge"), null);
+        var only = L.remove(L.remove(L.remove(L.remove(L.remove(L.remove(L.remove(b, "start", 2), "start", 1), "start", 0), "center", 0), "end", 0), "end", 0), "end", 0);
+        compare(L.setTextAll(only, { bold: true }), null);
+    }
 }
