@@ -74,18 +74,10 @@ PanelWindow {
         choose(L.key("end", BarLayout.layout.end.length));
         BarLayout.add(id, "end");
     }
-    // Whether every island that has a text style has `field` set (the "All islands" checkmarks).
+    // Whether the all-islands text has `field` set ("theme" and "mono": the font).
     function allText(field) {
-        var n = 0, on = 0;
-        for (var i = 0; i < order.length; i++) {
-            if (order[i].id === L.SEPARATOR)
-                continue;
-            n++;
-            var t = L.textOf(BarLayout.layout[order[i].zone][order[i].index]);
-            if (field === "mono" ? t.font === L.MONO : (field === "theme" ? t.font === null : t[field] === true))
-                on++;
-        }
-        return n > 0 && on === n;
+        var t = BarLayout.allText;
+        return field === "mono" ? t.font === L.MONO : (field === "theme" ? t.font === null : t[field] === true);
     }
     function allSized(size) {
         var n = 0, on = 0;
@@ -302,7 +294,7 @@ PanelWindow {
                                 baseBold: true
                             }
                             UqText {
-                                text: "Set every island at once. You can still change any one of them after."
+                                text: "Settings for every island. An island can still have its own text and size."
                                 color: Theme.textMuted
                                 wrapMode: Text.WordWrap
                                 Layout.fillWidth: true
@@ -344,9 +336,16 @@ PanelWindow {
                                     Layout.fillWidth: true
                                 }
                                 MenuRow {
-                                    text: "Use the theme's everywhere"
-                                    onActivated: BarLayout.setTextAll(null)
+                                    visible: !L.isPlainText(BarLayout.allText)
+                                    text: "Use the theme's"
+                                    onActivated: BarLayout.setAllText(null)
                                 }
+                            }
+                            UqText {
+                                text: "Every island that has no text of its own uses this."
+                                color: Theme.textMuted
+                                wrapMode: Text.WordWrap
+                                Layout.fillWidth: true
                             }
                             Flow {
                                 spacing: 2
@@ -356,14 +355,14 @@ PanelWindow {
                                     detail: win.allText("theme") ? "✓" : ""
                                     Accessible.checkable: true
                                     Accessible.checked: win.allText("theme")
-                                    onActivated: BarLayout.setTextAll({ font: null })
+                                    onActivated: BarLayout.setAllText({ font: null })
                                 }
                                 MenuRow {
                                     text: "Monospace"
                                     detail: win.allText("mono") ? "✓" : ""
                                     Accessible.checkable: true
                                     Accessible.checked: win.allText("mono")
-                                    onActivated: BarLayout.setTextAll({ font: L.MONO })
+                                    onActivated: BarLayout.setAllText({ font: L.MONO })
                                 }
                                 MenuRow {
                                     text: "Bold"
@@ -371,7 +370,7 @@ PanelWindow {
                                     detail: win.allText("bold") ? "✓" : ""
                                     Accessible.checkable: true
                                     Accessible.checked: win.allText("bold")
-                                    onActivated: BarLayout.setTextAll({ bold: !win.allText("bold") })
+                                    onActivated: BarLayout.setAllText({ bold: !win.allText("bold") })
                                 }
                                 MenuRow {
                                     text: "Italic"
@@ -379,14 +378,14 @@ PanelWindow {
                                     detail: win.allText("italic") ? "✓" : ""
                                     Accessible.checkable: true
                                     Accessible.checked: win.allText("italic")
-                                    onActivated: BarLayout.setTextAll({ italic: !win.allText("italic") })
+                                    onActivated: BarLayout.setAllText({ italic: !win.allText("italic") })
                                 }
                                 MenuRow {
                                     text: "All capitals"
                                     detail: win.allText("caps") ? "✓" : ""
                                     Accessible.checkable: true
                                     Accessible.checked: win.allText("caps")
-                                    onActivated: BarLayout.setTextAll({ caps: !win.allText("caps") })
+                                    onActivated: BarLayout.setAllText({ caps: !win.allText("caps") })
                                 }
                             }
                             UqText {
@@ -402,9 +401,18 @@ PanelWindow {
                                     delegate: MenuRow {
                                         required property int modelData
                                         text: modelData + "%"
-                                        onActivated: BarLayout.setTextAll({ size: modelData })
+                                        detail: BarLayout.allText.size === modelData ? "✓" : ""
+                                        onActivated: BarLayout.setAllText({ size: modelData })
                                     }
                                 }
+                            }
+
+                            MenuRow {
+                                Layout.fillWidth: true
+                                Layout.topMargin: Theme.gapIn
+                                text: "Clear every island's own text"
+                                detail: "They all follow the text above"
+                                onActivated: BarLayout.setTextAll(null)
                             }
 
                             UqText {
