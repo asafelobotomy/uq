@@ -51,9 +51,7 @@ optdepends=(
   'kate: KWrite, a plain text editor'
 )
 # Keep !lto: rustc links with lld, and makepkg's LTO flags make the cxx-qt C++ objects unreadable to it.
-# !check: the full test suite (cargo + ~950 QML tests, about a minute) runs in CI before every tag, so
-# AUR users skip it. Build with `makepkg --check` (or scripts/build-local-pkg.sh) to run it anyway.
-options=(!lto !check)
+options=(!lto)
 backup=(etc/pam.d/uq-greetd etc/pam.d/uq-greeter etc/pam.d/uq-lock etc/pam.d/uq-lock-fingerprint etc/uq/greetd.toml etc/uq/greeter.toml)
 # The release asset, not GitHub's /archive/ tarball: that one is generated on demand and its bytes
 # (so its checksum) can change. The release workflow uploads exactly this file and prints its sum.
@@ -74,7 +72,10 @@ build() {
   cargo build --frozen --release -p uqd -p uqctl -p uq-settings -p uq-settings-helper
 }
 
+# The full suite (cargo plus ~950 QML tests, about a minute) runs in CI before every tag, so builds
+# skip it unless asked: UQ_CHECK=1 makepkg ... (makepkg has no per-PKGBUILD '!check' option).
 check() {
+  [ -n "${UQ_CHECK:-}" ] || { msg2 'skipping tests (CI runs them; set UQ_CHECK=1 to run)'; return 0; }
   cd "$srcdir/$pkgname-$_tag"
   export RUSTUP_TOOLCHAIN=stable
   export CARGO_TARGET_DIR=target
