@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # packaging/uq-session with a temporary $HOME and stub uqctl, start-hyprland and Hyprland on PATH:
-#   - first run (no hyprland.lua): runs `uqctl setup --quiet`, then execs the compositor
+#   - first run (no hyprland.lua): runs `uqctl setup --quiet --apps`, then execs the compositor
 #   - second run (the stub is in place): doesn't run setup again
 #   - a failing setup is written to ~/.local/state/uq/session.log and the session still starts
 #   - start-hyprland is preferred; plain Hyprland when start-hyprland isn't installed
@@ -39,9 +39,9 @@ run() { # extra env...
 : > "$tmp/calls"
 run; rc=$?
 [ "$rc" = 0 ] || { echo "FAIL: first run exited $rc"; fail=1; }
-grep -qx 'uqctl setup --quiet' "$tmp/calls" || { echo "FAIL: setup not run on first login: $(cat "$tmp/calls")"; fail=1; }
+grep -qx 'uqctl setup --quiet --apps' "$tmp/calls" || { echo "FAIL: setup not run on first login: $(cat "$tmp/calls")"; fail=1; }
 grep -q '^start-hyprland ' "$tmp/calls" || { echo "FAIL: session not started: $(cat "$tmp/calls")"; fail=1; }
-[ "$(head -n1 "$tmp/calls")" = 'uqctl setup --quiet' ] || { echo "FAIL: setup must run before the compositor"; fail=1; }
+[ "$(head -n1 "$tmp/calls")" = 'uqctl setup --quiet --apps' ] || { echo "FAIL: setup must run before the compositor"; fail=1; }
 [ -e "$home/.local/state/uq/session.log" ] && { echo "FAIL: a good setup wrote the log"; fail=1; }
 
 # 2. Second login: the stub is there, so no setup.
@@ -61,7 +61,7 @@ grep -q "^start-hyprland $pid\$\|^start-hyprland $pid " "$tmp/calls" || { echo "
 printf -- '-- mine\n' > "$home/.config/hypr/hyprland.lua"
 : > "$tmp/calls"
 run UQCTL_FAIL=1
-grep -qx 'uqctl setup --quiet' "$tmp/calls" || { echo "FAIL: setup not run for a config without the stub"; fail=1; }
+grep -qx 'uqctl setup --quiet --apps' "$tmp/calls" || { echo "FAIL: setup not run for a config without the stub"; fail=1; }
 
 # 5. Failing setup: logged, and the session still starts.
 rm -rf "$home/.config" "$home/.local"

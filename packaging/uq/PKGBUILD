@@ -22,6 +22,7 @@ makedepends=(cargo qt6-base qt6-declarative kcolorscheme kconfig)
 checkdepends=(lua qt6-declarative)
 optdepends=(
   'kitty: default terminal (SUPER+Return)'
+  'adw-gtk-theme: makes GTK 3 apps follow the uQ theme (stock Adwaita stays light)'
   'papirus-icon-theme: icon theme used by every uQ theme'
   'bibata-cursor-theme: cursor theme used by every uQ theme'
   'ttf-jetbrains-mono: monospace font'

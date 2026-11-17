@@ -28,7 +28,7 @@ log_line() {
 }
 
 if ! grep -qF "$marker" "$main_lua" 2>/dev/null; then
-    err=$(uqctl setup --quiet 2>&1 >/dev/null)
+    err=$(uqctl setup --quiet --apps 2>&1 >/dev/null)
     rc=$?
     if [ "$rc" -ne 0 ]; then
         log_line "uqctl setup exited $rc; starting the session anyway"
