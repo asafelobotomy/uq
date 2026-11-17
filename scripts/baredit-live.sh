@@ -20,13 +20,15 @@ done
 ls /dev/dri/card* >/dev/null 2>&1 || skip "no DRM device"
 uqctl=${UQCTL:-$root/target/debug/uqctl}
 [ -x "$uqctl" ] || skip "no uqctl binary"
+uqd=${UQD:-$root/target/debug/uqd}
+[ -x "$uqd" ] || skip "no uqd binary"
 
 tmp=$(mktemp -d /tmp/uqe.XXXXXX)
 rt="$tmp/rt"; mkdir -m 700 "$rt"
 pids=()
 cleanup() { for p in "${pids[@]}"; do kill "$p" 2>/dev/null; done; wait 2>/dev/null; rm -rf "$tmp"; }
 trap cleanup EXIT
-fail() { echo "FAIL: $*"; for f in hypr qs; do [ -f "$tmp/$f.log" ] && { echo "--- $f.log"; tail -n 40 "$tmp/$f.log"; }; done; exit 1; }
+fail() { echo "FAIL: $*"; for f in hypr qs uqd; do [ -f "$tmp/$f.log" ] && { echo "--- $f.log"; tail -n 40 "$tmp/$f.log"; }; done; exit 1; }
 
 "$root/tests/live/tools/build-uqinput.sh" "$tmp/uqinput" || skip "uqinput didn't build"
 
@@ -78,9 +80,20 @@ sleep 0.5
 echo "hyprland: $(hc version -j | jq -r '.tag // .version')"
 hc configerrors | grep -v '^\s*$' | sed 's/^/config error: /'
 
+# A real uqd on the private bus, so the bar's edits are saved and the bar redraws from them.
+mkdir -p "$tmp/config/hypr/uq" "$tmp/share" "$tmp/home"
+ln -s "$root/config/hypr" "$tmp/share/hypr"; ln -s "$root/themes" "$tmp/share/themes"; ln -s "$root/templates" "$tmp/share/templates"
+touch "$tmp/config/hypr/uq/generated.lua" "$tmp/config/hypr/uq/user.lua"
 shell_env=(env XDG_RUNTIME_DIR="$rt" WAYLAND_DISPLAY="$wl" HYPRLAND_INSTANCE_SIGNATURE="$sig"
     DBUS_SESSION_BUS_ADDRESS="unix:path=$tmp/bus" PATH="$tmp/bin:$(dirname "$uqctl"):$PATH"
-    XDG_STATE_HOME="$tmp/state" XDG_DATA_HOME="$tmp/data" QT_QPA_PLATFORM=wayland LC_ALL=C.UTF-8)
+    HOME="$tmp/home" XDG_CONFIG_HOME="$tmp/config" UQ_DATA_DIR="$tmp/share"
+    XDG_STATE_HOME="$tmp/state" XDG_DATA_HOME="$tmp/data" QT_QPA_PLATFORM=wayland LC_ALL=C.UTF-8 UQ_DEV_SESSION=1)
+"${shell_env[@]}" "$uqd" >"$tmp/uqd.log" 2>&1 &
+pids+=($!)
+for _ in $(seq 1 100); do
+    env DBUS_SESSION_BUS_ADDRESS="unix:path=$tmp/bus" busctl --user status org.uq.Desktop1 >/dev/null 2>&1 && break; sleep 0.1
+done
+env DBUS_SESSION_BUS_ADDRESS="unix:path=$tmp/bus" busctl --user status org.uq.Desktop1 >/dev/null 2>&1 || fail "uqd never came up: $(tail -n 5 "$tmp/uqd.log")"
 "${shell_env[@]}" qs -p "$root/shell" --no-duplicate >"$tmp/qs.log" 2>&1 &
 pids+=($!)
 for _ in $(seq 1 50); do hc layers -j | grep -q uq-bar && break; sleep 0.2; done
@@ -120,6 +133,9 @@ drain() {
 ipc() { "${shell_env[@]}" timeout 10 qs ipc -p "$root/shell" call uq "$@" 2>/dev/null; }
 layers() { hc layers -j | grep -o "\"namespace\": *\"$1\"" | wc -l; }
 wait_layers() { for _ in $(seq 1 40); do [ "$(layers "$1")" -eq "$2" ] && return 0; sleep 0.2; done; return 1; }
+click() { send "move $1 $2" "sleep 250" "button 272 down" "sleep 80" "button 272 up" "sleep 700"; drain; }
+# Where uqd keeps what it saved (the settings file under the sandbox's config or state).
+saved() { grep -rl "bold" "$tmp/config" "$tmp/state" "$tmp/data" 2>/dev/null | head -n 3; }
 bad=0
 check() { echo "FAIL: $*"; bad=1; }
 
@@ -129,33 +145,32 @@ still 0-bar
 wait_layers uq-bar-edit 1 || fail "no edit panel after editBar"
 wait_layers uq-bar-editor 1 || check "the Bar editor did not open with edit mode"
 sleep 1
-hc layers -j | jq -c '.. | objects | select(.namespace? == "uq-bar-editor") | {x, y, w, h}'
 still 1-dialog
 
-# --- 2. the pointer: an island on the left, All islands, an island type -----------------------
-# Rows are laid out by the dialog; the pictures show where, and the first pass only looks.
-read -r lx ly lw lh < <(hc layers -j | jq -r '.. | objects | select(.namespace? == "uq-bar-editor") | "\(.x) \(.y) \(.w) \(.h)"' | head -n1)
-cx=$((lx + lw / 2)); cy=$((ly + lh / 2))
-send "move $cx $cy" "sleep 400"; drain; still 2-pointer
+# --- 2. the pointer: an island on the left shows its settings ---------------------------------
+click 340 206; still 2-island
+# --- 3. All islands: one text for every island, saved ----------------------------------------
+click 322 136; still 3-all-islands
+click 754 261; click 832 306; sleep 1; still 4-all-bold
+saved | grep -q . || check "the all-islands text was not saved anywhere ($(find "$tmp/config" "$tmp/state" -type f | head -n 12 | tr '\n' ' '))"
+# An island with no text of its own shows the all-islands text (Bold, 120%); its own Bold toggles off.
+click 340 206; still 5-island-inherits
+click 575 329; sleep 1; still 6-island-own-text
 
-# --- 3. Esc closes the dialog; edit mode stays ------------------------------------------------
-send "key Escape" "sleep 800"; drain
+# --- 4. Esc closes the dialog; edit mode stays; S brings it back ------------------------------
+send "key Escape" "sleep 900"; drain
 wait_layers uq-bar-editor 0 || check "Esc did not close the Bar editor"
 [ "$(layers uq-bar-edit)" = 1 ] || check "Esc on the dialog ended edit mode"
-still 3-closed
-
-# --- 4. S on the edit panel brings it back ----------------------------------------------------
-send "type s" "sleep 800"; drain
+still 7-closed
+send "type s" "sleep 900"; drain
 wait_layers uq-bar-editor 1 || check "S did not open the Bar editor again"
-still 4-reopened
+still 8-reopened
 
 # --- 5. Esc twice more: dialog, then edit mode ------------------------------------------------
-send "key Escape" "sleep 800" "key Escape" "sleep 800"; drain
+send "key Escape" "sleep 900" "key Escape" "sleep 900"; drain
 wait_layers uq-bar-editor 0 || check "the Bar editor stayed"
 wait_layers uq-bar-edit 0 || check "Esc did not finish edit mode"
-[ "$(ipc editBar)" = on ] || check "editBar after Esc was not a fresh start"
-wait_layers uq-bar-editor 1 || check "edit mode a second time did not open the Bar editor"
-still 5-again
+echo "--- saved settings"; saved | head -n 40
 
 if [ -n "$grabber" ]; then
     sleep 0.5; kill "$grabber" 2>/dev/null

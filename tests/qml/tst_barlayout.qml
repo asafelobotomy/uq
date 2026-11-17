@@ -369,4 +369,33 @@ TestCase {
         var only = L.remove(L.remove(L.remove(L.remove(L.remove(L.remove(L.remove(b, "start", 2), "start", 1), "start", 0), "center", 0), "end", 0), "end", 0), "end", 0);
         compare(L.setTextAll(only, { bold: true }), null);
     }
+
+    function test_all_islands_text() {
+        var b = sample();
+        verify(L.isPlainText(L.allText(b)));
+        var g = L.withAllText(b, { bold: true, size: 120 });
+        compare(g.options.all, { text: { bold: true, size: 120 } });
+        compare(g.options.stocks, { symbols: ["AAPL"] }, "other options kept");
+        compare(L.allText(g).bold, true);
+        // An island with no text of its own takes it; one with its own keeps that.
+        compare(L.effectiveText(g, g.start[0]).size, 120);
+        var own = L.setText(g, "start", 0, { italic: true });
+        compare(own.start[0].text, { bold: true, italic: true, size: 120 }, "starts from what it shows");
+        compare(L.effectiveText(own, own.start[0]).italic, true);
+        compare(L.effectiveText(own, own.start[1]).italic, false);
+        // Opting out: the theme's look, set on purpose, is stored as {} and survives the save.
+        var plain = L.setText(g, "start", 1, { bold: false, size: 100 });
+        compare(plain.start[1].text, {});
+        verify(L.isPlainText(L.effectiveText(plain, plain.start[1])));
+        compare(L.toSetting(plain).start[1].text, {});
+        compare(L.toSetting(plain).start[0].text, undefined);
+        // Back to the all-islands text.
+        compare(L.setText(plain, "start", 1, null).start[1].text, undefined);
+        // With no all-islands text, setting the theme's look stores nothing, as before.
+        compare(L.setText(own, "start", 0, { bold: false, italic: false, size: 100 }).start[0].text, {});
+        compare(L.setText(b, "start", 0, { bold: true }).start[0].text, { bold: true });
+        compare(L.setText(L.setText(b, "start", 0, { bold: true }), "start", 0, { bold: false }).start[0].text, undefined);
+        // Cleared.
+        compare(L.withAllText(g, null).options.all, {});
+    }
 }

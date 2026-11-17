@@ -150,9 +150,15 @@ QtObject {
         return save(L.setText(layout, zone, index, t));
     }
 
-    // The same text style (barlayout.js setText) or size on every island but the separators.
+    // Give every island its own text style (barlayout.js setText), or with null take them all
+    // back to the all-islands text; the same size on every island but the separators.
     function setTextAll(t) {
         return save(L.setTextAll(layout, t));
+    }
+    // The text style of every island that has none of its own (options.all.text, saved).
+    readonly property var allText: L.allText(layout)
+    function setAllText(t) {
+        return save(L.withAllText(layout, t));
     }
     function setSizeAll(size) {
         return save(L.setSizeAll(layout, size));

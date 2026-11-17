@@ -34,7 +34,9 @@ Item {
     readonly property string chosen: item ? L.sizeOf(item) : "medium"
     readonly property int chosenUnits: item ? L.unitsOf(item) : 0
     // The island's text style, as stored (every field present).
-    readonly property var textStyle: L.textOf(item)
+    readonly property var textStyle: L.effectiveText(BarLayout.layout, item)
+    // The island has a text of its own (else it takes the all-islands text).
+    readonly property bool ownText: item !== null && item.text !== undefined && item.text !== null
     function setText(t) {
         if (pop.target)
             BarLayout.setText(pop.target.zone, pop.target.index, t);
@@ -236,8 +238,8 @@ Item {
                     Layout.fillWidth: true
                 }
                 MenuRow {
-                    visible: !L.isPlainText(pop.textStyle)
-                    text: "Use the theme's"
+                    visible: pop.ownText
+                    text: L.isPlainText(BarLayout.allText) ? "Use the theme's" : "Use the all-islands text"
                     onActivated: pop.setText(null)
                 }
             }

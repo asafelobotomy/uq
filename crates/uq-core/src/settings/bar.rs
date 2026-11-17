@@ -293,11 +293,8 @@ impl BarItem {
         if self.fill == Some(default_fill(&self.id)) {
             self.fill = None;
         }
-        self.text = self
-            .text
-            .take()
-            .map(TextStyle::repaired)
-            .filter(|t| !t.is_default());
+        // A text that is the theme's own is kept: on an island it opts out of the all-islands text.
+        self.text = self.text.take().map(TextStyle::repaired);
         if self.size() == Size::Custom {
             self.units = Some(
                 self.units
@@ -438,6 +435,16 @@ impl Default for CrumbsOptions {
     }
 }
 
+/// Every island at once.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct AllOptions {
+    /// The text style of every island that has none of its own (`text` on its item); the
+    /// theme's by default.
+    #[serde(skip_serializing_if = "TextStyle::is_default")]
+    pub text: TextStyle,
+}
+
 /// The Security island (oysterAV).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -455,6 +462,7 @@ impl Default for SecurityOptions {
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct BarOptions {
+    pub all: AllOptions,
     pub clock: ClockOptions,
     pub stocks: StocksOptions,
     pub news: NewsOptions,
@@ -466,7 +474,8 @@ pub struct BarOptions {
 }
 
 impl BarOptions {
-    pub const FIELDS: [&str; 8] = [
+    pub const FIELDS: [&str; 9] = [
+        "all",
         "clock",
         "stocks",
         "news",
@@ -639,6 +648,10 @@ impl BarLayout {
             MAX_FEEDS,
             valid_feed_url,
         )?;
+        o.all
+            .text
+            .check()
+            .map_err(|e| invalid("shell.bar.options.all.text", e))?;
         if o.crumbs.warn_gb > MAX_WARN_GB {
             return Err(invalid(
                 "shell.bar.options.crumbs.warn_gb",
@@ -683,6 +696,7 @@ impl BarLayout {
         dedup_valid(&mut o.news.feeds, MAX_FEEDS, valid_feed_url);
         dedup_valid(&mut o.worldclock.zones, MAX_ZONES, valid_zone);
         o.crumbs.warn_gb = o.crumbs.warn_gb.min(MAX_WARN_GB);
+        o.all.text = std::mem::take(&mut o.all.text).repaired();
         self
     }
 
@@ -953,6 +967,7 @@ pub(super) fn lenient_bar<'de, D: serde::Deserializer<'de>>(
         }
     };
     let options = BarOptions {
+        all: lenient(part("all")),
         clock: lenient(part("clock")),
         stocks: StocksOptions {
             symbols: strings(part("stocks"), "symbols")
@@ -1339,7 +1354,11 @@ mod tests {
         let t = b.start[0].text.clone().unwrap();
         assert_eq!((t.font, t.bold, t.size), (None, false, 130));
         assert_eq!(b.start[1].text.as_ref().unwrap().size, MAX_TEXT_SIZE);
-        assert_eq!(b.start[2].text, None, "the theme's look is stored as none");
+        assert_eq!(
+            b.start[2].text,
+            Some(TextStyle::default()),
+            "the theme's look, set on purpose, is kept: it opts out of the all-islands text"
+        );
         assert_eq!(b.start[3].text, None);
         assert!(b.validate().is_ok());
     }
@@ -1474,5 +1493,53 @@ mod tests {
         assert!(!valid_zone("Europe/") && !valid_zone("/Paris"));
         assert_eq!(island_name("stocks"), Some("Stock ticker"));
         assert_eq!(island_name("time"), None);
+    }
+
+    #[test]
+    fn all_islands_text_default() {
+        let mut b = BarLayout::default();
+        assert!(b.options.all.text.is_default());
+        // The theme's text is not written out.
+        assert!(
+            serde_json::to_value(&b.options).unwrap()["all"]
+                .as_object()
+                .unwrap()
+                .is_empty()
+        );
+        b.apply(
+            &serde_json::from_value(json!({"op": "options", "island": "all",
+                "value": {"text": {"bold": true, "size": 120, "font": "monospace"}}}))
+            .unwrap(),
+        )
+        .unwrap();
+        assert!(b.options.all.text.bold);
+        assert_eq!(b.options.all.text.size, 120);
+        assert!(b.validate().is_ok());
+        // A text size off the steps, a bad font and unknown fields are refused.
+        for bad in [
+            json!({"text": {"size": 125}}),
+            json!({"text": {"font": "  "}}),
+            json!({"text": {"nope": 1}}),
+            json!({"size": "large"}),
+        ] {
+            let r = b.clone().apply(
+                &serde_json::from_value(json!({"op": "options", "island": "all", "value": bad}))
+                    .unwrap(),
+            );
+            assert!(r.is_err(), "{bad}");
+        }
+        let v = BarLayout::from_value(&json!({"options": {"all": {"text": {"italic": true}}}}))
+            .unwrap();
+        assert!(v.options.all.text.italic);
+        // Loading repairs a size off the steps instead of failing.
+        #[derive(Deserialize)]
+        struct W {
+            #[serde(deserialize_with = "lenient_bar")]
+            bar: Option<BarLayout>,
+        }
+        let w: W =
+            serde_json::from_value(json!({"bar": {"options": {"all": {"text": {"size": 117}}}}}))
+                .unwrap();
+        assert_eq!(w.bar.unwrap().options.all.text.size, 120);
     }
 }
