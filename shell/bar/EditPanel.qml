@@ -18,7 +18,10 @@ PanelWindow {
     property bool active: false
 
     screen: bar ? bar.screen : null
-    visible: active && !Bridge.locked
+    // Unmapped for a moment when the Bar editor closes: a layer surface asking for the keyboard is
+    // only given it when it maps, not when it changes its mind.
+    visible: active && !Bridge.locked && !remap
+    property bool remap: false
     color: "transparent"
     WlrLayershell.layer: WlrLayer.Top
     WlrLayershell.namespace: "uq-bar-edit"
@@ -194,13 +197,15 @@ PanelWindow {
     Connections {
         target: BarLayout
         function onEditorOpenChanged() {
-            if (!BarLayout.editorOpen && panel.visible)
+            if (!BarLayout.editorOpen && panel.visible) {
+                panel.remap = true;
                 refocus.restart();
+            }
         }
     }
     Timer {
         id: refocus
-        interval: 100
-        onTriggered: box.forceActiveFocus()
+        interval: 120
+        onTriggered: panel.remap = false
     }
 }
