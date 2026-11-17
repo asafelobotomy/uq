@@ -168,6 +168,7 @@ Island {
             width: Theme.fontSize * 26
 
             RowLayout {
+                Layout.alignment: Qt.AlignHCenter
                 spacing: Theme.gapIn
                 Rectangle {
                     Layout.preferredWidth: 10
@@ -178,7 +179,6 @@ Island {
                 UqText {
                     text: root.word
                     baseBold: true
-                    Layout.fillWidth: true
                 }
             }
             UqText {
@@ -186,14 +186,16 @@ Island {
                 text: "Everything oysterAV checks is fine."
                 color: Theme.textMuted
                 Layout.fillWidth: true
+                horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.Wrap
             }
             Repeater {
                 model: root.reasons
                 delegate: UqText {
                     required property string modelData
-                    text: "\u2022 " + modelData
+                    text: modelData
                     Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignHCenter
                     wrapMode: Text.Wrap
                 }
             }
@@ -204,17 +206,17 @@ Island {
                 model: Sec.facts(root.summary)
                 delegate: RowLayout {
                     required property var modelData
-                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignHCenter
                     spacing: Theme.gapIn
                     UqText {
                         text: modelData.label
                         color: Theme.textMuted
-                        Layout.preferredWidth: Theme.fontSize * 9
                     }
                     UqText {
                         text: modelData.value
                         color: root.tintOf(modelData.state === "muted" ? "" : modelData.state)
-                        Layout.fillWidth: true
+                        Layout.maximumWidth: Theme.fontSize * 16
+                        horizontalAlignment: Text.AlignHCenter
                         wrapMode: Text.Wrap
                     }
                 }
@@ -223,17 +225,17 @@ Island {
                 model: Sec.checks(root.summary)
                 delegate: RowLayout {
                     required property var modelData
-                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignHCenter
                     spacing: Theme.gapIn
                     UqText {
                         text: modelData.label
                         color: Theme.textMuted
-                        Layout.preferredWidth: Theme.fontSize * 9
                     }
                     UqText {
                         text: modelData.value
                         color: root.tintOf(modelData.state === "muted" ? "" : modelData.state)
-                        Layout.fillWidth: true
+                        Layout.maximumWidth: Theme.fontSize * 16
+                        horizontalAlignment: Text.AlignHCenter
                         wrapMode: Text.Wrap
                     }
                 }
@@ -250,11 +252,15 @@ Island {
                     Quickshell.execDetached(["oyst-cli", "scan", "--profile", "quick"]);
                     afterScan.restart();
                 }
-                Component.onCompleted: forceActiveFocus()
+                Component.onCompleted: {
+                    textItem.horizontalAlignment = Text.AlignHCenter;
+                    forceActiveFocus();
+                }
             }
             MenuRow {
                 Layout.fillWidth: true
                 text: "Open Security settings\u2026"
+                Component.onCompleted: textItem.horizontalAlignment = Text.AlignHCenter
                 onActivated: {
                     popup.hide();
                     Quickshell.execDetached(["uq-settings", "--page", "oysterav-security"]);
