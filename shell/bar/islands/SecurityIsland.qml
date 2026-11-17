@@ -2,14 +2,17 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
+import Quickshell.Widgets
+import QtQuick.Effects
 import "../../core"
 import ".."
 import "../../logic/security.js" as Sec
 
 // Security status (`security`), from oysterAV when it is installed (`oyst-cli status summary
-// --deep --json`: ok, warning or threat, with the reasons). Icon: a coloured ring, green, amber
-// or red. Small, Medium and Large add the word. A click lists why and opens oysterAV's Security
-// page in Settings. When the state gets worse it sends one notification (`notify-send`), and tries
+// --deep --json`: ok, warning or threat, with the reasons). Icon: oysterAV's own icon (a coloured
+// ring when it isn't installed), green, yellow or red by the state; oysterAV's tray icon stays out
+// of the Tray island while this island is on the bar. Small, Medium and Large add the word. A
+// click lists why and opens oysterAV's Security page in Settings. When the state gets worse it sends one notification (`notify-send`), and tries
 // again for a minute if the notification server isn't up yet (it takes its name a few seconds
 // after the shell starts). Hidden while oysterAV isn't installed or can't answer. Everything the
 // summary says is plain text and cut to length.
@@ -129,19 +132,41 @@ Island {
         anchors.centerIn: parent
         width: Math.min(implicitWidth, root.room)
         spacing: Theme.gapIn
-        Rectangle {
-            Layout.preferredWidth: 16
-            Layout.preferredHeight: 16
-            radius: 8
-            color: "transparent"
-            border.width: 2
-            border.color: root.tint
+        // oysterAV's own icon, shown in its colours' place: green, yellow or red by the status
+        // (the same tint as the ring). Without the icon installed, a ring of that colour.
+        Item {
+            Layout.preferredWidth: 20
+            Layout.preferredHeight: 20
+            IconImage {
+                id: appIcon
+                anchors.fill: parent
+                visible: false
+                implicitSize: 20
+                source: Quickshell.iconPath("oysterav", true)
+            }
+            MultiEffect {
+                anchors.fill: parent
+                visible: appIcon.source.toString() !== ""
+                source: appIcon
+                colorization: 0.9
+                colorizationColor: root.tint
+            }
             Rectangle {
                 anchors.centerIn: parent
-                width: 8
-                height: 8
-                radius: 4
-                color: root.tint
+                visible: appIcon.source.toString() === ""
+                width: 16
+                height: 16
+                radius: 8
+                color: "transparent"
+                border.width: 2
+                border.color: root.tint
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: 8
+                    height: 8
+                    radius: 4
+                    color: root.tint
+                }
             }
         }
         UqText {
@@ -260,6 +285,15 @@ Island {
                     textItem.horizontalAlignment = Text.AlignHCenter;
                     forceActiveFocus();
                 }
+            }
+            MenuRow {
+                Layout.fillWidth: true
+                text: "Open oysterAV\u2026"
+                onActivated: {
+                    popup.hide();
+                    Quickshell.execDetached(["oysterav"]);
+                }
+                Component.onCompleted: textItem.horizontalAlignment = Text.AlignHCenter
             }
             MenuRow {
                 Layout.fillWidth: true
