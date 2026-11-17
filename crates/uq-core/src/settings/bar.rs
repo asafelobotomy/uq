@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// Every island the bar knows, in the order Settings offers them, with its display name.
-pub const ISLANDS: [(&str, &str); 15] = [
+pub const ISLANDS: [(&str, &str); 16] = [
     ("system", "App menu, workspaces and dock"),
     ("work", "Open windows"),
     ("clock", "Clock and calendar"),
@@ -25,6 +25,7 @@ pub const ISLANDS: [(&str, &str); 15] = [
     ("worldclock", "World clock"),
     ("keyboard", "Keyboard layout"),
     ("security", "Security (oysterAV)"),
+    ("crumbs", "Storage cleanup (crumBS)"),
     ("separator", "Separator"),
 ];
 
@@ -398,6 +399,59 @@ pub struct WorkOptions {
     pub close: CloseButton,
 }
 
+/// Which readings the System monitor island shows (its popup shows them all).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct SysMonOptions {
+    pub cpu: bool,
+    pub mem: bool,
+    /// Graphics card use. Off, the bar never asks the graphics driver.
+    pub gpu: bool,
+    pub temp: bool,
+}
+
+impl Default for SysMonOptions {
+    fn default() -> Self {
+        Self {
+            cpu: true,
+            mem: true,
+            gpu: true,
+            temp: true,
+        }
+    }
+}
+
+/// The most the Storage cleanup island's amber mark can wait for, in GB.
+pub const MAX_WARN_GB: u32 = 500;
+
+/// The Storage cleanup island (crumBS): when the space that can be reclaimed counts as a lot.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct CrumbsOptions {
+    /// The island turns amber at this much reclaimable space, in GB; 0 never turns amber.
+    pub warn_gb: u32,
+}
+
+impl Default for CrumbsOptions {
+    fn default() -> Self {
+        Self { warn_gb: 5 }
+    }
+}
+
+/// The Security island (oysterAV).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct SecurityOptions {
+    /// Send a notification when the state gets worse.
+    pub notify: bool,
+}
+
+impl Default for SecurityOptions {
+    fn default() -> Self {
+        Self { notify: true }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct BarOptions {
@@ -406,10 +460,22 @@ pub struct BarOptions {
     pub news: NewsOptions,
     pub worldclock: WorldClockOptions,
     pub work: WorkOptions,
+    pub sysmon: SysMonOptions,
+    pub crumbs: CrumbsOptions,
+    pub security: SecurityOptions,
 }
 
 impl BarOptions {
-    pub const FIELDS: [&str; 5] = ["clock", "stocks", "news", "worldclock", "work"];
+    pub const FIELDS: [&str; 8] = [
+        "clock",
+        "stocks",
+        "news",
+        "worldclock",
+        "work",
+        "sysmon",
+        "crumbs",
+        "security",
+    ];
 }
 
 /// The three zones of the bar, left to right; `center` is truly centred.
@@ -573,6 +639,12 @@ impl BarLayout {
             MAX_FEEDS,
             valid_feed_url,
         )?;
+        if o.crumbs.warn_gb > MAX_WARN_GB {
+            return Err(invalid(
+                "shell.bar.options.crumbs.warn_gb",
+                format!("at most {MAX_WARN_GB}"),
+            ));
+        }
         check_list(
             "shell.bar.options.worldclock.zones",
             &o.worldclock.zones,
@@ -610,6 +682,7 @@ impl BarLayout {
         o.stocks.symbols = syms;
         dedup_valid(&mut o.news.feeds, MAX_FEEDS, valid_feed_url);
         dedup_valid(&mut o.worldclock.zones, MAX_ZONES, valid_zone);
+        o.crumbs.warn_gb = o.crumbs.warn_gb.min(MAX_WARN_GB);
         self
     }
 
@@ -892,6 +965,9 @@ pub(super) fn lenient_bar<'de, D: serde::Deserializer<'de>>(
             zones: strings(part("worldclock"), "zones").unwrap_or_default(),
         },
         work: lenient(part("work")),
+        sysmon: lenient(part("sysmon")),
+        crumbs: lenient(part("crumbs")),
+        security: lenient(part("security")),
     };
     Ok(Some(
         BarLayout {
@@ -925,6 +1001,43 @@ mod tests {
         );
         assert!(b.validate().is_ok());
         assert_eq!(b.options.stocks.symbols, ["^GSPC", "AAPL", "MSFT"]);
+    }
+
+    #[test]
+    fn crumbs_island_and_new_island_options() {
+        assert!(known_island("crumbs"));
+        assert_eq!(default_size("crumbs"), Size::Small);
+        let o = BarOptions::default();
+        assert_eq!(
+            (o.sysmon.cpu, o.sysmon.mem, o.sysmon.gpu, o.sysmon.temp),
+            (true, true, true, true)
+        );
+        assert_eq!((o.crumbs.warn_gb, o.security.notify), (5, true));
+        let b = BarLayout::from_value(&json!({
+            "end": [{"id": "crumbs"}],
+            "options": {"sysmon": {"gpu": false}, "crumbs": {"warn_gb": 0},
+                        "security": {"notify": false}}
+        }))
+        .unwrap();
+        assert!(!b.options.sysmon.gpu && b.options.sysmon.cpu);
+        assert_eq!(
+            (b.options.crumbs.warn_gb, b.options.security.notify),
+            (0, false)
+        );
+        for bad in [
+            json!({"options": {"crumbs": {"warn_gb": 501}}}),
+            json!({"options": {"sysmon": {"fans": true}}}),
+            json!({"options": {"security": {"notify": "yes"}}}),
+        ] {
+            assert!(BarLayout::from_value(&bad).is_err(), "{bad}");
+        }
+        let mut b = BarLayout::default();
+        b.apply(&BarEdit::Options {
+            island: "sysmon".into(),
+            value: json!({"cpu": true, "mem": false, "gpu": true, "temp": true}),
+        })
+        .unwrap();
+        assert!(!b.options.sysmon.mem);
     }
 
     #[test]

@@ -17,6 +17,125 @@ const FIRST: Duration = Duration::from_millis(250);
 /// hwmon drivers for the CPU package temperature, best first.
 const SENSORS: [&str; 5] = ["k10temp", "coretemp", "zenpower", "cpu_thermal", "acpitz"];
 
+/// The graphics card's reading: use, video memory and temperature.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Gpu {
+    pub name: String,
+    /// Percent, 0 to 100.
+    pub busy: f64,
+    pub vram_used: u64,
+    pub vram_total: u64,
+    pub temp_c: Option<f64>,
+}
+
+impl Gpu {
+    pub fn to_json(&self) -> Value {
+        json!({
+            "name": self.name,
+            "busy": self.busy,
+            "vram_used": self.vram_used,
+            "vram_total": self.vram_total,
+            "temp_c": self.temp_c,
+        })
+    }
+}
+
+/// Where the NVIDIA tool's answer must arrive by; a wedged driver never holds the island.
+const NVIDIA_TIMEOUT: Duration = Duration::from_millis(1500);
+
+/// One line of `nvidia-smi --query-gpu=name,utilization.gpu,memory.used,memory.total,
+/// temperature.gpu --format=csv,noheader,nounits` (MiB for memory; `[N/A]` where a card says
+/// nothing). The busiest of several cards is the one shown.
+pub fn parse_nvidia(text: &str) -> Option<Gpu> {
+    let mut best: Option<Gpu> = None;
+    for line in text.lines() {
+        let f: Vec<&str> = line.split(',').map(str::trim).collect();
+        if f.len() < 5 || f[0].is_empty() {
+            continue;
+        }
+        let num = |s: &str| s.parse::<f64>().ok().filter(|v| v.is_finite() && *v >= 0.0);
+        let Some(busy) = num(f[1]) else { continue };
+        let mib = |s: &str| num(s).map_or(0, |v| (v * 1024.0 * 1024.0) as u64);
+        let g = Gpu {
+            name: f[0].chars().take(48).collect(),
+            busy: round1(busy.min(100.0)),
+            vram_used: mib(f[2]),
+            vram_total: mib(f[3]),
+            temp_c: num(f[4]).map(round1),
+        };
+        if best.as_ref().is_none_or(|b| g.busy > b.busy) {
+            best = Some(g);
+        }
+    }
+    best
+}
+
+/// An AMD card's reading from `<sys>/class/drm/card*/device` (`gpu_busy_percent`,
+/// `mem_info_vram_*`, hwmon `temp1_input`). Other makers expose no such files.
+pub fn read_amd(sys: &Path) -> Option<Gpu> {
+    let mut cards: Vec<PathBuf> = std::fs::read_dir(sys.join("class/drm"))
+        .ok()?
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| {
+            p.file_name().and_then(|n| n.to_str()).is_some_and(|n| {
+                n.strip_prefix("card")
+                    .is_some_and(|d| d.parse::<u32>().is_ok())
+            })
+        })
+        .collect();
+    cards.sort();
+    let read = |p: PathBuf| std::fs::read_to_string(p).ok();
+    for card in cards {
+        let dev = card.join("device");
+        let Some(busy) =
+            read(dev.join("gpu_busy_percent")).and_then(|t| t.trim().parse::<f64>().ok())
+        else {
+            continue;
+        };
+        let bytes = |n: &str| read(dev.join(n)).and_then(|t| t.trim().parse::<u64>().ok());
+        let temp = std::fs::read_dir(dev.join("hwmon"))
+            .into_iter()
+            .flatten()
+            .flatten()
+            .find_map(|h| read_temp(&h.path().join("temp1_input")));
+        let name = read(dev.join("product_name"))
+            .map(|t| t.trim().chars().take(48).collect::<String>())
+            .filter(|t| !t.is_empty())
+            .unwrap_or_else(|| "AMD graphics".into());
+        return Some(Gpu {
+            name,
+            busy: round1(busy.clamp(0.0, 100.0)),
+            vram_used: bytes("mem_info_vram_used").unwrap_or(0),
+            vram_total: bytes("mem_info_vram_total").unwrap_or(0),
+            temp_c: temp,
+        });
+    }
+    None
+}
+
+/// Whether to ask `nvidia-smi` at all: the NVIDIA driver is loaded.
+fn has_nvidia(proc_root: &Path) -> bool {
+    proc_root.join("driver/nvidia").exists()
+}
+
+async fn read_nvidia() -> Option<Gpu> {
+    let run = tokio::process::Command::new("nvidia-smi")
+        .args([
+            "--query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu",
+            "--format=csv,noheader,nounits",
+        ])
+        .stdin(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .kill_on_drop(true)
+        .output();
+    let out = tokio::time::timeout(NVIDIA_TIMEOUT, run).await.ok()?.ok()?;
+    out.status
+        .success()
+        .then(|| parse_nvidia(&String::from_utf8_lossy(&out.stdout)))
+        .flatten()
+}
+
 /// Busy and total jiffies of one `cpu` line.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Times {
@@ -147,7 +266,13 @@ impl SysMon {
     }
 
     /// The payload from the previous and current CPU samples.
-    pub fn payload(&self, prev: &Stat, cur: &Stat, sensor: Option<&Path>) -> Value {
+    pub fn payload(
+        &self,
+        prev: &Stat,
+        cur: &Stat,
+        sensor: Option<&Path>,
+        gpu: Option<&Gpu>,
+    ) -> Value {
         let cores: Vec<f64> = prev
             .cores
             .iter()
@@ -175,7 +300,16 @@ impl SysMon {
             "mem_used": used,
             "mem_total": total,
             "temp_c": sensor.and_then(read_temp),
+            "gpu": gpu.map_or(Value::Null, Gpu::to_json),
         })
+    }
+
+    /// The graphics card, when there is one this island can read.
+    pub async fn gpu(&self) -> Option<Gpu> {
+        if has_nvidia(&self.proc_root) {
+            return read_nvidia().await;
+        }
+        read_amd(&self.sys_root)
     }
 
     /// Every `every` while `sysmon` is placed; removing it emits `null` once.
@@ -206,6 +340,12 @@ impl SysMon {
                 .borrow_and_update()
                 .as_ref()
                 .is_some_and(|s| placed(s, "sysmon"));
+            let want_gpu = want
+                && rx
+                    .borrow()
+                    .as_ref()
+                    .and_then(|s| s.shell.bar.as_ref())
+                    .is_none_or(|b| b.options.sysmon.gpu);
             if want != on {
                 on = want;
                 if on {
@@ -225,8 +365,9 @@ impl SysMon {
                 _ = tokio::time::sleep_until(next), if on => {
                     next = tokio::time::Instant::now() + every;
                     let cur = self.stat();
+                    let gpu = if want_gpu { self.gpu().await } else { None };
                     if let (Some(a), Some(b)) = (&prev, &cur)
-                        && !emit(self.payload(a, b, sensor.as_deref())).await
+                        && !emit(self.payload(a, b, sensor.as_deref(), gpu.as_ref())).await
                     {
                         return;
                     }
@@ -289,16 +430,48 @@ mod tests {
         assert_eq!(a.cores.len(), 2);
         let sensor = find_sensor(&d.path().join("sys"));
         assert!(sensor.as_ref().unwrap().ends_with("hwmon2/temp1_input"));
-        let v = m.payload(&a, &b, sensor.as_deref());
+        let v = m.payload(&a, &b, sensor.as_deref(), None);
         assert_eq!(
             v,
             json!({"cpu": 50.0, "cores": [90.0, 10.0], "mem": 75.0,
                    "mem_used": 12_000_000u64 * 1024, "mem_total": 16_000_000u64 * 1024,
-                   "temp_c": 52.4})
+                   "temp_c": 52.4, "gpu": null})
         );
         // Identical samples: 0 %, never a division by zero.
-        assert_eq!(m.payload(&a, &a, None)["cpu"], 0.0);
-        assert!(m.payload(&a, &a, None)["temp_c"].is_null());
+        assert_eq!(m.payload(&a, &a, None, None)["cpu"], 0.0);
+        assert!(m.payload(&a, &a, None, None)["temp_c"].is_null());
+    }
+
+    #[test]
+    fn nvidia_line_and_amd_files() {
+        let g = parse_nvidia(
+            "NVIDIA GeForce RTX 4070, 37, 1024, 12282, 51\nNVIDIA T400, 90, [N/A], 4096, [N/A]\n",
+        )
+        .unwrap();
+        assert_eq!(g.name, "NVIDIA T400", "the busiest card");
+        assert_eq!(
+            (g.busy, g.vram_used, g.vram_total, g.temp_c),
+            (90.0, 0, 4096 << 20, None)
+        );
+        let g = parse_nvidia("RTX, 5, 2048, 8192, 40\n").unwrap();
+        assert_eq!((g.vram_used, g.temp_c), (2048 << 20, Some(40.0)));
+        assert_eq!(parse_nvidia(""), None);
+        assert_eq!(parse_nvidia("No devices were found\n"), None);
+        assert_eq!(parse_nvidia("x, nan, 1, 1, 1\n"), None);
+
+        let d = tempfile::tempdir().unwrap();
+        let dev = d.path().join("class/drm/card0/device");
+        std::fs::create_dir_all(dev.join("hwmon/hwmon3")).unwrap();
+        std::fs::write(dev.join("gpu_busy_percent"), "42\n").unwrap();
+        std::fs::write(dev.join("mem_info_vram_used"), "1000\n").unwrap();
+        std::fs::write(dev.join("mem_info_vram_total"), "4000\n").unwrap();
+        std::fs::write(dev.join("hwmon/hwmon3/temp1_input"), "61000\n").unwrap();
+        let g = read_amd(d.path()).unwrap();
+        assert_eq!(
+            (g.name.as_str(), g.busy, g.vram_used, g.vram_total, g.temp_c),
+            ("AMD graphics", 42.0, 1000, 4000, Some(61.0))
+        );
+        assert_eq!(read_amd(&d.path().join("none")), None);
     }
 
     #[test]
