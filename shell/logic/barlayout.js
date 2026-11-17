@@ -369,6 +369,39 @@ function setText(bar, zone, index, t) {
     return out;
 }
 
+// Style `t` (as setText; null for the theme's own) on every island that has a text (not the
+// separators). Null when there is none.
+function setTextAll(bar, t) {
+    var out = bar, changed = false;
+    for (var z = 0; z < ZONES.length; z++)
+        for (var i = 0; i < bar[ZONES[z]].length; i++) {
+            var next = setText(out, ZONES[z], i, t);
+            if (next !== null) {
+                out = next;
+                changed = true;
+            }
+        }
+    return changed ? out : null;
+}
+
+// Size `size` (a tier, not Custom) on every island but the separators; null when there is none.
+function setSizeAll(bar, size) {
+    if (SIZES.indexOf(size) < 0 || size === CUSTOM)
+        return null;
+    var out = bar, changed = false;
+    for (var z = 0; z < ZONES.length; z++)
+        for (var i = 0; i < bar[ZONES[z]].length; i++) {
+            if (bar[ZONES[z]][i].id === SEPARATOR)
+                continue;
+            var next = setSize(out, ZONES[z], i, size);
+            if (next !== null) {
+                out = next;
+                changed = true;
+            }
+        }
+    return changed ? out : null;
+}
+
 // The next size up (dir 1) or down (-1) from `size` (with `units` for Custom), as
 // {size, units}, or null past the ends. Past Large it goes Custom, one Icon size at a time.
 function stepSize(size, dir, units) {

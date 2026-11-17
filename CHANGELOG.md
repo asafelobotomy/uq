@@ -9,6 +9,12 @@ All notable changes to uQ are listed here. The format follows
 
 ### Added
 
+- **Edit mode opens the Bar editor.** Editing the bar (right-click an island, Edit Islands, or
+  SUPER+ALT+B) now also opens a dialog with every island on the bar, every island type to add, the
+  chosen island's own settings (size, text and what it shows) and an "All islands" page to set one
+  size or text style for the whole bar. The screen under the bar dims while it is open, so the
+  bar stays lit and shows each change. Esc closes the dialog and edit mode goes on; S on the edit
+  panel opens it again.
 - **A Storage cleanup island (crumBS).** Shows how much space `crumbs scan` says can be freed and
   turns amber at a size you choose (`shell.bar.options.crumbs.warn_gb`, 5 GB by default). Its popup
   lists the biggest categories and opens crumBS's Storage page. Hidden without crumBS.
