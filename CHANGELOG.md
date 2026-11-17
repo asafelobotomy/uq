@@ -7,6 +7,21 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **Screenshots end in a floating preview, never a new window.** After Print, Shift+Print or
+  Super+Print the capture is saved to `~/Pictures/Screenshots`, copied, and shown in a small card
+  in the corner of the screen with **Copy**, **Discard** and a close button. It goes away after
+  12 seconds, or stays while the pointer is on it. The satty mark-up window and the notification's
+  "Open" button are gone; without the shell running, a notification says where the file is.
+
+### Fixed
+
+- **Print stopped working after the first screenshot.** `wl-copy` stays running to serve the
+  clipboard and inherited the lock that keeps two captures from running at once, so every later
+  press quietly did nothing until something else was copied. The lock is now let go before the copy
+  starts. A failing area picker or grim is also reported instead of ending silently.
+
 ## [0.3.7] - 2026-11-17
 
 ### Added

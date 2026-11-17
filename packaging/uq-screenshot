@@ -3,29 +3,39 @@
 # Spectacle, which needs KWin and won't run here).
 #
 #   uq-screenshot [print]    What Settings > Input > Print key says (default: region).
-#   uq-screenshot region     Pick an area with slurp (nothing is captured until you let go),
-#                            then mark it up in satty: Enter copies it and saves it, Esc
-#                            cancels. Without satty it is copied and saved at once.
-#   uq-screenshot window     The focused window: copied and saved at once.
-#   uq-screenshot screen     The screen under the pointer: copied and saved at once.
+#   uq-screenshot region     Pick an area with slurp (nothing is captured until you let go).
+#   uq-screenshot window     The focused window.
+#   uq-screenshot screen     The screen under the pointer.
 #
-# One capture at a time: a second press while one is open does nothing, so two bindings of
-# Print can't open two selectors.
+# Every capture is saved to $(xdg-user-dir PICTURES)/Screenshots/Screenshot_YYYYMMDD_HHMMSS.png,
+# copied to the clipboard, and shown in the shell's floating preview (Copy, Discard, close). It
+# never opens a window. If the shell isn't running a notification says where the file is.
 #
-# Files go to $(xdg-user-dir PICTURES)/Screenshots/Screenshot_YYYYMMDD_HHMMSS.png. A notification
-# says where (and offers to open the file). Needs grim, slurp and wl-copy; satty is optional.
-# UQ_SHOT_* overrides are for tests/shell/screenshot.sh only.
+# One capture at a time: a second press while one is being taken does nothing, so two bindings of
+# Print can't open two selectors. The lock is held only while capturing; nothing started here
+# (wl-copy stays alive to serve the clipboard) inherits it, or the next press would do nothing
+# until the clipboard changed.
+# Needs grim, slurp and wl-copy. UQ_SHOT_* overrides are for tests/shell/screenshot.sh and
+# scripts/screenshot-live.sh only.
 set -u
 
 mode=${1:-print}
 grim=${UQ_SHOT_GRIM:-grim}
-satty=${UQ_SHOT_SATTY:-satty}
 slurp=${UQ_SHOT_SLURP:-slurp}
 copy=${UQ_SHOT_COPY:-wl-copy}
 notify=${UQ_SHOT_NOTIFY:-notify-send}
 hyprctl=${UQ_SHOT_HYPRCTL:-hyprctl}
+qs=${UQ_SHOT_QS:-qs}
+shell_dir=${UQ_SHOT_SHELL:-/usr/share/uq/shell}
 state=${UQ_SHOT_STATE:-${XDG_STATE_HOME:-$HOME/.local/state}/uq/state.toml}
 lock=${XDG_RUNTIME_DIR:-/tmp}/uq-screenshot.lock
+
+have() { command -v "$1" >/dev/null 2>&1; }
+fail() {
+    have "$notify" && "$notify" -a "Screenshot" -u critical "Screenshot failed" "$1" >/dev/null 2>&1
+    printf 'uq-screenshot: %s\n' "$1" >&2
+    exit 1
+}
 
 # `print_action` under [ui] in state.toml (Settings > Input > Print key); region when unset.
 if [ "$mode" = print ]; then
@@ -33,11 +43,19 @@ if [ "$mode" = print ]; then
         ui && $1 == "print_action" { gsub(/[" ]/, "", $3); print $3; exit }' "$state" 2>/dev/null)
     case "$mode" in region | screen | window) ;; *) mode=region ;; esac
 fi
+case "$mode" in region | screen | window) ;; *)
+    printf 'usage: uq-screenshot [print|region|window|screen]\n' >&2
+    exit 2
+    ;;
+esac
 
-# Only one capture at a time (a held lock is another capture in progress).
-if command -v flock >/dev/null 2>&1; then
+# Only one capture at a time (a held lock is another capture in progress). Closed again before
+# the copy and the preview, and never passed on to them.
+if have flock; then
     exec 9>"$lock" && flock -n 9 || exit 0
 fi
+
+have "$grim" || fail "grim isn't installed."
 
 pictures=${UQ_SHOT_DIR:-}
 if [ -z "$pictures" ]; then
@@ -45,25 +63,8 @@ if [ -z "$pictures" ]; then
     [ -n "$pictures" ] && [ "$pictures" != "$HOME" ] || pictures=$HOME/Pictures
     pictures=$pictures/Screenshots
 fi
-mkdir -p "$pictures" || exit 1
+mkdir -p "$pictures" || fail "can't create $pictures."
 file=$pictures/Screenshot_$(date +%Y%m%d_%H%M%S).png
-
-say() {
-    # The action opens the file; a notification server without actions just shows the text.
-    command -v "$notify" >/dev/null 2>&1 || return 0
-    (
-        a=$("$notify" -a "Screenshot" -i "$file" --action=open=Open "$@" 2>/dev/null)
-        [ "$a" = open ] && xdg-open "$file" >/dev/null 2>&1
-    ) 9>&- & # not holding the lock while the notification waits
-}
-fail() {
-    command -v "$notify" >/dev/null 2>&1 && "$notify" -a "Screenshot" -u critical "Screenshot failed" "$1"
-    printf 'uq-screenshot: %s\n' "$1" >&2
-    exit 1
-}
-have() { command -v "$1" >/dev/null 2>&1; }
-
-have "$grim" || fail "grim isn't installed."
 
 # The output under the pointer, as Hyprland names it.
 focused_output() {
@@ -75,46 +76,47 @@ window_geometry() {
         jq -r 'select(.at and .size) | "\(.at[0]),\(.at[1]) \(.size[0])x\(.size[1])"'
 }
 
-# Copy and save an image already written to $file.
-finish() {
-    [ -s "$file" ] || exit 0
-    have "$copy" && "$copy" --type image/png <"$file"
-    say "Screenshot saved and copied" "${file/#$HOME/\~}"
-}
-
+# Take the capture into $file. A failed one leaves nothing behind.
 case "$mode" in
 region)
     have "$slurp" || fail "slurp isn't installed."
-    geo=$("$slurp" -d) || exit 0
-    [ -n "$geo" ] || exit 0
-    if have "$satty"; then
-        tmp=$(mktemp "${XDG_RUNTIME_DIR:-/tmp}/uq-shot.XXXXXX.png") || fail "no room for the capture."
-        trap 'rm -f "$tmp"' EXIT
-        "$grim" -g "$geo" "$tmp" || fail "the area couldn't be captured."
-        # Enter: copy and save, then close; Esc: close without saving.
-        "$satty" --filename "$tmp" --copy-command "$copy" --output-filename "$file" \
-            --actions-on-enter save-to-clipboard,save-to-file,exit \
-            --actions-on-escape exit --early-exit --disable-notifications
-        [ -s "$file" ] && say "Screenshot saved and copied" "${file/#$HOME/\~}"
-    else
-        "$grim" -g "$geo" "$file" || fail "the area couldn't be captured."
-        finish
-    fi
+    errf=$(mktemp "${XDG_RUNTIME_DIR:-/tmp}/uq-shot.XXXXXX") || fail "no room for the capture."
+    trap 'rm -f "$errf"' EXIT
+    geo=$("$slurp" -d 2>"$errf") && [ -n "$geo" ] || {
+        # Esc (slurp says "selection cancelled") is not an error; anything else is.
+        if [ ! -s "$errf" ] || grep -qi cancel "$errf"; then exit 0; fi
+        fail "the area picker failed: $(head -n 1 "$errf")"
+    }
+    "$grim" -g "$geo" "$file" || fail "the area couldn't be captured."
     ;;
 window)
     geo=$(window_geometry)
     [ -n "$geo" ] || fail "no window is focused."
     "$grim" -g "$geo" "$file" || fail "the window couldn't be captured."
-    finish
     ;;
 screen)
     out=$(focused_output)
     if [ -n "$out" ]; then "$grim" -o "$out" "$file"; else "$grim" "$file"; fi ||
         fail "the screen couldn't be captured."
-    finish
-    ;;
-*)
-    printf 'usage: uq-screenshot [print|region|window|screen]\n' >&2
-    exit 2
     ;;
 esac
+[ -s "$file" ] || { rm -f "$file"; fail "nothing was captured."; }
+
+# Capturing is over: let go of the lock before starting anything that outlives this script.
+exec 9>&-
+
+# The clipboard. wl-copy forks to serve it; stdio and the lock are not passed on.
+copied=
+if have "$copy"; then
+    timeout 10 "$copy" --type image/png <"$file" >/dev/null 2>&1 9>&- && copied=copied
+fi
+
+# The preview, in the shell. "ok" means it is showing.
+shown=$(timeout 5 "$qs" ipc -p "$shell_dir" call screenshot show "$file" "$copied" 2>/dev/null)
+if [ "$shown" != ok ] && have "$notify"; then
+    # No shell to show it: say where it is. No action, so nothing ever opens a viewer.
+    body=${file/#$HOME/\~}
+    [ -n "$copied" ] && body="$body (copied)"
+    "$notify" -a "Screenshot" -i "$file" "Screenshot saved" "$body" >/dev/null 2>&1
+fi
+exit 0

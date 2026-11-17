@@ -12,6 +12,7 @@ import "session"
 import "idle"
 import "power"
 import "pick"
+import "screenshot"
 import "wallpaper"
 import "edge"
 import "windows"
@@ -94,6 +95,9 @@ ShellRoot {
 
     // The full-screen "click a window" overlay for the rules editor's Pick a window.
     PickOverlay {}
+
+    // The floating preview a screenshot ends in (copy, discard), shown by `uq-screenshot`.
+    ShotPreview {}
 
     // Welcome in Settings, once, on the first login (Phase 5 spec §5.1).
     WelcomeTrigger {}
