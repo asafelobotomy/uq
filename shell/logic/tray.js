@@ -10,12 +10,16 @@
 //                     bell's place in the Notifications island instead of sitting in the tray.
 var NM_APPLET = "nm-applet";
 var NOTIFI = "org.notify.Panel";
+var OYSTERAV = "io.github.asafelobotomy.OysterAV";
 
-// Whether the tray leaves out the item with this id. ctx: { notifiBell: noti-fi's icon is the bell }.
+// Whether the tray leaves out the item with this id. ctx: { notifiBell: noti-fi's icon is the bell,
+// securityIcon: the bar has a Security island, which carries oysterAV's icon }.
 function hiddenInTray(id, ctx) {
     if (id === NM_APPLET)
         return true;
-    return id === NOTIFI && ctx !== null && ctx !== undefined && ctx.notifiBell === true;
+    if (ctx === null || ctx === undefined)
+        return false;
+    return (id === NOTIFI && ctx.notifiBell === true) || (id === OYSTERAV && ctx.securityIcon === true);
 }
 
 // The item with this id among the tray's items (any array-like with .length), or null.

@@ -12,7 +12,7 @@ import ".."
 // Other apps' tray icons (`tray`), apart from uQ's own Status island: as many as fit the
 // island's width, and when they don't all fit, a "+N" button listing the rest. Icons uQ shows
 // elsewhere stay out (logic/tray.js: nm-applet beside uQ's network icon, noti-fi's icon while it
-// is the bell). While this island is on the bar, Status shows no tray icons. Hidden outside
+// is the bell, oysterAV's while the bar has a Security island). While this island is on the bar, Status shows no tray icons. Hidden outside
 // edit mode while no app has an icon in the tray.
 Island {
     id: root
@@ -22,7 +22,7 @@ Island {
     readonly property var items: {
         var all = SystemTray.items.values;
         var bell = Tray.notifiBell(NotifBackend.backend, Tray.find(all, Tray.NOTIFI));
-        return Tray.shownItems(all, { notifiBell: bell });
+        return Tray.shownItems(all, { notifiBell: bell, securityIcon: BarLayout.placed("security") });
     }
     readonly property var fit: Tray.fit(items.length, room, cell, Theme.gapIn)
     readonly property var shownItems: items.slice(0, fit.shown)
