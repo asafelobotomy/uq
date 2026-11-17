@@ -424,7 +424,8 @@ pub struct BarLayout {
 
 impl Default for BarLayout {
     /// A new user's bar: today's islands, weather left out until a location is chosen, and the
-    /// other apps' tray icons in their own island before Status.
+    /// other apps' tray icons in their own island before Status, and the Security island (shown only
+    /// with oysterAV installed) before those.
     fn default() -> Self {
         let mut b = BarLayout::from_islands(&super::Islands::default(), false);
         let at = b
@@ -433,6 +434,8 @@ impl Default for BarLayout {
             .position(|i| i.id == "status")
             .unwrap_or(b.end.len());
         b.end.insert(at, BarItem::new("tray"));
+        // The Security island hides itself unless oysterAV is installed.
+        b.end.insert(at, BarItem::new("security"));
         b
     }
 }
@@ -916,7 +919,7 @@ mod tests {
         let b = BarLayout::default();
         assert_eq!(ids(&b.start), ["system", "work"]);
         assert!(b.center.is_empty());
-        assert_eq!(ids(&b.end), ["clock", "notif", "tray", "status"]);
+        assert_eq!(ids(&b.end), ["clock", "notif", "security", "tray", "status"]);
         assert!(b.validate().is_ok());
         assert_eq!(b.options.stocks.symbols, ["^GSPC", "AAPL", "MSFT"]);
     }
@@ -1116,7 +1119,7 @@ mod tests {
         }
         assert!(serde_json::from_value::<BarEdit>(json!({"op": "fly"})).is_err());
         b.apply(&BarEdit::Reset).unwrap();
-        assert_eq!(ids(&b.end), ["clock", "notif", "tray", "status"]);
+        assert_eq!(ids(&b.end), ["clock", "notif", "security", "tray", "status"]);
         assert_eq!(b.options.stocks.symbols, ["TSLA"], "reset keeps options");
     }
 
