@@ -378,6 +378,9 @@ case "$scenario" in
         [ "$(win w2 at | jq -r '.[0]')" -ge 1280 ] || { echo "FAIL: w2 is not inside the second screen (x=$(win w2 at | jq -r '.[0]'))"; bad=1; }
         [ "$(win w1 hidden)" = false ] || { echo "FAIL: w1 is hidden"; bad=1; }
         [ "$(hc activewindow -j | jq -r .title)" = w2 ] || { echo "FAIL: focus is not on the dropped window (it is on '$(hc activewindow -j | jq -r .title)')"; bad=1; }
+        # Focus must not visit the other screen after the drop (the shell making w1 Full there).
+        hops=$(awk -v e="${end:-0}" '$1 > e && $2 ~ /^focusedmonv2>>/' "$tmp/events.log" | wc -l)
+        [ "$hops" = 0 ] || { echo "FAIL: focus hopped between screens $hops time(s) after the drop"; bad=1; }
         echo "workspace events:"; grep -E ' (workspacev2|activeworkspacev2|focusedmonv2|moveworkspacev2)>>' "$tmp/events.log" | sed 's/^\([0-9]*\.[0-9]\{3\}\)[0-9]* /\1 /' | tail -n 20 ;;
     full-edge)
         # A Full window that was dragged comes back Full, and nothing else changed.
