@@ -7,6 +7,8 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.8] - 2026-11-17
+
 ### Fixed
 
 - **Qt apps no longer show Kvantum's grey bevelled buttons.** uQ's Kvantum theme named a base
