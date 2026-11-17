@@ -866,12 +866,12 @@ Island {
                     // Icon size: the icon, centred, turns into the close button under the pointer.
                     Item {
                         id: iconSlot
-                        // The × waits for the pointer to rest on the icon, so passing over a
+                        // Focused tab only. The × waits for the pointer to rest on the icon, so passing over a
                         // tab doesn't hide which app it is, and a quick click can't close it.
                         property bool closeShown: false
                         Timer {
                             interval: 400
-                            running: iconClose.containsMouse && pill.tier === "icon" && !pill.win.minimised
+                            running: iconClose.containsMouse && pill.tier === "icon" && pill.win.focused && !pill.win.minimised
                             onTriggered: iconSlot.closeShown = true
                         }
                         Connections {
@@ -911,8 +911,9 @@ Island {
                         MouseArea {
                             id: iconClose
                             anchors.fill: parent
-                            // A minimised tab's icon isn't a close button: clicking it restores.
-                            enabled: pill.tier === "icon" && !pill.win.minimised
+                            // Only the focused tab's icon turns into a close button; an unfocused or minimised
+                            // tab's icon never does, so clicking it just focuses or restores the window.
+                            enabled: pill.tier === "icon" && pill.win.focused && !pill.win.minimised
                             hoverEnabled: true
                             // Before the × shows, a click goes on to the tab (it focuses the window).
                             propagateComposedEvents: true
