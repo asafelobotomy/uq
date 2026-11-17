@@ -92,8 +92,13 @@ pub fn shell_env(theme: &Theme) -> String {
     out
 }
 
-/// Template and output path of the Kvantum theme, rendered only when a base exists.
-const KVANTUM_TARGET: (&str, &str) = ("kvantum.kvconfig.j2", "Kvantum/uq/uq.kvconfig");
+/// Templates and output paths of the Kvantum theme, rendered only when Kvantum is installed (a
+/// base theme exists). The config sets the metrics; the SVG is uQ's own flat artwork, drawn from
+/// the theme's colours. Without it Kvantum falls back to its built-in grey bevel.
+const KVANTUM_TARGETS: [(&str, &str); 2] = [
+    ("kvantum.kvconfig.j2", "Kvantum/uq/uq.kvconfig"),
+    ("kvantum.svg.j2", "Kvantum/uq/uq.svg"),
+];
 
 /// The first of [`KVANTUM_BASES`] installed under `dir` (`dir/<name>/<name>.kvconfig`).
 pub fn kvantum_base(dir: &Path) -> Option<&'static str> {
@@ -125,7 +130,7 @@ pub fn render(
     env.add_filter("rgb", rgb);
     let ctx = context! { theme => minijinja::Value::from(minijinja::value::Serde(theme)), variant => theme.variant.as_str(), is_dark => theme.variant == crate::theme::Variant::Dark, base => kvantum_base };
     let mut out = BTreeMap::new();
-    let extra = kvantum_base.map(|_| KVANTUM_TARGET);
+    let extra = kvantum_base.into_iter().flat_map(|_| KVANTUM_TARGETS);
     for (name, rel) in TARGETS.into_iter().chain(extra) {
         let src = std::fs::read_to_string(templates_dir.join(name)).map_err(|source| {
             RenderError::Read {
@@ -189,11 +194,24 @@ mod tests {
         assert!(!none.0.contains_key(Path::new("Kvantum/uq/uq.kvconfig")));
         let some = render(&theme(), &templates(), Some("KvArc")).unwrap();
         let body = &some.0[Path::new("Kvantum/uq/uq.kvconfig")];
-        assert!(body.starts_with("[%General]\ninherits=KvArc\n"), "{body}");
+        assert!(body.contains("[%General]\nauthor=uQ"), "{body}");
         assert!(body.contains("[GeneralColors]"), "{body}");
         assert!(body.contains("window.color=#282828"), "{body}");
         assert!(body.contains("highlight.color=#d79921"), "{body}");
         assert!(body.contains("disabled.text.color=#bdae93"), "{body}");
+        // The artwork carries the theme's accent, and every frame the config names exists in it.
+        let svg = &some.0[Path::new("Kvantum/uq/uq.svg")];
+        assert!(svg.contains("#d79921"), "{svg}");
+        for id in [
+            "button-normal-topleft",
+            "button-default",
+            "lineedit-focused-left",
+            "checkbox-checked-normal",
+            "tab-toggled",
+            "menuitem-pressed",
+        ] {
+            assert!(svg.contains(&format!("id=\"{id}")), "{id} missing");
+        }
     }
 
     #[test]
