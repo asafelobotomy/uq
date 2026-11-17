@@ -7,6 +7,16 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **A Storage cleanup island (crumBS).** Shows how much space `crumbs scan` says can be freed and
+  turns amber at a size you choose (`shell.bar.options.crumbs.warn_gb`, 5 GB by default). Its popup
+  lists the biggest categories and opens crumBS's Storage page. Hidden without crumBS.
+- **The System monitor shows the graphics card.** Use, video memory and temperature, for NVIDIA
+  (through `nvidia-smi`) and AMD (through sysfs). Options choose which readings the island shows:
+  processor, memory, graphics card, temperature (`shell.bar.options.sysmon`).
+- **The Security island's notifications can be switched off** (`shell.bar.options.security.notify`).
+
 ## [0.3.5] - 2026-11-17
 
 ### Changed

@@ -8,7 +8,8 @@ import ".."
 
 // System monitor (`sysmon`). Icon: processor use. Small: a chip icon and processor use. Medium:
 // and memory use. Large: and the processor's temperature where a sensor exists. A click shows
-// every core and the memory in use. The bridge reads /proc and /sys every 2 s, only while this
+// every core and the memory in use. The graphics card (NVIDIA through nvidia-smi, AMD through
+// sysfs) shows from Medium, after the memory, where there is one. The bridge reads /proc and /sys every 2 s, only while this
 // island is placed.
 Island {
     id: root
@@ -16,9 +17,20 @@ Island {
     readonly property var s: Bridge.sysmon
     readonly property bool has: s !== null && s !== undefined
     readonly property int iconSize: Theme.fontSize + 5
+    // shell.bar.options.sysmon: which readings the island shows (the popup shows all of them).
+    readonly property var opts: BarLayout.options.sysmon || ({})
+    readonly property bool showCpu: opts.cpu !== false
+    readonly property bool showMem: opts.mem !== false
+    readonly property bool showGpu: opts.gpu !== false
+    readonly property bool showTemp: opts.temp !== false
+    // Room for a second reading: Medium and wider, or Small when the processor is left out.
+    readonly property bool roomy: size === "medium" || size === "large" || size === "custom"
+        || (size === "small" && !showCpu)
+    readonly property var gpu: has && s.gpu && typeof s.gpu === "object" ? s.gpu : null
 
     Accessible.role: Accessible.Button
     Accessible.name: has ? "Processor " + T.percent(s.cpu) + ", memory " + T.percent(s.mem)
+        + (gpu ? ", graphics " + T.percent(gpu.busy) : "")
         + (s.temp_c !== null && s.temp_c !== undefined ? ", " + T.temp(s.temp_c) : "")
         : "System monitor"
 
@@ -35,19 +47,27 @@ Island {
             source: Quickshell.iconPath("cpu", "utilities-system-monitor")
         }
         UqText {
+            visible: root.showCpu || (!root.showMem && !root.showGpu)
             text: root.has ? T.percent(root.s.cpu) : "–"
             baseFamily: Theme.fontMono
             Layout.minimumWidth: implicitWidth
         }
         UqText {
-            visible: root.size === "medium" || root.size === "large"
+            visible: root.showMem && root.roomy
             text: "RAM " + (root.has ? T.percent(root.s.mem) : "–")
+            baseFamily: Theme.fontMono
+            color: root.showCpu ? Theme.textMuted : Theme.text
+            Layout.minimumWidth: implicitWidth
+        }
+        UqText {
+            visible: root.showGpu && root.gpu !== null && root.roomy
+            text: "GPU " + (root.gpu ? T.percent(root.gpu.busy) : "")
             baseFamily: Theme.fontMono
             color: Theme.textMuted
             Layout.minimumWidth: implicitWidth
         }
         UqText {
-            visible: root.size === "large" && root.has && T.temp(root.s.temp_c) !== ""
+            visible: root.showTemp && (root.size === "large" || root.size === "custom") && root.has && T.temp(root.s.temp_c) !== ""
             text: root.has ? T.temp(root.s.temp_c) : ""
             baseFamily: Theme.fontMono
             color: root.has && root.s.temp_c >= 90 ? Theme.warning : Theme.textMuted
@@ -119,6 +139,21 @@ Island {
                 text: "Memory " + (root.has ? T.percent(root.s.mem) + " · " + T.bytes(root.s.mem_used)
                     + " of " + T.bytes(root.s.mem_total) : "–")
                 baseBold: true
+            }
+            UqText {
+                visible: root.gpu !== null
+                text: root.gpu ? "Graphics card " + T.percent(root.gpu.busy)
+                    + (T.temp(root.gpu.temp_c) !== "" ? " · " + T.temp(root.gpu.temp_c) : "") : ""
+                baseBold: true
+            }
+            UqText {
+                visible: root.gpu !== null
+                text: root.gpu ? String(root.gpu.name).slice(0, 48)
+                    + (root.gpu.vram_total > 0 ? " · video memory " + T.bytes(root.gpu.vram_used)
+                    + " of " + T.bytes(root.gpu.vram_total) : "") : ""
+                color: Theme.textMuted
+                Layout.fillWidth: true
+                wrapMode: Text.Wrap
             }
             MenuRow {
                 id: openMonitor
