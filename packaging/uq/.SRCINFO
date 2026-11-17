@@ -68,6 +68,6 @@ pkgbase = uq
 	backup = etc/uq/greetd.toml
 	backup = etc/uq/greeter.toml
 	source = uq-0.3.4.tar.gz::https://github.com/asafelobotomy/uq/releases/download/v0.3.4/uq-0.3.4.tar.gz
-	sha256sums = 9882962d497ed45d1a49f5d2071470ed7ca843b2d98caa48468350232b9c1629
+	sha256sums = 270f5a3b676fd756e745b1c11cb3aa708c4bc1466903c8aa3d5b02f826f5ae8a
 
 pkgname = uq
