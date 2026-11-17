@@ -134,7 +134,8 @@ ipc() { "${shell_env[@]}" timeout 10 qs ipc -p "$root/shell" call uq "$@" 2>/dev
 layers() { hc layers -j | grep -o "\"namespace\": *\"$1\"" | wc -l; }
 wait_layers() { for _ in $(seq 1 40); do [ "$(layers "$1")" -eq "$2" ] && return 0; sleep 0.2; done; return 1; }
 click() { send "move $1 $2" "sleep 250" "button 272 down" "sleep 80" "button 272 up" "sleep 700"; drain; }
-saved() { cat "$tmp"/config/uq/*.toml 2>/dev/null; }
+# Where uqd keeps what it saved (the settings file under the sandbox's config or state).
+saved() { grep -rl "bold" "$tmp/config" "$tmp/state" "$tmp/data" 2>/dev/null | head -n 3; }
 bad=0
 check() { echo "FAIL: $*"; bad=1; }
 
@@ -150,15 +151,20 @@ still 1-dialog
 click 340 206; still 2-island
 # --- 3. All islands: one text for every island, saved ----------------------------------------
 click 322 136; still 3-all-islands
+click 754 261; click 832 306; sleep 1; still 4-all-bold
+saved | grep -q . || check "the all-islands text was not saved anywhere ($(find "$tmp/config" "$tmp/state" -type f | head -n 12 | tr '\n' ' '))"
+# An island with no text of its own shows the all-islands text (Bold, 120%); its own Bold toggles off.
+click 340 206; still 5-island-inherits
+click 575 329; sleep 1; still 6-island-own-text
 
 # --- 4. Esc closes the dialog; edit mode stays; S brings it back ------------------------------
 send "key Escape" "sleep 900"; drain
 wait_layers uq-bar-editor 0 || check "Esc did not close the Bar editor"
 [ "$(layers uq-bar-edit)" = 1 ] || check "Esc on the dialog ended edit mode"
-still 4-closed
+still 7-closed
 send "type s" "sleep 900"; drain
 wait_layers uq-bar-editor 1 || check "S did not open the Bar editor again"
-still 5-reopened
+still 8-reopened
 
 # --- 5. Esc twice more: dialog, then edit mode ------------------------------------------------
 send "key Escape" "sleep 900" "key Escape" "sleep 900"; drain
