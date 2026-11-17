@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Io
 import "../../core"
 import ".."
+import "../../logic/security.js" as Sec
 
 // Security status (`security`), from oysterAV when it is installed (`oyst-cli status summary
 // --deep --json`: ok, warning or threat, with the reasons). Icon: a coloured ring, green, amber
@@ -106,10 +107,17 @@ Island {
             poll.running = true;
     }
     Component.onCompleted: refresh()
+    // Every two minutes; every 15 s while a scan runs, so the popup follows it.
     Timer {
-        interval: 120000
+        interval: root.summary && root.summary.scanning === true ? 15000 : 120000
         running: true
         repeat: true
+        onTriggered: root.refresh()
+    }
+    // A scan started from the popup shows up in the summary a moment later.
+    Timer {
+        id: afterScan
+        interval: 4000
         onTriggered: root.refresh()
     }
 
@@ -148,21 +156,37 @@ Island {
         id: popup
     }
 
+    function tintOf(st) {
+        return st === "ok" ? Theme.success : (st === "threat" ? Theme.error
+            : (st === "warning" ? Theme.warning : Theme.textMuted));
+    }
+
     Component {
         id: details
         ColumnLayout {
             spacing: Theme.gapIn
-            width: Theme.fontSize * 24
+            width: Theme.fontSize * 26
 
-            UqText {
-                text: root.word
-                baseBold: true
+            RowLayout {
+                Layout.alignment: Qt.AlignHCenter
+                spacing: Theme.gapIn
+                Rectangle {
+                    Layout.preferredWidth: 10
+                    Layout.preferredHeight: 10
+                    radius: 5
+                    color: root.tint
+                }
+                UqText {
+                    text: root.word
+                    baseBold: true
+                }
             }
             UqText {
                 visible: root.reasons.length === 0
-                text: "No open findings; signatures and checks are fine."
+                text: "Everything oysterAV checks is fine."
                 color: Theme.textMuted
                 Layout.fillWidth: true
+                horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.Wrap
             }
             Repeater {
@@ -171,17 +195,76 @@ Island {
                     required property string modelData
                     text: modelData
                     Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignHCenter
                     wrapMode: Text.Wrap
+                }
+            }
+
+            Rectangle { Layout.fillWidth: true; height: 1; color: Theme.border }
+
+            Repeater {
+                model: Sec.facts(root.summary)
+                delegate: RowLayout {
+                    required property var modelData
+                    Layout.alignment: Qt.AlignHCenter
+                    spacing: Theme.gapIn
+                    UqText {
+                        text: modelData.label
+                        color: Theme.textMuted
+                    }
+                    UqText {
+                        text: modelData.value
+                        color: root.tintOf(modelData.state === "muted" ? "" : modelData.state)
+                        Layout.maximumWidth: Theme.fontSize * 16
+                        horizontalAlignment: Text.AlignHCenter
+                        wrapMode: Text.Wrap
+                    }
+                }
+            }
+            Repeater {
+                model: Sec.checks(root.summary)
+                delegate: RowLayout {
+                    required property var modelData
+                    Layout.alignment: Qt.AlignHCenter
+                    spacing: Theme.gapIn
+                    UqText {
+                        text: modelData.label
+                        color: Theme.textMuted
+                    }
+                    UqText {
+                        text: modelData.value
+                        color: root.tintOf(modelData.state === "muted" ? "" : modelData.state)
+                        Layout.maximumWidth: Theme.fontSize * 16
+                        horizontalAlignment: Text.AlignHCenter
+                        wrapMode: Text.Wrap
+                    }
+                }
+            }
+
+            Rectangle { Layout.fillWidth: true; height: 1; color: Theme.border }
+
+            MenuRow {
+                Layout.fillWidth: true
+                text: root.summary && root.summary.scanning === true ? "Scan running\u2026" : "Run a quick scan"
+                enabled: !(root.summary && root.summary.scanning === true)
+                onActivated: {
+                    popup.hide();
+                    Quickshell.execDetached(["oyst-cli", "scan", "--profile", "quick"]);
+                    afterScan.restart();
+                }
+                Component.onCompleted: {
+                    textItem.horizontalAlignment = Text.AlignHCenter;
+                    forceActiveFocus();
                 }
             }
             MenuRow {
                 Layout.fillWidth: true
-                text: "Open Security settings…"
+                text: "Open Security settings\u2026"
+                Component.onCompleted: textItem.horizontalAlignment = Text.AlignHCenter
                 onActivated: {
                     popup.hide();
                     Quickshell.execDetached(["uq-settings", "--page", "oysterav-security"]);
                 }
-                Component.onCompleted: forceActiveFocus()
             }
         }
     }
