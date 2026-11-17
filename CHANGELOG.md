@@ -7,6 +7,8 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.7] - 2026-11-17
+
 ### Added
 
 - **Edit mode opens the Bar editor.** Editing the bar (right-click an island, Edit Islands, or
