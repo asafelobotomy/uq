@@ -78,6 +78,7 @@ PanelWindow {
         case "sysmon": return cSysMon;
         case "worldclock": return cWorldClock;
         case "keyboard": return cKeyboard;
+        case "security": return cSecurity;
         case "separator": return cSeparator;
         }
         return null;
@@ -96,6 +97,7 @@ PanelWindow {
     Component { id: cSysMon; SysMonIsland {} }
     Component { id: cWorldClock; WorldClockIsland {} }
     Component { id: cKeyboard; KeyboardIsland {} }
+    Component { id: cSecurity; SecurityIsland {} }
     Component { id: cSeparator; SeparatorIsland {} }
 
     // The slot of island `key`, for anchoring popups to it.

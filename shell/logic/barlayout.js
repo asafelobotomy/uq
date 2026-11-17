@@ -45,13 +45,14 @@ var ISLANDS = [
     { id: "sysmon", name: "System monitor" },
     { id: "worldclock", name: "World clock" },
     { id: "keyboard", name: "Keyboard layout" },
+    { id: "security", name: "Security (oysterAV)" },
     { id: SEPARATOR, name: "Separator" }
 ];
 
 // Left out first when even every island at Icon size doesn't fit: separators, then these, in
 // this order. Same idea for which island steps down first among equals.
 var EXPENDABLE = [SEPARATOR, "keyboard", "worldclock", "news", "stocks", "sysmon", "media",
-                  "weather", "tray", "notif", "work", "clock", "system", "status"];
+                  "weather", "tray", "security", "notif", "work", "clock", "system", "status"];
 
 function known(id) {
     for (var i = 0; i < ISLANDS.length; i++)
@@ -72,7 +73,7 @@ function defaultSize(id) {
     switch (id) {
     case "system": case "work": case "status": case "news": return "large";
     case "clock": case "media": case "stocks": case "worldclock": case "tray": return "medium";
-    case "keyboard": return "icon";
+    case "keyboard": case "security": return "icon";
     default: return "small";
     }
 }
