@@ -7,6 +7,17 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **Other apps follow the uQ theme.** Sessions now run `uqctl setup --apps`, so GTK, Qt and
+  terminal apps get uQ's colours from the first login. When Qt app theming is on, uqd also keeps
+  qt6ct's fonts and a per-theme marker in step (so running Qt apps reload their palette when only
+  the colours change), and writes uQ's colour scheme into `~/.config/kdeglobals` so Kirigami and
+  KDE apps (Dolphin, Kate) stop being Breeze Light. A kdeglobals that already holds another
+  colour scheme is left alone. With `adw-gtk-theme` installed (new optional dependency), uqd sets
+  the GTK 3 theme to `adw-gtk3` or `adw-gtk3-dark`, and `gtk-3.0/gtk.css` defines libadwaita's
+  colour names, so GTK 3 apps follow the theme too.
+
 ## [0.3.6] - 2026-11-17
 
 ### Added

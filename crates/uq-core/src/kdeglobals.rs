@@ -114,6 +114,105 @@ fn ensure_terminal_at(path: &Path, terminal: &str) -> std::io::Result<bool> {
     }
 }
 
+/// Split an INI text into `(header, lines)` groups; the lines before any header have header "".
+fn groups(text: &str) -> Vec<(String, Vec<String>)> {
+    let mut out: Vec<(String, Vec<String>)> = vec![(String::new(), Vec::new())];
+    for line in text.lines() {
+        let t = line.trim();
+        if t.starts_with('[') && t.ends_with(']') {
+            out.push((t.to_string(), Vec::new()));
+        } else if let Some(last) = out.last_mut() {
+            last.1.push(line.to_string());
+        }
+    }
+    out
+}
+
+/// The colour scheme name uQ's `kde/uq.colors` carries (`[General] ColorScheme=`).
+const SCHEME: &str = "uQ";
+
+/// `existing` with uQ's `[Colors:*]` groups from `scheme` (the rendered `kde/uq.colors`) and
+/// `[General] ColorScheme=uQ`, or `None` when nothing should change. Kirigami and every other KDE
+/// framework read their colours from here (outside Plasma that means Breeze Light otherwise).
+/// A file that already has colours of its own (KDE's System Settings wrote them) is theirs: it
+/// is only rewritten while it still says `ColorScheme=uQ`. Everything else in it is kept.
+pub fn with_colors(existing: &str, scheme: &str) -> Option<String> {
+    let ours = groups(scheme);
+    if !ours.iter().any(|(h, _)| h.starts_with("[Colors:")) {
+        return None;
+    }
+    let mut theirs = groups(existing);
+    let has_colors = theirs.iter().any(|(h, _)| h.starts_with("[Colors:"));
+    let is_uq = theirs.iter().any(|(h, l)| {
+        h == "[General]"
+            && l.iter().any(|l| {
+                key_of(l) == Some("ColorScheme")
+                    && l.split_once('=').is_some_and(|(_, v)| v.trim() == SCHEME)
+            })
+    });
+    if has_colors && !is_uq {
+        return None;
+    }
+    theirs.retain(|(h, _)| !h.starts_with("[Colors:"));
+    // [General] ColorScheme=uQ, first in the group.
+    match theirs.iter_mut().find(|(h, _)| h == "[General]") {
+        Some((_, lines)) => {
+            lines.retain(|l| key_of(l) != Some("ColorScheme"));
+            lines.insert(0, format!("ColorScheme={SCHEME}"));
+        }
+        None => theirs.insert(
+            1,
+            ("[General]".into(), vec![format!("ColorScheme={SCHEME}")]),
+        ),
+    }
+    theirs.extend(ours.into_iter().filter(|(h, _)| h.starts_with("[Colors:")));
+    let mut out = String::new();
+    for (h, lines) in theirs {
+        let body: Vec<&str> = {
+            let mut v: Vec<&str> = lines.iter().map(String::as_str).collect();
+            while v.last().is_some_and(|l| l.trim().is_empty()) {
+                v.pop();
+            }
+            v
+        };
+        if h.is_empty() && body.is_empty() {
+            continue;
+        }
+        if !out.is_empty() {
+            out.push('\n');
+        }
+        if !h.is_empty() {
+            out.push_str(&h);
+            out.push('\n');
+        }
+        for l in body {
+            out.push_str(l);
+            out.push('\n');
+        }
+    }
+    (out != existing).then_some(out)
+}
+
+/// Put uQ's colour scheme into `~/.config/kdeglobals` (see [`with_colors`]). `Ok(true)` when the
+/// file changed; no rendered scheme yet is `Ok(false)`.
+pub fn sync_colors(p: &Paths) -> std::io::Result<bool> {
+    let scheme = match std::fs::read_to_string(p.theme_dir.join("kde/uq.colors")) {
+        Ok(s) => s,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(e) => return Err(e),
+    };
+    let path = conf_path(p);
+    let existing = match std::fs::read_to_string(&path) {
+        Ok(s) => s,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(e) => return Err(e),
+    };
+    match with_colors(&existing, &scheme) {
+        Some(new) => atomic_write(&path, &new).map(|()| true),
+        None => Ok(false),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -210,5 +309,46 @@ mod tests {
             conf_path(&p),
             p.hypr_dir.parent().unwrap().join("kdeglobals")
         );
+    }
+
+    const SCHEME_TXT: &str = "[General]\nColorScheme=uQ\nName=uQ Gruvbox\n\n[Colors:Window]\nBackgroundNormal=40,40,40\n\n[Colors:View]\nBackgroundNormal=60,56,54\n\n[WM]\nactiveBackground=1,2,3\n";
+
+    #[test]
+    fn colours_go_into_an_empty_file_without_the_wm_group() {
+        let new = with_colors("", SCHEME_TXT).unwrap();
+        assert_eq!(
+            new,
+            "[General]\nColorScheme=uQ\n\n[Colors:Window]\nBackgroundNormal=40,40,40\n\n[Colors:View]\nBackgroundNormal=60,56,54\n"
+        );
+        assert_eq!(with_colors(&new, SCHEME_TXT), None, "second run: unchanged");
+    }
+
+    #[test]
+    fn colours_keep_the_rest_and_the_terminal() {
+        let old = "[General]\nTerminalApplication=kitty\n\n[Icons]\nTheme=Papirus-Dark\n";
+        let new = with_colors(old, SCHEME_TXT).unwrap();
+        assert!(
+            new.starts_with("[General]\nColorScheme=uQ\nTerminalApplication=kitty\n"),
+            "{new}"
+        );
+        assert!(new.contains("[Icons]\nTheme=Papirus-Dark\n"), "{new}");
+        assert!(new.contains("[Colors:Window]"), "{new}");
+    }
+
+    #[test]
+    fn colours_replace_an_older_uq_scheme() {
+        let old = with_colors("", SCHEME_TXT).unwrap();
+        let next = SCHEME_TXT.replace("40,40,40", "9,9,9");
+        let new = with_colors(&old, &next).unwrap();
+        assert!(new.contains("BackgroundNormal=9,9,9"), "{new}");
+        assert!(!new.contains("40,40,40"), "{new}");
+        assert_eq!(new.matches("[Colors:Window]").count(), 1);
+    }
+
+    #[test]
+    fn colours_leave_a_users_own_scheme_alone() {
+        let theirs =
+            "[General]\nColorScheme=BreezeDark\n\n[Colors:Window]\nBackgroundNormal=1,1,1\n";
+        assert_eq!(with_colors(theirs, SCHEME_TXT), None);
     }
 }

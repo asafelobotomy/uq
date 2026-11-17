@@ -50,6 +50,33 @@ pub fn gsettings_commands(t: &Theme) -> Vec<[String; 3]> {
     .collect()
 }
 
+/// The GTK 3 theme that follows the colour scheme: adw-gtk3 is built on libadwaita's named
+/// colours (which `gtk-3.0/gtk.css` redefines), so it turns uQ's colours into every GTK 3 widget.
+/// Stock Adwaita for GTK 3 ignores `color-scheme` and stays light. `None` when it isn't installed.
+pub fn gtk_theme(variant: Variant, installed: impl Fn(&str) -> bool) -> Option<&'static str> {
+    let name = match variant {
+        Variant::Dark => "adw-gtk3-dark",
+        Variant::Light => "adw-gtk3",
+    };
+    installed(name).then_some(name)
+}
+
+/// Whether a GTK theme directory is installed in the usual places.
+fn gtk_theme_installed(name: &str) -> bool {
+    let home = std::env::var_os("HOME").map(std::path::PathBuf::from);
+    let data =
+        std::env::var("XDG_DATA_DIRS").unwrap_or_else(|_| "/usr/local/share:/usr/share".into());
+    let mut dirs: Vec<std::path::PathBuf> = data
+        .split(':')
+        .map(|d| std::path::Path::new(d).join("themes"))
+        .collect();
+    if let Some(h) = home {
+        dirs.push(h.join(".local/share/themes"));
+        dirs.push(h.join(".themes"));
+    }
+    dirs.iter().any(|d| d.join(name).join("gtk-3.0").is_dir())
+}
+
 #[derive(Debug, Clone)]
 pub struct GSettings {
     binary: PathBuf,
@@ -73,7 +100,11 @@ impl GSettings {
 
 impl SystemSettings for GSettings {
     fn apply(&self, theme: &Theme) -> std::io::Result<()> {
-        for [schema, key, value] in gsettings_commands(theme) {
+        let mut commands = gsettings_commands(theme);
+        if let Some(name) = gtk_theme(theme.variant, gtk_theme_installed) {
+            commands.push([IFACE.to_string(), "gtk-theme".to_string(), name.to_string()]);
+        }
+        for [schema, key, value] in commands {
             let status = std::process::Command::new(&self.binary)
                 .args(["set", &schema, &key, &value])
                 .status()?;
@@ -174,6 +205,23 @@ mod tests {
             .get(id, v)
             .unwrap()
             .clone()
+    }
+
+    #[test]
+    fn gtk_theme_follows_the_variant_when_installed() {
+        assert_eq!(
+            gtk_theme(Variant::Dark, |n| n == "adw-gtk3-dark"),
+            Some("adw-gtk3-dark")
+        );
+        assert_eq!(
+            gtk_theme(Variant::Light, |n| n == "adw-gtk3"),
+            Some("adw-gtk3")
+        );
+        assert_eq!(
+            gtk_theme(Variant::Dark, |_| false),
+            None,
+            "left alone without adw-gtk3"
+        );
     }
 
     #[test]

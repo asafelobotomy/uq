@@ -1263,10 +1263,15 @@ impl Desktop {
                     if let Err(e) = self.sys.apply(&theme) {
                         tracing::warn!("system settings: {e}");
                     }
-                    // Qt's icon theme, in a qt6ct.conf `uqctl setup --apps` wrote (and only then).
-                    if let Err(e) = uq_core::qt6ct::sync_icon_theme(&self.paths, &theme.icons.theme)
+                    // Qt's icons, fonts and palette marker, in a qt6ct.conf `uqctl setup --apps`
+                    // wrote (and only then); the same opt-in gives KDE/Kirigami apps uQ's colours.
+                    if let Err(e) = uq_core::qt6ct::sync(&self.paths, &theme) {
+                        tracing::warn!("qt6ct look: {e}");
+                    }
+                    if uq_core::qt6ct::is_opted_in(&self.paths)
+                        && let Err(e) = uq_core::kdeglobals::sync_colors(&self.paths)
                     {
-                        tracing::warn!("qt6ct icon theme: {e}");
+                        tracing::warn!("kdeglobals colours: {e}");
                     }
                     // KDE apps' terminal (Dolphin's "Open Terminal Here"), unless one is named.
                     if let Err(e) = uq_core::kdeglobals::ensure_terminal(&self.paths) {
