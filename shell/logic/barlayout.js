@@ -46,13 +46,14 @@ var ISLANDS = [
     { id: "worldclock", name: "World clock" },
     { id: "keyboard", name: "Keyboard layout" },
     { id: "security", name: "Security (oysterAV)" },
+    { id: "crumbs", name: "Storage cleanup (crumBS)" },
     { id: SEPARATOR, name: "Separator" }
 ];
 
 // Left out first when even every island at Icon size doesn't fit: separators, then these, in
 // this order. Same idea for which island steps down first among equals.
 var EXPENDABLE = [SEPARATOR, "keyboard", "worldclock", "news", "stocks", "sysmon", "media",
-                  "weather", "tray", "security", "notif", "work", "clock", "system", "status"];
+                  "weather", "tray", "security", "crumbs", "notif", "work", "clock", "system", "status"];
 
 function known(id) {
     for (var i = 0; i < ISLANDS.length; i++)

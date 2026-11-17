@@ -21,6 +21,8 @@ Island {
     // The worst state a notification has gone out for.
     property string notified: "ok"
     property int retries: 0
+    // shell.bar.options.security.notify: off, the island only shows the state.
+    readonly property bool notify: (BarLayout.options.security || ({})).notify !== false
 
     readonly property string state: summary ? String(summary.state) : ""
     readonly property var reasons: summary && Array.isArray(summary.reasons)
@@ -41,6 +43,8 @@ Island {
     // One notification when the state gets worse than the last one sent; fixed wording, reasons
     // cleaned to plain words so they can't look like options.
     function maybeNotify() {
+        if (!notify)
+            return;
         if (state === "" || rank(state) <= rank(notified)) {
             if (state !== "" && rank(state) < rank(notified))
                 notified = state;

@@ -15,6 +15,13 @@ All notable changes to uQ are listed here. The format follows
   size or text style for the whole bar. The screen under the bar dims while it is open, so the
   bar stays lit and shows each change. Esc closes the dialog and edit mode goes on; S on the edit
   panel opens it again.
+- **A Storage cleanup island (crumBS).** Shows how much space `crumbs scan` says can be freed and
+  turns amber at a size you choose (`shell.bar.options.crumbs.warn_gb`, 5 GB by default). Its popup
+  lists the biggest categories and opens crumBS's Storage page. Hidden without crumBS.
+- **The System monitor shows the graphics card.** Use, video memory and temperature, for NVIDIA
+  (through `nvidia-smi`) and AMD (through sysfs). Options choose which readings the island shows:
+  processor, memory, graphics card, temperature (`shell.bar.options.sysmon`).
+- **The Security island's notifications can be switched off** (`shell.bar.options.security.notify`).
 
 ## [0.3.6] - 2026-11-17
 
@@ -25,6 +32,7 @@ All notable changes to uQ are listed here. The format follows
   Settings. It sends one notification when the state gets worse, and hides itself when oysterAV
   isn't installed. It is in the default bar of new users; add it to an existing bar with Edit,
   Add an Island.
+
 
 ## [0.3.5] - 2026-11-17
 
