@@ -59,7 +59,7 @@ Island {
             return [];
         var all = SystemTray.items.values;
         var bell = Tray.notifiBell(NotifBackend.backend, Tray.find(all, Tray.NOTIFI));
-        return Tray.shownItems(all, { notifiBell: bell }).slice(0, trayRoom);
+        return Tray.shownItems(all, { notifiBell: bell, securityIcon: BarLayout.placed("security") }).slice(0, trayRoom);
     }
 
     // --- media ---

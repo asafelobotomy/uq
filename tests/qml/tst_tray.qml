@@ -14,6 +14,11 @@ TestCase {
         verify(!T.hiddenInTray("org.notify.Panel", { notifiBell: false }));
         verify(!T.hiddenInTray("org.notify.Panel", undefined));
     }
+    function test_oysterav_hidden_only_with_a_security_island() {
+        verify(T.hiddenInTray("io.github.asafelobotomy.OysterAV", { securityIcon: true }));
+        verify(!T.hiddenInTray("io.github.asafelobotomy.OysterAV", { securityIcon: false }));
+        verify(!T.hiddenInTray("io.github.asafelobotomy.OysterAV", null));
+    }
     function test_other_items_stay() {
         verify(!T.hiddenInTray("Claude_status_icon_1", { notifiBell: true }));
         verify(!T.hiddenInTray("", { notifiBell: true }));
