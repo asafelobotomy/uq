@@ -46,4 +46,11 @@ TestCase {
         compare(S.checks(null), []);
         compare(S.facts(null), []);
     }
+
+    function test_setup_needed_only_on_an_explicit_false() {
+        compare(S.setupNeeded({ setup_completed: false }), true);
+        compare(S.setupNeeded({ setup_completed: true }), false);
+        compare(S.setupNeeded({ state: "ok" }), false, "an older oysterAV that doesn't say");
+        compare(S.setupNeeded(null), false);
+    }
 }

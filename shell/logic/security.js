@@ -10,6 +10,12 @@ function _n(v) {
     return isFinite(x) && x >= 0 ? x : -1;
 }
 
+// True only when oysterAV says first-time setup has never been completed. A summary without the
+// field (an older oysterAV) is taken as set up, so nothing is gated by guesswork.
+function setupNeeded(s) {
+    return !!s && s.setup_completed === false;
+}
+
 // "just now", "3 hours ago", "2 days ago" from an age in hours.
 function ago(hours) {
     var h = _n(hours);

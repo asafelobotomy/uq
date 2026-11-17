@@ -12,7 +12,10 @@ import "../../logic/security.js" as Sec
 // --deep --json`: ok, warning or threat, with the reasons). Icon: oysterAV's own icon (a coloured
 // ring when it isn't installed), green, yellow or red by the state; oysterAV's tray icon stays out
 // of the Tray island while this island is on the bar. Small, Medium and Large add the word. A
-// click lists why and opens oysterAV's Security page in Settings. When the state gets worse it sends one notification (`notify-send`), and tries
+// click lists why and opens oysterAV's Security page in Settings. Until oysterAV's first-time
+// setup has run (the summary says `setup_completed: false`) the island is red and reads "Set up",
+// sends one notification, and a click opens the Setup tab of that page instead of the popup. When
+// the state gets worse it sends one notification (`notify-send`), and tries
 // again for a minute if the notification server isn't up yet (it takes its name a few seconds
 // after the shell starts). Hidden while oysterAV isn't installed or can't answer. Everything the
 // summary says is plain text and cut to length.
@@ -23,21 +26,33 @@ Island {
     property bool failed: false
     // The worst state a notification has gone out for.
     property string notified: "ok"
+    // Whether the "set up oysterAV" notification has gone out.
+    property bool setupNotified: false
     property int retries: 0
     // shell.bar.options.security.notify: off, the island only shows the state.
     readonly property bool notify: (BarLayout.options.security || ({})).notify !== false
 
+    readonly property bool setupNeeded: Sec.setupNeeded(summary)
     readonly property string state: summary ? String(summary.state) : ""
     readonly property var reasons: summary && Array.isArray(summary.reasons)
         ? summary.reasons.slice(0, 6).map(function (r) { return String(r).slice(0, 120); }) : []
-    readonly property string word: state === "ok" ? "Protected"
+    readonly property string word: setupNeeded ? "Set up"
+        : state === "ok" ? "Protected"
         : (state === "threat" ? "Threat found" : (state === "warning" ? "Needs attention" : "Security"))
-    readonly property color tint: state === "ok" ? Theme.success
+    readonly property color tint: setupNeeded ? Theme.error
+        : state === "ok" ? Theme.success
         : (state === "threat" ? Theme.error : (state === "warning" ? Theme.warning : Theme.textMuted))
+
+    // Once setup has run, a later need for it is news again.
+    onSetupNeededChanged: {
+        if (!setupNeeded)
+            setupNotified = false;
+    }
 
     shown: summary !== null && !failed
     Accessible.role: Accessible.Button
-    Accessible.name: "Security: " + word + ". Show details"
+    Accessible.name: setupNeeded ? "Security: first-time setup needed. Open setup"
+        : "Security: " + word + ". Show details"
 
     function rank(s) {
         return s === "threat" ? 2 : (s === "warning" ? 1 : 0);
@@ -48,6 +63,16 @@ Island {
     function maybeNotify() {
         if (!notify)
             return;
+        if (setupNeeded) {
+            if (setupNotified || notifier.running)
+                return;
+            notifier.command = ["notify-send", "--app-name=oysterAV", "--icon=security-low",
+                "--urgency", "normal", "Security: setup needed",
+                "oysterAV's first-time setup hasn't been run. Click the Security island to run it."];
+            notifier.target = "setup";
+            notifier.running = true;
+            return;
+        }
         if (state === "" || rank(state) <= rank(notified)) {
             if (state !== "" && rank(state) < rank(notified))
                 notified = state;
@@ -71,7 +96,10 @@ Island {
         onExited: function (code) {
             if (code === 0) {
                 root.retries = 0;
-                root.notified = target;
+                if (target === "setup")
+                    root.setupNotified = true;
+                else
+                    root.notified = target;
             } else if (root.retries < 6) {
                 root.retries += 1;
                 retry.restart();
@@ -114,9 +142,10 @@ Island {
             poll.running = true;
     }
     Component.onCompleted: refresh()
-    // Every two minutes; every 15 s while a scan runs, so the popup follows it.
+    // Every two minutes; every 15 s while a scan runs, so the popup follows it, or while setup is
+    // pending, so the island turns as soon as it has been run.
     Timer {
-        interval: root.summary && root.summary.scanning === true ? 15000 : 120000
+        interval: root.setupNeeded || (root.summary && root.summary.scanning === true) ? 15000 : 120000
         running: true
         repeat: true
         onTriggered: root.refresh()
@@ -178,11 +207,23 @@ Island {
 
     MouseArea {
         anchors.fill: parent
-        onClicked: popup.open && popup.anchorItem === root ? popup.hide() : popup.show(root, details)
+        onClicked: {
+            if (root.setupNeeded) {
+                popup.hide();
+                root.openSetup();
+            } else {
+                popup.open && popup.anchorItem === root ? popup.hide() : popup.show(root, details);
+            }
+        }
     }
 
     LazyPopup {
         id: popup
+    }
+
+    // The Setup tab of oysterAV's Security page: the first-time setup, run from Settings.
+    function openSetup() {
+        Quickshell.execDetached(["uq-settings", "--page", "oysterav-security", "--setting", "setup"]);
     }
 
     function tintOf(st) {

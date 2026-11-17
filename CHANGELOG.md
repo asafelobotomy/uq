@@ -7,6 +7,13 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **The Security island waits for oysterAV's first-time setup.** Until setup has run (oysterAV's
+  summary says `setup_completed: false`) the island is red and reads "Set up", sends one
+  notification, and a left click opens the Setup tab of oysterAV's Security page in Settings
+  instead of the popup. An older oysterAV that doesn't report it is treated as set up.
+
 ## [0.3.10] - 2026-11-18
 
 ### Added
