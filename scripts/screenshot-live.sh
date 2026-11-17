@@ -16,7 +16,7 @@ set -u
 root=$(cd "$(dirname "$0")/.." && pwd)
 
 skip() { echo "SKIP: $*"; exit 77; }
-for bin in Hyprland hyprctl qs dbus-daemon jq foot socat gcc wayland-scanner grim wl-copy wl-paste; do
+for bin in Hyprland hyprctl qs dbus-daemon jq foot socat gcc wayland-scanner grim wl-copy wl-paste cmp; do
     command -v "$bin" >/dev/null 2>&1 || skip "$bin is not installed"
 done
 ls /dev/dri/card* >/dev/null 2>&1 || skip "no DRM device"
@@ -148,7 +148,11 @@ echo old | "${shell_env[@]}" wl-copy
 snap screen || check "uq-screenshot screen failed: $(cat "$tmp/snap.out")"
 f=$(newest)
 [ -n "$f" ] && [ -s "$f" ] || check "nothing was saved in $pics"
-wait_layers 1 || check "the preview never appeared"
+wait_layers 1 || { check "the preview never appeared"
+    echo "--- uq-screenshot output:"; cat "$tmp/snap.out"
+    echo "--- ipc: $("${shell_env[@]}" timeout 10 qs ipc -p "$root/shell" call screenshot show "$f" copied 2>&1)"
+    echo "--- qs.log (screenshot lines)"; grep -i "screenshot\|ShotPreview\|ERROR" "$tmp/qs.log" | tail -n 20
+    hc layers -j | jq -c '.. | objects | .namespace? // empty' | sort -u | tr '\n' ' '; echo; }
 sleep 1; still 1-preview
 [ "$(hc clients -j | jq length)" = "$clients" ] || check "a window opened for the screenshot"
 [ "$(png_size "$f")" = 1280x720 ] || check "the screen capture is $(png_size "$f"), not 1280x720"
