@@ -20,8 +20,7 @@ Rectangle {
     default property alias content: body.data
 
     Layout.fillWidth: true
-    // Cards side by side are the same height, so the columns line up.
-    Layout.fillHeight: true
+    // A card is as tall as its rows, so a short card beside a tall one has no empty space inside.
     Layout.alignment: Qt.AlignTop
     // Never more columns than the grid has: in one column (a narrow window), a span of 2 made
     // the grid lay this card over its neighbours.
