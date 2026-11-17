@@ -200,6 +200,8 @@ wait_layers 0 || check "the close button didn't dismiss the preview"
 [ "$(nshots)" = "$n" ] || check "dismissing deleted a file"
 
 # --- 6. it goes away by itself ------------------------------------------------------------------
+# The pointer is still over where the card was: it stays while hovered, so move away first.
+send "move 100 300" "sleep 300"; drain
 sleep 1.1; snap screen || check "a fourth capture failed"
 wait_layers 1 || check "no preview for the fourth capture"
 for _ in $(seq 1 80); do [ "$(layers)" = 0 ] && break; sleep 0.25; done
