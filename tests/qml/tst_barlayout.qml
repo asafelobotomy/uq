@@ -38,6 +38,8 @@ TestCase {
         compare(L.sizeOf(b.start[2]), "large", "news is Large by default");
         compare(L.sizeOf(b.start[3]), "medium");
         compare(L.sizeOf({ id: "keyboard" }), "icon");
+        compare(L.sizeOf({ id: "security" }), "icon");
+        verify(L.known("security"));
         compare([L.UNITS.icon, L.UNITS.small, L.UNITS.medium, L.UNITS.large], [1, 2, 4, 6]);
         compare(L.stepSize("small", 1), { size: "medium", units: null });
         compare(L.stepSize("icon", -1), null);

@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// Every island the bar knows, in the order Settings offers them, with its display name.
-pub const ISLANDS: [(&str, &str); 14] = [
+pub const ISLANDS: [(&str, &str); 15] = [
     ("system", "App menu, workspaces and dock"),
     ("work", "Open windows"),
     ("clock", "Clock and calendar"),
@@ -24,6 +24,7 @@ pub const ISLANDS: [(&str, &str); 14] = [
     ("sysmon", "System monitor"),
     ("worldclock", "World clock"),
     ("keyboard", "Keyboard layout"),
+    ("security", "Security (oysterAV)"),
     ("separator", "Separator"),
 ];
 
@@ -89,7 +90,7 @@ pub fn default_size(id: &str) -> Size {
     match id {
         "system" | "work" | "status" | "news" => Size::Large,
         "clock" | "media" | "stocks" | "worldclock" | "tray" => Size::Medium,
-        "keyboard" => Size::Icon,
+        "keyboard" | "security" => Size::Icon,
         _ => Size::Small,
     }
 }
@@ -1129,6 +1130,8 @@ mod tests {
         );
         assert_eq!(parse(json!({"id": "clock"})).size(), Size::Medium);
         assert_eq!(parse(json!({"id": "keyboard"})).size(), Size::Icon);
+        assert_eq!(parse(json!({"id": "security"})).size(), Size::Icon);
+        assert!(known_island("security"));
         assert_eq!(parse(json!({"id": "work"})).size(), Size::Large);
         assert!(serde_json::from_value::<BarItem>(json!({"id": "clock", "size": "huge"})).is_err());
         assert_eq!(
