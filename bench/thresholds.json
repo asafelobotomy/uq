@@ -1,0 +1,65 @@
+{
+  "comment": "Fractions over the base, on the same CI machine. A metric fails when it grows past `fail` AND by more than min_abs (in its own unit); past `warn` it is only flagged. First matching rule wins.",
+  "rules": [
+    {
+      "match": "_startup_ms$",
+      "warn": 0.15,
+      "fail": 0.4,
+      "min_abs": 150
+    },
+    {
+      "match": "_idle_rss$|^shell_rss",
+      "warn": 0.1,
+      "fail": 0.25,
+      "min_abs": 4194304
+    },
+    {
+      "match": "_idle_cpu_pct$|_children_cpu_pct$",
+      "warn": 0.25,
+      "fail": 0.75,
+      "min_abs": 0.5
+    },
+    {
+      "match": "_wakeups_per_s$",
+      "warn": 0.2,
+      "fail": 0.5,
+      "min_abs": 10
+    },
+    {
+      "match": "_spawns_per_min$|_startup_spawns$",
+      "warn": 0.2,
+      "fail": 0.5,
+      "min_abs": 3
+    },
+    {
+      "match": "_frames_per_min$",
+      "warn": 0.2,
+      "fail": 0.5,
+      "min_abs": 3
+    },
+    {
+      "match": "^popup_",
+      "warn": 0.2,
+      "fail": 0.5,
+      "min_abs": 50
+    },
+    {
+      "match": "^frame_",
+      "warn": 0.25,
+      "fail": 0.6,
+      "min_abs": 3
+    },
+    {
+      "match": "_threads$|^frames_per",
+      "warn": 0.25,
+      "fail": 1.0,
+      "min_abs": 3
+    },
+    {
+      "match": ".*",
+      "warn": 0.1,
+      "fail": 0.25,
+      "min_abs": 0
+    }
+  ]
+}
