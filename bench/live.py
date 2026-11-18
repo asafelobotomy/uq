@@ -277,6 +277,13 @@ def main():
     env = Env(a.src)
     try:
         env.start_session()
+        # uqlip, as on a real desktop: without it the shell's clipboard watcher ends and is retried
+        # every few seconds, which would show up as idle spawns that a running session does not have.
+        uqlip = env.spawn([f"{env.bin}/uqlip"], env=env.shell_env(), log="uqlip")
+        time.sleep(1.5)
+        if uqlip.poll() is not None:
+            note("uqlip exited at start: " + open(env.tmp + "/uqlip.log").read()[-300:])
+            uqlip = None
         print("== shell startup (bar layer visible)")
         times = []
         for _ in range(starts):
@@ -360,6 +367,10 @@ def main():
             env.stop(p)
         else:
             note("strace is not installed; process spawns not counted")
+
+        if uqlip is not None:
+            print("== uqlip idle")
+            idle_sample(uqlip.pid, window, "uqlip")
 
         print("== uqd")
         share = env.tmp + "/share"

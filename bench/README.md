@@ -7,12 +7,13 @@ session, and writes one JSON file of metrics (all "lower is better").
 |---|---|
 | `shell_startup_ms`, `uqd_startup_ms` | process start until the bar layer exists / `org.uq.Desktop1` is on the bus; median of 5 |
 | `*_idle_rss`, `*_threads` | `/proc/PID/status` after 8 s of settling |
-| `*_idle_cpu_pct`, `*_idle_children_cpu_pct` | CPU ticks of the process, and of children it waited for, over a 25 s idle window |
+| `*_idle_cpu_pct`, `*_idle_children_cpu_pct` | CPU ticks of the process, and of children it waited for, over a 25 s idle window placed inside one wall-clock minute (the bar clock repaints at the minute change) |
 | `*_idle_wakeups_per_s` | voluntary + involuntary context switches over all threads, per second |
 | `*_idle_spawns_per_min`, `shell_startup_spawns` | `execve` calls counted with `strace --seccomp-bpf` |
 | `shell_idle_frames_per_min` | frames Qt renders while nothing happens (Qt's `QSG_RENDER_TIMING`) |
 | `popup_open/close_lookseedo_ms` | `qs ipc call uq open/close lookseedo` until the layer maps/unmaps (includes the constant cost of the `qs ipc` client) |
-| `shell_rss_after_popups`, `shell_rss_growth_popups` | memory after 10 open/close cycles: a leak check |
+| `shell_rss_after_popups`, `shell_rss_growth_popups` | memory after 10 open/close cycles (after 2 warm-up cycles); the growth is noisy, so it only fails when it triples and passes 32 MiB |
+| `uqlip_idle_*` | the clipboard daemon, which also runs in the session so the shell's watcher behaves as on a desktop |
 | `frame_p50_ms`, `frame_p95_ms` | frame times from `QSG_RENDER_TIMING` while popups open and close |
 
 Rendering is software (llvmpipe on vkms), so frame times and latencies only mean something against
