@@ -129,7 +129,11 @@ class Env:
             "hl.config({ misc = { disable_hyprland_logo = true, disable_splash_rendering = true } })\n")
         # BENCH_HW=1 renders on the machine's own GPU (frame times that mean something); CI is software.
         env = self.base_env()
-        if not os.environ.get("BENCH_HW"):
+        if os.environ.get("BENCH_HW"):
+            # Next to a running desktop the DRM device is taken, so Hyprland gets a headless output
+            # that renders on the GPU's render node.
+            env["AQ_BACKENDS"] = "headless"
+        else:
             env["LIBGL_ALWAYS_SOFTWARE"] = "1"
         self.spawn(["Hyprland", "-c", f"{self.tmp}/hypr.lua"], env=env, log="hypr")
         sig = wl = None
