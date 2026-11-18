@@ -319,9 +319,7 @@ def main():
                 print(open(env.tmp + "/qs.log").read()[-3000:])
                 sys.exit("the shell never put its bar up")
             times.append(up * 1000)
-            if a.diag:
-            diag_popups(env)
-        env.stop(p)
+            env.stop(p)
             env.wait_layer("uq-bar", present=False, timeout=10)
         put("shell_startup_ms", med(times), "ms", spread=round(max(times) - min(times), 1))
 
@@ -375,6 +373,8 @@ def main():
         else:
             note(f"only {len(fr)} frame-timing lines while popups ran; sample of the log:\n"
                  + "".join(open(env.tmp + "/qs.log", errors="replace").readlines()[-8:]))
+        if a.diag:
+            diag_popups(env)
         env.stop(p)
 
         if shutil.which("strace"):
