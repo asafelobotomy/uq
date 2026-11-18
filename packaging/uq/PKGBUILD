@@ -70,7 +70,7 @@ build() {
   cd "$srcdir/$pkgname-$_tag"
   export RUSTUP_TOOLCHAIN=stable
   export CARGO_TARGET_DIR=target
-  cargo build --frozen --release -p uqd -p uqctl -p uq-settings -p uq-settings-helper
+  cargo build --frozen --release -p uqd -p uqctl -p uq-clip -p uq-settings -p uq-settings-helper
 }
 
 # The full suite (cargo plus ~950 QML tests, about a minute) runs in CI before every tag, so builds
@@ -96,6 +96,7 @@ package() {
   cd "$srcdir/$pkgname-$_tag"
   install -Dm755 target/release/uqd "$pkgdir/usr/bin/uqd"
   install -Dm755 target/release/uqctl "$pkgdir/usr/bin/uqctl"
+  install -Dm755 target/release/uq-clipd "$pkgdir/usr/bin/uq-clipd"
   install -Dm755 scripts/uq-dev "$pkgdir/usr/bin/uq-dev"
   # The uQ session entry: runs `uqctl setup` on first login, then Hyprland.
   install -Dm755 packaging/uq-session "$pkgdir/usr/bin/uq-session"
@@ -146,6 +147,7 @@ package() {
   install -dm755 "$pkgdir/usr/share/uq/settings/pages"
   install -Dm644 packaging/uqd.service "$pkgdir/usr/lib/systemd/user/uqd.service"
   install -Dm644 packaging/uq-shell.service "$pkgdir/usr/lib/systemd/user/uq-shell.service"
+  install -Dm644 packaging/uq-clipd.service "$pkgdir/usr/lib/systemd/user/uq-clipd.service"
   install -Dm644 packaging/uq-lock.service "$pkgdir/usr/lib/systemd/user/uq-lock.service"
   install -Dm755 packaging/uq-lock-run "$pkgdir/usr/lib/uq/uq-lock-run"
   install -Dm644 packaging/pam/uq-greetd "$pkgdir/etc/pam.d/uq-greetd"

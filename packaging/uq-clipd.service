@@ -1,0 +1,16 @@
+[Unit]
+Description=uQ clipboard history
+Documentation=https://github.com/asafelobotomy/uq
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+# A session component, not an app (see uqd.service).
+Slice=session.slice
+ExecCondition=/bin/sh -c 'test -n "$HYPRLAND_INSTANCE_SIGNATURE" && test -S "$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket.sock"'
+ExecStart=/usr/bin/uq-clipd
+Restart=on-failure
+RestartSec=2
+# The history holds what the owner copied: keep it out of reach of everything else.
+UMask=0077
+NoNewPrivileges=yes

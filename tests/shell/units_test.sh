@@ -4,7 +4,7 @@
 set -u
 root=$(cd "$(dirname "$0")/../.." && pwd)
 fail=0
-for u in uq-shell uqd uq-lock; do
+for u in uq-shell uqd uq-lock uq-clipd; do
     f="$root/packaging/$u.service"
     [ -f "$f" ] || { echo "FAIL: $u.service missing"; fail=1; continue; }
     if grep -q '^\[Install\]' "$f"; then echo "FAIL: $u.service has an [Install] section"; fail=1; fi

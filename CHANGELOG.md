@@ -7,6 +7,17 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **A clipboard history.** `uq-clipd` follows the Wayland clipboard (the `ext-data-control` protocol,
+  or `wlr-data-control` on older compositors) and keeps a private history of text and images in
+  `~/.local/share/uq/clipboard/` (owner-only files): newest first, duplicates move to the top, up to
+  200 entries and 16 MiB each, pinned entries are never pruned. Copies a password manager marks
+  secret (`x-kde-passwordManagerHint`), copies from ignored apps (KeePassXC, Bitwarden, 1Password,
+  Proton Pass by default) and anything while paused are never read. `uqctl clip` lists, searches,
+  copies back, pins, deletes, clears and pauses; `uqctl clip watch` streams changes. The popup,
+  bar island and Settings page follow. `uq-shell.service` starts the daemon.
+
 ### Fixed
 
 - **Qt apps no longer show Kvantum's grey bevelled buttons.** uQ's Kvantum theme named a base

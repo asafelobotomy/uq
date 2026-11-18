@@ -1,6 +1,7 @@
 //! uqctl: command-line client for uqd (`org.uq.Desktop1`).
 
 mod bridge;
+mod clip_cmd;
 mod greeter_cmd;
 mod integrations;
 mod keys_cmd;
@@ -107,6 +108,11 @@ enum Cmd {
         /// Start Welcome over from its first step, even if it was finished.
         #[arg(long)]
         reset: bool,
+    },
+    /// The clipboard history kept by uq-clipd: list, copy again, pin, delete, pause.
+    Clip {
+        #[command(subcommand)]
+        cmd: clip_cmd::ClipCmd,
     },
     /// Print recent setting changes: id, time, origin and summary, newest first.
     History {
@@ -410,6 +416,7 @@ async fn run(cmd: Cmd) -> Result<(), String> {
         | Cmd::Bridge { .. }
         | Cmd::Settings { .. }
         | Cmd::Welcome { .. }
+        | Cmd::Clip { .. }
         | Cmd::Profile { .. }
         | Cmd::Keys { .. }
         | Cmd::Theme { .. }
@@ -538,6 +545,10 @@ async fn main() -> ExitCode {
     }
     if let Cmd::Welcome { reset } = cli.cmd {
         return welcome_cmd::main(reset).await;
+    }
+    if let Cmd::Clip { cmd } = cli.cmd {
+        // uq-clipd's own socket, not the desktop bus.
+        return clip_cmd::main(cmd);
     }
     if let Cmd::Launch { id } = &cli.cmd {
         // Bounded inside: uqd gets 500 ms, Hyprland its own request timeout.
