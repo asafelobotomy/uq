@@ -29,7 +29,9 @@ fail() { echo "FAIL: $*"; for f in hypr qs; do [ -f "$tmp/$f.log" ] && { echo "-
 
 "$root/tests/live/tools/build-uqinput.sh" "$tmp/uqinput" || skip "uqinput didn't build"
 
-mkdir -p "$tmp/bin" "$tmp/oyst"
+mkdir -p "$tmp/bin" "$tmp/oyst" "$tmp/data/icons/hicolor/48x48/apps"
+# oysterAV's own icon, so the island shows it the way it does on a desktop with oysterAV installed.
+cp "$root/tests/live/fixtures/oysterav.png" "$tmp/data/icons/hicolor/48x48/apps/oysterav.png"
 echo -1 >"$tmp/oyst/pct"
 cat >"$tmp/bin/oyst-cli" <<SH
 #!/bin/sh
@@ -116,7 +118,7 @@ sleep 0.5
 
 shell_env=(env XDG_RUNTIME_DIR="$rt" WAYLAND_DISPLAY="$wl" HYPRLAND_INSTANCE_SIGNATURE="$sig"
     DBUS_SESSION_BUS_ADDRESS="unix:path=$tmp/bus" PATH="$tmp/bin:$(dirname "$uqctl"):$PATH"
-    XDG_STATE_HOME="$tmp/state" QT_QPA_PLATFORM=wayland LC_ALL=C.UTF-8)
+    XDG_STATE_HOME="$tmp/state" XDG_DATA_DIRS="$tmp/data:/usr/local/share:/usr/share" QT_QPA_PLATFORM=wayland LC_ALL=C.UTF-8)
 "${shell_env[@]}" qs -p "$tmp/harness/shell.qml" --no-duplicate >"$tmp/qs.log" 2>&1 &
 pids+=($!)
 for _ in $(seq 1 50); do hc layers -j | grep -q uq-bar && break; sleep 0.2; done

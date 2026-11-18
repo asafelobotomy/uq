@@ -17,8 +17,8 @@ import "../../logic/security.js" as Sec
 // sends one notification, and a click opens the Setup tab of that page instead of the popup. When
 // the state gets worse it sends one notification (`notify-send`), and tries
 // again for a minute if the notification server isn't up yet (it takes its name a few seconds
-// after the shell starts). While a scan runs the icon takes the accent colour inside a pulsing
-// ring (still under Reduce motion), the word reads "Scanning 42%" and the popup shows a progress
+// after the shell starts). While a scan runs oysterAV's icon takes the accent colour and
+// pulses (steady under Reduce motion), the word reads "Scanning 42%" and the popup shows a progress
 // bar. Hidden while oysterAV isn't installed or can't answer. Everything the
 // summary says is plain text and cut to length.
 Island {
@@ -173,6 +173,13 @@ Island {
         Item {
             Layout.preferredWidth: 20
             Layout.preferredHeight: 20
+            // While a scan runs the icon takes the accent colour and pulses (steady under Reduce motion).
+            SequentialAnimation on opacity {
+                running: root.scanning && !Settings.reduceMotion && root.visible
+                loops: Animation.Infinite
+                NumberAnimation { from: 1; to: 0.35; duration: Motion.base * 8; easing.type: Easing.InOutSine }
+                NumberAnimation { from: 0.35; to: 1; duration: Motion.base * 8; easing.type: Easing.InOutSine }
+            }
             IconImage {
                 id: appIcon
                 anchors.fill: parent
@@ -186,22 +193,6 @@ Island {
                 source: appIcon
                 colorization: 0.9
                 colorizationColor: root.tint
-            }
-            // The scanning ring: flat, around the icon; it pulses unless Reduce motion is on.
-            Rectangle {
-                id: scanRing
-                anchors.fill: parent
-                visible: root.scanning
-                radius: width / 2
-                color: "transparent"
-                border.width: 2
-                border.color: Theme.accent
-                SequentialAnimation on opacity {
-                    running: root.scanning && !Settings.reduceMotion && root.visible
-                    loops: Animation.Infinite
-                    NumberAnimation { from: 1; to: 0.25; duration: Motion.base * 8; easing.type: Easing.InOutSine }
-                    NumberAnimation { from: 0.25; to: 1; duration: Motion.base * 8; easing.type: Easing.InOutSine }
-                }
             }
             Rectangle {
                 anchors.centerIn: parent
