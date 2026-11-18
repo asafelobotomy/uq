@@ -235,6 +235,32 @@ def frames_in(path):
     return out
 
 
+def frame_lines(path):
+    """Each frame line of Qt's render timing, in full (the split into polish, sync, render, swap)."""
+    return [l.strip() for l in open(path, errors="replace") if FRAME.search(l)]
+
+
+def diag_popups(env):
+    """--diag: for each popup, the frame lines logged while it opens and while it closes, so a long
+    frame can be told from its neighbours and the phase that makes it long is visible."""
+    log = env.tmp + "/qs.log"
+    for name, layer in (("lookseedo", "uq-lookseedo"), ("appmenu", "uq-appmenu"),
+                        ("quicksettings", "uq-quick"), ("powermenu", "uq-power")):
+        for cycle in range(4):  # the first cycle includes loading the popup's QML
+            n0 = len(frame_lines(log))
+            env.ipc("open", name)
+            env.wait_layer(layer, True, 10)
+            time.sleep(0.6)
+            n1 = len(frame_lines(log))
+            env.ipc("close", name)
+            env.wait_layer(layer, False, 10)
+            time.sleep(0.6)
+            lines = frame_lines(log)
+            print(f"== diag {name} cycle {cycle}: open {n1 - n0} frames, close {len(lines) - n1} frames")
+            for i, l in enumerate(lines[n0:], start=0):
+                print(f"   {'open ' if i < n1 - n0 else 'close'} {l}")
+
+
 def count_execve(path, since=None):
     n = 0
     for line in open(path, errors="replace"):
@@ -272,6 +298,7 @@ def main():
     ap.add_argument("--src", default=".")
     ap.add_argument("--out", default="bench-live.json")
     ap.add_argument("--quick", action="store_true")
+    ap.add_argument("--diag", action="store_true", help="print each popup's open and close frames in full")
     a = ap.parse_args()
     settle, window, starts, cycles = (3, 6, 2, 3) if a.quick else (8, 25, 5, 10)
     env = Env(a.src)
@@ -292,7 +319,9 @@ def main():
                 print(open(env.tmp + "/qs.log").read()[-3000:])
                 sys.exit("the shell never put its bar up")
             times.append(up * 1000)
-            env.stop(p)
+            if a.diag:
+            diag_popups(env)
+        env.stop(p)
             env.wait_layer("uq-bar", present=False, timeout=10)
         put("shell_startup_ms", med(times), "ms", spread=round(max(times) - min(times), 1))
 
