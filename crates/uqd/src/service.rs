@@ -33,6 +33,34 @@ use uq_core::theme::{ThemeRegistry, Variant};
 const USER_LUA_STUB: &str =
     "-- Your own Hyprland settings. uQ reads this file last and never rewrites it.\n";
 
+/// With uQ's login screen installed, match its theme to the desktop's: `uqctl greeter sync-theme`
+/// asks the root helper, which polkit lets an active local administrator do without a prompt.
+/// Best effort and in the background; a theme the login screen doesn't ship (your own) or a
+/// missing helper just leaves the login screen as it was.
+fn sync_login_theme(name: &str, variant: Variant) {
+    if !std::path::Path::new("/etc/uq/greeter.toml").is_file() {
+        return;
+    }
+    let (name, variant) = (name.to_string(), variant.as_str());
+    tokio::spawn(async move {
+        let _ = tokio::process::Command::new("uqctl")
+            .args([
+                "greeter",
+                "sync-theme",
+                "--theme",
+                &name,
+                "--variant",
+                variant,
+            ])
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .kill_on_drop(false)
+            .status()
+            .await;
+    });
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Event {
     ThemeChanged {
@@ -1286,6 +1314,7 @@ impl Desktop {
                         tracing::warn!("restarting the shell for its new icons: {e}");
                     }
                 }
+                sync_login_theme(&theme.id, theme.variant);
                 let _ = self.events.send(Event::ThemeChanged {
                     name: theme.id.clone(),
                     variant: theme.variant,

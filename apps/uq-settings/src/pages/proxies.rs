@@ -205,6 +205,7 @@ pub trait Helper {
         hide_users: bool,
         reduce_motion: bool,
     ) -> zbus::Result<()>;
+    fn sync_greeter_theme(&self, theme: &str, variant: &str) -> zbus::Result<()>;
     fn set_greeter_wallpaper(&self, fd: zbus::wire::Fd<'_>) -> zbus::Result<()>;
     fn clear_greeter_wallpaper(&self) -> zbus::Result<()>;
     fn set_greeter_monitors(&self, json: &str) -> zbus::Result<()>;

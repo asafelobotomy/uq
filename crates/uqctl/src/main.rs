@@ -522,6 +522,12 @@ async fn main() -> ExitCode {
         // Local files only: no uqd, no timeout.
         return setup::main(apps, json, quiet);
     }
+    if let Cmd::Greeter {
+        cmd: greeter_cmd::GreeterCmd::SyncTheme { theme, variant },
+    } = &cli.cmd
+    {
+        return greeter_cmd::sync_theme(theme, variant).await;
+    }
     if let Cmd::Greeter { cmd } = &cli.cmd {
         // Local files and systemctl only: no uqd.
         return greeter_cmd::main(cmd);

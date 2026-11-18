@@ -151,6 +151,40 @@ impl Helper {
         self.write(&self.cfg.greeter_toml(), body.as_bytes()).await
     }
 
+    /// `SyncGreeterTheme`: the login screen's theme and variant only; `hide_users` and
+    /// `reduce_motion` stay as they are in `/etc/uq/greeter.toml` (false when it is missing or
+    /// unreadable). The theme and variant must name a shipped pre-rendered variant.
+    pub async fn sync_greeter_theme(
+        &self,
+        sender: &str,
+        theme: &str,
+        variant: &str,
+    ) -> Result<(), HelperError> {
+        let theme = ThemeName::parse(theme)?;
+        let variant = GreeterVariant::parse(variant)?;
+        let tokens = self.cfg.rendered_tokens(&theme, variant);
+        if !std::fs::metadata(&tokens).is_ok_and(|m| m.is_file()) {
+            return Err(HelperError::InvalidArgument(format!(
+                "{}-{} isn't an installed theme variant",
+                theme.as_str(),
+                variant.as_str()
+            )));
+        }
+        self.authorize(sender, Action::GreeterTheme).await?;
+        let current: Option<toml::Table> = std::fs::read_to_string(self.cfg.greeter_toml())
+            .ok()
+            .and_then(|t| t.parse().ok());
+        let flag = |k: &str| {
+            current
+                .as_ref()
+                .and_then(|t| t.get(k))
+                .and_then(toml::Value::as_bool)
+                .unwrap_or(false)
+        };
+        let body = templates::greeter(&theme, variant, flag("hide_users"), flag("reduce_motion"));
+        self.write(&self.cfg.greeter_toml(), body.as_bytes()).await
+    }
+
     /// `SetGreeterWallpaper`: copy the passed file byte for byte to
     /// `/var/lib/uq-greeter/wallpaper`. The fd must be a regular file of at most 20 MiB; it is
     /// read with `pread` from offset 0 (the caller's offset is untouched) and never decoded.
@@ -386,6 +420,19 @@ impl HelperIface {
         let sender = sender_of(&header)?;
         self.helper
             .set_greeter_appearance(&sender, theme, variant, hide_users, reduce_motion)
+            .await
+    }
+
+    async fn sync_greeter_theme(
+        &self,
+        theme: &str,
+        variant: &str,
+        #[zbus(header)] header: zbus::message::Header<'_>,
+    ) -> Result<(), HelperError> {
+        let _busy = self.helper.activity.begin();
+        let sender = sender_of(&header)?;
+        self.helper
+            .sync_greeter_theme(&sender, theme, variant)
             .await
     }
 

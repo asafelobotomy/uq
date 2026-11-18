@@ -200,6 +200,40 @@ async fn logind_rejects_anything_outside_the_set_before_asking_polkit() {
 }
 
 #[tokio::test]
+async fn sync_greeter_theme_keeps_the_other_settings() {
+    let f = Fixture::new(true);
+    f.helper
+        .set_greeter_appearance(":1.5", "dracula", "light", true, true)
+        .await
+        .unwrap();
+    f.helper
+        .sync_greeter_theme(":1.5", "forest", "dark")
+        .await
+        .unwrap();
+    let t: toml::Table = fs::read_to_string(f.path("etc/uq/greeter.toml"))
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert_eq!(t["theme"].as_str(), Some("forest"));
+    assert_eq!(t["variant"].as_str(), Some("dark"));
+    assert_eq!(t["hide_users"].as_bool(), Some(true));
+    assert_eq!(t["reduce_motion"].as_bool(), Some(true));
+    assert_eq!(
+        f.checks().last(),
+        Some(&(":1.5".to_string(), Action::GreeterTheme))
+    );
+    // A theme that isn't shipped is refused before polkit is asked.
+    let n = f.checks().len();
+    assert!(
+        f.helper
+            .sync_greeter_theme(":1.5", "ghost", "dark")
+            .await
+            .is_err()
+    );
+    assert_eq!(f.checks().len(), n);
+}
+
+#[tokio::test]
 async fn greeter_appearance_needs_a_shipped_variant() {
     let f = Fixture::new(true);
     f.helper

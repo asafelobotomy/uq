@@ -9,6 +9,7 @@ All notable changes to uQ are listed here. The format follows
 
 ### Added
 
+- **The login screen follows your theme.** When you change theme (or its dark and light variant), uqd asks the root helper to match the login screen to it. A polkit rule (`49-uq-greeter-theme.rules`) lets an active local administrator (group `wheel`) do this one thing without a password; everything else about the login screen still asks. A theme the login screen doesn't ship, such as your own, leaves it as it was. Picking a different login theme in Settings is replaced at the next theme change.
 - **A uQ backdrop.** With no wallpaper chosen, the desktop and the login screen now show uQ's own faceted backdrop with the uQ mark, drawn in the active theme's colours (dark or light), so the wallpaper changes colour with the theme. Picking a picture, folder or colour in Settings works as before.
 - **A uQ boot and shutdown banner.** `uq-banner-boot.service` and `uq-banner-shutdown.service` print the block-letter uQ on the console in the login screen theme's accent. They are off until enabled: `run0 systemctl enable uq-banner-boot uq-banner-shutdown`. They never touch the bootloader or the kernel command line.
 

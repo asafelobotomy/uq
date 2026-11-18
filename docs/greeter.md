@@ -52,7 +52,8 @@ it says so; enable one with `run0 systemctl enable <name>.service`.
   monitors show the wallpaper and the clock. Tab goes user → password → session → power; Enter
   logs in; Esc cancels.
 - **What it reads.** The greeter never reads a home directory. It reads only:
-  - `/etc/uq/greeter.toml`: theme, variant, `hide_users` and `reduce_motion` (Settings writes it).
+  - `/etc/uq/greeter.toml`: theme, variant, `hide_users` and `reduce_motion` (Settings writes it, and
+    uqd rewrites the theme and variant whenever the desktop theme changes, see below);
     The greeter has no fades and its Hyprland runs with animations off either way; `reduce_motion`
     also stops the user list coasting when flicked or animating its scroll;
   - `/usr/share/uq/themes/rendered/<theme>-<variant>/tokens.json`: every theme pre-rendered by the
@@ -78,6 +79,16 @@ it says so; enable one with `run0 systemctl enable <name>.service`.
   password or a PAM message. A wrong password, a locked account ("The account is locked due to 3 failed logins.") and every other PAM message are shown
   as plain text. When your password has expired, the greeter asks for a new one twice and checks
   they match before PAM sees them.
+
+## Following the desktop theme
+
+Each time the desktop theme or variant changes, uqd runs `uqctl greeter sync-theme`, which asks
+`uq-settings-helper` to set the login screen's theme and variant (`hide_users` and `reduce_motion`
+are kept). The polkit action `org.uq.settings.greeter-theme` is allowed without a password for an
+active local member of `wheel` by `/usr/share/polkit-1/rules.d/49-uq-greeter-theme.rules`; anyone else
+is asked for an administrator password, and the background request then fails. The helper refuses
+theme names the package doesn't ship pre-rendered, so your own themes leave the login screen as it
+was. A different login theme chosen in Settings lasts until the next theme change.
 
 ## Fingerprint login
 

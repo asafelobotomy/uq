@@ -1,0 +1,10 @@
+// Lets an active local administrator (group wheel) match the login screen's theme to the
+// desktop's without a password prompt, so the login screen follows each theme change. Only this
+// one action: the theme and variant names, checked against the themes uQ ships; every other
+// login screen change still asks for a password.
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.uq.settings.greeter-theme" &&
+        subject.local && subject.active && subject.isInGroup("wheel")) {
+        return polkit.Result.YES;
+    }
+});
