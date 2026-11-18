@@ -262,6 +262,15 @@ def frame_lines(path):
     return [l.strip() for l in open(path, errors="replace") if FRAME.search(l)]
 
 
+def explain_layers(env, what):
+    """A popup's layer never showed up on its level: print every layer Hyprland lists and the end of
+    the shell's log, which says whether the shell, the compositor or the level is at fault."""
+    print(f"== {what}: layers now")
+    print(json.dumps(env.hypr_json("layers"), indent=1)[:3000])
+    print("-- qs.log (tail)")
+    print("".join(open(env.tmp + "/qs.log", errors="replace").readlines()[-40:]))
+
+
 POPUPS = (("lookseedo", "uq-lookseedo"), ("appmenu", "uq-appmenu"),
           ("quicksettings", "uq-quick"), ("powermenu", "uq-power"))
 
@@ -277,7 +286,8 @@ def popup_frames(env, diag=False):
         for cycle in range(4):
             n0, b0 = len(frame_lines(log)), len(blocked_in(log))
             env.ipc("open", name)
-            env.wait_layer(layer, True, 10, level=3 if name == "lookseedo" else 2)
+            if env.wait_layer(layer, True, 10, level=3 if name == "lookseedo" else 2) is None and cycle == 0:
+                explain_layers(env, f"{name} did not reach its open level")
             time.sleep(0.6)
             frames = frame_lines(log)[n0:]
             blocked = blocked_in(log)[b0:]
@@ -388,6 +398,7 @@ def main():
             r = env.ipc("open", "lookseedo")
             if r.returncode or env.wait_layer("uq-lookseedo", True, 10, level=3) is None:
                 note(f"open lookseedo failed: {r.stdout.strip()} {r.stderr.strip()[-200:]}")
+                explain_layers(env, "lookseedo did not reach the overlay level")
                 break
             opens.append((time.monotonic() - t0) * 1000)
             time.sleep(0.4)  # let the open animation finish before closing
