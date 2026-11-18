@@ -2002,7 +2002,7 @@ dependencies = [
 
 [[package]]
 name = "uq-core"
-version = "0.3.7"
+version = "0.3.8"
 dependencies = [
  "chrono",
  "chrono-tz",
@@ -2026,7 +2026,7 @@ dependencies = [
 
 [[package]]
 name = "uq-settings"
-version = "0.3.7"
+version = "0.3.8"
 dependencies = [
  "async-trait",
  "clap",
@@ -2048,7 +2048,7 @@ dependencies = [
 
 [[package]]
 name = "uq-settings-helper"
-version = "0.3.7"
+version = "0.3.8"
 dependencies = [
  "async-trait",
  "libc",
@@ -2067,7 +2067,7 @@ dependencies = [
 
 [[package]]
 name = "uqctl"
-version = "0.3.7"
+version = "0.3.8"
 dependencies = [
  "chrono",
  "chrono-tz",
@@ -2093,7 +2093,7 @@ dependencies = [
 
 [[package]]
 name = "uqd"
-version = "0.3.7"
+version = "0.3.8"
 dependencies = [
  "async-trait",
  "chrono",

@@ -18,6 +18,15 @@ All notable changes to uQ are listed here. The format follows
   copies back, pins, deletes, clears and pauses; `uqctl clip watch` streams changes. The popup,
   bar island and Settings page follow. `uq-shell.service` starts the daemon.
 
+## [0.3.8] - 2026-11-17
+
+### Changed
+
+- **The Security island shows oysterAV's own icon**, tinted green, yellow or red by the security
+  status (a coloured ring if the icon isn't installed), and its popup gets an "Open oysterAV" row.
+  oysterAV's tray icon no longer also shows in the Tray or Status island while the bar has a
+  Security island.
+
 ### Fixed
 
 - **Qt apps no longer show Kvantum's grey bevelled buttons.** uQ's Kvantum theme named a base
