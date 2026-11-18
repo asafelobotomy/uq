@@ -246,7 +246,11 @@ fn expire_forgets_old_unpinned_entries_only() {
     let id = s.list("old pinned", None, 1)[0].id;
     s.set_pinned(id, true).unwrap();
     assert_eq!(s.expire(3600, 10_000).unwrap(), 1);
-    let left: Vec<String> = s.list("", None, 10).into_iter().map(|e| e.preview).collect();
+    let left: Vec<String> = s
+        .list("", None, 10)
+        .into_iter()
+        .map(|e| e.preview)
+        .collect();
     assert_eq!(left, vec!["old pinned", "fresh"]);
     assert_eq!(s.expire(3600, 10_000).unwrap(), 0);
 }
