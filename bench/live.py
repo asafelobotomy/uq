@@ -60,7 +60,8 @@ def status_kb(pid, key):
 
 
 def idle_sample(pid, seconds, prefix):
-    s0, c0, w0, t0 = stat(pid), None, ctxsw(pid), time.monotonic()
+    quiet_start(seconds)
+    s0, w0, t0 = stat(pid), ctxsw(pid), time.monotonic()
     time.sleep(seconds)
     s1, w1, t1 = stat(pid), ctxsw(pid), time.monotonic()
     dt = t1 - t0
@@ -69,6 +70,17 @@ def idle_sample(pid, seconds, prefix):
     put(f"{prefix}_idle_wakeups_per_s", (w1 - w0) / dt, "per_s")
     put(f"{prefix}_idle_rss", status_kb(pid, "VmRSS") * 1024, "bytes")
     put(f"{prefix}_threads", status_kb(pid, "Threads"), "count")
+
+
+def quiet_start(window):
+    """Wait until a `window`-second sample fits inside one wall-clock minute, clear of both ends:
+    the bar's clock repaints when the minute changes, which would put a few frames (and the wakeups
+    behind them) into a window it falls in and not into one it misses."""
+    while True:
+        sec = time.time() % 60
+        if 3 <= sec <= 57 - window:
+            return
+        time.sleep(0.5)
 
 
 def med(xs):
@@ -237,6 +249,24 @@ def count_execve(path, since=None):
     return n
 
 
+def spawn_summary(path, since, who):
+    """Which commands were started while idle, for the notes (the count alone says only that)."""
+    seen = {}
+    for line in open(path, errors="replace"):
+        m = re.search(r"execve\(\"([^\"]+)\", \[(.*?)\]", line)
+        if not m or "= -1" in line:
+            continue
+        try:
+            if float(line.split()[1]) < since:
+                continue
+        except (ValueError, IndexError):
+            continue
+        key = m.group(2).replace('"', "")[:110]
+        seen[key] = seen.get(key, 0) + 1
+    for k, n in sorted(seen.items(), key=lambda kv: -kv[1])[:8]:
+        note(f"{who} idle spawn x{n}: {k}")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--src", default=".")
@@ -263,6 +293,7 @@ def main():
         # Render timing on: idle frames are counted, and the output is also the frame-time source.
         p, up = env.start_shell(QSG_RENDER_TIMING="1", QT_LOGGING_RULES="qt.scenegraph.time.*=true")
         time.sleep(settle)
+        quiet_start(window)  # idle_sample waits for a quiet window too; start the frame count inside it
         f_before = len(frames_in(env.tmp + "/qs.log"))
         idle_sample(p.pid, window, "shell")
         f_idle = len(frames_in(env.tmp + "/qs.log")) - f_before
@@ -270,6 +301,14 @@ def main():
 
         print("== popups")
         opens, closes = [], []
+        # Two throwaway cycles: the first open loads the popup's QML once, which is not growth.
+        for _ in range(2):
+            env.ipc("open", "lookseedo")
+            env.wait_layer("uq-lookseedo", True, 10)
+            time.sleep(0.4)
+            env.ipc("close", "lookseedo")
+            env.wait_layer("uq-lookseedo", False, 10)
+            time.sleep(0.4)
         rss0 = status_kb(p.pid, "VmRSS") * 1024
         f_mark = len(frames_in(env.tmp + "/qs.log"))
         for _ in range(cycles):
@@ -313,9 +352,11 @@ def main():
                 t_up = time.time()
                 put("shell_startup_spawns", count_execve(slog), "count")
                 time.sleep(settle)
+                quiet_start(window)
                 t_idle = time.time()
                 time.sleep(window)
                 put("shell_idle_spawns_per_min", count_execve(slog, since=t_idle) / window * 60, "per_min")
+                spawn_summary(slog, t_idle, "shell")
             env.stop(p)
         else:
             note("strace is not installed; process spawns not counted")
@@ -358,9 +399,11 @@ def main():
                 d = env.spawn(["strace", "-f", "--seccomp-bpf", "-ttt", "-e", "trace=execve", "-o", slog,
                                f"{env.bin}/uqd"], env=uenv, log="uqd")
                 time.sleep(settle)
+                quiet_start(window)
                 t_idle = time.time()
                 time.sleep(window)
                 put("uqd_idle_spawns_per_min", count_execve(slog, since=t_idle) / window * 60, "per_min")
+                spawn_summary(slog, t_idle, "uqd")
                 env.stop(d)
     finally:
         env.cleanup()

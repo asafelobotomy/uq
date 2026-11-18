@@ -57,7 +57,8 @@ def main():
             continue
         (b, unit), (h, _) = base[name], head[name]
         r = rule(rules, name)
-        delta = (h - b) / b if b else 0.0
+        # From zero any growth is infinite in relative terms; min_abs then decides if it matters.
+        delta = (h - b) / b if b else (float("inf") if h > b else 0.0)
         mark = "ok"
         if abs(h - b) > r.get("min_abs", 0):
             if delta > r["fail"]:
@@ -67,7 +68,7 @@ def main():
                 mark = "warn"
             elif delta < -r["warn"]:
                 mark = "faster"
-        rows.append((name, fmt(b, unit), fmt(h, unit), f"{delta * 100:+.1f}%", mark))
+        rows.append((name, fmt(b, unit), fmt(h, unit), ("new" if delta == float("inf") else f"{delta * 100:+.1f}%"), mark))
 
     md = ["| metric | base | head | change | |", "|---|---:|---:|---:|---|"]
     md += [f"| `{n}` | {b} | {h} | {d} | {m} |" for n, b, h, d, m in rows]
