@@ -2,6 +2,7 @@ module core
 singleton Theme 1.0 Theme.qml
 singleton Bridge 1.0 Bridge.qml
 singleton Settings 1.0 Settings.qml
+singleton Motion 1.0 Motion.qml
 singleton Surfaces 1.0 Surfaces.qml
 singleton Outputs 1.0 Outputs.qml
 singleton StayAwake 1.0 StayAwake.qml

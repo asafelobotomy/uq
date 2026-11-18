@@ -176,7 +176,7 @@ Scope {
                         opacity: area.containsMouse || area.pressed ? 1 : 0
                         Behavior on opacity {
                             enabled: !Settings.reduceMotion
-                            NumberAnimation { duration: 100 }
+                            NumberAnimation { duration: Motion.fast; easing.type: Motion.easing }
                         }
                     }
 

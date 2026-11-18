@@ -911,7 +911,7 @@ PanelWindow {
                     border.color: Theme.border
                     border.width: Theme.borderWidth - 1
                     Behavior on Layout.preferredHeight {
-                        NumberAnimation { duration: Settings.reduceMotion ? 0 : 160; easing.type: Easing.OutCubic }
+                        NumberAnimation { duration: Motion.base; easing.type: Motion.easing }
                     }
 
                     Rectangle {

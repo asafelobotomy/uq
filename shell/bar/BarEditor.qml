@@ -108,7 +108,7 @@ PanelWindow {
         opacity: win.shown ? 0.38 : 0
         Behavior on opacity {
             enabled: !Settings.reduceMotion
-            NumberAnimation { duration: 140 }
+            NumberAnimation { duration: Motion.base; easing.type: Motion.easing }
         }
         MouseArea {
             anchors.fill: parent
