@@ -7,6 +7,10 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **The app menu, quick settings and the power menu open without a stall.** They used to create a new window each time, and the shell waited 30 to 40 ms for that window's first frame. Their windows now stay in place, out of sight and out of the way, and the menu fades in and out instead (the shell uses a little more memory at rest).
+
 ### Security
 
 - `uqlip.service` can only open Unix sockets and can't create namespaces or change its personality, so a flaw in what it reads from the clipboard can't reach the network.

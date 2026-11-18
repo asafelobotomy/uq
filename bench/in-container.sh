@@ -25,7 +25,7 @@ for round in $(seq 1 "${ROUNDS:-2}"); do
         echo "=========== $(basename "$src") round $round"
         su tester -c "set -e
             export LIBSEAT_BACKEND=seatd XDG_RUNTIME_DIR=\$(mktemp -d)
-            timeout 900 python3 -I '$script' --src '$src' --out '$out/$(basename "$src")-$round.json'" || rc=$?
+            timeout 900 python3 -I '$script' --src '$src' --out '$out/$(basename "$src")-$round.json' ${BENCH_ARGS:-}" || rc=$?
     done
 done
 kill %1 2>/dev/null || true

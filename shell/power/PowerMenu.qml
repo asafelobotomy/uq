@@ -39,12 +39,19 @@ PanelWindow {
         { action: "poweroff", glyph: "⏻", name: "Shut down" }
     ]
 
-    visible: shown
+    // The window stays mapped between uses, so opening it only shows the card: mapping a fresh
+    // layer surface made the shell wait 30 to 40 ms on the first frame of every open. Hidden, it
+    // takes no input and no keyboard and draws nothing. It stays on the top layer, as the bar does,
+    // because Hyprland on some machines keeps a layer where it was mapped when the client asks to move it.
+    visible: true
+    mask: shown ? cardMask : noMask
+    readonly property Region cardMask: Region { item: content }
+    readonly property Region noMask: Region { width: 0; height: 0 }
     screen: target
     color: "transparent"
     WlrLayershell.layer: WlrLayer.Top
     WlrLayershell.namespace: "uq-power"
-    WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
+    WlrLayershell.keyboardFocus: shown ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
     exclusionMode: ExclusionMode.Ignore
     // No anchors: the compositor centres the layer surface on its output.
     implicitWidth: layout.implicitWidth + Theme.gapOut * 2
@@ -166,13 +173,17 @@ PanelWindow {
 
     HyprlandFocusGrab {
         windows: [root]
-        active: root.visible
+        active: root.shown
         onCleared: Surfaces.close()
     }
 
     Rectangle {
         id: content
         anchors.fill: parent
+        // Fades in and out here, since the compositor no longer maps and unmaps the window.
+        opacity: root.shown ? 1 : 0
+        visible: root.shown || opacity > 0
+        Behavior on opacity { NumberAnimation { duration: Motion.base; easing.type: Motion.easing } }
         radius: Theme.radius
         color: Theme.bg
         border.color: Theme.border

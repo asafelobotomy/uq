@@ -60,12 +60,19 @@ PanelWindow {
     property string hostFileText: ""
     readonly property string hostName: M.hostname(Quickshell.env("HOSTNAME"), hostFileText)
 
-    visible: shown
+    // The window stays mapped between uses, so opening it only shows the card: mapping a fresh
+    // layer surface made the shell wait 30 to 40 ms on the first frame of every open. Hidden, it
+    // takes no input and no keyboard and draws nothing. It stays on the top layer, as the bar does,
+    // because Hyprland on some machines keeps a layer where it was mapped when the client asks to move it.
+    visible: true
+    mask: shown ? cardMask : noMask
+    readonly property Region cardMask: Region { item: content }
+    readonly property Region noMask: Region { width: 0; height: 0 }
     screen: target
     color: "transparent"
     WlrLayershell.layer: WlrLayer.Top
     WlrLayershell.namespace: "uq-appmenu"
-    WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
+    WlrLayershell.keyboardFocus: shown ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
     exclusionMode: ExclusionMode.Ignore
     anchors.top: true
     anchors.left: true
@@ -231,12 +238,17 @@ PanelWindow {
         // The bar window is included so a click on the app-menu button toggles the menu closed
         // instead of clearing the grab and reopening it.
         windows: Surfaces.anchor && Surfaces.anchor.barWindow ? [root, Surfaces.anchor.barWindow] : [root]
-        active: root.visible
+        active: root.shown
         onCleared: Surfaces.close()
     }
 
     Rectangle {
+        id: content
         anchors.fill: parent
+        // Fades in and out here, since the compositor no longer maps and unmaps the window.
+        opacity: root.shown ? 1 : 0
+        visible: root.shown || opacity > 0
+        Behavior on opacity { NumberAnimation { duration: Motion.base; easing.type: Motion.easing } }
         radius: Theme.radius
         color: Theme.surface
         border.color: Theme.border
@@ -406,6 +418,8 @@ PanelWindow {
                                     implicitSize: root.iconSize
                                     backer.sourceSize.width: root.iconSize * root.dpr
                                     backer.sourceSize.height: root.iconSize * root.dpr
+                                    // Decoded off the GUI thread, so the menu's first frame doesn't wait on every icon.
+                                    backer.asynchronous: true
                                     source: root.iconSource(cell.modelData.icon)
                                 }
                                 UqText {

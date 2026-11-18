@@ -8,6 +8,18 @@
       "min_abs": 150
     },
     {
+      "match": "^shell_rss_growth_popups$",
+      "warn": 1.0,
+      "fail": 3.0,
+      "min_abs": 33554432
+    },
+    {
+      "match": "^shell_(idle_rss|rss_after_popups)$",
+      "warn": 0.25,
+      "fail": 0.6,
+      "min_abs": 33554432
+    },
+    {
       "match": "_idle_rss$|^shell_rss",
       "warn": 0.1,
       "fail": 0.25,
@@ -36,6 +48,18 @@
       "warn": 0.2,
       "fail": 0.5,
       "min_abs": 3
+    },
+    {
+      "match": "^frames_per_popup_cycle$",
+      "warn": 1000,
+      "fail": 1000,
+      "min_abs": 1000
+    },
+    {
+      "match": "^popup_(first_sync|[a-z]+_open_frame|[a-z]+_first_sync)_ms$",
+      "warn": 0.25,
+      "fail": 0.6,
+      "min_abs": 8
     },
     {
       "match": "^popup_",

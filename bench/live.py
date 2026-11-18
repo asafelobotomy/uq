@@ -142,8 +142,16 @@ class Env:
         open(f"{self.tmp}/hypr.lua", "w").write(
             'hl.monitor({ output = "", mode = "1280x720", position = "auto", scale = 1 })\n'
             "hl.config({ misc = { disable_hyprland_logo = true, disable_splash_rendering = true } })\n")
+        # --gpu renders on the machine's own GPU (frame times that mean something); CI is software.
+        # BENCH_HW=1 also nests Hyprland in the running session, for a desktop whose DRM seat is taken.
         env = self.base_env()
-        if not GPU:
+        if os.environ.get("BENCH_HW"):
+            host = os.environ.get("WAYLAND_DISPLAY", "")
+            host = host if host.startswith("/") else os.path.join(os.environ.get("XDG_RUNTIME_DIR", ""), host)
+            if not os.path.exists(host):
+                sys.exit("BENCH_HW needs a running Wayland session to nest in (WAYLAND_DISPLAY)")
+            env["WAYLAND_DISPLAY"] = host
+        elif not GPU:
             env["LIBGL_ALWAYS_SOFTWARE"] = "1"
         self.spawn(["Hyprland", "-c", f"{self.tmp}/hypr.lua"], env=env, log="hypr")
         sig = wl = None
@@ -172,24 +180,26 @@ class Env:
         s.close()
         return json.loads(buf or b"null")
 
-    def layers(self):
+    def layers(self, level=None):
+        """Namespaces of the layer surfaces; with level (0 background, 1 bottom, 2 top, 3 overlay),
+        only those on that level."""
         names = []
-        def walk(o):
+        def walk(o, lvl):
             if isinstance(o, dict):
-                if "namespace" in o:
+                if "namespace" in o and (level is None or lvl == str(level)):
                     names.append(o["namespace"])
-                for v in o.values():
-                    walk(v)
+                for k, v in o.items():
+                    walk(v, k if k in ("0", "1", "2", "3") else lvl)
             elif isinstance(o, list):
                 for v in o:
-                    walk(v)
-        walk(self.hypr_json("layers"))
+                    walk(v, lvl)
+        walk(self.hypr_json("layers"), None)
         return names
 
-    def wait_layer(self, ns, present=True, timeout=20.0):
+    def wait_layer(self, ns, present=True, timeout=20.0, level=None):
         t0 = time.monotonic()
         while time.monotonic() - t0 < timeout:
-            if (ns in self.layers()) == present:
+            if (ns in self.layers(level)) == present:
                 return time.monotonic() - t0
             time.sleep(0.005)
         return None
@@ -237,7 +247,10 @@ class Env:
         shutil.rmtree(self.tmp, ignore_errors=True)
 
 
-FRAME = re.compile(r"(?i)frame rendered|renderloop")
+# Only the "frame rendered in 12ms" lines: the other renderloop lines carry "elapsed since last call:
+# 443 ms", the idle gap before a frame, which an earlier version read as a 400 ms frame.
+FRAME = re.compile(r"frame rendered in")
+BLOCKED = re.compile(r"blockedForSync=([0-9]+) ms")
 NUM_MS = re.compile(r"([0-9]+(?:\.[0-9]+)?)\s*ms")
 
 
@@ -249,6 +262,66 @@ def frames_in(path):
             m = NUM_MS.search(line)
             if m:
                 out.append(float(m.group(1)))
+    return out
+
+
+def blocked_in(path):
+    """How long the GUI thread waited on the render thread (blockedForSync) for each frame it prepared;
+    the first frame after a popup maps includes creating its surface and swapchain."""
+    return [int(m.group(1)) for line in open(path, errors="replace") for m in [BLOCKED.search(line)] if m]
+
+
+def frame_lines(path):
+    """Each frame line of Qt's render timing, in full (the split into polish, sync, render, swap)."""
+    return [l.strip() for l in open(path, errors="replace") if FRAME.search(l)]
+
+
+def explain_layers(env, what):
+    """A popup's layer never showed up on its level: print every layer Hyprland lists and the end of
+    the shell's log, which says whether the shell, the compositor or the level is at fault."""
+    print(f"== {what}: layers now")
+    print(json.dumps(env.hypr_json("layers"), indent=1)[:3000])
+    print("-- qs.log (tail)")
+    print("".join(open(env.tmp + "/qs.log", errors="replace").readlines()[-40:]))
+
+
+POPUPS = (("lookseedo", "uq-lookseedo"), ("appmenu", "uq-appmenu"),
+          ("quicksettings", "uq-quick"), ("powermenu", "uq-power"))
+
+
+def popup_frames(env, diag=False):
+    """For each popup, open and close it four times and read the frames Qt logged while it opened:
+    the slowest frame and the longest the GUI thread waited for the render thread. The first cycle
+    loads the popup's QML, so the medians use the other three. With diag, every frame line is printed."""
+    log = env.tmp + "/qs.log"
+    out = {}
+    for name, layer in POPUPS:
+        worst, waits = [], []
+        for cycle in range(4):
+            n0, b0 = len(frame_lines(log)), len(blocked_in(log))
+            warm = name != "lookseedo"  # kept mapped: the layer never appears or goes, so just wait
+            env.ipc("open", name)
+            if warm:
+                time.sleep(0.3)
+            elif env.wait_layer(layer, True, 10, level=3) is None and cycle == 0:
+                explain_layers(env, f"{name} did not reach its open level")
+            time.sleep(0.6)
+            frames = frame_lines(log)[n0:]
+            blocked = blocked_in(log)[b0:]
+            env.ipc("close", name)
+            if not warm:
+                env.wait_layer(layer, False, 10, level=3)
+            time.sleep(0.6)
+            ms = [float(NUM_MS.search(l).group(1)) for l in frames if NUM_MS.search(l)]
+            if cycle > 0 and ms:
+                worst.append(max(ms))
+                waits.append(max(blocked) if blocked else 0)
+            if diag:
+                print(f"== diag {name} cycle {cycle}: {len(frames)} frames, blockedForSync {blocked}")
+                for l in frames:
+                    print(f"   {l}")
+        if worst:
+            out[name] = (statistics.median(worst), statistics.median(waits))
     return out
 
 
@@ -292,6 +365,7 @@ def main():
     ap.add_argument("--src", default=".")
     ap.add_argument("--out", default="bench-live.json")
     ap.add_argument("--quick", action="store_true")
+    ap.add_argument("--diag", action="store_true", help="print each popup's open and close frames in full")
     ap.add_argument("--gpu", action="store_true", help="render on the real GPU instead of llvmpipe")
     a = ap.parse_args()
     global GPU
@@ -334,30 +408,38 @@ def main():
         # Two throwaway cycles: the first open loads the popup's QML once, which is not growth.
         for _ in range(2):
             env.ipc("open", "lookseedo")
-            env.wait_layer("uq-lookseedo", True, 10)
+            env.wait_layer("uq-lookseedo", True, 10, level=3)
             time.sleep(0.4)
             env.ipc("close", "lookseedo")
-            env.wait_layer("uq-lookseedo", False, 10)
+            env.wait_layer("uq-lookseedo", False, 10, level=3)
             time.sleep(0.4)
         rss0 = status_kb(p.pid, "VmRSS") * 1024
         f_mark = len(frames_in(env.tmp + "/qs.log"))
+        first_sync = []
         for _ in range(cycles):
+            b_mark = len(blocked_in(env.tmp + "/qs.log"))
             t0 = time.monotonic()
             r = env.ipc("open", "lookseedo")
-            if r.returncode or env.wait_layer("uq-lookseedo", True, 10) is None:
+            if r.returncode or env.wait_layer("uq-lookseedo", True, 10, level=3) is None:
                 note(f"open lookseedo failed: {r.stdout.strip()} {r.stderr.strip()[-200:]}")
+                explain_layers(env, "lookseedo did not reach the overlay level")
                 break
             opens.append((time.monotonic() - t0) * 1000)
             time.sleep(0.4)  # let the open animation finish before closing
+            waits = blocked_in(env.tmp + "/qs.log")[b_mark:]
+            if waits:
+                first_sync.append(max(waits))
             t0 = time.monotonic()
             env.ipc("close", "lookseedo")
-            env.wait_layer("uq-lookseedo", False, 10)
+            env.wait_layer("uq-lookseedo", False, 10, level=3)
             closes.append((time.monotonic() - t0) * 1000)
             time.sleep(0.4)
         if opens:
             # Includes the `qs ipc` client's own start, a constant that cancels in a comparison.
             put("popup_open_lookseedo_ms", med(opens), "ms")
             put("popup_close_lookseedo_ms", med(closes), "ms")
+            if first_sync:
+                put("popup_first_sync_ms", med(first_sync), "ms")
             put("shell_rss_after_popups", status_kb(p.pid, "VmRSS") * 1024, "bytes")
             put("shell_rss_growth_popups", status_kb(p.pid, "VmRSS") * 1024 - rss0, "bytes")
         fr = frames_in(env.tmp + "/qs.log")[f_mark:]
@@ -369,6 +451,9 @@ def main():
         else:
             note(f"only {len(fr)} frame-timing lines while popups ran; sample of the log:\n"
                  + "".join(open(env.tmp + "/qs.log", errors="replace").readlines()[-8:]))
+        for name, (frame_ms, sync_ms) in popup_frames(env, a.diag).items():
+            put(f"popup_{name}_open_frame_ms", frame_ms, "ms")
+            put(f"popup_{name}_first_sync_ms", sync_ms, "ms")
         env.stop(p)
 
         if shutil.which("strace"):

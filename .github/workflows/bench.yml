@@ -15,6 +15,10 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      args:
+        description: 'Extra arguments for bench/live.py (for example --diag)'
+        default: ''
 
 permissions:
   contents: read
@@ -48,9 +52,11 @@ jobs:
           [ -n "$card" ] || { echo "::error::vkms loaded but no vkms card found"; exit 1; }
           echo "SMOKE_CARD=$card" >> "$GITHUB_ENV"
       - name: Measure
+        env:
+          BENCH_ARGS: ${{ github.event.inputs.args }}
         run: |
           srcs=/work/head; [ -d base ] && srcs="/work/base /work/head"
-          docker run --rm --device "$SMOKE_CARD" -e SMOKE_CARD -e SMOKE_UID="$(id -u)" \
+          docker run --rm --device "$SMOKE_CARD" -e BENCH_ARGS -e SMOKE_CARD -e SMOKE_UID="$(id -u)" \
             -v "$GITHUB_WORKSPACE:/work" archlinux:latest bash /work/head/bench/in-container.sh /work/out $srcs
       - name: Compare with the base
         if: github.event_name == 'pull_request'
