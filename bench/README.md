@@ -35,7 +35,8 @@ Needs Hyprland, quickshell, a DRM device and a release build of `uqctl` and `uqd
 
 ```sh
 cargo build --release -p uqctl -p uqd -p uqlip
-python3 bench/live.py --src . --out bench-live.json     # --quick for a short run
+python3 bench/live.py --src . --out bench-live.json     # --quick for a short run; --gpu renders on the real GPU
+UQ_BENCH_TRACE=1 python3 bench/live.py ...             # also prints idle syscall counts and the shell log tail
 ```
 
 On a machine with a GPU, `BENCH_HW=1 python3 bench/live.py --diag --src . --out /tmp/hw.json` renders on
