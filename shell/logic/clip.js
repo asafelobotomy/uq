@@ -100,3 +100,10 @@ function summary(state) {
         return "Clipboard history is paused";
     return state.count === 1 ? "1 item in the clipboard history" : state.count + " items in the clipboard history";
 }
+
+// How long to wait before starting `uqctl clip watch` again after `misses` watches in a row that
+// ended without a snapshot (uqlip not running): 5, 10, 30 s, then every 60 s.
+function retryDelayMs(misses) {
+    var steps = [5000, 10000, 30000, 60000];
+    return steps[Math.max(0, Math.min(steps.length - 1, misses | 0))];
+}

@@ -52,6 +52,19 @@ def ctxsw(pid):
     return total
 
 
+def thread_ctxsw(pid):
+    """{tid: (name, context switches)}; for finding out which threads wake while idle."""
+    out = {}
+    for t in os.listdir(f"/proc/{pid}/task"):
+        try:
+            n = int(open(f"/proc/{pid}/task/{t}/status").read().split("voluntary_ctxt_switches:")[1].split()[0])
+            n += int(open(f"/proc/{pid}/task/{t}/status").read().split("nonvoluntary_ctxt_switches:")[1].split()[0])
+            out[t] = (open(f"/proc/{pid}/task/{t}/comm").read().strip(), n)
+        except (OSError, IndexError):
+            pass
+    return out
+
+
 def status_kb(pid, key):
     for line in open(f"/proc/{pid}/status"):
         if line.startswith(key + ":"):
@@ -61,10 +74,12 @@ def status_kb(pid, key):
 
 def idle_sample(pid, seconds, prefix):
     quiet_start(seconds)
-    s0, w0, t0 = stat(pid), ctxsw(pid), time.monotonic()
+    s0, w0, t0, th0 = stat(pid), ctxsw(pid), time.monotonic(), thread_ctxsw(pid)
     time.sleep(seconds)
-    s1, w1, t1 = stat(pid), ctxsw(pid), time.monotonic()
+    s1, w1, t1, th1 = stat(pid), ctxsw(pid), time.monotonic(), thread_ctxsw(pid)
     dt = t1 - t0
+    busy = sorted(((n - th0.get(t, (c, 0))[1]) / dt, c, t) for t, (c, n) in th1.items())[::-1]
+    print(f"{prefix} wakeups per thread:", ", ".join(f"{c}[{t}]={r:.2f}/s" for r, c, t in busy if r > 0.05), flush=True)
     put(f"{prefix}_idle_cpu_pct", (s1[0] - s0[0]) / CLK / dt * 100, "pct")
     put(f"{prefix}_idle_children_cpu_pct", (s1[1] - s0[1]) / CLK / dt * 100, "pct")
     put(f"{prefix}_idle_wakeups_per_s", (w1 - w0) / dt, "per_s")
@@ -127,7 +142,9 @@ class Env:
         open(f"{self.tmp}/hypr.lua", "w").write(
             'hl.monitor({ output = "", mode = "1280x720", position = "auto", scale = 1 })\n'
             "hl.config({ misc = { disable_hyprland_logo = true, disable_splash_rendering = true } })\n")
-        env = dict(self.base_env(), LIBGL_ALWAYS_SOFTWARE="1")
+        env = self.base_env()
+        if not GPU:
+            env["LIBGL_ALWAYS_SOFTWARE"] = "1"
         self.spawn(["Hyprland", "-c", f"{self.tmp}/hypr.lua"], env=env, log="hypr")
         sig = wl = None
         for _ in range(100):
@@ -267,12 +284,18 @@ def spawn_summary(path, since, who):
         note(f"{who} idle spawn x{n}: {k}")
 
 
+GPU = False
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--src", default=".")
     ap.add_argument("--out", default="bench-live.json")
     ap.add_argument("--quick", action="store_true")
+    ap.add_argument("--gpu", action="store_true", help="render on the real GPU instead of llvmpipe")
     a = ap.parse_args()
+    global GPU
+    GPU = a.gpu
     settle, window, starts, cycles = (3, 6, 2, 3) if a.quick else (8, 25, 5, 10)
     env = Env(a.src)
     try:
@@ -367,6 +390,31 @@ def main():
             env.stop(p)
         else:
             note("strace is not installed; process spawns not counted")
+
+        if os.environ.get("UQ_BENCH_TRACE") and shutil.which("strace"):
+            print("== shell idle syscall trace (diagnostic)")
+            tlog = env.tmp + "/strace-wake.log"
+            wrap = ["strace", "-f", "--seccomp-bpf", "-y", "-ttt", "-e", "trace=read,write,recvmsg,sendmsg,timerfd_settime,inotify_add_watch", "-o", tlog]
+            p, up = env.start_shell(wrap=wrap)
+            if up is None:
+                note("diagnostic trace: shell did not start")
+            else:
+                time.sleep(settle)
+                quiet_start(window)
+                t_idle = time.time()
+                time.sleep(window)
+                counts = {}
+                for line in open(tlog, errors="replace"):
+                    m = re.match(r"(?:\[pid\s+)?(\d+)\]?\s+(\d+\.\d+) (\w+)\((.*)", line)
+                    if not m or float(m.group(2)) < t_idle:
+                        continue
+                    k = (m.group(1) + " " + m.group(3), re.sub(r"\d{3,}", "N", m.group(4)[:80]))
+                    counts[k] = counts.get(k, 0) + 1
+                for (sc, arg), n in sorted(counts.items(), key=lambda kv: -kv[1])[:40]:
+                    print(f"TRACE {n:5d} {sc} {arg}", flush=True)
+                for ln in open(env.tmp + "/qs.log", errors="replace").readlines()[-40:]:
+                    print("QSLOG", ln.rstrip()[:200], flush=True)
+            env.stop(p)
 
         if uqlip is not None:
             print("== uqlip idle")

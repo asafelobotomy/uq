@@ -34,7 +34,8 @@ Needs Hyprland, quickshell, a DRM device and a release build of `uqctl` and `uqd
 
 ```sh
 cargo build --release -p uqctl -p uqd -p uqlip
-python3 bench/live.py --src . --out bench-live.json     # --quick for a short run
+python3 bench/live.py --src . --out bench-live.json     # --quick for a short run; --gpu renders on the real GPU
+UQ_BENCH_TRACE=1 python3 bench/live.py ...             # also prints idle syscall counts and the shell log tail
 ```
 
 Rust micro-benchmarks for `uq-core` are not in yet; the shell and daemon figures above are the
