@@ -15,6 +15,10 @@ pub struct Config {
     pub max_items: usize,
     /// Largest image or text stored, in MiB.
     pub max_entry_mb: u64,
+    /// Unpinned entries older than this many hours are forgotten; 0 keeps them until pruned.
+    pub expire_hours: u64,
+    /// Forget the unpinned entries each time uqlip starts (it starts with the session).
+    pub clear_on_login: bool,
     pub privacy: Privacy,
 }
 
@@ -24,6 +28,8 @@ impl Default for Config {
             enabled: true,
             max_items: Limits::default().max_items,
             max_entry_mb: 16,
+            expire_hours: 0,
+            clear_on_login: false,
             privacy: Privacy::default(),
         }
     }

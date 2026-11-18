@@ -82,6 +82,18 @@ impl Daemon {
         self.watchers.push(tx);
     }
 
+    /// Forget what has outlived `expire_hours`. Tells the watchers when something went.
+    pub fn expire_due(&mut self) {
+        if self.config.expire_hours == 0 {
+            return;
+        }
+        match self.store.expire(self.config.expire_hours * 3600, now()) {
+            Ok(0) => {}
+            Ok(_) => self.broadcast(),
+            Err(e) => tracing::warn!("couldn't expire old copies: {e}"),
+        }
+    }
+
     /// A copy the watcher read and the privacy rules allowed.
     pub fn captured(&mut self, c: Captured, app: Option<&str>) {
         if !self.config.enabled || self.paused {
@@ -91,6 +103,12 @@ impl Daemon {
             return;
         };
         if kind == Kind::Text && c.data.len() as u64 > self.config.privacy.max_text_bytes {
+            return;
+        }
+        if kind == Kind::Text
+            && self.config.privacy.skip_secret_looking
+            && crate::privacy::looks_secret(&String::from_utf8_lossy(&c.data))
+        {
             return;
         }
         match self.store.add(kind, &c.mime, &c.data, app, now()) {

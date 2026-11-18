@@ -559,6 +559,9 @@ everything not pinned, **Esc** closes.
 - Copies a password manager marks secret (`x-kde-passwordManagerHint`) are never read, and
   neither are copies from the apps on the ignore list (KeePassXC, Bitwarden, 1Password and Proton
   Pass to start with; change it in Settings > Clipboard).
+- Text that looks like a secret (API keys and tokens such as `ghp_…` or `sk-…`, JWTs, private
+  keys, card numbers) is skipped, and Settings > Clipboard > Forgetting can forget copies after a
+  number of hours, or at every login. Pinned entries are never forgotten.
 - Settings > Clipboard pauses recording, forgets the history and sets the limits. From a
   terminal: `uqctl clip list|copy|pin|unpin|delete|clear|pause|resume|status|config|watch`.
 - `uqlip` is a user service (`uqlip.service`) started with the shell. It needs the compositor to

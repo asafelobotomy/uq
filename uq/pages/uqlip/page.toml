@@ -41,6 +41,21 @@ id = "max_text_kb"
 label = "Longest text kept"
 keywords = ["limit", "size"]
 
+[[setting]]
+id = "expire_hours"
+label = "Forget copies after"
+keywords = ["expire", "delete", "old", "hours", "days", "privacy"]
+
+[[setting]]
+id = "clear_on_login"
+label = "Forget copies at login"
+keywords = ["wipe", "session", "startup", "privacy"]
+
+[[setting]]
+id = "skip_secret_looking"
+label = "Skip copies that look like secrets"
+keywords = ["token", "key", "password", "card", "privacy"]
+
 [requires]
 bins = ["uqlip", "uqctl"]
 
@@ -63,7 +78,7 @@ argv = ["/usr/bin/uqctl", "clip", "config", "set"]
 output = "none"
 timeout_ms = 5000
 args = [
-  { name = "key", pattern = "^(enabled|max_items|max_entry_mb|max_text_kb)$" },
+  { name = "key", pattern = "^(enabled|max_items|max_entry_mb|max_text_kb|expire_hours|clear_on_login|skip_secret_looking)$" },
   { name = "value", pattern = "^[a-z0-9]{1,8}$" },
 ]
 

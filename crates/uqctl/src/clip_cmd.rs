@@ -65,7 +65,8 @@ pub enum ClipCmd {
 
 #[derive(Subcommand)]
 pub enum ConfigCmd {
-    /// One of: enabled (true or false), max_items, max_entry_mb, max_text_kb.
+    /// One of: enabled, clear_on_login, skip_secret_looking (true or false), max_items,
+    /// max_entry_mb, max_text_kb, expire_hours (0 keeps entries until they are pruned).
     Set { key: String, value: String },
     /// Never keep copies from this app (its window class, as `hyprctl clients` shows it).
     IgnoreAdd { app: String },
@@ -81,8 +82,18 @@ fn apply(cfg: &mut Config, cmd: &ConfigCmd) -> Result<(), String> {
             .filter(|n| (lo..=hi).contains(n))
             .ok_or(format!("{what} must be a number from {lo} to {hi}"))
     };
+    let flag = |v: &str, what: &str| match v {
+        "true" | "on" => Ok(true),
+        "false" | "off" => Ok(false),
+        _ => Err(format!("{what} must be true or false")),
+    };
     match cmd {
         ConfigCmd::Set { key, value } => match key.as_str() {
+            "clear_on_login" => cfg.clear_on_login = flag(value, "clear_on_login")?,
+            "skip_secret_looking" => {
+                cfg.privacy.skip_secret_looking = flag(value, "skip_secret_looking")?
+            }
+            "expire_hours" => cfg.expire_hours = num(value, 0, 8760, "expire_hours")?,
             "enabled" => {
                 cfg.enabled = match value.as_str() {
                     "true" | "on" => true,
@@ -298,6 +309,18 @@ mod tests {
         assert!(apply(&mut c, &set("max_entry_mb", "999")).is_err());
         assert!(apply(&mut c, &set("enabled", "maybe")).is_err());
         assert!(apply(&mut c, &set("nope", "1")).is_err());
+        apply(&mut c, &set("expire_hours", "24")).unwrap();
+        apply(&mut c, &set("clear_on_login", "true")).unwrap();
+        apply(&mut c, &set("skip_secret_looking", "off")).unwrap();
+        assert_eq!(
+            (
+                c.expire_hours,
+                c.clear_on_login,
+                c.privacy.skip_secret_looking
+            ),
+            (24, true, false)
+        );
+        assert!(apply(&mut c, &set("expire_hours", "9000")).is_err());
     }
 
     #[test]
