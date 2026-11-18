@@ -125,6 +125,8 @@ hl.config({
 hl.config({
     input = {
         kb_layout    = "us",
+        -- Num Lock is on when the session starts; set it false in user.lua to turn that off.
+        numlock_by_default = true,
         -- Click to focus: a window takes the keyboard only when clicked (hover still scrolls the
         -- window under the cursor). 1 is focus-follows-mouse; set it in user.lua to have that.
         follow_mouse = 2,
