@@ -9,7 +9,7 @@ All notable changes to uQ are listed here. The format follows
 
 ### Changed
 
-- **look=see>do_ opens without a stall.** Opening it used to create a new window each time, and the shell waited 30 to 40 ms for that window's first frame. The window now stays in place, out of sight and out of the way, and look=see>do_ fades in and out instead.
+- **Popups open without a stall.** Opening look=see>do_, the app menu, quick settings or the power menu used to create a new window each time, and the shell waited 30 to 40 ms for that window's first frame. Their windows now stay in place, out of sight and out of the way, and the popup fades in and out instead (the shell uses a little more memory at rest).
 
 ## [0.3.12] - 2026-11-18
 

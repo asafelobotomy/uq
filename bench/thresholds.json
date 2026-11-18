@@ -44,6 +44,12 @@
       "min_abs": 3
     },
     {
+      "match": "^frames_per_popup_cycle$",
+      "warn": 1000,
+      "fail": 1000,
+      "min_abs": 1000
+    },
+    {
       "match": "^popup_(first_sync|[a-z]+_open_frame|[a-z]+_first_sync)_ms$",
       "warn": 0.25,
       "fail": 0.6,

@@ -277,12 +277,12 @@ def popup_frames(env, diag=False):
         for cycle in range(4):
             n0, b0 = len(frame_lines(log)), len(blocked_in(log))
             env.ipc("open", name)
-            env.wait_layer(layer, True, 10, level=3 if name == "lookseedo" else None)
+            env.wait_layer(layer, True, 10, level=3)
             time.sleep(0.6)
             frames = frame_lines(log)[n0:]
             blocked = blocked_in(log)[b0:]
             env.ipc("close", name)
-            env.wait_layer(layer, False, 10, level=3 if name == "lookseedo" else None)
+            env.wait_layer(layer, False, 10, level=3)
             time.sleep(0.6)
             ms = [float(NUM_MS.search(l).group(1)) for l in frames if NUM_MS.search(l)]
             if cycle > 0 and ms:
