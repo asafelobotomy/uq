@@ -338,6 +338,25 @@ impl Store {
         Ok(ids.len())
     }
 
+    /// Forget unpinned entries last copied more than `max_age_secs` before `now`. Returns how
+    /// many went. Pinned entries stay.
+    pub fn expire(&mut self, max_age_secs: u64, now: u64) -> Result<usize, StoreError> {
+        let cutoff = now.saturating_sub(max_age_secs);
+        let ids: Vec<u64> = self
+            .index
+            .entries
+            .iter()
+            .filter(|e| !e.pinned && e.created < cutoff)
+            .map(|e| e.id)
+            .collect();
+        if ids.is_empty() {
+            return Ok(0);
+        }
+        self.remove_ids(&ids);
+        self.save()?;
+        Ok(ids.len())
+    }
+
     pub fn len(&self) -> usize {
         self.index.entries.len()
     }

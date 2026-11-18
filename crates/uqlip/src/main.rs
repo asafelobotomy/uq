@@ -86,6 +86,15 @@ fn main() {
         }
     };
     let daemon = Arc::new(Mutex::new(Daemon::new(store, config.clone())));
+    {
+        let mut d = daemon.lock().unwrap();
+        if config.clear_on_login
+            && let Err(e) = d.store.clear(true)
+        {
+            tracing::warn!("couldn't clear the history at start: {e}");
+        }
+        d.expire_due();
+    }
 
     let sock = socket_path();
     if let Some(parent) = sock.parent() {
@@ -144,17 +153,19 @@ fn main() {
     });
 
     loop {
-        match rx.recv_timeout(Duration::from_secs(3600)) {
+        match rx.recv_timeout(Duration::from_secs(600)) {
             Ok(Event::Copied(c)) => {
                 let app = active_app();
-                daemon.lock().unwrap().captured(c, app.as_deref());
+                let mut d = daemon.lock().unwrap();
+                d.captured(c, app.as_deref());
+                d.expire_due();
             }
             Ok(Event::Ignored) => {}
             Ok(Event::Unsupported) => {
                 tracing::error!("this compositor can't be watched: no data-control protocol");
                 daemon.lock().unwrap().protocol = "none";
             }
-            Err(RecvTimeoutError::Timeout) => {}
+            Err(RecvTimeoutError::Timeout) => daemon.lock().unwrap().expire_due(),
             Err(RecvTimeoutError::Disconnected) => break,
         }
     }

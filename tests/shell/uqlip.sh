@@ -56,6 +56,12 @@ sleep 1.2
 [ "$(previews)" = "visible|hello" ] || bad "normal offer not recorded: $(previews)"
 wait $! 2>/dev/null
 
+# Text that looks like a secret (a GitHub token) is skipped even without the hint.
+"$bin/examples/offer" 2 ghp_abcdefghijklmnopqrstuvwxyz0123456789 text/plain & pids+=($!)
+sleep 1.2
+[ "$(previews)" = "visible|hello" ] || bad "a secret-looking copy was recorded: $(previews)"
+wait $! 2>/dev/null
+
 clip pause; echo paused | wl-copy; settle; clip resume
 [ "$(previews)" = "visible|hello" ] || bad "recorded while paused: $(previews)"
 
