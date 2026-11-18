@@ -17,6 +17,22 @@ All notable changes to uQ are listed here. The format follows
 
 ### Fixed
 
+- **Print stopped working after the first screenshot.** `wl-copy` stays running to serve the
+  clipboard and inherited the lock that keeps two captures from running at once, so every later
+  press quietly did nothing until something else was copied. The lock is now let go before the copy
+  starts. A failing area picker or grim is also reported instead of ending silently.
+
+## [0.3.8] - 2026-11-17
+
+### Changed
+
+- **The Security island shows oysterAV's own icon**, tinted green, yellow or red by the security
+  status (a coloured ring if the icon isn't installed), and its popup gets an "Open oysterAV" row.
+  oysterAV's tray icon no longer also shows in the Tray or Status island while the bar has a
+  Security island.
+
+### Fixed
+
 - **Qt apps no longer show Kvantum's grey bevelled buttons.** uQ's Kvantum theme named a base
   theme that Kvantum never used, so every Qt app fell back to Kvantum's built-in grey 3D style
   with a blue accent, whatever the uQ theme. uqd now also writes `Kvantum/uq/uq.svg`, flat rounded
@@ -24,11 +40,6 @@ All notable changes to uQ are listed here. The format follows
   radios, sliders, progress bars, list selections, menus), and a full `uq.kvconfig`. OK, Cancel and
   Apply, tabs and the rest now match uQ's own windows in every theme, light or dark, and follow
   theme changes. Apps pick it up when they next start.
-
-- **Print stopped working after the first screenshot.** `wl-copy` stays running to serve the
-  clipboard and inherited the lock that keeps two captures from running at once, so every later
-  press quietly did nothing until something else was copied. The lock is now let go before the copy
-  starts. A failing area picker or grim is also reported instead of ending silently.
 
 ## [0.3.7] - 2026-11-17
 
