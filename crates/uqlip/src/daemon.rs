@@ -1,4 +1,4 @@
-//! The state of `uq-clipd` and the handling of each request. Kept apart from the socket and the
+//! The state of `uqlip` and the handling of each request. Kept apart from the socket and the
 //! Wayland code so tests can drive it directly.
 
 use crate::config::Config;

@@ -9,9 +9,9 @@ All notable changes to uQ are listed here. The format follows
 
 ### Added
 
-- **A clipboard history.** `uq-clipd` follows the Wayland clipboard (the `ext-data-control` protocol,
+- **A clipboard history.** `uqlip` follows the Wayland clipboard (the `ext-data-control` protocol,
   or `wlr-data-control` on older compositors) and keeps a private history of text and images in
-  `~/.local/share/uq/clipboard/` (owner-only files): newest first, duplicates move to the top, up to
+  `~/.local/share/uq/uqlip/` (owner-only files): newest first, duplicates move to the top, up to
   200 entries and 16 MiB each, pinned entries are never pruned. Copies a password manager marks
   secret (`x-kde-passwordManagerHint`), copies from ignored apps (KeePassXC, Bitwarden, 1Password,
   Proton Pass by default) and anything while paused are never read. `uqctl clip` lists, searches,

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# uq-clipd against a real compositor (headless sway): it records text and images, skips copies a
+# uqlip against a real compositor (headless sway): it records text and images, skips copies a
 # password manager marked secret, skips ignored apps and pauses, puts an entry back with
 # `uqctl clip copy`, and keeps pinned entries through `clear`. Skipped without sway and wl-clipboard.
 set -u
@@ -8,8 +8,8 @@ for c in sway wl-copy wl-paste grim jq; do
     command -v "$c" >/dev/null || { echo "clip skipped (no $c)"; exit 0; }
 done
 bin="$root/target/debug"
-[ -x "$bin/uq-clipd" ] && [ -x "$bin/uqctl" ] || (cd "$root" && cargo build --locked -q -p uq-clip -p uqctl --examples) || exit 1
-[ -x "$bin/examples/offer" ] || (cd "$root" && cargo build --locked -q -p uq-clip --examples) || exit 1
+[ -x "$bin/uqlip" ] && [ -x "$bin/uqctl" ] || (cd "$root" && cargo build --locked -q -p uqlip -p uqctl --examples) || exit 1
+[ -x "$bin/examples/offer" ] || (cd "$root" && cargo build --locked -q -p uqlip --examples) || exit 1
 
 tmp=$(mktemp -d)
 pids=()
@@ -31,10 +31,10 @@ export WAYLAND_DISPLAY=$(basename "$sock")
 
 start_clipd() {
     [ -n "${clipd:-}" ] && { kill "$clipd"; wait "$clipd" 2>/dev/null; }
-    "$bin/uq-clipd" >"$tmp/clipd.log" 2>&1 & clipd=$!
+    "$bin/uqlip" >"$tmp/clipd.log" 2>&1 & clipd=$!
     pids+=("$clipd")
     for _ in $(seq 50); do "$bin/uqctl" clip status >/dev/null 2>&1 && return; sleep 0.1; done
-    bad "uq-clipd did not start"; cat "$tmp/clipd.log"
+    bad "uqlip did not start"; cat "$tmp/clipd.log"
 }
 clip() { "$bin/uqctl" clip "$@"; }
 previews() { clip list --json | jq -r '.[].preview' | paste -sd'|'; }

@@ -1,4 +1,4 @@
-//! `uq-clipd`: follows the Wayland clipboard, keeps the history, answers `uqctl clip` and the shell.
+//! `uqlip`: follows the Wayland clipboard, keeps the history, answers `uqctl clip` and the shell.
 
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
@@ -7,11 +7,11 @@ use std::process::{Command, Stdio};
 use std::sync::mpsc::{RecvTimeoutError, channel};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use uq_clip::config::{Config, config_path, data_dir, socket_path};
-use uq_clip::daemon::Daemon;
-use uq_clip::ipc::Request;
-use uq_clip::store::Store;
-use uq_clip::watch::{self, Event, Policy};
+use uqlip::config::{Config, config_path, data_dir, socket_path};
+use uqlip::daemon::Daemon;
+use uqlip::ipc::Request;
+use uqlip::store::Store;
+use uqlip::watch::{self, Event, Policy};
 
 /// The focused window's class, for the ignore list and the "from" label. Best effort: Hyprland
 /// only, and `None` anywhere else. `UQ_CLIP_TEST_APP` stands in for it in tests.
@@ -81,7 +81,7 @@ fn main() {
     let store = match Store::open(&dir, config.limits()) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("uq-clipd: {e}");
+            eprintln!("uqlip: {e}");
             std::process::exit(1);
         }
     };
@@ -96,14 +96,14 @@ fn main() {
     }
     // A leftover socket from a crash would refuse to bind; a live daemon would answer.
     if UnixStream::connect(&sock).is_ok() {
-        eprintln!("uq-clipd: already running");
+        eprintln!("uqlip: already running");
         std::process::exit(1);
     }
     let _ = std::fs::remove_file(&sock);
     let listener = match UnixListener::bind(&sock) {
         Ok(l) => l,
         Err(e) => {
-            eprintln!("uq-clipd: can't listen on {}: {e}", sock.display());
+            eprintln!("uqlip: can't listen on {}: {e}", sock.display());
             std::process::exit(1);
         }
     };

@@ -1,4 +1,4 @@
-//! The socket `uq-clipd` listens on (`$XDG_RUNTIME_DIR/uq/clip.sock`, owner only).
+//! The socket `uqlip` listens on (`$XDG_RUNTIME_DIR/uq/uqlip.sock`, owner only).
 //!
 //! One JSON object per line each way. A request is `{"cmd": "...", ...}`; the reply is one line,
 //! `{"ok": true, ...}` or `{"ok": false, "error": "..."}`. The exception is `watch`: the
@@ -47,7 +47,7 @@ pub enum Request {
         paused: bool,
     },
     Status,
-    /// Read `clipboard.toml` again.
+    /// Read `uqlip.toml` again.
     Reload,
     /// Keep the connection and stream state changes.
     Watch,
@@ -76,7 +76,7 @@ pub struct Status {
 /// Send one request and read the one-line reply.
 pub fn call(socket: &Path, req: &Request) -> Result<serde_json::Value, String> {
     let mut s = UnixStream::connect(socket).map_err(|e| {
-        format!("uq-clipd isn't running ({e}). Start it with: systemctl --user start uq-clipd")
+        format!("uqlip isn't running ({e}). Start it with: systemctl --user start uqlip")
     })?;
     s.set_read_timeout(Some(Duration::from_secs(5))).ok();
     let mut line = serde_json::to_string(req).map_err(|e| e.to_string())?;

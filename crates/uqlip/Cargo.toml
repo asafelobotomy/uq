@@ -1,15 +1,15 @@
 [package]
-name = "uq-clip"
-description = "uQ's clipboard manager: history store, privacy rules and the uq-clipd daemon"
+name = "uqlip"
+description = "uQ's clipboard manager: history store, privacy rules and the uqlip daemon"
 edition.workspace = true
 version.workspace = true
 license.workspace = true
 
 [lib]
-name = "uq_clip"
+name = "uqlip"
 
 [[bin]]
-name = "uq-clipd"
+name = "uqlip"
 path = "src/main.rs"
 
 [dependencies]

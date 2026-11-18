@@ -1,4 +1,4 @@
-//! `~/.config/uq/clipboard.toml`. Every key is optional; a missing or unreadable file means the
+//! `~/.config/uq/uqlip.toml`. Every key is optional; a missing or unreadable file means the
 //! defaults. The Settings page and `uqctl clip config` write this file (never the daemon).
 
 use crate::privacy::Privacy;
@@ -55,19 +55,19 @@ pub fn config_path() -> PathBuf {
     std::env::var_os("XDG_CONFIG_HOME")
         .map(PathBuf::from)
         .unwrap_or_else(|| home().join(".config"))
-        .join("uq/clipboard.toml")
+        .join("uq/uqlip.toml")
 }
 
 pub fn data_dir() -> PathBuf {
     std::env::var_os("XDG_DATA_HOME")
         .map(PathBuf::from)
         .unwrap_or_else(|| home().join(".local/share"))
-        .join("uq/clipboard")
+        .join("uq/uqlip")
 }
 
 pub fn socket_path() -> PathBuf {
     std::env::var_os("XDG_RUNTIME_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("/tmp"))
-        .join("uq/clip.sock")
+        .join("uq/uqlip.sock")
 }

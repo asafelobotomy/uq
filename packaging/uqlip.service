@@ -8,7 +8,7 @@ After=graphical-session.target
 # A session component, not an app (see uqd.service).
 Slice=session.slice
 ExecCondition=/bin/sh -c 'test -n "$HYPRLAND_INSTANCE_SIGNATURE" && test -S "$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket.sock"'
-ExecStart=/usr/bin/uq-clipd
+ExecStart=/usr/bin/uqlip
 Restart=on-failure
 RestartSec=2
 # The history holds what the owner copied: keep it out of reach of everything else.

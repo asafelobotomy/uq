@@ -1,12 +1,12 @@
-//! `uqctl clip`: talk to `uq-clipd`, the clipboard history (see `uq-clip`).
+//! `uqctl clip`: talk to `uqlip`, the clipboard history (see `uqlip`).
 
 use clap::Subcommand;
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::UnixStream;
 use std::process::ExitCode;
-use uq_clip::config::socket_path;
-use uq_clip::ipc::{Request, call, entries_from};
-use uq_clip::store::{Entry, Kind};
+use uqlip::config::socket_path;
+use uqlip::ipc::{Request, call, entries_from};
+use uqlip::store::{Entry, Kind};
 
 #[derive(Subcommand)]
 pub enum ClipCmd {
@@ -45,14 +45,14 @@ pub enum ClipCmd {
         #[arg(long)]
         all: bool,
     },
-    /// Stop recording until `resume` (or until uq-clipd restarts).
+    /// Stop recording until `resume` (or until uqlip restarts).
     Pause,
     Resume,
     Status {
         #[arg(long)]
         json: bool,
     },
-    /// Read clipboard.toml again.
+    /// Read uqlip.toml again.
     Reload,
     /// Print one JSON line now and after every change, until interrupted.
     Watch,
@@ -107,7 +107,7 @@ fn run(cmd: ClipCmd) -> Result<(), String> {
             if json {
                 println!("{}", v["entries"]);
             } else {
-                let now = uq_clip::daemon::now();
+                let now = uqlip::daemon::now();
                 for e in entries_from(&v) {
                     println!("{}", row(&e, now));
                 }
@@ -157,7 +157,7 @@ fn run(cmd: ClipCmd) -> Result<(), String> {
         }
         ClipCmd::Watch => {
             let mut s =
-                UnixStream::connect(&sock).map_err(|e| format!("uq-clipd isn't running ({e})"))?;
+                UnixStream::connect(&sock).map_err(|e| format!("uqlip isn't running ({e})"))?;
             s.write_all(b"{\"cmd\":\"watch\"}\n")
                 .map_err(|e| e.to_string())?;
             let mut out = std::io::stdout();

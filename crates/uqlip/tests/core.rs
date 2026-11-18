@@ -1,9 +1,9 @@
-use uq_clip::config::Config;
-use uq_clip::daemon::Daemon;
-use uq_clip::ipc::Request;
-use uq_clip::privacy::{Privacy, Skip, choose};
-use uq_clip::store::{Added, Kind, Limits, Store};
-use uq_clip::watch::Captured;
+use uqlip::config::Config;
+use uqlip::daemon::Daemon;
+use uqlip::ipc::Request;
+use uqlip::privacy::{Privacy, Skip, choose};
+use uqlip::store::{Added, Kind, Limits, Store};
+use uqlip::watch::Captured;
 
 fn store(limits: Limits) -> (tempfile::TempDir, Store) {
     let d = tempfile::tempdir().unwrap();

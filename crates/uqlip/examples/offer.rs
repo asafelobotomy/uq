@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 use std::sync::mpsc::channel;
-use uq_clip::watch;
+use uqlip::watch;
 
 fn main() {
     let mut a = std::env::args().skip(1);

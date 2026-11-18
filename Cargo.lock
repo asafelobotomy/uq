@@ -1984,23 +1984,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
 
 [[package]]
-name = "uq-clip"
-version = "0.3.7"
-dependencies = [
- "libc",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.21",
- "toml",
- "tracing",
- "tracing-subscriber",
- "wayland-client",
- "wayland-protocols",
- "wayland-protocols-wlr",
-]
-
-[[package]]
 name = "uq-core"
 version = "0.3.8"
 dependencies = [
@@ -2083,9 +2066,9 @@ dependencies = [
  "thiserror 2.0.21",
  "tokio",
  "tokio-util",
- "uq-clip",
  "uq-core",
  "uqd",
+ "uqlip",
  "wayland-client",
  "wayland-scanner",
  "zbus",
@@ -2110,6 +2093,23 @@ dependencies = [
  "uq-core",
  "uqd",
  "zbus",
+]
+
+[[package]]
+name = "uqlip"
+version = "0.3.8"
+dependencies = [
+ "libc",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "toml",
+ "tracing",
+ "tracing-subscriber",
+ "wayland-client",
+ "wayland-protocols",
+ "wayland-protocols-wlr",
 ]
 
 [[package]]

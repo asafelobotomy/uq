@@ -445,7 +445,7 @@ pub fn spawn(events: Sender<Event>, policy: Policy, max_bytes: u64) -> io::Resul
         "wlr-data-control"
     };
     std::thread::Builder::new()
-        .name("uq-clip-wayland".into())
+        .name("uqlip-wayland".into())
         .spawn(move || {
             let r = if use_ext {
                 ext::run(conn, events.clone(), policy, max_bytes, rx, wake_r)

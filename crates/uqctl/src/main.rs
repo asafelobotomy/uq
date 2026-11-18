@@ -109,7 +109,7 @@ enum Cmd {
         #[arg(long)]
         reset: bool,
     },
-    /// The clipboard history kept by uq-clipd: list, copy again, pin, delete, pause.
+    /// The clipboard history kept by uqlip: list, copy again, pin, delete, pause.
     Clip {
         #[command(subcommand)]
         cmd: clip_cmd::ClipCmd,
@@ -547,7 +547,7 @@ async fn main() -> ExitCode {
         return welcome_cmd::main(reset).await;
     }
     if let Cmd::Clip { cmd } = cli.cmd {
-        // uq-clipd's own socket, not the desktop bus.
+        // uqlip's own socket, not the desktop bus.
         return clip_cmd::main(cmd);
     }
     if let Cmd::Launch { id } = &cli.cmd {

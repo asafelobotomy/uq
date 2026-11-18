@@ -16,7 +16,7 @@ ExecCondition=/bin/sh -c 'test -n "$HYPRLAND_INSTANCE_SIGNATURE" && test -S "$XD
 EnvironmentFile=-%S/uq/theme/shell.env
 ExecStart=/usr/bin/qs -p /usr/share/uq/shell
 # The clipboard history is part of the shell: start it with the shell (it stops with the session).
-ExecStartPost=-/usr/bin/systemctl --user --no-block start uq-clipd.service
+ExecStartPost=-/usr/bin/systemctl --user --no-block start uqlip.service
 Restart=always
 RestartSec=1
 KillMode=process
