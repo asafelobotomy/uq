@@ -202,7 +202,7 @@ PanelWindow {
         border.width: WindowLook.border
         Behavior on x {
             enabled: !Settings.reduceMotion
-            NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: Motion.base; easing.type: Motion.easing }
         }
     }
     // The window edge's input area while it is out.
@@ -287,7 +287,7 @@ PanelWindow {
 
             Behavior on x {
                 enabled: !Settings.reduceMotion
-                NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+                NumberAnimation { duration: Motion.base; easing.type: Motion.easing }
             }
 
             ScreencopyView {
@@ -334,11 +334,11 @@ PanelWindow {
 
         Behavior on x {
             enabled: !Settings.reduceMotion
-            NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: Motion.base; easing.type: Motion.easing }
         }
         Behavior on width {
             enabled: !Settings.reduceMotion
-            NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: Motion.base; easing.type: Motion.easing }
         }
 
         Row {

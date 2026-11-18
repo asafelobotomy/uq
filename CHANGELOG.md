@@ -9,6 +9,9 @@ All notable changes to uQ are listed here. The format follows
 
 ### Changed
 
+- **The shell moves at one speed.** Slides, resizes, the bar editor's scrim and the resize grips
+  now share two motion tokens (`Motion.fast` 100 ms, `Motion.base` 140 ms, ease-out) instead of
+  mixed 100 to 160 ms values and easings, and all of them stop under Reduce motion.
 - **The Security island waits for oysterAV's first-time setup.** Until setup has run (oysterAV's
   summary says `setup_completed: false`) the island is red and reads "Set up", sends one
   notification, and a left click opens the Setup tab of oysterAV's Security page in Settings

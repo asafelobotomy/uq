@@ -706,7 +706,7 @@ Island {
                         : 0
                     Behavior on x {
                         enabled: !Settings.reduceMotion && pill.index !== root.dragIndex
-                        NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
+                        NumberAnimation { duration: Motion.base; easing.type: Motion.easing }
                     }
                 }
                 z: pill.index === root.dragIndex ? 1 : 0
@@ -731,7 +731,7 @@ Island {
                 Accessible.onPressAction: root.choose(win)
                 Behavior on Layout.preferredWidth {
                     enabled: !Settings.reduceMotion
-                    NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
+                    NumberAnimation { duration: Motion.base; easing.type: Motion.easing }
                 }
 
                 HoverHandler {
