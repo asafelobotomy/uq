@@ -372,7 +372,7 @@ fn keybinds() -> Keybinds {
         "overrides": [
             {"id": "uq.terminal", "combo": "SUPER + T"},
             {"id": "uq.close", "enabled": false},
-            {"id": "uq.float", "combo": "SUPER + SHIFT + V"},
+            {"id": "uq.float", "combo": "SUPER + SHIFT + F"},
             {"id": "uq.ws.next", "combo": "SUPER + SHIFT + mouse_down"},
             {"id": "uq.window.drag", "combo": "ALT + mouse:272"},
             {"id": "uq.window.resize", "combo": "ALT + mouse:273"},
