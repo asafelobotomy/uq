@@ -143,8 +143,10 @@ package() {
   install -Dm644 packaging/polkit/org.uq.settings.policy "$pkgdir/usr/share/polkit-1/actions/org.uq.settings.policy"
   # The helper's unit makes these writable only if they exist.
   install -dm755 "$pkgdir/etc/uq" "$pkgdir/etc/systemd/logind.conf.d"
-  # Plugin settings pages are read from here (one directory per page); none ship with uQ itself.
+  # Plugin settings pages are read from here (one directory per page); uQ ships only uqlip's.
   install -dm755 "$pkgdir/usr/share/uq/settings/pages"
+  # uqlip's own page (the clipboard history).
+  install -Dm644 -t "$pkgdir/usr/share/uq/settings/pages/uqlip" uq/pages/uqlip/*
   install -Dm644 packaging/uqd.service "$pkgdir/usr/lib/systemd/user/uqd.service"
   install -Dm644 packaging/uq-shell.service "$pkgdir/usr/lib/systemd/user/uq-shell.service"
   install -Dm644 packaging/uqlip.service "$pkgdir/usr/lib/systemd/user/uqlip.service"

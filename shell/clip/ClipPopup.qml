@@ -110,7 +110,7 @@ PanelWindow {
                     Accessible.name: "Search the clipboard history"
                     onEdited: text => { root.query = text; root.current = 0; }
                     onAccepted: root.activate(root.current)
-                    Keys.onPressed: event => {
+                    onKeyed: event => {
                         var ctrl = (event.modifiers & Qt.ControlModifier) !== 0;
                         var shift = (event.modifiers & Qt.ShiftModifier) !== 0;
                         if (event.key === Qt.Key_Down) {

@@ -1,0 +1,108 @@
+# uqlip's own Settings page, shipped by uQ itself (installed to /usr/share/uq/settings/pages/uqlip/).
+uq_api = 2
+id = "uqlip"
+name = "Clipboard"
+icon = "edit-paste"
+qml = "Page.qml"
+keywords = ["clipboard", "copy", "paste", "history", "uqlip", "password", "privacy"]
+
+[[setting]]
+id = "enabled"
+label = "Keep a clipboard history"
+keywords = ["record", "history"]
+
+[[setting]]
+id = "pause"
+label = "Pause the clipboard history"
+keywords = ["stop", "recording"]
+
+[[setting]]
+id = "forget"
+label = "Forget the clipboard history"
+keywords = ["clear", "delete"]
+
+[[setting]]
+id = "ignored"
+label = "Apps whose copies are never kept"
+keywords = ["password manager", "ignore", "privacy"]
+
+[[setting]]
+id = "max_items"
+label = "Entries kept"
+keywords = ["limit", "how many"]
+
+[[setting]]
+id = "max_entry_mb"
+label = "Largest entry"
+keywords = ["limit", "size", "image"]
+
+[[setting]]
+id = "max_text_kb"
+label = "Longest text kept"
+keywords = ["limit", "size"]
+
+[requires]
+bins = ["uqlip", "uqctl"]
+
+[[command]]
+id = "config"
+argv = ["/usr/bin/uqctl", "clip", "config"]
+output = "json"
+timeout_ms = 5000
+watch = { files = ["~/.config/uq/uqlip.toml"] }
+
+[[command]]
+id = "status"
+argv = ["/usr/bin/uqctl", "clip", "status", "--json"]
+output = "json"
+timeout_ms = 5000
+
+[[command]]
+id = "set"
+argv = ["/usr/bin/uqctl", "clip", "config", "set"]
+output = "none"
+timeout_ms = 5000
+args = [
+  { name = "key", pattern = "^(enabled|max_items|max_entry_mb|max_text_kb)$" },
+  { name = "value", pattern = "^[a-z0-9]{1,8}$" },
+]
+
+[[command]]
+id = "ignore-add"
+argv = ["/usr/bin/uqctl", "clip", "config", "ignore-add"]
+output = "none"
+timeout_ms = 5000
+args = [{ name = "app", pattern = "^[A-Za-z0-9][A-Za-z0-9._ -]{0,63}$" }]
+
+[[command]]
+id = "ignore-remove"
+argv = ["/usr/bin/uqctl", "clip", "config", "ignore-remove"]
+output = "none"
+timeout_ms = 5000
+args = [{ name = "app", pattern = "^[A-Za-z0-9][A-Za-z0-9._ -]{0,63}$" }]
+
+[[command]]
+id = "pause"
+argv = ["/usr/bin/uqctl", "clip", "pause"]
+output = "none"
+timeout_ms = 5000
+
+[[command]]
+id = "resume"
+argv = ["/usr/bin/uqctl", "clip", "resume"]
+output = "none"
+timeout_ms = 5000
+
+[[command]]
+id = "clear"
+argv = ["/usr/bin/uqctl", "clip", "clear"]
+output = "text"
+timeout_ms = 10000
+confirm = "Forget everything that was copied? Pinned entries stay."
+
+[[command]]
+id = "clear-all"
+argv = ["/usr/bin/uqctl", "clip", "clear", "--all"]
+output = "text"
+timeout_ms = 10000
+confirm = "Forget everything that was copied, pinned entries too? This can't be undone."

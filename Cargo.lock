@@ -2066,6 +2066,7 @@ dependencies = [
  "thiserror 2.0.21",
  "tokio",
  "tokio-util",
+ "toml",
  "uq-core",
  "uqd",
  "uqlip",

@@ -7,6 +7,7 @@ license.workspace = true
 [dependencies]
 uq-core.workspace = true
 uqlip = { path = "../uqlip" }
+toml.workspace = true
 uqd = { path = "../uqd" }
 tokio = { workspace = true, features = ["io-std", "io-util"] }
 serde.workspace = true
