@@ -406,6 +406,8 @@ PanelWindow {
                                     implicitSize: root.iconSize
                                     backer.sourceSize.width: root.iconSize * root.dpr
                                     backer.sourceSize.height: root.iconSize * root.dpr
+                                    // Decoded off the GUI thread, so the menu's first frame doesn't wait on every icon.
+                                    backer.asynchronous: true
                                     source: root.iconSource(cell.modelData.icon)
                                 }
                                 UqText {
