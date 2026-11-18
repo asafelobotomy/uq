@@ -52,6 +52,26 @@ TestCase {
         compare(C.age(10, 5), "now");
     }
 
+    function test_paste_shortcut_by_window_class() {
+        compare(C.pasteShortcut("firefox"), "CTRL,V,");
+        compare(C.pasteShortcut("kitty"), "CTRL SHIFT,V,");
+        compare(C.pasteShortcut("Alacritty"), "CTRL SHIFT,V,");
+        compare(C.pasteShortcut(undefined), "CTRL,V,");
+    }
+
+    function test_digit_picks_rows() {
+        compare(C.indexForDigit("1"), 0);
+        compare(C.indexForDigit("9"), 8);
+        compare(C.indexForDigit("0"), -1);
+        compare(C.indexForDigit("a"), -1);
+    }
+
+    function test_preview_text_keeps_lines_and_cuts() {
+        compare(C.previewText("a\r\nb"), "a\nb");
+        compare(C.previewText("abcdef", 4), "abc…");
+        compare(C.previewText(null), "");
+    }
+
     function test_retry_backs_off() {
         compare(C.retryDelayMs(0), 5000);
         compare(C.retryDelayMs(1), 10000);
