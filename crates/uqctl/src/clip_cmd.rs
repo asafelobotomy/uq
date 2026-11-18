@@ -92,7 +92,9 @@ fn apply(cfg: &mut Config, cmd: &ConfigCmd) -> Result<(), String> {
             }
             "max_items" => cfg.max_items = num(value, 1, 5000, "max_items")? as usize,
             "max_entry_mb" => cfg.max_entry_mb = num(value, 1, 256, "max_entry_mb")?,
-            "max_text_kb" => cfg.privacy.max_text_bytes = num(value, 1, 65536, "max_text_kb")? * 1024,
+            "max_text_kb" => {
+                cfg.privacy.max_text_bytes = num(value, 1, 65536, "max_text_kb")? * 1024
+            }
             other => return Err(format!("unknown setting {other}")),
         },
         ConfigCmd::IgnoreAdd { app } => {
@@ -100,12 +102,19 @@ fn apply(cfg: &mut Config, cmd: &ConfigCmd) -> Result<(), String> {
             if app.is_empty() || app.len() > 64 {
                 return Err("the app name must be 1 to 64 characters".into());
             }
-            if !cfg.privacy.ignore_apps.iter().any(|a| a.eq_ignore_ascii_case(app)) {
+            if !cfg
+                .privacy
+                .ignore_apps
+                .iter()
+                .any(|a| a.eq_ignore_ascii_case(app))
+            {
                 cfg.privacy.ignore_apps.push(app.to_string());
             }
         }
         ConfigCmd::IgnoreRemove { app } => {
-            cfg.privacy.ignore_apps.retain(|a| !a.eq_ignore_ascii_case(app.trim()));
+            cfg.privacy
+                .ignore_apps
+                .retain(|a| !a.eq_ignore_ascii_case(app.trim()));
         }
     }
     Ok(())
@@ -201,7 +210,10 @@ fn run(cmd: ClipCmd) -> Result<(), String> {
         ClipCmd::Reload => ok(Request::Reload),
         ClipCmd::Config { cmd: None } => {
             let cfg = Config::load(&config_path());
-            println!("{}", serde_json::to_string(&cfg).map_err(|e| e.to_string())?);
+            println!(
+                "{}",
+                serde_json::to_string(&cfg).map_err(|e| e.to_string())?
+            );
             Ok(())
         }
         ClipCmd::Config { cmd: Some(cmd) } => {
@@ -266,7 +278,10 @@ mod tests {
     use super::*;
 
     fn set(k: &str, v: &str) -> ConfigCmd {
-        ConfigCmd::Set { key: k.into(), value: v.into() }
+        ConfigCmd::Set {
+            key: k.into(),
+            value: v.into(),
+        }
     }
 
     #[test]
@@ -275,7 +290,10 @@ mod tests {
         apply(&mut c, &set("max_items", "50")).unwrap();
         apply(&mut c, &set("enabled", "off")).unwrap();
         apply(&mut c, &set("max_text_kb", "2")).unwrap();
-        assert_eq!((c.max_items, c.enabled, c.privacy.max_text_bytes), (50, false, 2048));
+        assert_eq!(
+            (c.max_items, c.enabled, c.privacy.max_text_bytes),
+            (50, false, 2048)
+        );
         assert!(apply(&mut c, &set("max_items", "0")).is_err());
         assert!(apply(&mut c, &set("max_entry_mb", "999")).is_err());
         assert!(apply(&mut c, &set("enabled", "maybe")).is_err());
@@ -286,10 +304,28 @@ mod tests {
     fn ignore_list_adds_once_and_removes_any_case() {
         let mut c = Config::default();
         let n = c.privacy.ignore_apps.len();
-        apply(&mut c, &ConfigCmd::IgnoreAdd { app: "MyVault".into() }).unwrap();
-        apply(&mut c, &ConfigCmd::IgnoreAdd { app: "myvault".into() }).unwrap();
+        apply(
+            &mut c,
+            &ConfigCmd::IgnoreAdd {
+                app: "MyVault".into(),
+            },
+        )
+        .unwrap();
+        apply(
+            &mut c,
+            &ConfigCmd::IgnoreAdd {
+                app: "myvault".into(),
+            },
+        )
+        .unwrap();
         assert_eq!(c.privacy.ignore_apps.len(), n + 1);
-        apply(&mut c, &ConfigCmd::IgnoreRemove { app: "MYVAULT".into() }).unwrap();
+        apply(
+            &mut c,
+            &ConfigCmd::IgnoreRemove {
+                app: "MYVAULT".into(),
+            },
+        )
+        .unwrap();
         assert_eq!(c.privacy.ignore_apps.len(), n);
         assert!(apply(&mut c, &ConfigCmd::IgnoreAdd { app: " ".into() }).is_err());
     }
