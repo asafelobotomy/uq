@@ -28,7 +28,7 @@ ShellRoot {
                     id: sizeRow
                     required property string modelData
                     readonly property var widths: [sys.width, work.width, clock.width, notif.width, status.width,
-                        weather.width, stocks.width, news.width, sysmon.width, world.width, media.width, kbd.width, tray.width, sec.width, crumbs.width]
+                        weather.width, stocks.width, news.width, sysmon.width, world.width, media.width, kbd.width, tray.width, sec.width, crumbs.width, clip.width]
                     SystemIsland { id: sys; size: sizeRow.modelData }
                     WorkIsland { id: work; size: sizeRow.modelData }
                     ClockIsland { id: clock; size: sizeRow.modelData }
@@ -44,6 +44,7 @@ ShellRoot {
                     TrayIsland { id: tray; size: sizeRow.modelData }
                     SecurityIsland { id: sec; size: sizeRow.modelData }
                     CrumbsIsland { id: crumbs; size: sizeRow.modelData }
+                    ClipIsland { id: clip; size: sizeRow.modelData }
                     SeparatorIsland {}
                     Component.onCompleted: {
                         var unit = { icon: 1, small: 2, medium: 4, large: 6 }[modelData] * BarLayout.unit;

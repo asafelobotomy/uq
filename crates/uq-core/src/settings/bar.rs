@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// Every island the bar knows, in the order Settings offers them, with its display name.
-pub const ISLANDS: [(&str, &str); 16] = [
+pub const ISLANDS: [(&str, &str); 17] = [
     ("system", "App menu, workspaces and dock"),
     ("work", "Open windows"),
     ("clock", "Clock and calendar"),
@@ -26,6 +26,7 @@ pub const ISLANDS: [(&str, &str); 16] = [
     ("keyboard", "Keyboard layout"),
     ("security", "Security (oysterAV)"),
     ("crumbs", "Storage cleanup (crumBS)"),
+    ("clip", "Clipboard history (uqlip)"),
     ("separator", "Separator"),
 ];
 
@@ -91,7 +92,7 @@ pub fn default_size(id: &str) -> Size {
     match id {
         "system" | "work" | "status" | "news" => Size::Large,
         "clock" | "media" | "stocks" | "worldclock" | "tray" => Size::Medium,
-        "keyboard" | "security" => Size::Icon,
+        "keyboard" | "security" | "clip" => Size::Icon,
         _ => Size::Small,
     }
 }

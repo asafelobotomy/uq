@@ -93,7 +93,7 @@ pub fn default_of(id: &str) -> Option<&'static Default> {
     DEFAULTS.iter().find(|d| d.id == id)
 }
 
-static DEFAULTS: [Default; 65] = [
+static DEFAULTS: [Default; 66] = [
     Default {
         id: "uq.terminal",
         label: "Open a terminal",
@@ -157,6 +157,17 @@ static DEFAULTS: [Default; 65] = [
         group: Group::AppsAndDesktop,
         combo: Some("SUPER + period"),
         action: DefaultAction::Global("emoji"),
+        locked: false,
+        repeating: false,
+        release: false,
+        mouse: false,
+    },
+    Default {
+        id: "uq.clip",
+        label: "Open the clipboard history",
+        group: Group::AppsAndDesktop,
+        combo: Some("SUPER + SHIFT + V"),
+        action: DefaultAction::Global("clip"),
         locked: false,
         repeating: false,
         release: false,
@@ -841,8 +852,8 @@ mod tests {
 
     #[test]
     fn table_has_60_rows_58_bound() {
-        assert_eq!(defaults().len(), 65);
-        assert_eq!(defaults().iter().filter(|d| d.combo.is_some()).count(), 63);
+        assert_eq!(defaults().len(), 66);
+        assert_eq!(defaults().iter().filter(|d| d.combo.is_some()).count(), 64);
     }
 
     #[test]
@@ -886,7 +897,7 @@ mod tests {
             let c = parse(d.combo.unwrap()).unwrap_or_else(|e| panic!("{}: {e}", d.id));
             assert!(seen.insert(c), "{} repeats a combo", d.id);
         }
-        assert_eq!(seen.len(), 63);
+        assert_eq!(seen.len(), 64);
     }
 
     #[test]
@@ -950,6 +961,7 @@ mod tests {
         for id in [
             "uq.lookseedo",
             "uq.emoji",
+            "uq.clip",
             "uq.appmenu",
             "uq.quick-settings",
             "uq.notif-centre",

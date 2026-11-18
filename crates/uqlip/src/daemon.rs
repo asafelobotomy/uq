@@ -111,7 +111,22 @@ impl Daemon {
         let s = |e: crate::store::StoreError| e.to_string();
         Ok(match req {
             Request::List { query, kind, limit } => {
-                json!({"ok": true, "entries": self.store.list(&query, kind, limit.min(1000))})
+                // An image's entry says where its file is, so the shell can show a thumbnail.
+                let entries: Vec<Value> = self
+                    .store
+                    .list(&query, kind, limit.min(1000))
+                    .into_iter()
+                    .map(|e| {
+                        let mut v = serde_json::to_value(&e).unwrap_or_default();
+                        if e.kind == Kind::Image
+                            && let Ok(p) = self.store.blob_path(e.id)
+                        {
+                            v["path"] = json!(p);
+                        }
+                        v
+                    })
+                    .collect();
+                json!({"ok": true, "entries": entries})
             }
             Request::Get { id } => {
                 let e = self.store.entry(id).map_err(s)?.clone();

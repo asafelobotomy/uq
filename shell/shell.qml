@@ -17,6 +17,7 @@ import "edge"
 import "windows"
 import "services"
 import "desktop"
+import "clip"
 
 ShellRoot {
     // NotifBackend is a lazily created singleton: this binding touches it so it picks a backend
@@ -44,6 +45,9 @@ ShellRoot {
         model: Quickshell.screens
         delegate: Wallpaper {}
     }
+
+    // The clipboard history (uqlip), on SUPER+SHIFT+V.
+    ClipPopup {}
 
     // The right-click menu on empty desktop space (opened from the wallpaper layer).
     DesktopMenu {}
