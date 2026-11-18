@@ -405,10 +405,10 @@ def main():
                 time.sleep(window)
                 counts = {}
                 for line in open(tlog, errors="replace"):
-                    m = re.match(r"(?:\[pid\s+(\d+)\] )?(\d+\.\d+) (\w+)\((.*)", line)
+                    m = re.match(r"(?:\[pid\s+)?(\d+)\]?\s+(\d+\.\d+) (\w+)\((.*)", line)
                     if not m or float(m.group(2)) < t_idle:
                         continue
-                    k = (m.group(3), re.sub(r"\d+", "N", m.group(4)[:70]))
+                    k = (m.group(1) + " " + m.group(3), re.sub(r"\d{3,}", "N", m.group(4)[:80]))
                     counts[k] = counts.get(k, 0) + 1
                 for (sc, arg), n in sorted(counts.items(), key=lambda kv: -kv[1])[:40]:
                     print(f"TRACE {n:5d} {sc} {arg}", flush=True)
