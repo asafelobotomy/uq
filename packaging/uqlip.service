@@ -14,3 +14,10 @@ RestartSec=2
 # The history holds what the owner copied: keep it out of reach of everything else.
 UMask=0077
 NoNewPrivileges=yes
+# It only talks to the compositor and its own socket, never the network. These need no mount
+# namespace, so they work in a user service everywhere.
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native
