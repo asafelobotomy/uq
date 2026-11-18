@@ -16,6 +16,24 @@ function setupNeeded(s) {
     return !!s && s.setup_completed === false;
 }
 
+// The running scan, from `scanning` and `scan_progress` ({percent 0-100, pack, message}), or null
+// when none runs: {percent, known, pack}. `percent` is a whole number, -1 (`known` false) when
+// this oysterAV doesn't say how far along it is, which the island shows as "scanning" alone.
+function progress(s) {
+    if (!s || s.scanning !== true)
+        return null;
+    var p = s.scan_progress;
+    var pct = p && typeof p === "object" ? _n(p.percent) : -1;
+    var pack = p && typeof p === "object" ? String(p.pack || "").replace(/[^A-Za-z0-9 _.-]/g, "").slice(0, 24) : "";
+    pct = pct < 0 ? -1 : Math.min(100, Math.round(pct));
+    return { percent: pct, known: pct >= 0, pack: pack };
+}
+
+// "Scanning", "Scanning 42%": the island's word while a scan runs.
+function scanWord(pr) {
+    return pr && pr.known ? "Scanning " + pr.percent + "%" : "Scanning";
+}
+
 // "just now", "3 hours ago", "2 days ago" from an age in hours.
 function ago(hours) {
     var h = _n(hours);

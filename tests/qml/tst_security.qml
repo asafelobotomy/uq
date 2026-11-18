@@ -53,4 +53,21 @@ TestCase {
         compare(S.setupNeeded({ state: "ok" }), false, "an older oysterAV that doesn't say");
         compare(S.setupNeeded(null), false);
     }
+
+    function test_progress() {
+        compare(S.progress(null), null);
+        compare(S.progress({ scanning: false, scan_progress: { percent: 50 } }), null);
+        var p = S.progress({ scanning: true, scan_progress: { percent: 41.6, pack: "clamav" } });
+        compare(p.percent, 42);
+        compare(p.known, true);
+        compare(p.pack, "clamav");
+        compare(S.scanWord(p), "Scanning 42%");
+        // An older oysterAV doesn't say how far along it is.
+        var old = S.progress({ scanning: true });
+        compare(old.known, false);
+        compare(S.scanWord(old), "Scanning");
+        compare(S.progress({ scanning: true, scan_progress: { percent: 400 } }).percent, 100);
+        compare(S.progress({ scanning: true, scan_progress: { percent: -3 } }).known, false);
+        compare(S.progress({ scanning: true, scan_progress: { pack: "<b>x</b>" } }).pack, "bxb");
+    }
 }
