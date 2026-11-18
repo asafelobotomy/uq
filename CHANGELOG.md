@@ -7,6 +7,10 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+### Security
+
+- `uqlip.service` can only open Unix sockets and can't create namespaces or change its personality, so a flaw in what it reads from the clipboard can't reach the network.
+
 ## [0.3.12] - 2026-11-18
 
 ### Added
