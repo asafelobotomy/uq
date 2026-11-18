@@ -7,6 +7,8 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.11] - 2026-11-18
+
 ### Changed
 
 - **The shell moves at one speed.** Slides, resizes, the bar editor's scrim and the resize grips
