@@ -6,8 +6,8 @@ import "../logic/clip.js" as C
 
 // The clipboard history as the shell sees it: uqlip's list, kept live by `uqctl clip watch`
 // (one snapshot per change), and the actions on it. The popup and the bar island both read this.
-// When uqlip isn't running the watch ends and is tried again every few seconds; nothing here
-// blocks the shell.
+// When uqlip isn't running the watch ends and is tried again after 5, 10, 30 and then every 60 s
+// (a spawn each time, so a stopped uqlip costs next to nothing); nothing here blocks the shell.
 Singleton {
     id: root
 
@@ -74,16 +74,21 @@ Singleton {
                 root.enabled = s.enabled;
                 root.count = s.count;
                 root.connected = true;
+                root.misses = 0;
                 root.refresh();
             }
         }
         onRunningChanged: {
             if (!running) {
                 root.connected = false;
+                retry.interval = C.retryDelayMs(root.misses);
+                root.misses += 1;
                 retry.restart();
             }
         }
     }
+    // Watches that ended without a snapshot since the last one that had one.
+    property int misses: 0
     Timer {
         id: retry
         interval: 5000

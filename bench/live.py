@@ -52,6 +52,19 @@ def ctxsw(pid):
     return total
 
 
+def thread_ctxsw(pid):
+    """{tid: (name, context switches)}; for finding out which threads wake while idle."""
+    out = {}
+    for t in os.listdir(f"/proc/{pid}/task"):
+        try:
+            n = int(open(f"/proc/{pid}/task/{t}/status").read().split("voluntary_ctxt_switches:")[1].split()[0])
+            n += int(open(f"/proc/{pid}/task/{t}/status").read().split("nonvoluntary_ctxt_switches:")[1].split()[0])
+            out[t] = (open(f"/proc/{pid}/task/{t}/comm").read().strip(), n)
+        except (OSError, IndexError):
+            pass
+    return out
+
+
 def status_kb(pid, key):
     for line in open(f"/proc/{pid}/status"):
         if line.startswith(key + ":"):
@@ -61,10 +74,12 @@ def status_kb(pid, key):
 
 def idle_sample(pid, seconds, prefix):
     quiet_start(seconds)
-    s0, w0, t0 = stat(pid), ctxsw(pid), time.monotonic()
+    s0, w0, t0, th0 = stat(pid), ctxsw(pid), time.monotonic(), thread_ctxsw(pid)
     time.sleep(seconds)
-    s1, w1, t1 = stat(pid), ctxsw(pid), time.monotonic()
+    s1, w1, t1, th1 = stat(pid), ctxsw(pid), time.monotonic(), thread_ctxsw(pid)
     dt = t1 - t0
+    busy = sorted(((n - th0.get(t, (c, 0))[1]) / dt, c, t) for t, (c, n) in th1.items())[::-1]
+    print(f"{prefix} wakeups per thread:", ", ".join(f"{c}[{t}]={r:.2f}/s" for r, c, t in busy if r > 0.05), flush=True)
     put(f"{prefix}_idle_cpu_pct", (s1[0] - s0[0]) / CLK / dt * 100, "pct")
     put(f"{prefix}_idle_children_cpu_pct", (s1[1] - s0[1]) / CLK / dt * 100, "pct")
     put(f"{prefix}_idle_wakeups_per_s", (w1 - w0) / dt, "per_s")
@@ -375,6 +390,27 @@ def main():
             env.stop(p)
         else:
             note("strace is not installed; process spawns not counted")
+
+        if os.environ.get("UQ_BENCH_TRACE") and shutil.which("strace"):
+            print("== shell idle syscall trace (diagnostic)")
+            tlog = env.tmp + "/strace-wake.log"
+            wrap = ["strace", "-f", "-y", "-ttt", "-e", "trace=read,write,recvmsg,sendmsg,timerfd_settime,ppoll,epoll_pwait,epoll_wait,futex", "-o", tlog]
+            p, up = env.start_shell(wrap=wrap)
+            if up is not None:
+                time.sleep(settle)
+                quiet_start(window)
+                t_idle = time.time()
+                time.sleep(window)
+                counts = {}
+                for line in open(tlog, errors="replace"):
+                    m = re.match(r"(?:\[pid\s+(\d+)\] )?(\d+\.\d+) (\w+)\((.*)", line)
+                    if not m or float(m.group(2)) < t_idle:
+                        continue
+                    k = (m.group(3), re.sub(r"\d+", "N", m.group(4)[:70]))
+                    counts[k] = counts.get(k, 0) + 1
+                for (sc, arg), n in sorted(counts.items(), key=lambda kv: -kv[1])[:40]:
+                    print(f"TRACE {n:5d} {sc} {arg}", flush=True)
+            env.stop(p)
 
         if uqlip is not None:
             print("== uqlip idle")

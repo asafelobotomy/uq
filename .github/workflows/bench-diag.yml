@@ -1,0 +1,32 @@
+name: Bench diagnostics (temporary)
+on:
+  push:
+    branches: [claude/project-thread-ai6d8q]
+permissions:
+  contents: read
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: head
+          persist-credentials: false
+      - name: Load vkms
+        run: |
+          sudo modprobe vkms 2>/dev/null || {
+            sudo apt-get update -q && sudo apt-get install -y -q "linux-modules-extra-$(uname -r)" && sudo modprobe vkms
+          }
+          card=""
+          for c in /sys/class/drm/card*; do
+            case "${c##*/}" in *-*) continue ;; esac
+            [ "$(basename "$(readlink -f "$c/device")")" = vkms ] && card=/dev/dri/${c##*/}
+          done
+          [ -n "$card" ] || { echo "::error::vkms loaded but no vkms card found"; exit 1; }
+          echo "SMOKE_CARD=$card" >> "$GITHUB_ENV"
+      - name: Measure
+        run: |
+          srcs=/work/head
+          docker run --rm --device "$SMOKE_CARD" -e UQ_BENCH_TRACE=1 -e ROUNDS=1 -e SMOKE_CARD -e SMOKE_UID="$(id -u)" \
+            -v "$GITHUB_WORKSPACE:/work" archlinux:latest bash /work/head/bench/in-container.sh /work/out $srcs

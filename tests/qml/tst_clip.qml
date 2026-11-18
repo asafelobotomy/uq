@@ -52,6 +52,15 @@ TestCase {
         compare(C.age(10, 5), "now");
     }
 
+    function test_retry_backs_off() {
+        compare(C.retryDelayMs(0), 5000);
+        compare(C.retryDelayMs(1), 10000);
+        compare(C.retryDelayMs(2), 30000);
+        compare(C.retryDelayMs(3), 60000);
+        compare(C.retryDelayMs(99), 60000);
+        compare(C.retryDelayMs(-1), 5000);
+    }
+
     function test_move_stays_inside() {
         compare(C.move(0, -1, 3), 0);
         compare(C.move(2, 1, 3), 2);
