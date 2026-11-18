@@ -7,6 +7,8 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.12] - 2026-11-18
+
 ### Added
 
 - The Security island shows a running oysterAV scan: its icon takes the accent colour inside a pulsing ring (still under Reduce motion), it reads "Scanning 42%", and its popup shows a progress bar. Needs oysterAV with `scan_progress` in `status summary`; an older oysterAV shows "Scanning" without a percentage.
