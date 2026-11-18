@@ -1,0 +1,13 @@
+[Unit]
+Description=uQ shutdown banner
+DefaultDependencies=no
+Before=shutdown.target
+ConditionPathExists=/dev/console
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/uq/uq-banner shutdown
+TimeoutSec=5
+
+[Install]
+WantedBy=poweroff.target reboot.target halt.target kexec.target

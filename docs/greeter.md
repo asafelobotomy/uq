@@ -57,7 +57,7 @@ it says so; enable one with `run0 systemctl enable <name>.service`.
     also stops the user list coasting when flicked or animating its scroll;
   - `/usr/share/uq/themes/rendered/<theme>-<variant>/tokens.json`: every theme pre-rendered by the
     package (the default theme, dark, if the chosen one is missing);
-  - `/var/lib/uq-greeter/wallpaper`: the login wallpaper (the theme's background colour if it's
+  - `/var/lib/uq-greeter/wallpaper`: the login wallpaper (uQ's backdrop in the theme's colours if it's
     missing or unreadable);
   - the users AccountsService lists (system and locked accounts are hidden; pictures only from
     `/var/lib/AccountsService/icons/`), read with `busctl` over the system bus;

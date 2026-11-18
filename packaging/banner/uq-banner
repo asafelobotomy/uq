@@ -1,0 +1,35 @@
+#!/bin/sh
+# Prints the uQ banner (boot or shutdown) on the system console, in the accent colour of the
+# login screen's theme. Takes no input, needs no network, never fails the boot or the shutdown.
+# Usage: uq-banner boot|shutdown
+mode=${1:-boot}
+exec 2>/dev/null
+accent="138;180;248"   # Graphite's accent (the greeter default); replaced by the login screen theme when readable
+dim="170;163;188"
+if read_theme=$(sed -n 's/^theme *= *"\([a-z0-9_-]*\)".*/\1/p' "${UQ_ETC:-/etc/uq}/greeter.toml" 2>/dev/null | head -n1) &&
+   read_var=$(sed -n 's/^variant *= *"\(dark\|light\)".*/\1/p' "${UQ_ETC:-/etc/uq}/greeter.toml" 2>/dev/null | head -n1) &&
+   [ -n "$read_theme" ] && [ -n "$read_var" ]; then
+    hex=$(sed -n 's/.*"accent" *: *"#\([0-9a-fA-F]\{6\}\)".*/\1/p' \
+        "${UQ_SHARE:-/usr/share/uq}/themes/rendered/$read_theme-$read_var/tokens.json" 2>/dev/null | head -n1)
+    if [ -n "$hex" ]; then
+        accent="$((0x$(echo "$hex" | cut -c1-2)));$((0x$(echo "$hex" | cut -c3-4)));$((0x$(echo "$hex" | cut -c5-6)))"
+    fi
+fi
+. /etc/os-release 2>/dev/null
+ver=$(pacman -Q uq 2>/dev/null | cut -d' ' -f2 | cut -d- -f1)
+c=$(printf "\033[38;2;%sm" "$accent"); d=$(printf "\033[38;2;%sm" "$dim"); z=$(printf "\033[0m")
+{
+    printf '\n'
+    printf "$c%s$z\n" \
+        '        ▄████▄' \
+        '██  ██ ██    ██' \
+        '██  ██ ██    ██' \
+        '██  ██ ██  ▄ ██' \
+        ' ▀████  ▀████▀▄'
+    printf '\n'
+    case $mode in
+        shutdown) printf '%suQ%s · %s · shutting down, see you soon%s\n\n' "$d" "${ver:+ $ver}" "${PRETTY_NAME:-Linux}" "$z" ;;
+        *)        printf '%suQ%s · %s · starting up%s\n\n' "$d" "${ver:+ $ver}" "${PRETTY_NAME:-Linux}" "$z" ;;
+    esac
+} > "${UQ_BANNER_OUT:-/dev/console}" 2>/dev/null
+exit 0

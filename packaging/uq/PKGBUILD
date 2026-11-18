@@ -130,6 +130,10 @@ package() {
   install -Dm644 packaging/greeter/greeter.toml "$pkgdir/etc/uq/greeter.toml"
   install -Dm644 packaging/greeter/greetd-uq.conf "$pkgdir/usr/lib/systemd/system/greetd.service.d/uq.conf"
   install -Dm644 packaging/tmpfiles/uq-greeter.conf "$pkgdir/usr/lib/tmpfiles.d/uq-greeter.conf"
+  # The boot and shutdown banner (off until enabled: systemctl enable uq-banner-boot uq-banner-shutdown).
+  install -Dm755 packaging/banner/uq-banner "$pkgdir/usr/lib/uq/uq-banner"
+  install -Dm644 packaging/banner/uq-banner-boot.service "$pkgdir/usr/lib/systemd/system/uq-banner-boot.service"
+  install -Dm644 packaging/banner/uq-banner-shutdown.service "$pkgdir/usr/lib/systemd/system/uq-banner-shutdown.service"
   install -Dm755 target/release/uq-settings "$pkgdir/usr/bin/uq-settings"
   install -Dm644 packaging/org.uq.Settings.desktop "$pkgdir/usr/share/applications/org.uq.Settings.desktop"
   install -Dm644 packaging/dbus/org.uq.Settings1.service "$pkgdir/usr/share/dbus-1/services/org.uq.Settings1.service"

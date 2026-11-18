@@ -7,6 +7,11 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **A uQ backdrop.** With no wallpaper chosen, the desktop and the login screen now show uQ's own faceted backdrop with the uQ mark, drawn in the active theme's colours (dark or light), so the wallpaper changes colour with the theme. Picking a picture, folder or colour in Settings works as before.
+- **A uQ boot and shutdown banner.** `uq-banner-boot.service` and `uq-banner-shutdown.service` print the block-letter uQ on the console in the login screen theme's accent. They are off until enabled: `run0 systemctl enable uq-banner-boot uq-banner-shutdown`. They never touch the bootloader or the kernel command line.
+
 ### Changed
 
 - **The app menu, quick settings and the power menu open without a stall.** They used to create a new window each time, and the shell waited 30 to 40 ms for that window's first frame. Their windows now stay in place, out of sight and out of the way, and the menu fades in and out instead (the shell uses a little more memory at rest).
