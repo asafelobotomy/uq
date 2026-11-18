@@ -33,6 +33,7 @@ mkdir -p "$tmp/bin" "$tmp/oyst" "$tmp/data/icons/hicolor/48x48/apps"
 # oysterAV's own icon, so the island shows it the way it does on a desktop with oysterAV installed.
 cp "$root/tests/live/fixtures/oysterav.png" "$tmp/data/icons/hicolor/48x48/apps/oysterav.png"
 echo -1 >"$tmp/oyst/pct"
+echo ok >"$tmp/oyst/state"
 cat >"$tmp/bin/oyst-cli" <<SH
 #!/bin/sh
 d="$tmp/oyst"
@@ -44,7 +45,8 @@ case "\$1 \$2" in
     else
         s='"scanning":false,"scan_progress":null'
     fi
-    echo '{"schema":1,"state":"ok","reasons":[],'\$s',"last_scan_age_hours":2,"last_scan_profile":"quick","last_scan_state":"done","open_findings":0,"signature_age_hours":3,"signatures_stale":false,"quarantine_count":0,"checks":[],"setup_completed":true}'
+    st=\$(cat "\$d/state")
+    echo '{"schema":1,"state":"'\$st'","reasons":[],'\$s',"last_scan_age_hours":2,"last_scan_profile":"quick","last_scan_state":"done","open_findings":0,"signature_age_hours":3,"signatures_stale":false,"quarantine_count":0,"checks":[],"setup_completed":true}'
     ;;
 "scan --profile")
     ( i=0; while [ \$i -le 100 ]; do echo \$i >"\$d/pct"; i=\$((i + 4)); sleep 1; done; echo -1 >"\$d/pct" ) >/dev/null 2>&1 &
@@ -184,6 +186,13 @@ send "key Escape" "sleep 500"; drain
 # The scan runs 25 s; the island goes back to Protected.
 wait_word 'Protected' 40 || check "the island never went back to Protected, reads: $(word)"
 still 4-done
+# The other states keep oysterAV's icon too, in their own colours.
+echo warning >"$tmp/oyst/state"
+wait_word 'Needs attention' 40 || check "the island never said Needs attention, reads: $(word)"
+sleep 1; still 5-warning
+echo threat >"$tmp/oyst/state"
+wait_word 'Threat found' 40 || check "the island never said Threat found, reads: $(word)"
+sleep 1; still 6-threat
 
 grep -qE 'TypeError|ReferenceError|is not a type|Cannot assign|Unable to assign|Cannot read property|is not a function|[A-Za-z]+\.qml:[0-9]+:[0-9]*:? ' "$tmp/qs.log" &&
     { grep -E 'TypeError|ReferenceError|is not a type|Cannot assign|Unable to assign|Cannot read property|is not a function|[A-Za-z]+\.qml:[0-9]+:[0-9]*:? ' "$tmp/qs.log" | head -n 10; check "QML errors"; }

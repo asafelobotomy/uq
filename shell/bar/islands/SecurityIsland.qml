@@ -185,18 +185,20 @@ Island {
                 anchors.fill: parent
                 visible: false
                 implicitSize: 20
-                source: Quickshell.iconPath("oysterav", true)
+                // The icon theme's oysterav, else the file oysterAV installs into hicolor itself, so the
+                // island shows it on a desktop whose icon theme lookup misses it.
+                source: Quickshell.iconPath("oysterav", true) || "file:///usr/share/icons/hicolor/128x128/apps/oysterav.png"
             }
             MultiEffect {
                 anchors.fill: parent
-                visible: appIcon.source.toString() !== ""
+                visible: appIcon.status === Image.Ready
                 source: appIcon
                 colorization: 0.9
                 colorizationColor: root.tint
             }
             Rectangle {
                 anchors.centerIn: parent
-                visible: appIcon.source.toString() === ""
+                visible: appIcon.status !== Image.Ready
                 width: 16
                 height: 16
                 radius: 8
