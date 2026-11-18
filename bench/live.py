@@ -394,9 +394,11 @@ def main():
         if os.environ.get("UQ_BENCH_TRACE") and shutil.which("strace"):
             print("== shell idle syscall trace (diagnostic)")
             tlog = env.tmp + "/strace-wake.log"
-            wrap = ["strace", "-f", "-y", "-ttt", "-e", "trace=read,write,recvmsg,sendmsg,timerfd_settime,ppoll,epoll_pwait,epoll_wait,futex", "-o", tlog]
+            wrap = ["strace", "-f", "--seccomp-bpf", "-y", "-ttt", "-e", "trace=read,write,recvmsg,sendmsg,timerfd_settime,inotify_add_watch", "-o", tlog]
             p, up = env.start_shell(wrap=wrap)
-            if up is not None:
+            if up is None:
+                note("diagnostic trace: shell did not start")
+            else:
                 time.sleep(settle)
                 quiet_start(window)
                 t_idle = time.time()
