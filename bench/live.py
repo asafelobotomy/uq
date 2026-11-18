@@ -130,9 +130,13 @@ class Env:
         # BENCH_HW=1 renders on the machine's own GPU (frame times that mean something); CI is software.
         env = self.base_env()
         if os.environ.get("BENCH_HW"):
-            # Next to a running desktop the DRM device is taken, so Hyprland gets a headless output
-            # that renders on the GPU's render node.
-            env["AQ_BACKENDS"] = "headless"
+            # Next to a running desktop the DRM seat is taken, so Hyprland runs as a window of that
+            # desktop (its Wayland backend) and renders on the GPU through it.
+            host = os.environ.get("WAYLAND_DISPLAY", "")
+            host = host if host.startswith("/") else os.path.join(os.environ.get("XDG_RUNTIME_DIR", ""), host)
+            if not os.path.exists(host):
+                sys.exit("BENCH_HW needs a running Wayland session to nest in (WAYLAND_DISPLAY)")
+            env["WAYLAND_DISPLAY"] = host
         else:
             env["LIBGL_ALWAYS_SOFTWARE"] = "1"
         self.spawn(["Hyprland", "-c", f"{self.tmp}/hypr.lua"], env=env, log="hypr")
