@@ -154,7 +154,7 @@ drain() {
 }
 bad=0
 check() { echo "FAIL: $*"; bad=1; }
-word() { grep 'WORD' "$tmp/qs.log" | tail -n1 | cut -d' ' -f3-; }
+word() { grep 'WORD' "$tmp/qs.log" | tail -n1 | sed 's/.*WORD [a-z]* //'; }
 wait_word() {   # wait_word REGEX SECONDS
     for _ in $(seq 1 $(($2 * 4))); do word | grep -Eq "$1" && return 0; sleep 0.25; done
     return 1
@@ -163,7 +163,7 @@ wait_word() {   # wait_word REGEX SECONDS
 for _ in $(seq 1 40); do grep -q 'WORD true' "$tmp/qs.log" && break; sleep 0.25; done
 grep -q 'WORD true' "$tmp/qs.log" || fail "the Security island never appeared"
 read -r bx by < <(hc layers -j | jq -r '.. | objects | select(.namespace? == "uq-bar") | "\(.x) \(.y)"' | head -n1)
-read -r sx sy sw sh < <(grep 'SLOT' "$tmp/qs.log" | tail -n1 | cut -d' ' -f2-)
+read -r sx sy sw sh < <(grep 'SLOT' "$tmp/qs.log" | tail -n1 | sed 's/.*SLOT //')
 cx=$((bx + sx + sw / 2)); cy=$((by + sy + sh / 2))
 echo "island at $cx,$cy; word: $(word)"
 word | grep -q 'Protected' || check "idle island should read Protected, reads: $(word)"
