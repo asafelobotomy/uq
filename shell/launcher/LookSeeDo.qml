@@ -83,16 +83,12 @@ PanelWindow {
     readonly property bool emojiHint: L.showEmojiHint(searched, gotExternal, deadlinePassed)
     readonly property var appList: L.appEntries(DesktopEntries.applications.values)
 
-    // The window stays mapped between uses, so opening it only shows the panel: mapping a fresh
-    // layer surface made the shell wait 30 to 40 ms on the first frame of every open. Hidden, it
-    // sits on the background layer (never above a fullscreen window, so direct scanout and
-    // tearing are untouched), takes no input and no keyboard, and draws nothing.
-    visible: true
+    visible: shown
     screen: target
     color: "transparent"
-    WlrLayershell.layer: shown ? WlrLayer.Overlay : WlrLayer.Background
+    WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "uq-lookseedo"
-    WlrLayershell.keyboardFocus: shown ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+    WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
     exclusionMode: ExclusionMode.Ignore
     anchors.top: true
     margins.top: Math.round((screen ? screen.height : 1080) * 0.18)
@@ -102,9 +98,7 @@ PanelWindow {
     // panel takes input; a click below it falls through to what's underneath and closes look=see>do_.
     readonly property int maxListHeight: Math.round((screen ? screen.height : 1080) * 0.55)
     implicitHeight: maxListHeight + 200
-    mask: shown ? panelMask : noMask
-    readonly property Region panelMask: Region { item: panel }
-    readonly property Region noMask: Region { width: 0; height: 0 }
+    mask: Region { item: panel }
 
     function screenFor(monitor) {
         if (!monitor)
@@ -564,7 +558,7 @@ PanelWindow {
 
     HyprlandFocusGrab {
         windows: [root]
-        active: root.shown
+        active: root.visible
         onCleared: Surfaces.close()
     }
 
@@ -573,10 +567,6 @@ PanelWindow {
     Item {
         id: panel
         width: parent.width
-        // Fades in and out here, since the compositor no longer maps and unmaps the window.
-        opacity: root.shown ? 1 : 0
-        visible: root.shown || opacity > 0
-        Behavior on opacity { NumberAnimation { duration: Motion.base; easing.type: Motion.easing } }
         implicitHeight: pill.height + (body.visible ? Theme.gapIn + body.height : 0)
 
         Rectangle {

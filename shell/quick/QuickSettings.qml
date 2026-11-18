@@ -44,15 +44,15 @@ PanelWindow {
 
     // The window stays mapped between uses, so opening it only shows the card: mapping a fresh
     // layer surface made the shell wait 30 to 40 ms on the first frame of every open. Hidden, it
-    // sits on the background layer (never above a fullscreen window), takes no input and no
-    // keyboard, and draws nothing.
+    // takes no input and no keyboard and draws nothing. It stays on the top layer, as the bar does,
+    // because Hyprland on some machines keeps a layer where it was mapped when the client asks to move it.
     visible: true
     mask: shown ? cardMask : noMask
     readonly property Region cardMask: Region { item: content }
     readonly property Region noMask: Region { width: 0; height: 0 }
     screen: target
     color: "transparent"
-    WlrLayershell.layer: shown ? WlrLayer.Top : WlrLayer.Background
+    WlrLayershell.layer: WlrLayer.Top
     WlrLayershell.namespace: "uq-quick"
     WlrLayershell.keyboardFocus: shown ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
     exclusionMode: ExclusionMode.Ignore
