@@ -14,6 +14,7 @@ session, and writes one JSON file of metrics (all "lower is better").
 | `popup_open/close_lookseedo_ms` | `qs ipc call uq open/close lookseedo` until the layer maps/unmaps (includes the constant cost of the `qs ipc` client) |
 | `shell_rss_after_popups`, `shell_rss_growth_popups` | memory after 10 open/close cycles (after 2 warm-up cycles); the growth is noisy, so it only fails when it triples and passes 32 MiB |
 | `uqlip_idle_*` | the clipboard daemon, which also runs in the session so the shell's watcher behaves as on a desktop |
+| `popup_<name>_open_frame_ms`, `popup_<name>_first_sync_ms` | for lookseedo, appmenu, quicksettings and powermenu: the slowest frame Qt logs while the popup opens, and the longest the GUI thread waits for the render thread (surface and swapchain creation, first uploads); median of three opens after a warm-up |
 | `frame_p50_ms`, `frame_p95_ms` | render time of each frame (the "frame rendered in" lines of `QSG_RENDER_TIMING`) while popups open and close |
 
 Rendering is software (llvmpipe on vkms), so frame times and latencies only mean something against

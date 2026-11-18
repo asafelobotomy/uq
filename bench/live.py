@@ -260,25 +260,39 @@ def frame_lines(path):
     return [l.strip() for l in open(path, errors="replace") if FRAME.search(l)]
 
 
-def diag_popups(env):
-    """--diag: for each popup, the frame lines logged while it opens and while it closes, so a long
-    frame can be told from its neighbours and the phase that makes it long is visible."""
+POPUPS = (("lookseedo", "uq-lookseedo"), ("appmenu", "uq-appmenu"),
+          ("quicksettings", "uq-quick"), ("powermenu", "uq-power"))
+
+
+def popup_frames(env, diag=False):
+    """For each popup, open and close it four times and read the frames Qt logged while it opened:
+    the slowest frame and the longest the GUI thread waited for the render thread. The first cycle
+    loads the popup's QML, so the medians use the other three. With diag, every frame line is printed."""
     log = env.tmp + "/qs.log"
-    for name, layer in (("lookseedo", "uq-lookseedo"), ("appmenu", "uq-appmenu"),
-                        ("quicksettings", "uq-quick"), ("powermenu", "uq-power")):
-        for cycle in range(4):  # the first cycle includes loading the popup's QML
-            n0 = len(frame_lines(log))
+    out = {}
+    for name, layer in POPUPS:
+        worst, waits = [], []
+        for cycle in range(4):
+            n0, b0 = len(frame_lines(log)), len(blocked_in(log))
             env.ipc("open", name)
             env.wait_layer(layer, True, 10)
             time.sleep(0.6)
-            n1 = len(frame_lines(log))
+            frames = frame_lines(log)[n0:]
+            blocked = blocked_in(log)[b0:]
             env.ipc("close", name)
             env.wait_layer(layer, False, 10)
             time.sleep(0.6)
-            lines = frame_lines(log)
-            print(f"== diag {name} cycle {cycle}: open {n1 - n0} frames, close {len(lines) - n1} frames")
-            for i, l in enumerate(lines[n0:], start=0):
-                print(f"   {'open ' if i < n1 - n0 else 'close'} {l}")
+            ms = [float(NUM_MS.search(l).group(1)) for l in frames if NUM_MS.search(l)]
+            if cycle > 0 and ms:
+                worst.append(max(ms))
+                waits.append(max(blocked) if blocked else 0)
+            if diag:
+                print(f"== diag {name} cycle {cycle}: {len(frames)} frames, blockedForSync {blocked}")
+                for l in frames:
+                    print(f"   {l}")
+        if worst:
+            out[name] = (statistics.median(worst), statistics.median(waits))
+    return out
 
 
 def count_execve(path, since=None):
@@ -400,8 +414,9 @@ def main():
         else:
             note(f"only {len(fr)} frame-timing lines while popups ran; sample of the log:\n"
                  + "".join(open(env.tmp + "/qs.log", errors="replace").readlines()[-8:]))
-        if a.diag:
-            diag_popups(env)
+        for name, (frame_ms, sync_ms) in popup_frames(env, a.diag).items():
+            put(f"popup_{name}_open_frame_ms", frame_ms, "ms")
+            put(f"popup_{name}_first_sync_ms", sync_ms, "ms")
         env.stop(p)
 
         if shutil.which("strace"):
