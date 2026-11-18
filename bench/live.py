@@ -127,7 +127,9 @@ class Env:
         open(f"{self.tmp}/hypr.lua", "w").write(
             'hl.monitor({ output = "", mode = "1280x720", position = "auto", scale = 1 })\n'
             "hl.config({ misc = { disable_hyprland_logo = true, disable_splash_rendering = true } })\n")
-        env = dict(self.base_env(), LIBGL_ALWAYS_SOFTWARE="1")
+        env = self.base_env()
+        if not GPU:
+            env["LIBGL_ALWAYS_SOFTWARE"] = "1"
         self.spawn(["Hyprland", "-c", f"{self.tmp}/hypr.lua"], env=env, log="hypr")
         sig = wl = None
         for _ in range(100):
@@ -267,12 +269,18 @@ def spawn_summary(path, since, who):
         note(f"{who} idle spawn x{n}: {k}")
 
 
+GPU = False
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--src", default=".")
     ap.add_argument("--out", default="bench-live.json")
     ap.add_argument("--quick", action="store_true")
+    ap.add_argument("--gpu", action="store_true", help="render on the real GPU instead of llvmpipe")
     a = ap.parse_args()
+    global GPU
+    GPU = a.gpu
     settle, window, starts, cycles = (3, 6, 2, 3) if a.quick else (8, 25, 5, 10)
     env = Env(a.src)
     try:
