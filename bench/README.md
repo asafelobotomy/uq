@@ -14,7 +14,7 @@ session, and writes one JSON file of metrics (all "lower is better").
 | `popup_open/close_lookseedo_ms` | `qs ipc call uq open/close lookseedo` until the layer maps/unmaps (includes the constant cost of the `qs ipc` client) |
 | `shell_rss_after_popups`, `shell_rss_growth_popups` | memory after 10 open/close cycles (after 2 warm-up cycles); the growth is noisy, so it only fails when it triples and passes 32 MiB |
 | `uqlip_idle_*` | the clipboard daemon, which also runs in the session so the shell's watcher behaves as on a desktop |
-| `frame_p50_ms`, `frame_p95_ms` | frame times from `QSG_RENDER_TIMING` while popups open and close |
+| `frame_p50_ms`, `frame_p95_ms` | render time of each frame (the "frame rendered in" lines of `QSG_RENDER_TIMING`) while popups open and close |
 
 Rendering is software (llvmpipe on vkms), so frame times and latencies only mean something against
 another run on the same machine. CPU, memory, wakeups, spawns and idle frames are not renderer
@@ -36,6 +36,10 @@ Needs Hyprland, quickshell, a DRM device and a release build of `uqctl` and `uqd
 cargo build --release -p uqctl -p uqd -p uqlip
 python3 bench/live.py --src . --out bench-live.json     # --quick for a short run
 ```
+
+On a machine with a GPU, `BENCH_HW=1 python3 bench/live.py --diag --src . --out /tmp/hw.json` renders on
+the GPU instead of llvmpipe, and `--diag` prints every popup's frames in full. `popup_first_sync_ms`
+is how long the GUI thread waits for a popup's first frame (surface and swapchain creation).
 
 Rust micro-benchmarks for `uq-core` are not in yet; the shell and daemon figures above are the
 user-visible ones.

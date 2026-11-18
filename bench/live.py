@@ -127,7 +127,10 @@ class Env:
         open(f"{self.tmp}/hypr.lua", "w").write(
             'hl.monitor({ output = "", mode = "1280x720", position = "auto", scale = 1 })\n'
             "hl.config({ misc = { disable_hyprland_logo = true, disable_splash_rendering = true } })\n")
-        env = dict(self.base_env(), LIBGL_ALWAYS_SOFTWARE="1")
+        # BENCH_HW=1 renders on the machine's own GPU (frame times that mean something); CI is software.
+        env = self.base_env()
+        if not os.environ.get("BENCH_HW"):
+            env["LIBGL_ALWAYS_SOFTWARE"] = "1"
         self.spawn(["Hyprland", "-c", f"{self.tmp}/hypr.lua"], env=env, log="hypr")
         sig = wl = None
         for _ in range(100):
