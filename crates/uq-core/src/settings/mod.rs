@@ -208,12 +208,12 @@ pub struct UiSettings {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum PrintAction {
-    /// Pick an area, then mark it up in satty.
+    /// Pick an area.
     #[default]
     Region,
-    /// The screen under the pointer, copied and saved at once.
+    /// The screen under the pointer.
     Screen,
-    /// The focused window, copied and saved at once.
+    /// The focused window.
     Window,
 }
 
