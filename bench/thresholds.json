@@ -8,6 +8,12 @@
       "min_abs": 150
     },
     {
+      "match": "^shell_rss_growth_popups$",
+      "warn": 1.0,
+      "fail": 3.0,
+      "min_abs": 33554432
+    },
+    {
       "match": "_idle_rss$|^shell_rss",
       "warn": 0.1,
       "fail": 0.25,
