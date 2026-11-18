@@ -15,8 +15,12 @@ All notable changes to uQ are listed here. The format follows
   200 entries and 16 MiB each, pinned entries are never pruned. Copies a password manager marks
   secret (`x-kde-passwordManagerHint`), copies from ignored apps (KeePassXC, Bitwarden, 1Password,
   Proton Pass by default) and anything while paused are never read. `uqctl clip` lists, searches,
-  copies back, pins, deletes, clears and pauses; `uqctl clip watch` streams changes. The popup,
-  bar island and Settings page follow. `uq-shell.service` starts the daemon.
+  copies back, pins, deletes, clears and pauses; `uqctl clip watch` streams changes and
+  `uqctl clip config` changes the settings. **Super + Shift + V** opens the history in the shell:
+  search by typing, Up and Down to choose, Enter to put an entry back on the clipboard, Ctrl+P to
+  pin, Delete to forget, images shown as thumbnails. A new Clipboard history bar island shows
+  the count (add it in the bar editor), and Settings has a Clipboard page for pausing, forgetting,
+  the apps that are never kept and the limits. `uq-shell.service` starts the daemon.
 
 ## [0.3.8] - 2026-11-17
 

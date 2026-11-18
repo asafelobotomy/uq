@@ -278,7 +278,7 @@ checks are in [docs/notes/settings-slice-b-live-check.md](docs/notes/settings-sl
 Every shortcut uQ sets up is listed here by what it does, with its keys, grouped as Apps and
 desktop, Windows, Workspaces, Sound and brightness, Media, and Profiles. The defaults:
 Open a terminal (Super + Return), Close the window (Super + Q), Float or tile the window
-(Super + V), Log out (Super + Shift + M), Open look=see>do_ (Super + Space), Open look=see>do_ for emoji (Super + period; it needs the shell's emoji shortcut, which comes with the emoji picker), Open the app menu
+(Super + V), Log out (Super + Shift + M), Open look=see>do_ (Super + Space), Open look=see>do_ for emoji (Super + period; it needs the shell's emoji shortcut, which comes with the emoji picker), Open the clipboard history (Super + Shift + V), Open the app menu
 (tap Super), Open quick settings (Super + A), Open notifications (Super + N), Lock the screen
 (Super + L), Open the power menu (Super + Escape), the three layouts (Super + Alt + D, M and S),
 focus with Super + the arrows, workspaces 1 to 10 with Super + the number (Shift moves the
@@ -543,6 +543,24 @@ What the bridge does with the rows:
 
 Rows are shown as plain text, labelled with the provider's `Name`. uQ never runs anything a
 provider sends; picking a row only calls back its `Activate`.
+
+### Clipboard history (uqlip)
+
+`uqlip` keeps what you copy, text and images, so you can get it back. Press **Super + Shift + V**
+(or click the Clipboard history island, which you can add in the bar editor) to open the history:
+type to search, Up and Down to choose, **Enter** puts the entry back on the clipboard (paste it
+where you like), **Ctrl+P** pins it, **Delete** forgets it, **Ctrl+Shift+Delete** forgets
+everything not pinned, **Esc** closes.
+
+- The history lives in `~/.local/share/uq/uqlip/`, readable only by you. Newest first; copying
+  something again moves it to the top; pinned entries are never trimmed.
+- Copies a password manager marks secret (`x-kde-passwordManagerHint`) are never read, and
+  neither are copies from the apps on the ignore list (KeePassXC, Bitwarden, 1Password and Proton
+  Pass to start with; change it in Settings > Clipboard).
+- Settings > Clipboard pauses recording, forgets the history and sets the limits. From a
+  terminal: `uqctl clip list|copy|pin|unpin|delete|clear|pause|resume|status|config|watch`.
+- `uqlip` is a user service (`uqlip.service`) started with the shell. It needs the compositor to
+  offer `ext-data-control` or `wlr-data-control` (Hyprland does).
 
 ### Notifications
 
