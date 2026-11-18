@@ -38,6 +38,12 @@
       "min_abs": 3
     },
     {
+      "match": "^popup_first_sync_ms$",
+      "warn": 0.2,
+      "fail": 0.5,
+      "min_abs": 10
+    },
+    {
       "match": "^popup_",
       "warn": 0.2,
       "fail": 0.5,

@@ -220,7 +220,10 @@ class Env:
         shutil.rmtree(self.tmp, ignore_errors=True)
 
 
-FRAME = re.compile(r"(?i)frame rendered|renderloop")
+# Only the "frame rendered in 12ms" lines: the other renderloop lines carry "elapsed since last call:
+# 443 ms", the idle gap before a frame, which an earlier version read as a 400 ms frame.
+FRAME = re.compile(r"frame rendered in")
+BLOCKED = re.compile(r"blockedForSync=([0-9]+) ms")
 NUM_MS = re.compile(r"([0-9]+(?:\.[0-9]+)?)\s*ms")
 
 
@@ -233,6 +236,12 @@ def frames_in(path):
             if m:
                 out.append(float(m.group(1)))
     return out
+
+
+def blocked_in(path):
+    """How long the GUI thread waited on the render thread (blockedForSync) for each frame it prepared;
+    the first frame after a popup maps includes creating its surface and swapchain."""
+    return [int(m.group(1)) for line in open(path, errors="replace") for m in [BLOCKED.search(line)] if m]
 
 
 def frame_lines(path):
@@ -345,7 +354,9 @@ def main():
             time.sleep(0.4)
         rss0 = status_kb(p.pid, "VmRSS") * 1024
         f_mark = len(frames_in(env.tmp + "/qs.log"))
+        first_sync = []
         for _ in range(cycles):
+            b_mark = len(blocked_in(env.tmp + "/qs.log"))
             t0 = time.monotonic()
             r = env.ipc("open", "lookseedo")
             if r.returncode or env.wait_layer("uq-lookseedo", True, 10) is None:
@@ -353,6 +364,9 @@ def main():
                 break
             opens.append((time.monotonic() - t0) * 1000)
             time.sleep(0.4)  # let the open animation finish before closing
+            waits = blocked_in(env.tmp + "/qs.log")[b_mark:]
+            if waits:
+                first_sync.append(max(waits))
             t0 = time.monotonic()
             env.ipc("close", "lookseedo")
             env.wait_layer("uq-lookseedo", False, 10)
@@ -362,6 +376,8 @@ def main():
             # Includes the `qs ipc` client's own start, a constant that cancels in a comparison.
             put("popup_open_lookseedo_ms", med(opens), "ms")
             put("popup_close_lookseedo_ms", med(closes), "ms")
+            if first_sync:
+                put("popup_first_sync_ms", med(first_sync), "ms")
             put("shell_rss_after_popups", status_kb(p.pid, "VmRSS") * 1024, "bytes")
             put("shell_rss_growth_popups", status_kb(p.pid, "VmRSS") * 1024 - rss0, "bytes")
         fr = frames_in(env.tmp + "/qs.log")[f_mark:]
