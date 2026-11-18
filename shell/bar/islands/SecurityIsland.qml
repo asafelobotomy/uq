@@ -17,7 +17,9 @@ import "../../logic/security.js" as Sec
 // sends one notification, and a click opens the Setup tab of that page instead of the popup. When
 // the state gets worse it sends one notification (`notify-send`), and tries
 // again for a minute if the notification server isn't up yet (it takes its name a few seconds
-// after the shell starts). Hidden while oysterAV isn't installed or can't answer. Everything the
+// after the shell starts). While a scan runs the icon takes the accent colour inside a pulsing
+// ring (still under Reduce motion), the word reads "Scanning 42%" and the popup shows a progress
+// bar. Hidden while oysterAV isn't installed or can't answer. Everything the
 // summary says is plain text and cut to length.
 Island {
     id: root
@@ -36,10 +38,15 @@ Island {
     readonly property string state: summary ? String(summary.state) : ""
     readonly property var reasons: summary && Array.isArray(summary.reasons)
         ? summary.reasons.slice(0, 6).map(function (r) { return String(r).slice(0, 120); }) : []
+    // The running scan (security.js progress): null when none runs.
+    readonly property var scan: Sec.progress(summary)
+    readonly property bool scanning: scan !== null && !setupNeeded
     readonly property string word: setupNeeded ? "Set up"
+        : scanning ? Sec.scanWord(scan)
         : state === "ok" ? "Protected"
         : (state === "threat" ? "Threat found" : (state === "warning" ? "Needs attention" : "Security"))
     readonly property color tint: setupNeeded ? Theme.error
+        : scanning ? Theme.accent
         : state === "ok" ? Theme.success
         : (state === "threat" ? Theme.error : (state === "warning" ? Theme.warning : Theme.textMuted))
 
@@ -142,10 +149,10 @@ Island {
             poll.running = true;
     }
     Component.onCompleted: refresh()
-    // Every two minutes; every 15 s while a scan runs, so the popup follows it, or while setup is
+    // Every 30 s; every 3 s while a scan runs, so the bar follows it, every 15 s while setup is
     // pending, so the island turns as soon as it has been run.
     Timer {
-        interval: root.setupNeeded || (root.summary && root.summary.scanning === true) ? 15000 : 120000
+        interval: root.scanning ? 3000 : (root.setupNeeded ? 15000 : 30000)
         running: true
         repeat: true
         onTriggered: root.refresh()
@@ -179,6 +186,22 @@ Island {
                 source: appIcon
                 colorization: 0.9
                 colorizationColor: root.tint
+            }
+            // The scanning ring: flat, around the icon; it pulses unless Reduce motion is on.
+            Rectangle {
+                id: scanRing
+                anchors.fill: parent
+                visible: root.scanning
+                radius: width / 2
+                color: "transparent"
+                border.width: 2
+                border.color: Theme.accent
+                SequentialAnimation on opacity {
+                    running: root.scanning && !Settings.reduceMotion && root.visible
+                    loops: Animation.Infinite
+                    NumberAnimation { from: 1; to: 0.25; duration: Motion.base * 8; easing.type: Easing.InOutSine }
+                    NumberAnimation { from: 0.25; to: 1; duration: Motion.base * 8; easing.type: Easing.InOutSine }
+                }
             }
             Rectangle {
                 anchors.centerIn: parent
@@ -267,6 +290,35 @@ Island {
                     Layout.fillWidth: true
                     horizontalAlignment: Text.AlignHCenter
                     wrapMode: Text.Wrap
+                }
+            }
+
+            // The running scan: a flat bar with how far it has got and which scanner is at work.
+            ColumnLayout {
+                Layout.fillWidth: true
+                visible: root.scanning
+                spacing: Theme.gapIn
+                Rectangle {
+                    Layout.fillWidth: true
+                    visible: root.scan !== null && root.scan.known
+                    height: 6
+                    radius: 3
+                    color: Theme.surfaceAlt
+                    Rectangle {
+                        objectName: "scanFill"
+                        height: parent.height
+                        radius: parent.radius
+                        color: Theme.accent
+                        width: parent.width * (root.scan && root.scan.known ? root.scan.percent / 100 : 0)
+                        Behavior on width { NumberAnimation { duration: Motion.base; easing.type: Motion.easing } }
+                    }
+                }
+                UqText {
+                    Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignHCenter
+                    color: Theme.textMuted
+                    text: root.scan === null ? "" : (root.scan.known ? root.scan.percent + "%" : "Scan running\u2026")
+                        + (root.scan !== null && root.scan.pack !== "" ? " \u00b7 " + root.scan.pack : "")
                 }
             }
 
