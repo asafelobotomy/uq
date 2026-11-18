@@ -7,6 +7,8 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.10] - 2026-11-18
+
 ### Added
 
 - **A clipboard history.** `uqlip` follows the Wayland clipboard (the `ext-data-control` protocol,
