@@ -374,10 +374,10 @@ def main():
         # Two throwaway cycles: the first open loads the popup's QML once, which is not growth.
         for _ in range(2):
             env.ipc("open", "lookseedo")
-            env.wait_layer("uq-lookseedo", True, 10, level=3 if name == "lookseedo" else 2)
+            env.wait_layer("uq-lookseedo", True, 10, level=3)
             time.sleep(0.4)
             env.ipc("close", "lookseedo")
-            env.wait_layer("uq-lookseedo", False, 10, level=3 if name == "lookseedo" else 2)
+            env.wait_layer("uq-lookseedo", False, 10, level=3)
             time.sleep(0.4)
         rss0 = status_kb(p.pid, "VmRSS") * 1024
         f_mark = len(frames_in(env.tmp + "/qs.log"))
@@ -396,7 +396,7 @@ def main():
                 first_sync.append(max(waits))
             t0 = time.monotonic()
             env.ipc("close", "lookseedo")
-            env.wait_layer("uq-lookseedo", False, 10, level=3 if name == "lookseedo" else 2)
+            env.wait_layer("uq-lookseedo", False, 10, level=3)
             closes.append((time.monotonic() - t0) * 1000)
             time.sleep(0.4)
         if opens:
