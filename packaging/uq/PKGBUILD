@@ -4,7 +4,7 @@
 # pkgver is the Cargo.toml version with '-rc.N' written 'rcN' (pacman forbids '-');
 # scripts/bump-version.sh keeps them in step.
 pkgname=uq
-pkgver=0.3.8
+pkgver=0.3.9
 pkgrel=1
 _tag=${pkgver/rc/-rc.}
 # The uq-hyprland-pin this release's config/hypr/base.lua is tested with: equal to
@@ -46,9 +46,8 @@ optdepends=(
   'sound-theme-freedesktop: the test sound on the Sound settings page'
   'xorg-xrandr: tells X11 apps which display is the main one'
   'grim: screenshots (Print)'
-  'satty: mark up a screenshot before saving it (Print)'
-  'slurp: pick an area for a screenshot when satty is missing'
-  'wl-clipboard: copy screenshots to the clipboard'
+  'slurp: pick an area for a screenshot (Print)'
+  'wl-clipboard: copy screenshots to the clipboard (Copy in the preview)'
   'kate: KWrite, a plain text editor'
 )
 # Keep !lto: rustc links with lld, and makepkg's LTO flags make the cxx-qt C++ objects unreadable to it.
