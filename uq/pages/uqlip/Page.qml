@@ -153,6 +153,44 @@ SettingsPage {
     }
 
     SettingsTab {
+        title: "Forgetting"
+        iconName: "edit-clear-history"
+
+        SettingsCard {
+            title: "Automatic forgetting"
+            iconName: "edit-clear-history"
+            help: "Pinned entries are never removed."
+            SettingRow {
+                settingId: "expire_hours"
+                label: "Forget copies after (hours, 0 = never)"
+                highlight: page.highlight
+                QQC2.SpinBox {
+                    from: 0
+                    to: 8760
+                    stepSize: 6
+                    editable: true
+                    value: page.config ? page.config.expire_hours : 0
+                    onValueModified: page.setValue("expire_hours", value)
+                }
+            }
+            SwitchRow {
+                settingId: "clear_on_login"
+                label: "Forget copies at login"
+                highlight: page.highlight
+                value: page.config ? page.config.clear_on_login === true : false
+                onChosen: v => page.setValue("clear_on_login", v ? "true" : "false")
+            }
+            SwitchRow {
+                settingId: "skip_secret_looking"
+                label: "Skip copies that look like secrets"
+                highlight: page.highlight
+                value: page.config && page.config.privacy ? page.config.privacy.skip_secret_looking !== false : true
+                onChosen: v => page.setValue("skip_secret_looking", v ? "true" : "false")
+            }
+        }
+    }
+
+    SettingsTab {
         title: "Limits"
         iconName: "preferences-system"
 

@@ -287,7 +287,7 @@ PanelWindow {
                 id: hint
                 Layout.fillWidth: true
                 color: Theme.textMuted
-                text: "Enter paste   Ctrl+Enter copy   Ctrl+1-9 pick   Ctrl+P pin   Del forget   Esc close"
+                text: "Enter paste   Ctrl+Enter copy   Ctrl+P pin   Del forget   Esc close"
                 elide: Text.ElideRight
             }
         }
