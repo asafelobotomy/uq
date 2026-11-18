@@ -80,6 +80,7 @@ PanelWindow {
         case "keyboard": return cKeyboard;
         case "security": return cSecurity;
         case "crumbs": return cCrumbs;
+        case "clip": return cClip;
         case "separator": return cSeparator;
         }
         return null;
@@ -100,6 +101,7 @@ PanelWindow {
     Component { id: cKeyboard; KeyboardIsland {} }
     Component { id: cSecurity; SecurityIsland {} }
     Component { id: cCrumbs; CrumbsIsland {} }
+    Component { id: cClip; ClipIsland {} }
     Component { id: cSeparator; SeparatorIsland {} }
 
     // The slot of island `key`, for anchoring popups to it.

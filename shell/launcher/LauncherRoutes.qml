@@ -3,6 +3,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Hyprland
 import "../core"
+import "../clip"
 import "../notif"
 import "../session"
 
@@ -18,6 +19,7 @@ Scope {
     // README use (tests/shell/bar_loads.sh prints it).
     readonly property bool routed: lookseedoKey.appid === "uq" && lookseedoKey.name === "lookseedo"
         && emojiKey.appid === "uq" && emojiKey.name === "emoji"
+        && clipKey.appid === "uq" && clipKey.name === "clip"
         && appMenuKey.appid === "uq" && appMenuKey.name === "appmenu"
         && quickSettingsKey.appid === "uq" && quickSettingsKey.name === "quick-settings"
         && notifCentreKey.appid === "uq" && notifCentreKey.name === "notif-centre"
@@ -27,7 +29,7 @@ Scope {
         && ipc.target === "uq" && typeof ipc.open === "function"
         && typeof ipc.close === "function" && typeof ipc.toggle === "function"
         && typeof ipc.lock === "function" && typeof ipc.lockSecure === "function"
-        && typeof ipc.editBar === "function"
+        && typeof ipc.editBar === "function" && typeof ipc.clip === "function"
 
     // SUPER+Space: Hyprland sends `pressed` on the key press (and `released` after).
     GlobalShortcut {
@@ -46,6 +48,18 @@ Scope {
         name: "emoji"
         description: "Open look=see>do_ to search for emoji"
         onPressed: Surfaces.openWith("lookseedo", ":")
+    }
+
+    // SUPER+SHIFT+V: the clipboard history (uqlip). Ignored while locked.
+    GlobalShortcut {
+        id: clipKey
+        appid: "uq"
+        name: "clip"
+        description: "Open or close the clipboard history"
+        onPressed: {
+            if (!Bridge.locked)
+                ClipState.toggle();
+        }
     }
 
     // Tapping SUPER is a `release = true` bind, which Hyprland fires only on the key release
@@ -129,6 +143,14 @@ Scope {
         // qs ipc ... call uq lock: "ok", or "ignored" when already locked.
         function lock(): string {
             return Session.lock();
+        }
+
+        // qs ipc ... call uq clip: the clipboard history opens or closes; "open" or "closed".
+        function clip(): string {
+            if (Bridge.locked)
+                return "ignored";
+            ClipState.toggle();
+            return ClipState.open ? "open" : "closed";
         }
 
         // qs ipc ... call uq editBar: edit mode on or off; "on" or "off".

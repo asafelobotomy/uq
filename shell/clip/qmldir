@@ -1,0 +1,3 @@
+module clip
+singleton ClipState 1.0 ClipState.qml
+ClipPopup 1.0 ClipPopup.qml

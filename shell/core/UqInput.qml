@@ -15,6 +15,9 @@ Item {
     property int maximumLength: secret ? 512 : 100
     signal edited(string text)
     signal accepted()
+    // A key press, before the field handles it: a handler may set event.accepted to take the key
+    // (the clipboard history uses it for Up, Down, Delete and Ctrl+P).
+    signal keyed(var event)
     implicitHeight: 26
     implicitWidth: 180
 
@@ -44,6 +47,9 @@ Item {
         onTextEdited: root.edited(text)
         onAccepted: root.accepted()
         Keys.onPressed: event => {
+            root.keyed(event);
+            if (event.accepted)
+                return;
             if (root.secret && KeyRules.blocks(event.modifiers, event.key))
                 event.accepted = true;
         }

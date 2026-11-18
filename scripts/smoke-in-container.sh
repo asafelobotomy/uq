@@ -21,7 +21,7 @@ SEATD_VTBOUND=0 seatd -u tester -l error &
 rc=0
 su tester -c "set -e
     cd /src
-    cargo build --locked -p uqctl -p uqd
+    cargo build --locked -p uqctl -p uqd -p uqlip
     export XDG_RUNTIME_DIR=\$(mktemp -d) LIBSEAT_BACKEND=seatd UQCTL=/src/target/debug/uqctl
     timeout 300 scripts/smoke-shell.sh" || rc=$?
 # Super+drag on the real shell (scripts/drag-live.sh asserts what it leaves behind). 77 is "can't run here".
@@ -42,6 +42,12 @@ su tester -c "set -e
     cd /src
     export XDG_RUNTIME_DIR=\$(mktemp -d) LIBSEAT_BACKEND=seatd UQCTL=/src/target/debug/uqctl UQ_CAPTURE_DIR=/src/captures
     timeout 240 scripts/islands-live.sh" || { r=$?; [ "$r" = 77 ] || rc=$r; }
+
+echo "=========== clip-live"
+su tester -c "set -e
+    cd /src
+    export XDG_RUNTIME_DIR=\$(mktemp -d) LIBSEAT_BACKEND=seatd UQCTL=/src/target/debug/uqctl UQ_CAPTURE_DIR=/src/captures
+    timeout 240 scripts/clip-live.sh" || { r=$?; [ "$r" = 77 ] || rc=$r; }
 
 echo "=========== baredit-live"
 su tester -c "set -e

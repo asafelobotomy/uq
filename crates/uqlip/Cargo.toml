@@ -1,0 +1,28 @@
+[package]
+name = "uqlip"
+description = "uQ's clipboard manager: history store, privacy rules and the uqlip daemon"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[lib]
+name = "uqlip"
+
+[[bin]]
+name = "uqlip"
+path = "src/main.rs"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+libc = "0.2"
+wayland-client = "0.31"
+wayland-protocols = { version = "0.32", features = ["client", "staging"] }
+wayland-protocols-wlr = { version = "0.3", features = ["client"] }
+
+[dev-dependencies]
+tempfile.workspace = true
