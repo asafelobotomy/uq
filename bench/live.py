@@ -412,6 +412,8 @@ def main():
                     counts[k] = counts.get(k, 0) + 1
                 for (sc, arg), n in sorted(counts.items(), key=lambda kv: -kv[1])[:40]:
                     print(f"TRACE {n:5d} {sc} {arg}", flush=True)
+                for ln in open(env.tmp + "/qs.log", errors="replace").readlines()[-40:]:
+                    print("QSLOG", ln.rstrip()[:200], flush=True)
             env.stop(p)
 
         if uqlip is not None:
