@@ -14,6 +14,12 @@
       "min_abs": 33554432
     },
     {
+      "match": "^shell_(idle_rss|rss_after_popups)$",
+      "warn": 0.25,
+      "fail": 0.6,
+      "min_abs": 33554432
+    },
+    {
       "match": "_idle_rss$|^shell_rss",
       "warn": 0.1,
       "fail": 0.25,
