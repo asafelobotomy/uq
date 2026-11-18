@@ -7,6 +7,8 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.9] - 2026-11-18
+
 ### Changed
 
 - **Screenshots end in a floating preview, never a new window.** After Print, Shift+Print or
