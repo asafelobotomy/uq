@@ -118,7 +118,7 @@ drain() {
     fail "uqinput didn't finish its commands ($(tail -n 3 "$tmp/uqinput.out"))"
 }
 ipc() { "${shell_env[@]}" timeout 10 qs ipc -p "$root/shell" call uq "$1" lookseedo 2>/dev/null; }
-layers() { hc layers -j | grep -o '"namespace": *"uq-lookseedo"' | wc -l; }
+layers() { hc layers -j | jq '[.. | objects | select(has("levels")) | .levels["3"][]? | select(.namespace == "uq-lookseedo")] | length'; }
 wait_layers() { for _ in $(seq 1 40); do [ "$(layers)" -eq "$1" ] && return 0; sleep 0.2; done; return 1; }
 active() { hc activewindow -j | jq -r '.class // ""'; }
 bad=0
@@ -128,12 +128,12 @@ check() { echo "FAIL: $*"; bad=1; }
 [ "$(ipc open)" = ok ] || fail "qs ipc open lookseedo did not answer ok"
 wait_layers 1 || fail "no uq-lookseedo layer after opening"
 sleep 1.5
-hc layers -j | jq -c '.. | objects | select(.namespace? == "uq-lookseedo") | {x, y, w, h}'
+hc layers -j | jq -c '.. | objects | select(has("levels")) | .levels["3"][]? | select(.namespace == "uq-lookseedo") | {x, y, w, h}'
 still 1-home
 
 # --- 2. an empty square opens the picker, which pins what is chosen ---------------------------
 # Square 2: the squares sit under the pill (44), the Recent list and the Pinned heading.
-read -r lx ly < <(hc layers -j | jq -r '.. | objects | select(.namespace? == "uq-lookseedo") | "\(.x) \(.y)"' | head -n1)
+read -r lx ly < <(hc layers -j | jq -r '.. | objects | select(has("levels")) | .levels["3"][]? | select(.namespace == "uq-lookseedo") | "\(.x) \(.y)"' | head -n1)
 echo "layer at $lx,$ly"
 # The squares sit under the pill (44), the Recent list (a heading and one row: foot is the only seeded
 # app installed) and the Pinned heading; square 2 is the second of five.

@@ -166,24 +166,26 @@ class Env:
         s.close()
         return json.loads(buf or b"null")
 
-    def layers(self):
+    def layers(self, level=None):
+        """Namespaces of the layer surfaces; with level (0 background, 1 bottom, 2 top, 3 overlay),
+        only those on that level."""
         names = []
-        def walk(o):
+        def walk(o, lvl):
             if isinstance(o, dict):
-                if "namespace" in o:
+                if "namespace" in o and (level is None or lvl == str(level)):
                     names.append(o["namespace"])
-                for v in o.values():
-                    walk(v)
+                for k, v in o.items():
+                    walk(v, k if k in ("0", "1", "2", "3") else lvl)
             elif isinstance(o, list):
                 for v in o:
-                    walk(v)
-        walk(self.hypr_json("layers"))
+                    walk(v, lvl)
+        walk(self.hypr_json("layers"), None)
         return names
 
-    def wait_layer(self, ns, present=True, timeout=20.0):
+    def wait_layer(self, ns, present=True, timeout=20.0, level=None):
         t0 = time.monotonic()
         while time.monotonic() - t0 < timeout:
-            if (ns in self.layers()) == present:
+            if (ns in self.layers(level)) == present:
                 return time.monotonic() - t0
             time.sleep(0.005)
         return None
@@ -275,12 +277,12 @@ def popup_frames(env, diag=False):
         for cycle in range(4):
             n0, b0 = len(frame_lines(log)), len(blocked_in(log))
             env.ipc("open", name)
-            env.wait_layer(layer, True, 10)
+            env.wait_layer(layer, True, 10, level=3 if name == "lookseedo" else None)
             time.sleep(0.6)
             frames = frame_lines(log)[n0:]
             blocked = blocked_in(log)[b0:]
             env.ipc("close", name)
-            env.wait_layer(layer, False, 10)
+            env.wait_layer(layer, False, 10, level=3 if name == "lookseedo" else None)
             time.sleep(0.6)
             ms = [float(NUM_MS.search(l).group(1)) for l in frames if NUM_MS.search(l)]
             if cycle > 0 and ms:
@@ -372,10 +374,10 @@ def main():
         # Two throwaway cycles: the first open loads the popup's QML once, which is not growth.
         for _ in range(2):
             env.ipc("open", "lookseedo")
-            env.wait_layer("uq-lookseedo", True, 10)
+            env.wait_layer("uq-lookseedo", True, 10, level=3)
             time.sleep(0.4)
             env.ipc("close", "lookseedo")
-            env.wait_layer("uq-lookseedo", False, 10)
+            env.wait_layer("uq-lookseedo", False, 10, level=3)
             time.sleep(0.4)
         rss0 = status_kb(p.pid, "VmRSS") * 1024
         f_mark = len(frames_in(env.tmp + "/qs.log"))
@@ -384,7 +386,7 @@ def main():
             b_mark = len(blocked_in(env.tmp + "/qs.log"))
             t0 = time.monotonic()
             r = env.ipc("open", "lookseedo")
-            if r.returncode or env.wait_layer("uq-lookseedo", True, 10) is None:
+            if r.returncode or env.wait_layer("uq-lookseedo", True, 10, level=3) is None:
                 note(f"open lookseedo failed: {r.stdout.strip()} {r.stderr.strip()[-200:]}")
                 break
             opens.append((time.monotonic() - t0) * 1000)
@@ -394,7 +396,7 @@ def main():
                 first_sync.append(max(waits))
             t0 = time.monotonic()
             env.ipc("close", "lookseedo")
-            env.wait_layer("uq-lookseedo", False, 10)
+            env.wait_layer("uq-lookseedo", False, 10, level=3)
             closes.append((time.monotonic() - t0) * 1000)
             time.sleep(0.4)
         if opens:

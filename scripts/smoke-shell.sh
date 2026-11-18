@@ -2,7 +2,7 @@
 # Smoke test: the shell on a real (headless) Hyprland.
 #
 #   - the uq-bar layer appears within 10 s
-#   - qs ipc call uq open/close lookseedo maps and unmaps the uq-lookseedo layer
+#   - qs ipc call uq open/close lookseedo raises and lowers the uq-lookseedo layer (overlay while open, background while closed)
 #   - Dispatch focus_window / move against a real window moves it (hyprctl clients -j)
 #   - smoke_launch_survives_restart: a Launch'd app scope outlives a shell restart
 #   - hot-plug: a new headless output gets a bar, and removing it removes the bar
@@ -133,10 +133,16 @@ if command -v grim >/dev/null 2>&1; then
 fi
 
 # --- shell IPC opens look=see>do_ --------------------------------------------------------------
-layer_count() { hc layers -j 2>/dev/null | grep -o "\"namespace\": *\"$1\"" | wc -l; }
-wait_layer() { # wait_layer <namespace> <n>: poll up to 5 s until exactly n such layers exist
+layer_count() { # layer_count <namespace> [level]: look=see>do_ stays mapped on the background layer (0) when closed
+    if [ -n "${2:-}" ]; then
+        hc layers -j 2>/dev/null | jq --arg ns "$1" --arg lv "$2" '[.. | objects | select(has("levels")) | .levels[$lv][]? | select(.namespace == $ns)] | length'
+    else
+        hc layers -j 2>/dev/null | grep -o "\"namespace\": *\"$1\"" | wc -l
+    fi
+}
+wait_layer() { # wait_layer <namespace> <n> [level]: poll up to 5 s until exactly n such layers exist
     for _ in $(seq 1 25); do
-        [ "$(layer_count "$1")" -eq "$2" ] && return 0
+        [ "$(layer_count "$1" "${3:-}")" -eq "$2" ] && return 0
         sleep 0.2
     done
     return 1
@@ -150,10 +156,10 @@ smoke_ipc_lookseedo() {
         return 0
     fi
     [ "$r" = ok ] || fail "qs ipc call uq open lookseedo printed '$r', not ok ($(tail -n 3 "$tmp/ipc.err"))"
-    wait_layer uq-lookseedo 1 || fail "no uq-lookseedo layer after qs ipc call uq open lookseedo"
+    wait_layer uq-lookseedo 1 3 || fail "no uq-lookseedo layer after qs ipc call uq open lookseedo"
     r=$("${shell_env[@]}" timeout 10 qs ipc -p "$root/shell" call uq close lookseedo 2>"$tmp/ipc.err")
     [ "$r" = ok ] || fail "qs ipc call uq close lookseedo printed '$r', not ok ($(tail -n 3 "$tmp/ipc.err"))"
-    wait_layer uq-lookseedo 0 || fail "the uq-lookseedo layer stayed after qs ipc call uq close lookseedo"
+    wait_layer uq-lookseedo 0 3 || fail "the uq-lookseedo layer stayed after qs ipc call uq close lookseedo"
     echo "ok: qs ipc open/close lookseedo (uq-lookseedo layer mapped and unmapped)"
 }
 smoke_ipc_lookseedo

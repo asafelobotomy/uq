@@ -7,6 +7,10 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **look=see>do_ opens without a stall.** Opening it used to create a new window each time, and the shell waited 30 to 40 ms for that window's first frame. The window now stays in place, out of sight and out of the way, and look=see>do_ fades in and out instead.
+
 ## [0.3.12] - 2026-11-18
 
 ### Added

@@ -120,7 +120,7 @@ drain() {
     fail "uqinput didn't finish its commands ($(tail -n 3 "$tmp/uqinput.out"))"
 }
 ipc() { "${shell_env[@]}" timeout 10 qs ipc -p "$root/shell" call uq "$1" lookseedo 2>/dev/null; }
-layers() { hc layers -j | grep -o '"namespace": *"uq-lookseedo"' | wc -l; }
+layers() { hc layers -j | jq '[.. | objects | select(has("levels")) | .levels["3"][]? | select(.namespace == "uq-lookseedo")] | length'; }
 wait_layers() { for _ in $(seq 1 40); do [ "$(layers)" -eq "$1" ] && return 0; sleep 0.2; done; return 1; }
 active() { hc activewindow -j | jq -r '.class // ""'; }
 bad=0
