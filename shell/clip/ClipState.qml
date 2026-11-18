@@ -29,6 +29,77 @@ Singleton {
     }
     // Put entry `id` on the clipboard and close.
     function copy(id) { _run(["copy", String(id)]); open = false; }
+
+    // The window that had focus when the popup opened (its class picks Ctrl+V or Ctrl+Shift+V).
+    property string targetClass: ""
+    // Put entry `id` on the clipboard, close, and press paste in the window that had focus. The
+    // short wait lets that window get its keyboard focus back and the copy land first.
+    function paste(id) {
+        _run(["copy", String(id)]);
+        open = false;
+        pasteTimer.shortcut = C.pasteShortcut(targetClass);
+        pasteTimer.restart();
+    }
+    Timer {
+        id: pasteTimer
+        property string shortcut: "CTRL,V,"
+        interval: 180
+        onTriggered: Quickshell.execDetached(["hyprctl", "dispatch", "sendshortcut", shortcut + "activewindow"])
+    }
+
+    // Full-text search: the daemon looks at the whole of every text, not just the one-line preview.
+    property string searchQuery: ""
+    property var found: []
+    function search(q) {
+        searchQuery = q;
+        if (q.trim() === "") {
+            found = [];
+            return;
+        }
+        searchDelay.restart();
+    }
+    Timer {
+        id: searchDelay
+        interval: 120
+        onTriggered: {
+            if (searcher.running)
+                searcher.running = false;
+            searcher.command = ["uqctl", "clip", "list", "--json", "--limit", "200", "--", root.searchQuery.trim()];
+            searcher.running = true;
+        }
+    }
+    Process {
+        id: searcher
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var r = C.parseList(text);
+                if (r !== null && root.searchQuery.trim() !== "")
+                    root.found = r;
+            }
+        }
+    }
+
+    // The whole text of one entry for the preview pane.
+    property int fullId: -1
+    property string fullText: ""
+    function loadFull(id) {
+        if (id === fullId)
+            return;
+        fullId = id;
+        fullText = "";
+        if (id < 0)
+            return;
+        if (fuller.running)
+            fuller.running = false;
+        fuller.command = ["uqctl", "clip", "get", String(id)];
+        fuller.running = true;
+    }
+    Process {
+        id: fuller
+        stdout: StdioCollector {
+            onStreamFinished: root.fullText = C.previewText(text, 1500)
+        }
+    }
     function pin(id, pinned) { _run([pinned ? "pin" : "unpin", String(id)]); }
     function remove(id) { _run(["delete", String(id)]); }
     function clear() { _run(["clear"]); }

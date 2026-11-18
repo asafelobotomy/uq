@@ -13,12 +13,15 @@ import "../logic/clip.js" as C
 // `qs ipc call uq clip`.
 //   Type            filters the list
 //   Up / Down       move (PageUp / PageDown jump)
-//   Enter           copies the highlighted entry back and closes
+//   Enter           pastes the highlighted entry into the window you came from (Ctrl+Shift+V in
+//                   terminals) and closes; clicking a row does the same
+//   Ctrl+Enter      only puts it back on the clipboard, without pasting
+//   Ctrl+1 .. 9     pastes that row
 //   Ctrl+P          pins or unpins it       Delete   forgets it
-//   Ctrl+Shift+Delete   forgets everything not pinned
+//   Ctrl+Shift+Delete   forgets everything not pinned (no longer in the hint line, still works)
 //   Esc             closes
-// Text is shown as plain text (UqText); images as thumbnails. Nothing here pastes: the entry is
-// put on the clipboard and the person pastes where they want.
+// Text is shown as plain text (UqText); images as thumbnails. The highlighted text also shows
+// below the list (the first 1500 characters), so a long copy can be told apart from another.
 PanelWindow {
     id: root
 
@@ -28,7 +31,9 @@ PanelWindow {
     property string query: ""
     property int current: 0
     property double now: Date.now() / 1000
-    readonly property var rows: C.filter(ClipState.entries, query)
+    // Searching asks uqlip, which looks at the whole of each text; without a query it is the list.
+    readonly property var rows: query.trim() === "" ? ClipState.entries : ClipState.found
+    readonly property var currentEntry: current >= 0 && current < rows.length ? rows[current] : null
     readonly property int rowHeight: Theme.fontSize * 2 + Theme.gapIn * 2
     readonly property int imageHeight: rowHeight * 2
 
@@ -40,7 +45,7 @@ PanelWindow {
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
     exclusionMode: ExclusionMode.Ignore
     implicitWidth: Theme.fontSize * 38
-    implicitHeight: Math.min(Theme.fontSize * 38, Math.max(Theme.fontSize * 14, header.implicitHeight + list.contentHeight + Theme.gapOut * 3 + hint.implicitHeight))
+    implicitHeight: Math.min(Theme.fontSize * 38, Math.max(Theme.fontSize * 14, header.implicitHeight + list.contentHeight + Theme.gapOut * 3 + hint.implicitHeight + (previewPane.visible ? Theme.fontSize * 5 + Theme.gapIn * 2 : 0)))
 
     function screenFor(monitor) {
         if (!monitor)
@@ -54,10 +59,22 @@ PanelWindow {
 
     function activate(i) {
         if (i >= 0 && i < rows.length)
+            ClipState.paste(rows[i].id);
+    }
+    function copyOnly(i) {
+        if (i >= 0 && i < rows.length)
             ClipState.copy(rows[i].id);
+    }
+    function windowClass() {
+        var t = Hyprland.activeToplevel;
+        var o = t ? t.lastIpcObject : null;
+        return o && typeof o.class === "string" ? o.class : "";
     }
 
     onShownChanged: {
+        if (shown)
+            ClipState.targetClass = windowClass();
+        ClipState.search("");
         openedOn = shown ? screenFor(Hyprland.focusedMonitor) : null;
         query = "";
         search.text = "";
@@ -66,6 +83,7 @@ PanelWindow {
         if (shown)
             Qt.callLater(function () { search.forceActiveFocus(); });
     }
+    onCurrentEntryChanged: ClipState.loadFull(currentEntry && currentEntry.kind === "text" ? currentEntry.id : -1)
     onRowsChanged: current = C.move(current, 0, rows.length) < 0 ? 0 : C.move(current, 0, rows.length)
 
     Connections {
@@ -108,7 +126,7 @@ PanelWindow {
                     implicitHeight: Theme.fontSize * 2 + 6
                     placeholder: ClipState.paused ? "Paused: new copies aren't kept" : "Search what you copied"
                     Accessible.name: "Search the clipboard history"
-                    onEdited: text => { root.query = text; root.current = 0; }
+                    onEdited: text => { root.query = text; root.current = 0; ClipState.search(text); }
                     onAccepted: root.activate(root.current)
                     onKeyed: event => {
                         var ctrl = (event.modifiers & Qt.ControlModifier) !== 0;
@@ -123,6 +141,10 @@ PanelWindow {
                             root.current = C.move(root.current, -8, root.rows.length);
                         } else if (event.key === Qt.Key_Escape) {
                             ClipState.hide();
+                        } else if (ctrl && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter)) {
+                            root.copyOnly(root.current);
+                        } else if (ctrl && !shift && C.indexForDigit(event.text) >= 0) {
+                            root.activate(C.indexForDigit(event.text));
                         } else if (ctrl && event.key === Qt.Key_P && root.rows.length > 0) {
                             var e = root.rows[root.current];
                             ClipState.pin(e.id, !e.pinned);
@@ -227,6 +249,12 @@ PanelWindow {
                             text: C.label(row.modelData, 200)
                         }
                         UqText {
+                            visible: row.index < 9
+                            text: String(row.index + 1)
+                            color: Theme.textMuted
+                            Accessible.ignored: true
+                        }
+                        UqText {
                             text: C.age(row.modelData.created, root.now)
                             color: Theme.textMuted
                         }
@@ -242,10 +270,24 @@ PanelWindow {
             }
 
             UqText {
+                id: previewPane
+                visible: root.currentEntry !== null && root.currentEntry.kind === "text"
+                    && ClipState.fullText !== "" && ClipState.fullText.length > root.currentEntry.preview.length - 1
+                Layout.fillWidth: true
+                Layout.preferredHeight: visible ? Theme.fontSize * 5 : 0
+                wrapMode: Text.Wrap
+                elide: Text.ElideRight
+                maximumLineCount: 4
+                color: Theme.textMuted
+                text: ClipState.fullText
+                Accessible.ignored: true
+            }
+
+            UqText {
                 id: hint
                 Layout.fillWidth: true
                 color: Theme.textMuted
-                text: "Enter copy   Ctrl+P pin   Del forget   Ctrl+Shift+Del clear   Esc close"
+                text: "Enter paste   Ctrl+Enter copy   Ctrl+1-9 pick   Ctrl+P pin   Del forget   Esc close"
                 elide: Text.ElideRight
             }
         }

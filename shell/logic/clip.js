@@ -107,3 +107,27 @@ function retryDelayMs(misses) {
     var steps = [5000, 10000, 30000, 60000];
     return steps[Math.max(0, Math.min(steps.length - 1, misses | 0))];
 }
+
+// Window classes that paste with Ctrl+Shift+V instead of Ctrl+V (terminals).
+var TERMINALS = ["kitty", "alacritty", "foot", "footclient", "wezterm", "org.wezfurlong.wezterm",
+    "konsole", "org.kde.konsole", "gnome-terminal", "gnome-terminal-server", "xterm", "urxvt",
+    "terminator", "tilix", "st", "st-256color", "ghostty", "com.mitchellh.ghostty", "kyko",
+    "org.kde.yakuake", "yakuake", "lxterminal", "xfce4-terminal", "cool-retro-term"];
+
+// The `hyprctl dispatch sendshortcut` argument that pastes into a window of class `cls`.
+function pasteShortcut(cls) {
+    var c = String(cls || "").toLowerCase();
+    return TERMINALS.indexOf(c) >= 0 ? "CTRL SHIFT,V," : "CTRL,V,";
+}
+
+// The row for Ctrl+<digit> (1..9): index 0..8, or -1 for any other key text.
+function indexForDigit(text) {
+    return /^[1-9]$/.test(String(text)) ? Number(text) - 1 : -1;
+}
+
+// What a full-text preview shows: the text cut at `max` characters, line breaks kept.
+function previewText(text, max) {
+    var t = String(text || "").replace(/\r/g, "");
+    var m = max || 600;
+    return t.length > m ? t.slice(0, m - 1) + "…" : t;
+}

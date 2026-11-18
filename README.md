@@ -548,8 +548,10 @@ provider sends; picking a row only calls back its `Activate`.
 
 `uqlip` keeps what you copy, text and images, so you can get it back. Press **Super + Shift + V**
 (or click the Clipboard history island, which you can add in the bar editor) to open the history:
-type to search, Up and Down to choose, **Enter** puts the entry back on the clipboard (paste it
-where you like), **Ctrl+P** pins it, **Delete** forgets it, **Ctrl+Shift+Delete** forgets
+type to search (it looks through the whole text of every copy), Up and Down to choose, **Enter**
+(or a click) pastes the entry into the window you came from, using Ctrl+Shift+V in terminals,
+**Ctrl+Enter** only puts it back on the clipboard, **Ctrl+1** to **Ctrl+9** paste that row, the
+highlighted text shows in full below the list, **Ctrl+P** pins it, **Delete** forgets it, **Ctrl+Shift+Delete** forgets
 everything not pinned, **Esc** closes.
 
 - The history lives in `~/.local/share/uq/uqlip/`, readable only by you. Newest first; copying
