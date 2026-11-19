@@ -264,6 +264,15 @@ What uQ does with it:
   menu opens, if it isn't running: at most once every 30 seconds, without waiting, never per
   keystroke. Without a service file the key is ignored. A provider that fails to start is logged
   at most every 10 minutes and search carries on without it.
+  uQ asks the session bus which names it can start (`ListActivatableNames`), so a service file in
+  the user's own `~/.local/share/dbus-1/services/` counts as well as one in `/usr/share/dbus-1/services/`.
+  That is how an app that can't install into `/usr` (an AppImage, say) can offer a provider: it
+  writes its `.provider` into `~/.local/share/uq/launcher/` and a service file whose `Exec=` points
+  at a stable copy of the provider. `uqctl integrations check` only looks at a package's `uq/`
+  folder; it never sees these user files.
+- A provider's `Activate` only returns: uQ doesn't launch anything for it. To start a program, the
+  provider runs it itself, or hands the launch back by asking the app to start it. (There is no
+  provider call for "launch this in its own scope".)
 - The provider should exit after about 60 seconds without a call. `templates/provider/` does all
   of this in about a hundred lines of Rust.
 
