@@ -1,6 +1,6 @@
 pkgbase = uq
 	pkgdesc = Themeable Hyprland desktop: shell, theme and layout daemon, CLI and base config
-	pkgver = 0.3.14
+	pkgver = 0.3.15
 	pkgrel = 1
 	url = https://github.com/asafelobotomy/uq
 	install = uq.install

@@ -7,6 +7,8 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.15] - 2026-11-19
+
 ### Added
 
 - **More for startup apps.** The Startup page can space the apps' starts a few seconds apart, start an app that failed at login once more, say how long after login each app started, and run or stop an app right now (`RunAutostart` and `StopAutostart` on `org.uq.Desktop1`). An app set to start hidden that has its own option for it (Steam, Discord, Telegram, Signal, Element, Slack, Nextcloud, Syncthing GTK, 1Password) is given that option. Profiles can carry Start hidden.
