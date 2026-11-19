@@ -53,10 +53,12 @@ fn entry(id: &str, argv: &[&str], delay: u32) -> Resolved {
         enabled: true,
         can_toggle: true,
         delay,
+        minimize: false,
         plan: Plan::Run {
             argv: argv.iter().map(|s| s.to_string()).collect(),
             cwd: Some(PathBuf::from("/")),
             delay,
+            minimize: false,
         },
         orphan_copy: None,
     }
@@ -427,3 +429,76 @@ async fn runner_bad_session_id_runs_nothing() {
 
 /// Through a real `Desktop` and the folder scan.
 mod desktop;
+
+/// A hider that records the scopes it was asked about and answers with `how`.
+struct FakeHider {
+    asked: Mutex<Vec<String>>,
+    how: Option<Hidden>,
+}
+
+#[async_trait::async_trait]
+impl Hider for FakeHider {
+    async fn hide(&self, unit: &str) -> Option<Hidden> {
+        self.asked.lock().unwrap().push(unit.to_string());
+        self.how
+    }
+}
+
+fn minimised(id: &str, minimize: bool) -> Resolved {
+    let mut e = entry(id, &["app"], 0);
+    e.minimize = minimize;
+    if let Plan::Run { minimize: m, .. } = &mut e.plan {
+        *m = minimize;
+    }
+    e
+}
+
+async fn with_hider(plan: Vec<Resolved>, how: Option<Hidden>) -> (Rig, Arc<FakeHider>, Vec<Value>) {
+    let dir = tempfile::tempdir().unwrap();
+    let fake = Arc::new(FakeSpawner::default());
+    let hider = Arc::new(FakeHider {
+        asked: Mutex::new(Vec::new()),
+        how,
+    });
+    let cfg = AutostartConfig::new(
+        fake.clone(),
+        record_path(dir.path()),
+        Some(SESSION.into()),
+        false,
+    )
+    .with_hider(hider.clone());
+    let runner = Runner::shared(cfg);
+    start(&runner, plan.clone()).await;
+    for _ in 0..20 {
+        tokio::task::yield_now().await;
+    }
+    let out = rows(&runner, &plan).await;
+    (Rig { dir, fake, runner }, hider, out)
+}
+
+#[tokio::test]
+async fn only_apps_set_to_start_minimised_are_hidden() {
+    let plan = vec![minimised("a.desktop", true), minimised("b.desktop", false)];
+    let (_rig, hider, out) = with_hider(plan, Some(Hidden::Tray)).await;
+    let asked = hider.asked.lock().unwrap().clone();
+    assert_eq!(asked.len(), 1, "{asked:?}");
+    assert!(asked[0].starts_with("app-uq-autostart-a-"), "{asked:?}");
+    assert_eq!(out[0]["minimize"], true);
+    assert_eq!(out[0]["hidden"], "tray");
+    assert_eq!(out[1]["minimize"], false);
+    assert!(out[1].get("hidden").is_none());
+}
+
+#[tokio::test]
+async fn minimised_without_a_tray_icon_is_reported() {
+    let (_rig, _h, out) =
+        with_hider(vec![minimised("a.desktop", true)], Some(Hidden::Minimised)).await;
+    assert_eq!(out[0]["hidden"], "minimised");
+}
+
+#[tokio::test]
+async fn an_unreachable_compositor_reports_nothing() {
+    let (_rig, _h, out) = with_hider(vec![minimised("a.desktop", true)], None).await;
+    assert!(out[0].get("hidden").is_none());
+    assert_eq!(out[0]["status"], "running");
+}

@@ -398,6 +398,7 @@ mod tests {
                     id: "nm-applet.desktop".into(),
                     enabled: Some(false),
                     delay: None,
+                    minimize: None,
                 }],
                 added: vec![crate::autostart::Added::Command {
                     id: "a-0b12".into(),
@@ -405,6 +406,7 @@ mod tests {
                     argv: vec!["backup-check".into(), "--quiet".into()],
                     enabled: true,
                     delay: Some(10),
+                    minimize: false,
                 }],
             },
             integration_rules: IntegrationRules {

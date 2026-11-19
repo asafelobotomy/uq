@@ -99,3 +99,17 @@ fn autostart_summaries_are_plain() {
         );
     }
 }
+
+#[test]
+fn start_hidden_has_its_own_line() {
+    let normal = files(json!([{"id": "nm-applet.desktop", "enabled": true}]));
+    let hidden = files(json!([{"id": "nm-applet.desktop", "enabled": true, "minimize": true}]));
+    assert_eq!(
+        s(&normal, &hidden),
+        "Startup app nm-applet set to start hidden"
+    );
+    assert_eq!(
+        s(&hidden, &normal),
+        "Startup app nm-applet set to start normally"
+    );
+}

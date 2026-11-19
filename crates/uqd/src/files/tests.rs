@@ -415,6 +415,7 @@ fn off(id: &str) -> Autostart {
             id: id.into(),
             enabled: Some(false),
             delay: None,
+            minimize: None,
         }],
         added: Vec::new(),
     }

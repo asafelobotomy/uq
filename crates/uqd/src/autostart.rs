@@ -6,6 +6,7 @@
 //! or a journal read (its guard can't be held across an `await` in a spawned task). Writes to
 //! the startup section never start or stop anything; they show at the next login.
 
+pub mod hide;
 mod list;
 mod record;
 pub mod spawn;
@@ -14,6 +15,7 @@ mod trigger;
 pub use list::list;
 pub use trigger::{shell_ready, spawn_fallback};
 
+use hide::{Hidden, Hider};
 use record::{Record, Started, valid_session};
 use spawn::{ExitInfo, Spawner, SystemSpawner, is_service_var};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -48,6 +50,7 @@ pub struct AutostartConfig {
     record: PathBuf,
     session: Option<String>,
     dev: bool,
+    hider: Option<Arc<dyn Hider>>,
 }
 
 impl AutostartConfig {
@@ -76,6 +79,7 @@ impl AutostartConfig {
             record: runtime.join("uq/autostart-run.json"),
             session,
             dev,
+            hider: None,
         }
     }
 
@@ -86,7 +90,14 @@ impl AutostartConfig {
             record: PathBuf::new(),
             session: None,
             dev: false,
+            hider: None,
         }
+    }
+
+    /// What hides the windows of apps set to start minimised. Without one they open as usual.
+    pub fn with_hider(mut self, hider: Arc<dyn Hider>) -> AutostartConfig {
+        self.hider = Some(hider);
+        self
     }
 
     pub fn has_spawner(&self) -> bool {
@@ -105,6 +116,7 @@ impl AutostartConfig {
             record,
             session,
             dev,
+            hider: None,
         }
     }
 }
@@ -131,6 +143,8 @@ pub struct Runner {
     cfg: AutostartConfig,
     started: bool,
     statuses: BTreeMap<String, Status>,
+    /// How each app that started minimised was hidden (this uqd's runs only).
+    hidden: BTreeMap<String, Hidden>,
     shell_ready_calls: u32,
     /// The cleaned last lines of a failed run, by `(unit, exit)` (F16).
     logs: HashMap<(String, ExitInfo), Vec<String>>,
@@ -150,6 +164,7 @@ impl Runner {
             cfg,
             started: false,
             statuses: BTreeMap::new(),
+            hidden: BTreeMap::new(),
             shell_ready_calls: 0,
             logs: HashMap::new(),
             record: Record::default(),
@@ -200,7 +215,7 @@ impl Runner {
 }
 
 /// One entry to start: its id, argv, working directory and delay.
-type Job = (String, Vec<String>, PathBuf, u32);
+type Job = (String, Vec<String>, PathBuf, u32, bool);
 
 /// Run the plan once per login (R7). The caller built `plan` and `env` under the desktop lock
 /// and dropped it. `emit` is called on every status change.
@@ -259,7 +274,8 @@ pub async fn start_once(
                     argv,
                     cwd: Some(cwd),
                     delay,
-                } => Some((e.id, argv, cwd, delay)),
+                    minimize,
+                } => Some((e.id, argv, cwd, delay, minimize)),
                 _ => None,
             })
             .collect()
@@ -286,7 +302,9 @@ pub async fn start_once(
             .collect(),
     );
     let recheck = lock(runner).recheck.clone();
+    let hider = lock(runner).cfg.hider.clone();
     let ctx = Ctx {
+        hider,
         recheck,
         runner: runner.clone(),
         spawner,
@@ -308,6 +326,7 @@ pub async fn start_once(
 
 #[derive(Clone)]
 struct Ctx {
+    hider: Option<Arc<dyn Hider>>,
     recheck: Option<Recheck>,
     runner: SharedRunner,
     spawner: Arc<dyn Spawner>,
@@ -323,7 +342,7 @@ fn now_secs() -> i64 {
 }
 
 /// Sleep the delay, start the entry in its own scope, record it, and wait for it in a task.
-async fn run_one(ctx: Ctx, (id, argv, cwd, delay): Job) {
+async fn run_one(ctx: Ctx, (id, argv, cwd, delay, minimize): Job) {
     if delay > 0 {
         tokio::time::sleep(Duration::from_secs(delay.into())).await;
         if let Some(check) = &ctx.recheck
@@ -371,6 +390,20 @@ async fn run_one(ctx: Ctx, (id, argv, cwd, delay): Job) {
     let Some((child, run)) = child else {
         return;
     };
+    if minimize && let Some(hider) = ctx.hider.clone() {
+        let (runner, emit, id, unit) = (
+            ctx.runner.clone(),
+            ctx.emit.clone(),
+            id.clone(),
+            run.unit.clone(),
+        );
+        tokio::spawn(async move {
+            if let Some(how) = hider.hide(&unit).await {
+                lock(&runner).hidden.insert(id, how);
+                emit();
+            }
+        });
+    }
     tokio::spawn(async move {
         let exit = child.wait.await;
         let status = match exit {

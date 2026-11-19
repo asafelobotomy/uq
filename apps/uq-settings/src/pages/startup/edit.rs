@@ -88,7 +88,7 @@ pub(crate) fn find(list: &[Value], field: &str, key: &str) -> Option<usize> {
 /// The found entry's choice, made when missing.
 pub(super) fn choice_mut<'a>(files: &'a mut Vec<Value>, id: &str) -> &'a mut Value {
     let i = find(files, "id", id).unwrap_or_else(|| {
-        files.push(json!({"id": id, "enabled": null, "delay": null}));
+        files.push(json!({"id": id, "enabled": null, "delay": null, "minimize": null}));
         files.len() - 1
     });
     &mut files[i]

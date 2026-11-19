@@ -369,6 +369,15 @@ output), **Not started** (with the reason), **Off** or **Off in uQ**, or **Start
 finished** for an app a previous uqd started that has since ended. A **Start delay** of up to 600
 seconds makes an app wait after the shell is ready.
 
+**Start hidden** (the minimise button on each row) opens the app out of the way. When its window
+opens, uQ looks for the app's icon in the system tray: an app that has one goes to the tray (its
+window is closed, which is what a tray app does with its window), and an app without one is
+minimised to its tab on the bar, from where it can be restored. Only windows of the app uQ started
+are touched, for up to a minute after it starts (and a few seconds after its first window, for
+apps that show a splash screen first). The row then says **Running, hidden in the tray** or
+**Running, minimised**. An app that quits when its window is closed can't be sent to the tray this
+way; leave it on a normal start.
+
 Turn an app off with its switch. For a system entry, uQ writes a copy in `~/.config/autostart`
 with `Hidden=true` and `X-uQ-Autostart=true`; turning it on deletes that copy. uQ never edits a
 file of your own there: turning one off is kept in uQ's settings only, and the row says "Off in

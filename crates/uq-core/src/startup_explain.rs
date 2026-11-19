@@ -438,6 +438,7 @@ mod tests {
             id: "nm-applet.desktop".into(),
             enabled: Some(false),
             delay: None,
+            minimize: None,
         }];
         let v = explain_autostart(&st, &FileReport::default());
         assert_eq!(v["nm-applet.desktop"]["source"], "uq");

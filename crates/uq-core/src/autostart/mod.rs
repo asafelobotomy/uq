@@ -37,6 +37,10 @@ pub struct FileChoice {
     pub id: String,
     pub enabled: Option<bool>,
     pub delay: Option<u32>,
+    /// Start the app hidden: to its tray icon, or minimised when it has none. `None` leaves it
+    /// to open normally.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub minimize: Option<bool>,
 }
 
 /// An app (by desktop id) or a command (as argv, never through a shell) the user added.
@@ -49,6 +53,8 @@ pub enum Added {
         app: String,
         enabled: bool,
         delay: Option<u32>,
+        #[serde(skip_serializing_if = "is_false")]
+        minimize: bool,
     },
     Command {
         id: String,
@@ -56,6 +62,8 @@ pub enum Added {
         argv: Vec<String>,
         enabled: bool,
         delay: Option<u32>,
+        #[serde(skip_serializing_if = "is_false")]
+        minimize: bool,
     },
 }
 
@@ -90,6 +98,18 @@ impl Added {
         }
     }
 
+    pub fn minimize(&self) -> bool {
+        match self {
+            Added::App { minimize, .. } | Added::Command { minimize, .. } => *minimize,
+        }
+    }
+
+    pub fn set_minimize(&mut self, on: bool) {
+        match self {
+            Added::App { minimize, .. } | Added::Command { minimize, .. } => *minimize = on,
+        }
+    }
+
     pub fn set_enabled(&mut self, on: bool) {
         match self {
             Added::App { enabled, .. } | Added::Command { enabled, .. } => *enabled = on,
@@ -101,6 +121,10 @@ impl Added {
             Added::App { delay, .. } | Added::Command { delay, .. } => *delay = d,
         }
     }
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
 }
 
 /// The Startup section.
@@ -271,7 +295,7 @@ impl Autostart {
     /// Drop the choices that set nothing.
     pub fn prune_empty_choices(&mut self) {
         self.files
-            .retain(|c| c.enabled.is_some() || c.delay.is_some());
+            .retain(|c| c.enabled.is_some() || c.delay.is_some() || c.minimize.is_some());
     }
 }
 

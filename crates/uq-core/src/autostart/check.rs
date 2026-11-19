@@ -38,8 +38,11 @@ pub(super) fn check_choice(key: &str, c: &FileChoice) -> Result<(), SettingError
         return Err(invalid(&format!("{key}.id"), APP_REASON));
     }
     check_delay(&format!("{key}.delay"), c.delay)?;
-    if c.enabled.is_none() && c.delay.is_none() {
-        return Err(invalid(key, "a startup choice needs on or off, or a delay"));
+    if c.enabled.is_none() && c.delay.is_none() && c.minimize.is_none() {
+        return Err(invalid(
+            key,
+            "a startup choice needs on or off, a delay, or start minimised",
+        ));
     }
     Ok(())
 }
@@ -51,7 +54,7 @@ pub(super) fn parse_choice(key: &str, v: &Value) -> Result<FileChoice, SettingEr
             "a choice is a set of fields, not a single value",
         ));
     };
-    check_known(key, v, &["id", "enabled", "delay"])?;
+    check_known(key, v, &["id", "enabled", "delay", "minimize"])?;
     let id = field(o, "id")
         .and_then(Value::as_str)
         .ok_or_else(|| invalid(&format!("{key}.id"), APP_REASON))?;
@@ -62,10 +65,18 @@ pub(super) fn parse_choice(key: &str, v: &Value) -> Result<FileChoice, SettingEr
                 .ok_or_else(|| invalid(&format!("{key}.enabled"), BOOL_REASON))?,
         ),
     };
+    let minimize = match field(o, "minimize") {
+        None => None,
+        Some(b) => Some(
+            b.as_bool()
+                .ok_or_else(|| invalid(&format!("{key}.minimize"), BOOL_REASON))?,
+        ),
+    };
     let c = FileChoice {
         id: normalise_id(id),
         enabled,
         delay: parse_delay(&format!("{key}.delay"), field(o, "delay"))?,
+        minimize,
     };
     check_choice(key, &c)?;
     Ok(c)
@@ -131,7 +142,11 @@ pub(super) fn parse_added(key: &str, v: &Value) -> Result<Added, SettingError> {
             "an entry is a set of fields, not a single value",
         ));
     };
-    check_known(key, v, &["id", "name", "app", "argv", "enabled", "delay"])?;
+    check_known(
+        key,
+        v,
+        &["id", "name", "app", "argv", "enabled", "delay", "minimize"],
+    )?;
     let at = |f: &str| format!("{key}.{f}");
     let id = match field(o, "id") {
         None => String::new(),
@@ -151,6 +166,12 @@ pub(super) fn parse_added(key: &str, v: &Value) -> Result<Added, SettingError> {
             .ok_or_else(|| invalid(&at("enabled"), BOOL_REASON))?,
     };
     let delay = parse_delay(&at("delay"), field(o, "delay"))?;
+    let minimize = match field(o, "minimize") {
+        None => false,
+        Some(b) => b
+            .as_bool()
+            .ok_or_else(|| invalid(&at("minimize"), BOOL_REASON))?,
+    };
     let a = match (field(o, "app"), field(o, "argv")) {
         (Some(_), Some(_)) => {
             return Err(invalid(
@@ -168,6 +189,7 @@ pub(super) fn parse_added(key: &str, v: &Value) -> Result<Added, SettingError> {
             ),
             enabled,
             delay,
+            minimize,
         },
         (None, Some(argv)) => {
             let Some(items) = argv.as_array() else {
@@ -191,6 +213,7 @@ pub(super) fn parse_added(key: &str, v: &Value) -> Result<Added, SettingError> {
                 argv,
                 enabled,
                 delay,
+                minimize,
             }
         }
     };
