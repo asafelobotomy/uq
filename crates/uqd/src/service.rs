@@ -1316,6 +1316,10 @@ impl Desktop {
                     if let Err(e) = uq_core::kdeglobals::sync_look(&self.paths, &look) {
                         tracing::warn!("kdeglobals look: {e}");
                     }
+                    // Flatpak apps: read-only access to the theme files, so they follow too.
+                    if let Err(e) = uq_core::flatpak::sync(&self.paths) {
+                        tracing::warn!("flatpak override: {e}");
+                    }
                     // KDE apps' terminal (Dolphin's "Open Terminal Here"), unless one is named.
                     if let Err(e) = uq_core::kdeglobals::ensure_terminal(&self.paths) {
                         tracing::warn!("kdeglobals terminal: {e}");
