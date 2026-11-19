@@ -205,6 +205,53 @@ SettingsPage {
                     Layout.fillWidth: true
                 }
                 SettingRow {
+                    settingId: "start-stagger"
+                    iconName: "view-sort-ascending"
+                    label: Number(snap.stagger || 0) === 0 ? "Apps start together" : "Apps start " + snap.stagger + " s apart"
+                    help: "Starts the apps one after another instead of all at once, so the desktop stays quick while you log in. An app's own delay still counts."
+                    highlight: App.highlight
+                    enabled: page.ready
+                    Layout.fillWidth: true
+
+                    QQC2.SpinBox {
+                        id: staggerBox
+                        objectName: "staggerBox"
+                        from: 0
+                        to: page.limits.stagger_max || 30
+                        value: Number(snap.stagger || 0)
+                        editable: true
+                        enabled: page.idle
+                        Accessible.name: "Seconds between starts"
+                        onValueModified: staggerTimer.restart()
+                    }
+                    Timer {
+                        id: staggerTimer
+                        interval: 400
+                        onTriggered: sm.setStagger(staggerBox.value)
+                    }
+                }
+                SettingRow {
+                    settingId: "start-retry"
+                    iconName: "view-refresh"
+                    label: snap.retry === true ? "Failed apps try once more" : "Failed apps are left alone"
+                    help: "An app that fails when it starts at login, often because the network isn't up yet, is started again once, 10 seconds later."
+                    highlight: App.highlight
+                    enabled: page.ready
+                    Layout.fillWidth: true
+
+                    QQC2.Switch {
+                        id: retrySwitch
+                        objectName: "retrySwitch"
+                        checked: snap.retry === true
+                        enabled: page.idle
+                        Accessible.name: "Try a failed app once more"
+                        onToggled: {
+                            sm.setRetry(retrySwitch.checked);
+                            retrySwitch.checked = Qt.binding(() => snap.retry === true);
+                        }
+                    }
+                }
+                SettingRow {
                     settingId: "add-startup"
                     iconName: "list-add"
                     label: "Add"
@@ -259,6 +306,8 @@ SettingsPage {
                         onEnabledChosen: on => sm.setEnabled(String(modelData.id), on)
                         onDelayChosen: secs => sm.setDelay(String(modelData.id), secs)
                         onMinimizeChosen: on => sm.setMinimize(String(modelData.id), on)
+                        onRunRequested: sm.runNow(String(modelData.id))
+                        onStopRequested: sm.stopNow(String(modelData.id))
                         onRemoveRequested: {
                             confirmRemove.appId = String(modelData.id);
                             confirmRemove.open();

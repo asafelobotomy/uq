@@ -736,7 +736,7 @@ static COMPAT_SETTINGS: [SearchEntry; 7] = [
     ),
 ];
 
-static STARTUP_SETTINGS: [SearchEntry; 4] = [
+static STARTUP_SETTINGS: [SearchEntry; 6] = [
     entry(
         "login-apps",
         "Apps that start when you log in",
@@ -748,6 +748,16 @@ static STARTUP_SETTINGS: [SearchEntry; 4] = [
         &["autostart", "add", "command"],
     ),
     entry("start-delay", "Start delay", &["delay", "wait", "later"]),
+    entry(
+        "start-stagger",
+        "Space out the starts",
+        &["stagger", "gap", "one at a time", "order"],
+    ),
+    entry(
+        "start-retry",
+        "Try again if an app fails",
+        &["retry", "again", "fail", "crash"],
+    ),
     entry(
         "env-vars",
         "Environment variables",
@@ -1746,6 +1756,16 @@ mod tests {
                     "start-delay",
                     "Start delay",
                     &["delay", "wait", "later"][..]
+                ),
+                (
+                    "start-stagger",
+                    "Space out the starts",
+                    &["stagger", "gap", "one at a time", "order"][..]
+                ),
+                (
+                    "start-retry",
+                    "Try again if an app fails",
+                    &["retry", "again", "fail", "crash"][..]
                 ),
                 (
                     "env-vars",

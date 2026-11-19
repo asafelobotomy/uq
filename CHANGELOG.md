@@ -9,6 +9,7 @@ All notable changes to uQ are listed here. The format follows
 
 ### Added
 
+- **More for startup apps.** The Startup page can space the apps' starts a few seconds apart, start an app that failed at login once more, say how long after login each app started, and run or stop an app right now (`RunAutostart` and `StopAutostart` on `org.uq.Desktop1`). An app set to start hidden that has its own option for it (Steam, Discord, Telegram, Signal, Element, Slack, Nextcloud, Syncthing GTK, 1Password) is given that option. Profiles can carry Start hidden.
 - **Start hidden for startup apps.** Each app on the Startup page has a minimise button: when it is on, the app starts out of the way. An app with a system tray icon is sent to the tray, and an app without one is minimised to its tab on the bar (restore it from there). The row says which happened. It only touches the windows of the app uQ started at login.
 
 ### Documentation

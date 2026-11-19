@@ -47,6 +47,22 @@ pub mod qobject {
         #[qinvokable]
         fn set_minimize(self: Pin<&mut StartupModel>, id: &QString, on: bool);
 
+        /// Start an app now, outside the once-per-login run.
+        #[qinvokable]
+        fn run_now(self: Pin<&mut StartupModel>, id: &QString);
+
+        /// Stop an app that is running.
+        #[qinvokable]
+        fn stop_now(self: Pin<&mut StartupModel>, id: &QString);
+
+        /// Set the seconds between one app's start and the next.
+        #[qinvokable]
+        fn set_stagger(self: Pin<&mut StartupModel>, secs: i32);
+
+        /// Start an app that failed at login again, once.
+        #[qinvokable]
+        fn set_retry(self: Pin<&mut StartupModel>, on: bool);
+
         /// Start an installed app (by its desktop id) at login.
         #[qinvokable]
         fn add_app(self: Pin<&mut StartupModel>, id: &QString);
@@ -168,6 +184,27 @@ impl StartupModel {
                 on,
             },
         );
+    }
+
+    fn run_now(self: Pin<&mut Self>, id: &QString) {
+        model_core::start(self, Op::RunNow { id: id.to_string() });
+    }
+
+    fn stop_now(self: Pin<&mut Self>, id: &QString) {
+        model_core::start(self, Op::StopNow { id: id.to_string() });
+    }
+
+    fn set_stagger(self: Pin<&mut Self>, secs: i32) {
+        model_core::start(
+            self,
+            Op::SetStagger {
+                secs: u32::try_from(secs).unwrap_or(0),
+            },
+        );
+    }
+
+    fn set_retry(self: Pin<&mut Self>, on: bool) {
+        model_core::start(self, Op::SetRetry { on });
     }
 
     fn add_app(self: Pin<&mut Self>, id: &QString) {

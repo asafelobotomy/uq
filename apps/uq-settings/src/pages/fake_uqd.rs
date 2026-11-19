@@ -629,6 +629,24 @@ impl FakeUqd {
         self.autostart.list(&state)
     }
 
+    fn run_autostart(&self, id: &str) -> Result<(), FakeError> {
+        self.autostart
+            .actions
+            .lock()
+            .unwrap()
+            .push(format!("run:{id}"));
+        Ok(())
+    }
+
+    fn stop_autostart(&self, id: &str) -> Result<(), FakeError> {
+        self.autostart
+            .actions
+            .lock()
+            .unwrap()
+            .push(format!("stop:{id}"));
+        Ok(())
+    }
+
     fn shell_ready(&self) {
         self.autostart.shell_ready.fetch_add(1, Ordering::SeqCst);
     }

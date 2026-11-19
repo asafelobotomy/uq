@@ -408,6 +408,7 @@ mod tests {
                     delay: Some(10),
                     minimize: false,
                 }],
+                ..Autostart::default()
             },
             integration_rules: IntegrationRules {
                 enabled: vec!["romforge.emulators".into()],

@@ -103,6 +103,28 @@ TestCase {
         verify(!child(busy, "appMinimize").enabled, "nothing while the page is busy");
     }
 
+    function test_run_and_stop_now() {
+        const row = make();
+        const button = child(row, "appRun");
+        verify(button.running, "a running app offers Stop");
+        compare(button.Accessible.name, "Stop now");
+        let stops = 0, runs = 0;
+        row.stopRequested.connect(() => stops++);
+        row.runRequested.connect(() => runs++);
+        button.clicked();
+        compare(stops, 1);
+        const idle = make({ status: "not_started" });
+        const run = child(idle, "appRun");
+        compare(run.Accessible.name, "Run now");
+        verify(run.enabled);
+        idle.runRequested.connect(() => runs++);
+        run.clicked();
+        compare(runs, 1);
+        verify(!child(make({ status: "off", enabled: false }), "appRun").enabled, "an app that is off can't run");
+        compare(child(make({ timing_text: "Started 8 s after login" }), "appTiming").text, "Started 8 s after login");
+        verify(!child(make(), "appTiming").visible);
+    }
+
     function test_remove_only_for_added() {
         verify(!child(make({ source: "system" }), "removeApp").visible);
         verify(!child(make({ source: "yours" }), "removeApp").visible);

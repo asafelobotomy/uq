@@ -147,7 +147,9 @@ fn autostart_tree_validation() {
     }
     let (_, text) = refused(&e("argv = [\"x\"]"));
     assert!(
-        text.contains("a profile can only turn a startup app on or off or set its delay"),
+        text.contains(
+            "a profile can only turn a startup app on or off, set its delay, or start it hidden"
+        ),
         "{text}"
     );
 }
@@ -431,4 +433,26 @@ fn mark_startup_only_overrides_uq() {
     let mut env = json!({"vars.A": row("uq")});
     mark_startup(&mut env, "env", &st, &active);
     assert_eq!(env["vars.A"]["source"], "uq");
+}
+
+#[test]
+fn start_hidden_is_a_profile_leaf() {
+    let mut st = state();
+    let hidden = s(&["nm-applet.desktop", "minimize"]);
+    assert_eq!(read_leaf(&st, "autostart", &hidden), None);
+    write_leaves(&mut st, "autostart", &[(hidden.clone(), Some(json!(true)))]).unwrap();
+    assert_eq!(read_leaf(&st, "autostart", &hidden), Some(json!(true)));
+    assert_eq!(
+        st.autostart.choice("nm-applet.desktop").unwrap().minimize,
+        Some(true)
+    );
+    // An added entry takes it too, and starts normally again on None.
+    let added = s(&["a-3f9c", "minimize"]);
+    write_leaves(&mut st, "autostart", &[(added.clone(), Some(json!(true)))]).unwrap();
+    assert_eq!(read_leaf(&st, "autostart", &added), Some(json!(true)));
+    write_leaves(&mut st, "autostart", &[(added.clone(), None)]).unwrap();
+    assert_eq!(read_leaf(&st, "autostart", &added), None);
+    assert!(write_leaves(&mut st, "autostart", &[(hidden, Some(json!("yes")))]).is_err());
+    let tree = serde_json::json!({"nm-applet.desktop": {"minimize": true}});
+    assert!(check_autostart_tree(&tree).is_ok());
 }

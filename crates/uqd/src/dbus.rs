@@ -463,6 +463,43 @@ impl DesktopIface {
         serde_json::to_string(&rows).map_err(|e| UqError::Io(e.to_string()))
     }
 
+    /// Start a startup app now (the page's Run now): it must be on and not running. Starts
+    /// outside the once-per-login plan, with no delay.
+    async fn run_autostart(&self, id: &str) -> Result<(), UqError> {
+        let (plan, env, events) = {
+            let d = self.desktop.lock().await;
+            let (plan, env) = d.autostart_plan();
+            (plan, env, d.events.clone())
+        };
+        let Some(entry) = plan.iter().find(|e| e.id == id) else {
+            return Err(UqError::InvalidArgument("that isn't a startup app".into()));
+        };
+        let emit = move || {
+            let _ = events.send(crate::service::Event::AutostartChanged);
+        };
+        if crate::autostart::run_now(&self.runner, entry, env, emit).await {
+            Ok(())
+        } else {
+            Err(UqError::Conflict(
+                "It can't be started now: it is turned off, already running, or can't run here."
+                    .into(),
+            ))
+        }
+    }
+
+    /// Stop a startup app that is running (the page's Stop now).
+    async fn stop_autostart(&self, id: &str) -> Result<(), UqError> {
+        let events = self.desktop.lock().await.events.clone();
+        let emit = move || {
+            let _ = events.send(crate::service::Event::AutostartChanged);
+        };
+        if crate::autostart::stop_now(&self.runner, id, emit).await {
+            Ok(())
+        } else {
+            Err(UqError::Conflict("That app isn't running.".into()))
+        }
+    }
+
     /// The shell is up: start the startup apps if this login hasn't yet. Returns at once.
     async fn shell_ready(&self) {
         crate::autostart::shell_ready(&self.desktop, &self.runner);

@@ -49,6 +49,22 @@ pub enum Op {
         id: String,
         on: bool,
     },
+    /// Start an app now, outside the once-per-login run.
+    RunNow {
+        id: String,
+    },
+    /// Stop an app that is running.
+    StopNow {
+        id: String,
+    },
+    /// Seconds between one app's start and the next (0 starts them together).
+    SetStagger {
+        secs: u32,
+    },
+    /// Start an app that failed at login again, once.
+    SetRetry {
+        on: bool,
+    },
     /// An installed app, by desktop id.
     AddApp {
         desktop_id: String,
@@ -176,6 +192,22 @@ impl StartupState {
         .await
     }
 
+    async fn set_stagger(&self, proxy: &DesktopProxy<'_>, secs: u32) -> zbus::Result<()> {
+        write_section(proxy, "autostart", |o| {
+            o.insert("stagger".into(), json!(secs));
+            Ok(())
+        })
+        .await
+    }
+
+    async fn set_retry(&self, proxy: &DesktopProxy<'_>, on: bool) -> zbus::Result<()> {
+        write_section(proxy, "autostart", |o| {
+            o.insert("retry".into(), json!(on));
+            Ok(())
+        })
+        .await
+    }
+
     async fn set_minimize(&self, proxy: &DesktopProxy<'_>, id: &str, on: bool) -> zbus::Result<()> {
         write_section(proxy, "autostart", |o| {
             let added = list_mut(o, "added")?;
@@ -284,6 +316,10 @@ impl PageLogic for StartupState {
             Op::SetEnabled { id, on } => self.set_enabled(p, &id, on).await,
             Op::SetDelay { id, delay } => self.set_delay(p, &id, delay).await,
             Op::SetMinimize { id, on } => self.set_minimize(p, &id, on).await,
+            Op::SetStagger { secs } => self.set_stagger(p, secs).await,
+            Op::SetRetry { on } => self.set_retry(p, on).await,
+            Op::RunNow { id } => p.run_autostart(&id).await,
+            Op::StopNow { id } => p.stop_autostart(&id).await,
             Op::AddApp { desktop_id } => self.add_app(p, &desktop_id).await,
             Op::AddCommand { name, command } => self.add_command(p, &name, &command).await,
             Op::Remove { id } => self.remove(p, &id).await,
@@ -353,7 +389,9 @@ impl PageLogic for StartupState {
             "section": {"env": rows::section_error(&env_rows, "env"),
                 "autostart": rows::section_error(&auto_rows, "autostart")},
             "installed": installed,
-            "limits": {"vars": env::MAX_VARS, "value_bytes": env::MAX_VALUE_BYTES,
+            "stagger": auto_section["stagger"].as_u64().unwrap_or(0),
+            "retry": auto_section["retry"] == true,
+            "limits": {"stagger_max": autostart::MAX_STAGGER, "vars": env::MAX_VARS, "value_bytes": env::MAX_VALUE_BYTES,
                 "added": autostart::MAX_ADDED, "delay_max": autostart::MAX_DELAY},
             "notice": {"seq": seq, "text": text},
         }))

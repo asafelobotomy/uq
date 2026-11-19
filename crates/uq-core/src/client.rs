@@ -94,6 +94,10 @@ pub trait Desktop {
     fn list_autostart(&self) -> zbus::Result<String>;
     /// JSON `{rules, problems, missing}`: the window rules from apps, each with `enabled`.
     fn list_integration_rules(&self) -> zbus::Result<String>;
+    /// Start a startup app now. Refused when it is off, running, or can't run here.
+    fn run_autostart(&self, id: &str) -> zbus::Result<()>;
+    /// Stop a startup app that is running.
+    fn stop_autostart(&self, id: &str) -> zbus::Result<()>;
     /// The shell is up; uqd starts the startup apps once per login. Returns at once.
     fn shell_ready(&self) -> zbus::Result<()>;
 

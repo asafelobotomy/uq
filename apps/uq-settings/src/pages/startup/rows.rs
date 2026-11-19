@@ -50,7 +50,7 @@ pub(super) fn status_text(row: &Value, off_in_uq: bool) -> String {
             };
         }
         "waiting" => {
-            return match row["delay"].as_u64() {
+            return match row["start_in"].as_u64().or(row["delay"].as_u64()) {
                 Some(d) if d > 0 => format!("Waiting {d} s"),
                 _ => "Waiting".to_string(),
             };
@@ -63,6 +63,22 @@ pub(super) fn status_text(row: &Value, off_in_uq: bool) -> String {
         _ => reason.unwrap_or_default(),
     };
     text.to_string()
+}
+
+/// "Started 8 s after login", with "again after it failed" when it was started a second time.
+fn timing_text(row: &Value) -> String {
+    let Some(secs) = row["started_after"].as_u64() else {
+        return String::new();
+    };
+    let again = if row["retried"] == true {
+        ", again after it failed"
+    } else {
+        ""
+    };
+    match secs {
+        0 => format!("Started as soon as you logged in{again}"),
+        n => format!("Started {n} s after login{again}"),
+    }
 }
 
 /// Whether `id` is the person's own entry turned off in the `autostart` section.
@@ -88,6 +104,7 @@ pub(super) fn app_row(row: &Value, section: &Value, explained: &Value) -> Value 
         "id": id, "name": row["name"], "icon": row["icon"], "source": row["source"],
         "enabled": row["enabled"], "can_toggle": row["can_toggle"], "delay": row["delay"],
         "minimize": row["minimize"] == true, "hidden": row["hidden"],
+        "timing_text": timing_text(row),
         "status": row["status"],
         "status_text": status_text(row, off_in_uq(row, section, id)),
         "reason": row["reason"], "exit": row["exit"], "signal": row["signal"],
