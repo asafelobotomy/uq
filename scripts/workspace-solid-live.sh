@@ -101,7 +101,7 @@ LUA
         [ "$ws" = 1 ] && color=00cc00 || color=0000cc
         hc dispatch "hl.dsp.focus({ workspace = $ws })" >/dev/null; sleep 1
         env XDG_RUNTIME_DIR="$rt" WAYLAND_DISPLAY="$wl" LIBGL_ALWAYS_SOFTWARE=1 \
-            foot -T "ws$ws" -o "colors.background=$color" -o "colors.alpha=1" -o "cursor.color=$color $color" sleep 600 >"$d/foot$ws.log" 2>&1 &
+            foot -T "ws$ws" -o "colors-dark.background=$color" -o "colors-dark.alpha=1" -o "colors-dark.cursor=$color $color" sleep 600 >"$d/foot$ws.log" 2>&1 &
         pids+=($!)
         for _ in $(seq 1 40); do hc clients -j | jq -e ".[] | select(.title == \"ws$ws\")" >/dev/null 2>&1 && break; sleep 0.25; done
         hc clients -j | jq -e ".[] | select(.title == \"ws$ws\")" >/dev/null 2>&1 || fail "$label: the window on workspace $ws never opened"
