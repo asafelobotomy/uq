@@ -7,6 +7,8 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.18] - 2026-11-19
+
 ### Fixed
 
 - **A dialog that needs typing keeps the keyboard.** When a window took the focus while a uQ popup (app menu, quick settings, look=see>do_, power menu, clipboard history or a bar popup) was open, the popup kept the keyboard for itself even though Hyprland showed the window as focused, so text typed into a file manager's "New folder" dialog went nowhere. The popup now closes when another window takes the focus. `scripts/dialog-focus-live.sh` checks it on a real Hyprland.
