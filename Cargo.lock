@@ -1985,7 +1985,7 @@ checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
 
 [[package]]
 name = "uq-core"
-version = "0.3.18"
+version = "0.3.19"
 dependencies = [
  "chrono",
  "chrono-tz",
@@ -2009,7 +2009,7 @@ dependencies = [
 
 [[package]]
 name = "uq-settings"
-version = "0.3.18"
+version = "0.3.19"
 dependencies = [
  "async-trait",
  "clap",
@@ -2031,7 +2031,7 @@ dependencies = [
 
 [[package]]
 name = "uq-settings-helper"
-version = "0.3.18"
+version = "0.3.19"
 dependencies = [
  "async-trait",
  "libc",
@@ -2050,7 +2050,7 @@ dependencies = [
 
 [[package]]
 name = "uqctl"
-version = "0.3.18"
+version = "0.3.19"
 dependencies = [
  "chrono",
  "chrono-tz",
@@ -2077,7 +2077,7 @@ dependencies = [
 
 [[package]]
 name = "uqd"
-version = "0.3.18"
+version = "0.3.19"
 dependencies = [
  "async-trait",
  "chrono",
@@ -2098,7 +2098,7 @@ dependencies = [
 
 [[package]]
 name = "uqlip"
-version = "0.3.18"
+version = "0.3.19"
 dependencies = [
  "libc",
  "serde",
