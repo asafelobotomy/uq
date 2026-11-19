@@ -23,6 +23,8 @@ pub struct FakeAutostart {
     /// When set, `ListAutostart` fails.
     pub fails: Arc<AtomicBool>,
     pub shell_ready: Arc<AtomicU32>,
+    /// The ids of every Run now and Stop now, as `run:<id>` and `stop:<id>`.
+    pub actions: Arc<Mutex<Vec<String>>>,
 }
 
 impl FakeAutostart {
@@ -33,6 +35,10 @@ impl FakeAutostart {
     /// Make every `ListAutostart` fail.
     pub fn fail(&self) {
         self.fails.store(true, Ordering::SeqCst);
+    }
+
+    pub fn actions(&self) -> Vec<String> {
+        self.actions.lock().unwrap().clone()
     }
 
     pub fn shell_ready_calls(&self) -> u32 {

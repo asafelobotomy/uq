@@ -150,7 +150,8 @@ marked `user.lua` binds and the key and action lists (JSON); `PauseShortcuts()` 
 Window rules use `GetSection("rules")` / `SetSection("rules", json, origin)`, like any section,
 and so do startup apps (`"autostart"`), environment variables (`"env"`) and Apps and scaling
 (`"compat"`); there is no separate write call for them. `ListAutostart()` returns each startup
-app's status as JSON, `ShellReady()` is what the bridge calls once the shell has sent its first
+app's status as JSON, `RunAutostart(id)` and `StopAutostart(id)` start or stop one app now,
+`ShellReady()` is what the bridge calls once the shell has sent its first
 request (so uqd knows when to start the login apps), and `AutostartChanged` is the signal sent
 when a status changes.
 Displays use `GetSection("monitors")` / `SetSection("monitors", json, origin)` for everything but
@@ -377,6 +378,15 @@ are touched, for up to a minute after it starts (and a few seconds after its fir
 apps that show a splash screen first). The row then says **Running, hidden in the tray** or
 **Running, minimised**. An app that quits when its window is closed can't be sent to the tray this
 way; leave it on a normal start.
+
+Apps that have their own way to start hidden are asked to use it as well (Steam, Discord, Telegram,
+Signal, Element, Slack, Nextcloud, Syncthing GTK and 1Password): uQ adds the app's own option
+(for example `-silent` for Steam) to the command, and the window watcher still covers anything it
+leaves open. Two options above the list apply to every app: **Space out the starts** starts them
+one after another, a few seconds apart (an app's own delay still counts), and **Try again if an app
+fails** starts an app that failed at login once more, ten seconds later (the row says so). Each row
+says how long after login the app started, and **Run now** / **Stop now** starts or stops it
+without logging out. A profile can carry Start hidden for an app too.
 
 Turn an app off with its switch. For a system entry, uQ writes a copy in `~/.config/autostart`
 with `Hidden=true` and `X-uQ-Autostart=true`; turning it on deletes that copy. uQ never edits a

@@ -71,6 +71,8 @@ pub enum Plan {
         /// Hide the app's window once it opens: to the tray when it has an icon there,
         /// minimised otherwise.
         minimize: bool,
+        /// Start it again once, ten seconds later, if it fails.
+        retry: bool,
     },
     /// The user, or the entry itself, turned it off.
     Off,
@@ -240,6 +242,7 @@ struct Row {
     enabled: bool,
     delay: u32,
     minimize: bool,
+    retry: bool,
 }
 
 impl Row {
@@ -259,12 +262,19 @@ impl Row {
                     Some(id) => launch::argv(compat.fix_for(id), id, argv.clone()).unwrap_or(argv),
                     None => argv,
                 };
-                let (delay, minimize) = (self.delay, self.minimize);
+                // An app that has its own way to start hidden is asked to use it.
+                let argv = if self.minimize {
+                    with_hidden_flag(argv)
+                } else {
+                    argv
+                };
+                let (delay, minimize, retry) = (self.delay, self.minimize, self.retry);
                 let run = Plan::Run {
                     argv,
                     cwd,
                     delay,
                     minimize,
+                    retry,
                 };
                 (run, true, true)
             }
@@ -327,6 +337,7 @@ fn resolve_found(
             .and_then(|c| c.delay)
             .unwrap_or(e.gnome_delay.unwrap_or(0).min(MAX_DELAY)),
         minimize: choice.and_then(|c| c.minimize).unwrap_or(false),
+        retry: state.retry,
     };
     let hidden = match source {
         Source::Yours => HIDDEN_YOURS,
@@ -338,6 +349,7 @@ fn resolve_found(
 
 fn resolve_added(
     a: &Added,
+    state: &Autostart,
     compat: &Compat,
     apps: &dyn Fn(&str) -> Option<(PathBuf, String)>,
     exists: &dyn Fn(&str) -> bool,
@@ -350,6 +362,7 @@ fn resolve_added(
         enabled: a.enabled(),
         delay: a.delay().unwrap_or(0).min(MAX_DELAY),
         minimize: a.minimize(),
+        retry: state.retry,
     };
     match a {
         Added::Command { argv, .. } => row.finish(Ok((argv.clone(), None)), None, compat),
@@ -380,16 +393,51 @@ pub fn resolve(
     apps: &dyn Fn(&str) -> Option<(PathBuf, String)>,
     exists: &dyn Fn(&str) -> bool,
 ) -> Vec<Resolved> {
-    found
+    let mut rows: Vec<Resolved> = found
         .iter()
         .filter_map(|f| resolve_found(f, state, compat, exists))
         .chain(
             state
                 .added
                 .iter()
-                .map(|a| resolve_added(a, compat, apps, exists)),
+                .map(|a| resolve_added(a, state, compat, apps, exists)),
         )
-        .collect()
+        .collect();
+    apply_stagger(&mut rows, state.stagger);
+    rows
+}
+
+/// The seconds each start waits when apps are `gap` seconds apart: in order of their own delay
+/// (ties in list order), each waits for its own delay or `gap` after the one before, whichever
+/// is later. With no gap they are the delays as they are.
+pub fn staggered(delays: &[u32], gap: u32) -> Vec<u32> {
+    let mut order: Vec<usize> = (0..delays.len()).collect();
+    order.sort_by_key(|i| (delays[*i], *i));
+    let mut out = delays.to_vec();
+    let mut last: Option<u32> = None;
+    for i in order {
+        let at = last.map_or(delays[i], |l| delays[i].max(l.saturating_add(gap)));
+        out[i] = at;
+        last = Some(at);
+    }
+    out
+}
+
+/// Spread the apps that will run (`Plan::Run`) by the state's gap. The page's own `delay`
+/// stays what the person set.
+fn apply_stagger(rows: &mut [Resolved], gap: u32) {
+    if gap == 0 {
+        return;
+    }
+    let runs: Vec<usize> = (0..rows.len())
+        .filter(|i| matches!(rows[*i].plan, Plan::Run { .. }))
+        .collect();
+    let own: Vec<u32> = runs.iter().map(|i| rows[*i].delay).collect();
+    for (i, at) in runs.into_iter().zip(staggered(&own, gap)) {
+        if let Plan::Run { delay, .. } = &mut rows[i].plan {
+            *delay = at;
+        }
+    }
 }
 
 /// Every found id and every added id.
@@ -430,4 +478,39 @@ pub fn wanted_copies(found: &[Found], state: &Autostart) -> (Vec<(String, String
         }
     }
     (write, delete)
+}
+
+/// Programs that can start hidden on their own: the program's file name and the option that
+/// does it. These are the apps people most often start at login; the window watcher still
+/// covers whatever the option leaves open.
+const OWN_HIDDEN_FLAG: &[(&str, &str)] = &[
+    ("steam", "-silent"),
+    ("discord", "--start-minimized"),
+    ("telegram-desktop", "-startintray"),
+    ("signal-desktop", "--start-in-tray"),
+    ("element-desktop", "--hidden"),
+    ("slack", "--startup"),
+    ("nextcloud", "--background"),
+    ("syncthing-gtk", "--minimized"),
+    ("1password", "--silent"),
+];
+
+/// The option the program (by file name, with no path) starts hidden with.
+pub fn own_hidden_flag(program: &str) -> Option<&'static str> {
+    let name = program.rsplit('/').next().unwrap_or(program);
+    OWN_HIDDEN_FLAG
+        .iter()
+        .find(|(p, _)| *p == name)
+        .map(|(_, f)| *f)
+}
+
+/// `argv` with the program's own start-hidden option right after the program, unless it is
+/// already there. A program that isn't known is left as it is.
+pub fn with_hidden_flag(mut argv: Vec<String>) -> Vec<String> {
+    if let Some(flag) = argv.first().and_then(|p| own_hidden_flag(p))
+        && !argv.iter().any(|a| a == flag)
+    {
+        argv.insert(1, flag.to_string());
+    }
+    argv
 }

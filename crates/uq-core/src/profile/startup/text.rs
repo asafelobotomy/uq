@@ -79,6 +79,7 @@ fn label_of(
         ("autostart", [id, f]) => match entry_name(state, id, names) {
             None => s(UNKNOWN_STARTUP),
             Some(n) if f == "delay" => format!("Start delay for {}", quoted(&n)),
+            Some(n) if f == "minimize" => format!("Start {} hidden", quoted(&n)),
             Some(n) => format!("Start {} at login", quoted(&n)),
         },
         _ => path.join("."),
@@ -157,7 +158,7 @@ pub fn startup_keys_of(state: &State) -> Vec<Key> {
     for (domain, id) in ids {
         let fields: &[&str] = match domain {
             "compat" => &["platform", "scale"],
-            _ => &["enabled", "delay"],
+            _ => &["enabled", "delay", "minimize"],
         };
         for f in fields {
             let mut path = vec![s(id), s(f)];
@@ -313,7 +314,7 @@ pub fn startup_keys(
             let (b, a) = (list(before, "files"), list(after, "files"));
             for id in all_ids(b, a, "id") {
                 let (cb, ca) = (find(b, "id", &id), find(a, "id", &id));
-                for f in ["enabled", "delay"] {
+                for f in ["enabled", "delay", "minimize"] {
                     if field(cb, f) != field(ca, f) {
                         keys.push(vec![id.clone(), s(f)]);
                     }
@@ -325,7 +326,7 @@ pub fn startup_keys(
                     tag(format!("added:{id}"));
                     continue;
                 };
-                for f in ["enabled", "delay"] {
+                for f in ["enabled", "delay", "minimize"] {
                     if field(Some(eb), f) != field(Some(ea), f) {
                         keys.push(vec![id.clone(), s(f)]);
                     }
@@ -380,7 +381,10 @@ pub fn mark_startup(rows: &mut Value, domain: &str, state: &State, active: &Acti
             let a = &state.autostart;
             let files = a.files.iter().map(|c| c.id.as_str());
             for id in files.chain(a.added.iter().map(|e| e.id())) {
-                if held(vec![s(id), s("enabled")]) || held(vec![s(id), s("delay")]) {
+                if ["enabled", "delay", "minimize"]
+                    .iter()
+                    .any(|f| held(vec![s(id), s(f)]))
+                {
                     marked.push(s(id));
                 }
             }

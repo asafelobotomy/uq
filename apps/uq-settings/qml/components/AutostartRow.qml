@@ -39,6 +39,9 @@ ColumnLayout {
     signal enabledChosen(bool on)
     /// The delay was changed, in seconds.
     signal delayChosen(int secs)
+    /// **Run now** or **Stop now** was pressed.
+    signal runRequested()
+    signal stopRequested()
     /// **Start hidden** was switched: open the app hidden (in its tray icon, or minimised).
     signal minimizeChosen(bool on)
     /// **Remove** was pressed (added entries only).
@@ -98,12 +101,34 @@ ColumnLayout {
                 Layout.fillWidth: true
             }
             UqLabel {
+                objectName: "appTiming"
+                visible: text !== ""
+                text: String(row.app.timing_text || "")
+                opacity: 0.7
+                Layout.fillWidth: true
+            }
+            UqLabel {
                 objectName: "appStatus"
                 text: String(row.app.status_text || "")
                 color: row.failed ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.textColor
                 wrapMode: Text.Wrap
                 Layout.fillWidth: true
             }
+        }
+        QQC2.ToolButton {
+            id: runButton
+            objectName: "appRun"
+            readonly property bool running: row.app.status === "running"
+            text: "Run or stop now"
+            icon.name: running ? "media-playback-stop" : "media-playback-start"
+            display: QQC2.AbstractButton.IconOnly
+            enabled: row.idle && (running || (row.app.enabled === true && row.app.can_toggle === true))
+            Accessible.name: running ? "Stop now" : "Run now"
+            Accessible.description: row.name
+            QQC2.ToolTip.visible: hovered
+            QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+            QQC2.ToolTip.text: running ? "Stop it now" : "Start it now, without logging in again"
+            onClicked: running ? row.stopRequested() : row.runRequested()
         }
         QQC2.ToolButton {
             id: hideButton

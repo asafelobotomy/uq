@@ -418,6 +418,7 @@ fn off(id: &str) -> Autostart {
             minimize: None,
         }],
         added: Vec::new(),
+        ..Autostart::default()
     }
 }
 

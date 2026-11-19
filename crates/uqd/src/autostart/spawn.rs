@@ -43,6 +43,9 @@ pub trait Spawner: Send + Sync {
     /// Whether `pid` still lives in the scope `unit` (started by an earlier uqd).
     async fn alive(&self, pid: u32, unit: &str) -> bool;
 
+    /// Stop everything in the scope `unit`. Whether it was asked to.
+    async fn stop(&self, unit: &str) -> bool;
+
     /// The last `lines` journal lines of the run in `unit` tagged `tag`, from `since` (Unix
     /// seconds) on. `None` when they couldn't be read (no journalctl, a failed start, the
     /// timeout), which the runner doesn't cache; `Some(vec![])` means the run logged nothing.
@@ -227,6 +230,20 @@ impl Spawner for SystemSpawner {
         })
     }
 
+    async fn stop(&self, unit: &str) -> bool {
+        let Some(systemctl) = find_on_path("systemctl") else {
+            return false;
+        };
+        tokio::process::Command::new(systemctl)
+            .args(["--user", "stop", &format!("{unit}.scope")])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .await
+            .is_ok_and(|s| s.success())
+    }
+
     async fn alive(&self, pid: u32, unit: &str) -> bool {
         tokio::fs::read_to_string(format!("/proc/{pid}/cgroup"))
             .await
@@ -314,6 +331,11 @@ mod fake {
         pub tails: Mutex<Vec<(String, String, i64)>>,
         pub tails_now: AtomicUsize,
         pub tails_max: AtomicUsize,
+        /// Exits that are used once each, in order, before `exits`.
+        pub exit_queue: Mutex<HashMap<String, std::collections::VecDeque<ExitInfo>>>,
+        /// Every scope `stop` was asked about.
+        pub stops: Mutex<Vec<String>>,
+        stoppers: Mutex<HashMap<String, std::sync::Arc<tokio::sync::Notify>>>,
         next_pid: AtomicU32,
     }
 
@@ -332,6 +354,9 @@ mod fake {
                 tails: Mutex::default(),
                 tails_now: AtomicUsize::new(0),
                 tails_max: AtomicUsize::new(0),
+                exit_queue: Mutex::default(),
+                stops: Mutex::default(),
+                stoppers: Mutex::default(),
                 next_pid: AtomicU32::new(1000),
             }
         }
@@ -344,6 +369,16 @@ mod fake {
 
         pub fn exit(&self, tag: &str, e: ExitInfo) {
             self.exits.lock().unwrap().insert(tag.to_string(), e);
+        }
+
+        /// The next run with `tag` ends this way (then the ones after follow `exit`).
+        pub fn exit_once(&self, tag: &str, e: ExitInfo) {
+            self.exit_queue
+                .lock()
+                .unwrap()
+                .entry(tag.to_string())
+                .or_default()
+                .push_back(e);
         }
 
         /// Make `pid` alive in `unit`'s scope.
@@ -371,16 +406,41 @@ mod fake {
                 cwd: cwd.into(),
             });
             let pid = self.next_pid.fetch_add(1, Ordering::SeqCst);
-            let exit = self.exits.lock().unwrap().get(tag).copied();
+            let queued = self
+                .exit_queue
+                .lock()
+                .unwrap()
+                .get_mut(tag)
+                .and_then(|q| q.pop_front());
+            let exit = queued.or_else(|| self.exits.lock().unwrap().get(tag).copied());
+            let stopper = std::sync::Arc::new(tokio::sync::Notify::new());
+            self.stoppers
+                .lock()
+                .unwrap()
+                .insert(unit.to_string(), stopper.clone());
             Ok(Child {
                 pid,
                 wait: Box::pin(async move {
                     match exit {
                         Some(e) => e,
-                        None => std::future::pending().await,
+                        None => {
+                            stopper.notified().await;
+                            ExitInfo::Signal(15)
+                        }
                     }
                 }),
             })
+        }
+
+        async fn stop(&self, unit: &str) -> bool {
+            self.stops.lock().unwrap().push(unit.to_string());
+            match self.stoppers.lock().unwrap().get(unit) {
+                Some(n) => {
+                    n.notify_one();
+                    true
+                }
+                None => false,
+            }
         }
 
         async fn alive(&self, pid: u32, unit: &str) -> bool {

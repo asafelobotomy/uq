@@ -22,6 +22,8 @@ use std::collections::BTreeSet;
 pub const MAX_FILES: usize = 200;
 pub const MAX_ADDED: usize = 50;
 pub const MAX_DELAY: u32 = 600;
+/// The most seconds between two apps' starts.
+pub const MAX_STAGGER: u32 = 30;
 pub const MAX_ARGV: usize = 64;
 pub const MAX_ARG_CHARS: usize = 1024;
 pub const MAX_NAME_CHARS: usize = 100;
@@ -132,6 +134,20 @@ fn is_false(b: &bool) -> bool {
 pub struct Autostart {
     pub files: Vec<FileChoice>,
     pub added: Vec<Added>,
+    /// Seconds between one app's start and the next (0 starts them together).
+    #[serde(skip_serializing_if = "is_zero")]
+    pub stagger: u32,
+    /// Start an app that failed again once, ten seconds later.
+    #[serde(skip_serializing_if = "is_false")]
+    pub retry: bool,
+}
+
+fn field_of<'a>(o: &'a Map<String, Value>, f: &str) -> Option<&'a Value> {
+    o.get(f).filter(|v| !v.is_null())
+}
+
+fn is_zero(n: &u32) -> bool {
+    *n == 0
 }
 
 /// `^a-[0-9a-f]{4,8}$`
@@ -175,7 +191,20 @@ impl<'de> Deserialize<'de> for Autostart {
                     .ok()
             })
             .collect();
-        Ok(Autostart { files, added }.repaired())
+        // A bad value of these is ignored, not a reason to lose the entries.
+        let stagger = o
+            .get("stagger")
+            .and_then(Value::as_u64)
+            .filter(|n| *n <= u64::from(MAX_STAGGER))
+            .map_or(0, |n| n as u32);
+        let retry = o.get("retry").and_then(Value::as_bool).unwrap_or(false);
+        Ok(Autostart {
+            files,
+            added,
+            stagger,
+            retry,
+        }
+        .repaired())
     }
 }
 
@@ -187,7 +216,7 @@ impl Autostart {
         let Some(o) = v.as_object() else {
             return Err(invalid("autostart", "expected an object"));
         };
-        check_known("autostart", v, &["files", "added"])?;
+        check_known("autostart", v, &["files", "added", "stagger", "retry"])?;
         let files = items(o, "files")?;
         if files.len() > MAX_FILES {
             return Err(invalid("autostart.files", "at most 200 startup choices"));
@@ -199,7 +228,25 @@ impl Autostart {
                 "at most 50 added startup entries",
             ));
         }
-        let mut out = Autostart::default();
+        let stagger = match field_of(o, "stagger") {
+            None => 0,
+            Some(n) => n
+                .as_u64()
+                .filter(|n| *n <= u64::from(MAX_STAGGER))
+                .map(|n| n as u32)
+                .ok_or_else(|| invalid("autostart.stagger", "a gap is 0 to 30 seconds"))?,
+        };
+        let retry = match field_of(o, "retry") {
+            None => false,
+            Some(b) => b
+                .as_bool()
+                .ok_or_else(|| invalid("autostart.retry", "expected on or off (true or false)"))?,
+        };
+        let mut out = Autostart {
+            stagger,
+            retry,
+            ..Autostart::default()
+        };
         let mut seen = BTreeSet::new();
         for (i, item) in files.iter().enumerate() {
             let key = format!("autostart.files[{i}]");

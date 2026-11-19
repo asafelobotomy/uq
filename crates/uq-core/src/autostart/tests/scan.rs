@@ -19,6 +19,7 @@ fn scan_user_file_shadows_system() {
             cwd: None,
             delay: 0,
             minimize: false,
+            retry: false,
         }
     );
     let r = one(sys("x.desktop", &entry("sys-x", "")), &Autostart::default());
@@ -185,6 +186,7 @@ fn scan_applies_compat_fix() {
             cwd: Some(PathBuf::from("/srv")),
             delay: 0,
             minimize: false,
+            retry: false,
         }
     );
     // An added app gets the same fix.
@@ -207,6 +209,7 @@ fn scan_applies_compat_fix() {
             cwd: None,
             delay: 0,
             minimize: false,
+            retry: false,
         }
     );
     // A command has no desktop id, so no fix.
@@ -219,6 +222,7 @@ fn scan_applies_compat_fix() {
             cwd: None,
             delay: 0,
             minimize: false,
+            retry: false,
         }
     );
 }
@@ -263,6 +267,7 @@ fn scan_expands_field_codes() {
             cwd: None,
             delay: 0,
             minimize: false,
+            retry: false,
         }
     );
 }
@@ -370,6 +375,7 @@ fn scan_added_override_is_not_fixed_again() {
             cwd: None,
             delay: 0,
             minimize: false,
+            retry: false,
         }
     );
 }
@@ -387,4 +393,96 @@ fn scan_minimize_comes_from_the_choice() {
     let both = ok(json!({"files": [{"id": "a.desktop", "enabled": false, "minimize": true}]}));
     let r = one(f, &both);
     assert_eq!((r.plan.clone(), r.minimize), (Plan::Off, true));
+}
+
+#[test]
+fn staggered_spaces_starts_in_delay_order() {
+    use crate::autostart::scan::staggered;
+    // No gap: untouched.
+    assert_eq!(staggered(&[0, 5, 0], 0), vec![0, 5, 0]);
+    // Three apps at once go 4 s apart, in list order.
+    assert_eq!(staggered(&[0, 0, 0], 4), vec![0, 4, 8]);
+    // Their own delay is never shortened, and the ones after it follow it.
+    assert_eq!(staggered(&[10, 0, 0], 4), vec![10, 0, 4]);
+    assert_eq!(staggered(&[0, 2, 0], 4), vec![0, 8, 4]);
+    assert_eq!(staggered(&[], 4), Vec::<u32>::new());
+}
+
+#[test]
+fn stagger_changes_the_plan_not_the_page_delay() {
+    let found = vec![
+        sys("a.desktop", &entry("a", "")),
+        sys("b.desktop", &entry("b", "")),
+    ];
+    let st = ok(json!({"stagger": 3}));
+    let rows = resolve(&found, &st, &Compat::default(), &|_| None, &|_| true);
+    let at = |i: usize| match &rows[i].plan {
+        Plan::Run { delay, .. } => *delay,
+        p => panic!("{p:?}"),
+    };
+    assert_eq!((at(0), at(1)), (0, 3));
+    assert_eq!((rows[0].delay, rows[1].delay), (0, 0));
+}
+
+#[test]
+fn retry_comes_from_the_section() {
+    let st = ok(json!({"retry": true}));
+    let r = one(sys("a.desktop", &entry("a", "")), &st);
+    assert!(matches!(r.plan, Plan::Run { retry: true, .. }), "{r:?}");
+    let r = one(sys("a.desktop", &entry("a", "")), &Autostart::default());
+    assert!(matches!(r.plan, Plan::Run { retry: false, .. }));
+}
+
+#[test]
+fn a_known_app_is_given_its_own_hidden_option() {
+    use crate::autostart::scan::{own_hidden_flag, with_hidden_flag};
+    assert_eq!(own_hidden_flag("/usr/bin/steam"), Some("-silent"));
+    assert_eq!(own_hidden_flag("nm-applet"), None);
+    assert_eq!(
+        with_hidden_flag(s(&["/usr/bin/steam", "%U"])),
+        s(&["/usr/bin/steam", "-silent", "%U"])
+    );
+    // Already there, or not a known program: left as it is.
+    assert_eq!(
+        with_hidden_flag(s(&["discord", "--start-minimized"])),
+        s(&["discord", "--start-minimized"])
+    );
+    assert_eq!(with_hidden_flag(s(&["nm-applet"])), s(&["nm-applet"]));
+    // Only an app set to start hidden gets it.
+    let st = ok(json!({"files": [{"id": "steam.desktop", "minimize": true}]}));
+    let r = one(sys("steam.desktop", &entry("steam", "")), &st);
+    let Plan::Run { argv, .. } = &r.plan else {
+        panic!("{r:?}")
+    };
+    assert_eq!(argv, &s(&["steam", "-silent"]));
+    let r = one(
+        sys("steam.desktop", &entry("steam", "")),
+        &Autostart::default(),
+    );
+    let Plan::Run { argv, .. } = &r.plan else {
+        panic!("{r:?}")
+    };
+    assert_eq!(argv, &s(&["steam"]));
+}
+
+#[test]
+fn stagger_and_retry_are_checked() {
+    let bad = |v| Autostart::from_section(&v, &Autostart::default()).unwrap_err();
+    assert!(bad(json!({"stagger": 31})).to_string().contains("30"));
+    assert!(
+        bad(json!({"retry": "yes"}))
+            .to_string()
+            .contains("on or off")
+    );
+    let a = ok(json!({"stagger": 5, "retry": true}));
+    assert_eq!((a.stagger, a.retry), (5, true));
+    assert_eq!(
+        a.section(),
+        json!({"files": [], "added": [], "stagger": 5, "retry": true})
+    );
+    // Off is not written.
+    assert_eq!(
+        Autostart::default().section(),
+        json!({"files": [], "added": []})
+    );
 }

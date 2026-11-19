@@ -399,6 +399,70 @@ fn status_names_how_a_hidden_app_was_hidden() {
 }
 
 #[tokio::test]
+async fn stagger_and_retry_round_trip_and_stagger_is_limited() {
+    let (r, page, _d) = rig().await;
+    let out = run(&page, Op::SetStagger { secs: 4 }).await;
+    assert_eq!(out.error, None);
+    assert_eq!(out.state["stagger"], 4);
+    let out = run(&page, Op::SetRetry { on: true }).await;
+    assert_eq!(out.error, None);
+    assert_eq!(out.state["retry"], true);
+    let section = section(&r, "autostart");
+    assert_eq!(
+        (section["stagger"].clone(), section["retry"].clone()),
+        (json!(4), json!(true))
+    );
+    let out = run(&page, Op::SetStagger { secs: 31 }).await;
+    let error = out.error.unwrap();
+    assert!(
+        error.contains("30") && !error.contains("autostart."),
+        "{error}"
+    );
+    assert_eq!(
+        run(&page, Op::SetStagger { secs: 0 }).await.state["stagger"],
+        0
+    );
+    assert_eq!(out.state["limits"]["stagger_max"], 30);
+}
+
+#[tokio::test]
+async fn run_now_and_stop_now_go_to_uqd() {
+    let (r, page, _d) = rig().await;
+    let id = "nm-applet.desktop";
+    assert_eq!(run(&page, Op::RunNow { id: id.into() }).await.error, None);
+    assert_eq!(run(&page, Op::StopNow { id: id.into() }).await.error, None);
+    assert_eq!(
+        r.autostart.actions(),
+        vec![format!("run:{id}"), format!("stop:{id}")]
+    );
+}
+
+#[test]
+fn timing_says_when_an_app_started() {
+    use super::rows::app_row;
+    let row = |extra: Value| {
+        let mut r = json!({"id": "a.desktop", "status": "running", "source": "system"});
+        for (k, v) in extra.as_object().unwrap() {
+            r[k] = v.clone();
+        }
+        app_row(&r, &json!({}), &json!({}))["timing_text"].clone()
+    };
+    assert_eq!(row(json!({})), "");
+    assert_eq!(row(json!({"started_after": 8})), "Started 8 s after login");
+    assert_eq!(
+        row(json!({"started_after": 0})),
+        "Started as soon as you logged in"
+    );
+    assert_eq!(
+        row(json!({"started_after": 12, "retried": true})),
+        "Started 12 s after login, again after it failed"
+    );
+    // A staggered app that is still waiting says its real wait.
+    let waiting = json!({"status": "waiting", "delay": 0, "start_in": 6});
+    assert_eq!(super::rows::status_text(&waiting, false), "Waiting 6 s");
+}
+
+#[tokio::test]
 async fn set_var_blocked_name_shows_message() {
     let (r, page, _d) = rig().await;
     assert_eq!(run(&page, set_var(None, "FOO", "1")).await.error, None);
@@ -518,7 +582,7 @@ async fn switches_listed_read_only() {
     assert_eq!(switches[0]["on"], false);
     assert_eq!(
         out.state["limits"],
-        json!({"vars": 100, "value_bytes": 4096, "added": 50, "delay_max": 600})
+        json!({"vars": 100, "value_bytes": 4096, "added": 50, "delay_max": 600, "stagger_max": 30})
     );
 }
 

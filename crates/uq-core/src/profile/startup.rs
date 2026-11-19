@@ -35,7 +35,7 @@ pub(super) const ENV_ONLY: &str =
 pub(super) const COMPAT_ONLY: &str = "a profile can only set an app's Run on and Size";
 /// Why an autostart entry's other fields are refused.
 pub(super) const AUTOSTART_ONLY: &str =
-    "a profile can only turn a startup app on or off or set its delay";
+    "a profile can only turn a startup app on or off, set its delay, or start it hidden";
 /// An apply that would pass the variables' limit.
 pub const TOO_MANY_VARS: &str = "This profile would make more than 100 environment variables.";
 pub const TOO_MANY_FIXES: &str = "This profile would make more than 100 app fixes.";
@@ -171,6 +171,7 @@ pub fn check_autostart_tree(tree: &Value) -> Result<(), ProfileError> {
             match f.as_str() {
                 "enabled" => bool_of(&key, v).map(drop),
                 "delay" => delay_of(&key, v).map(drop),
+                "minimize" => bool_of(&key, v).map(drop),
                 _ => Err(refuse(&key, AUTOSTART_ONLY)),
             }
             .map_err(to_profile)?;
@@ -205,16 +206,18 @@ pub fn read_leaf(state: &State, domain: &str, path: &[String]) -> Option<Value> 
         }
         ("autostart", [id, f]) => {
             let a = &state.autostart;
-            let (enabled, delay) = match a.added.iter().find(|e| e.id() == id) {
-                Some(e) => (Some(e.enabled()), e.delay()),
+            let (enabled, delay, minimize) = match a.added.iter().find(|e| e.id() == id) {
+                // An added entry that starts normally has no value to give.
+                Some(e) => (Some(e.enabled()), e.delay(), e.minimize().then_some(true)),
                 None => {
                     let c = a.choice(id)?;
-                    (c.enabled, c.delay)
+                    (c.enabled, c.delay, c.minimize)
                 }
             };
             match f.as_str() {
                 "enabled" => enabled.map(Value::Bool),
                 "delay" => delay.map(Value::from),
+                "minimize" => minimize.map(Value::Bool),
                 _ => None,
             }
         }
@@ -340,6 +343,7 @@ fn write_autostart(
             match f.as_str() {
                 "enabled" => e.set_enabled(enabled(value)?.unwrap_or(true)),
                 "delay" => e.set_delay(delay(value)?),
+                "minimize" => e.set_minimize(enabled(value)?.unwrap_or(false)),
                 _ => return Err(refuse(&key, AUTOSTART_ONLY)),
             }
             continue;
@@ -362,6 +366,7 @@ fn write_autostart(
         match f.as_str() {
             "enabled" => a.files[i].enabled = enabled(value)?,
             "delay" => a.files[i].delay = delay(value)?,
+            "minimize" => a.files[i].minimize = enabled(value)?,
             _ => return Err(refuse(&key, AUTOSTART_ONLY)),
         }
     }

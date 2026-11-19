@@ -35,8 +35,17 @@ pub async fn list(
     plan: &[Resolved],
     commands: &BTreeMap<String, Vec<String>>,
 ) -> Vec<Value> {
-    let (statuses, spawner, why_not, sem, mut logs, hidden) = {
+    let (statuses, spawner, why_not, sem, mut logs, hidden, times) = {
         let r = lock(runner);
+        let times: BTreeMap<String, (Option<u32>, bool)> = plan
+            .iter()
+            .map(|e| {
+                (
+                    e.id.clone(),
+                    (r.offsets.get(&e.id).copied(), r.retried.contains(&e.id)),
+                )
+            })
+            .collect();
         let hidden: BTreeMap<String, super::Hidden> = plan
             .iter()
             .filter_map(|e| Some((e.id.clone(), *r.hidden.get(&e.id)?)))
@@ -62,6 +71,7 @@ pub async fn list(
             r.tails.clone(),
             logs,
             hidden,
+            times,
         )
     };
     let mut alive = HashMap::new();
@@ -136,6 +146,20 @@ pub async fn list(
                 (None, Plan::Run { .. }) => ("not_started", Some(why_not.unwrap_or(NEXT_LOGIN))),
             };
             o.insert("status".into(), json!(status));
+            if let Plan::Run { delay, .. } = &e.plan {
+                o.insert("start_in".into(), json!(delay));
+            }
+            if let Some((Some(secs), retried)) = times.get(&e.id)
+                && matches!(
+                    st,
+                    Some(Status::Running | Status::Exited | Status::Failed { .. } | Status::Gone)
+                )
+            {
+                o.insert("started_after".into(), json!(secs));
+                if *retried {
+                    o.insert("retried".into(), json!(true));
+                }
+            }
             if let Some(h) = hidden.get(&e.id) {
                 o.insert("hidden".into(), json!(h.key()));
             }

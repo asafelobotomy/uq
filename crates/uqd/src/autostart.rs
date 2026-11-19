@@ -145,6 +145,13 @@ pub struct Runner {
     statuses: BTreeMap<String, Status>,
     /// How each app that started minimised was hidden (this uqd's runs only).
     hidden: BTreeMap<String, Hidden>,
+    /// When this login's run began, and how many seconds after it each app started.
+    t0: Option<tokio::time::Instant>,
+    offsets: BTreeMap<String, u32>,
+    /// Apps that were started a second time after they failed.
+    retried: BTreeSet<String>,
+    /// Apps stopped on purpose, so their end isn't a failure and isn't retried.
+    stopped: BTreeSet<String>,
     shell_ready_calls: u32,
     /// The cleaned last lines of a failed run, by `(unit, exit)` (F16).
     logs: HashMap<(String, ExitInfo), Vec<String>>,
@@ -165,6 +172,10 @@ impl Runner {
             started: false,
             statuses: BTreeMap::new(),
             hidden: BTreeMap::new(),
+            t0: None,
+            offsets: BTreeMap::new(),
+            retried: BTreeSet::new(),
+            stopped: BTreeSet::new(),
             shell_ready_calls: 0,
             logs: HashMap::new(),
             record: Record::default(),
@@ -214,8 +225,16 @@ impl Runner {
     }
 }
 
-/// One entry to start: its id, argv, working directory and delay.
-type Job = (String, Vec<String>, PathBuf, u32, bool);
+/// One entry to start.
+#[derive(Clone)]
+struct Job {
+    id: String,
+    argv: Vec<String>,
+    cwd: PathBuf,
+    delay: u32,
+    minimize: bool,
+    retry: bool,
+}
 
 /// Run the plan once per login (R7). The caller built `plan` and `env` under the desktop lock
 /// and dropped it. `emit` is called on every status change.
@@ -275,22 +294,31 @@ pub async fn start_once(
                     cwd: Some(cwd),
                     delay,
                     minimize,
-                } => Some((e.id, argv, cwd, delay, minimize)),
+                    retry,
+                } => Some(Job {
+                    id: e.id,
+                    argv,
+                    cwd,
+                    delay,
+                    minimize,
+                    retry,
+                }),
                 _ => None,
             })
             .collect()
     };
     if !same {
-        record.pending = jobs.iter().map(|(id, ..)| id.clone()).collect();
+        record.pending = jobs.iter().map(|j| j.id.clone()).collect();
     }
     {
         let mut r = lock(runner);
         for (id, s) in &record.started {
             r.statuses.insert(id.clone(), Status::Adopted(s.clone()));
         }
-        for (id, ..) in &jobs {
-            r.statuses.insert(id.clone(), Status::Waiting);
+        for j in &jobs {
+            r.statuses.insert(j.id.clone(), Status::Waiting);
         }
+        r.t0 = Some(tokio::time::Instant::now());
         record.save(&path);
         r.record = record;
     }
@@ -341,13 +369,17 @@ fn now_secs() -> i64 {
         .map_or(0, |d| d.as_secs() as i64)
 }
 
-/// Sleep the delay, start the entry in its own scope, record it, and wait for it in a task.
-async fn run_one(ctx: Ctx, (id, argv, cwd, delay, minimize): Job) {
-    if delay > 0 {
-        tokio::time::sleep(Duration::from_secs(delay.into())).await;
+/// How long after a failure an app is started again, when that is on.
+pub const RETRY_AFTER: Duration = Duration::from_secs(10);
+
+/// Sleep the delay, then start the entry.
+async fn run_one(ctx: Ctx, job: Job) {
+    if job.delay > 0 {
+        tokio::time::sleep(Duration::from_secs(job.delay.into())).await;
         if let Some(check) = &ctx.recheck
-            && !check(id.clone()).await
+            && !check(job.id.clone()).await
         {
+            let id = job.id;
             tracing::info!("startup app {id} was turned off during its delay; not starting it");
             {
                 let mut r = lock(&ctx.runner);
@@ -359,11 +391,25 @@ async fn run_one(ctx: Ctx, (id, argv, cwd, delay, minimize): Job) {
             return;
         }
     }
+    launch(ctx, job, 0).await;
+}
+
+/// Start the entry in its own scope, record it, and wait for it in a task. `attempt` is 1 for
+/// the second start after a failure.
+fn launch(ctx: Ctx, job: Job, attempt: u32) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+    Box::pin(launch_inner(ctx, job, attempt))
+}
+
+async fn launch_inner(ctx: Ctx, job: Job, attempt: u32) {
+    let id = job.id.clone();
     let sid = unit_id(id.strip_suffix(".desktop").unwrap_or(&id));
     let unit = format!("app-uq-autostart-{sid}-{:08x}", random_suffix());
     let tag = format!("uq-autostart-{sid}");
     let at = now_secs();
-    let spawned = ctx.spawner.spawn(&unit, &tag, &argv, &ctx.env, &cwd).await;
+    let spawned = ctx
+        .spawner
+        .spawn(&unit, &tag, &job.argv, &ctx.env, &job.cwd)
+        .await;
     let child = {
         let mut r = lock(&ctx.runner);
         r.spawns += 1;
@@ -380,6 +426,15 @@ async fn run_one(ctx: Ctx, (id, argv, cwd, delay, minimize): Job) {
                     at,
                 };
                 r.statuses.insert(id.clone(), Status::Running);
+                r.stopped.remove(&id);
+                r.hidden.remove(&id);
+                if let Some(t0) = r.t0 {
+                    let secs = t0.elapsed().as_secs().min(u64::from(u32::MAX)) as u32;
+                    r.offsets.insert(id.clone(), secs);
+                }
+                if attempt > 0 {
+                    r.retried.insert(id.clone());
+                }
                 r.record.started.insert(id.clone(), run.clone());
                 r.record.save(&ctx.path);
                 Some((child, run))
@@ -390,7 +445,9 @@ async fn run_one(ctx: Ctx, (id, argv, cwd, delay, minimize): Job) {
     let Some((child, run)) = child else {
         return;
     };
-    if minimize && let Some(hider) = ctx.hider.clone() {
+    if job.minimize
+        && let Some(hider) = ctx.hider.clone()
+    {
         let (runner, emit, id, unit) = (
             ctx.runner.clone(),
             ctx.emit.clone(),
@@ -406,14 +463,119 @@ async fn run_one(ctx: Ctx, (id, argv, cwd, delay, minimize): Job) {
     }
     tokio::spawn(async move {
         let exit = child.wait.await;
+        let on_purpose = lock(&ctx.runner).stopped.contains(&id);
         let status = match exit {
+            _ if on_purpose => Status::Exited,
             ExitInfo::Code(0) => Status::Exited,
             ExitInfo::Unknown => Status::Gone,
             exit => Status::Failed { run, exit },
         };
-        lock(&ctx.runner).statuses.insert(id, status);
+        let failed = matches!(status, Status::Failed { .. });
+        lock(&ctx.runner).statuses.insert(id.clone(), status);
         (ctx.emit)();
+        if failed && job.retry && attempt == 0 {
+            tokio::time::sleep(RETRY_AFTER).await;
+            launch(ctx, job, 1).await;
+        }
     });
+}
+
+/// Start an entry now, as the page's Run now does: outside the once-per-login plan, with no
+/// delay. `false` when the runner can't start anything or the app is running already.
+pub async fn run_now(
+    runner: &SharedRunner,
+    job_plan: &Resolved,
+    env: Vec<(String, String)>,
+    emit: impl Fn() + Send + Sync + 'static,
+) -> bool {
+    let Plan::Run {
+        argv,
+        cwd: Some(cwd),
+        minimize,
+        retry,
+        ..
+    } = job_plan.plan.clone()
+    else {
+        return false;
+    };
+    let (spawner, path, hider) = {
+        let r = lock(runner);
+        if r.not_run_reason().is_some() {
+            return false;
+        }
+        let Some(spawner) = r.cfg.spawner.clone() else {
+            return false;
+        };
+        (spawner, r.cfg.record.clone(), r.cfg.hider.clone())
+    };
+    if is_running(runner, &job_plan.id, &spawner).await {
+        return false;
+    }
+    let ctx = Ctx {
+        hider,
+        recheck: None,
+        runner: runner.clone(),
+        spawner,
+        path,
+        env: Arc::new(
+            env.into_iter()
+                .filter(|(k, _)| !is_service_var(k))
+                .collect(),
+        ),
+        emit: Arc::new(emit),
+    };
+    let job = Job {
+        id: job_plan.id.clone(),
+        argv,
+        cwd,
+        delay: 0,
+        minimize,
+        retry,
+    };
+    launch(ctx, job, 0).await;
+    true
+}
+
+async fn is_running(runner: &SharedRunner, id: &str, spawner: &Arc<dyn Spawner>) -> bool {
+    let status = lock(runner).statuses.get(id).cloned();
+    match status {
+        Some(Status::Running | Status::Waiting) => true,
+        Some(Status::Adopted(run)) => spawner.alive(run.pid, &run.unit).await,
+        _ => false,
+    }
+}
+
+/// Stop an app that is running, as the page's Stop now does. `false` when it isn't running.
+pub async fn stop_now(runner: &SharedRunner, id: &str, emit: impl Fn()) -> bool {
+    let (spawner, unit) = {
+        let r = lock(runner);
+        let Some(spawner) = r.cfg.spawner.clone() else {
+            return false;
+        };
+        let unit = match r.statuses.get(id) {
+            Some(Status::Running | Status::Adopted(_)) => {
+                r.record.started.get(id).map(|s| s.unit.clone())
+            }
+            _ => None,
+        };
+        (spawner, unit)
+    };
+    let Some(unit) = unit else {
+        return false;
+    };
+    lock(runner).stopped.insert(id.to_string());
+    let stopped = spawner.stop(&unit).await;
+    if !stopped {
+        lock(runner).stopped.remove(id);
+    } else {
+        // An app an earlier uqd started has no waiter to say it ended.
+        let mut r = lock(runner);
+        if matches!(r.statuses.get(id), Some(Status::Adopted(_))) {
+            r.statuses.insert(id.to_string(), Status::Exited);
+        }
+    }
+    emit();
+    stopped
 }
 
 #[cfg(test)]

@@ -59,6 +59,7 @@ fn entry(id: &str, argv: &[&str], delay: u32) -> Resolved {
             cwd: Some(PathBuf::from("/")),
             delay,
             minimize: false,
+            retry: false,
         },
         orphan_copy: None,
     }
@@ -501,4 +502,106 @@ async fn an_unreachable_compositor_reports_nothing() {
     let (_rig, _h, out) = with_hider(vec![minimised("a.desktop", true)], None).await;
     assert!(out[0].get("hidden").is_none());
     assert_eq!(out[0]["status"], "running");
+}
+
+fn with_retry(id: &str) -> Resolved {
+    let mut e = entry(id, &["app"], 0);
+    if let Plan::Run { retry, .. } = &mut e.plan {
+        *retry = true;
+    }
+    e
+}
+
+async fn settle() {
+    for _ in 0..30 {
+        tokio::task::yield_now().await;
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_failed_app_is_started_once_more_when_retry_is_on() {
+    let r = rig();
+    r.fake.exit_once("uq-autostart-a", ExitInfo::Code(1));
+    start(&r.runner, vec![with_retry("a.desktop")]).await;
+    settle().await;
+    assert_eq!(r.fake.calls().len(), 1);
+    tokio::time::sleep(RETRY_AFTER + Duration::from_secs(1)).await;
+    settle().await;
+    assert_eq!(r.fake.calls().len(), 2, "started again after it failed");
+    let out = rows(&r.runner, &[with_retry("a.desktop")]).await;
+    assert_eq!(out[0]["status"], "running");
+    assert_eq!(out[0]["retried"], true);
+}
+
+#[tokio::test(start_paused = true)]
+async fn retry_is_once_and_only_when_asked() {
+    let r = rig();
+    r.fake.exit("uq-autostart-a", ExitInfo::Code(1));
+    r.fake.exit("uq-autostart-b", ExitInfo::Code(1));
+    start(
+        &r.runner,
+        vec![with_retry("a.desktop"), entry("b.desktop", &["app"], 0)],
+    )
+    .await;
+    tokio::time::sleep(RETRY_AFTER * 3).await;
+    settle().await;
+    let units: Vec<String> = r.fake.calls().into_iter().map(|c| c.tag).collect();
+    assert_eq!(
+        units.iter().filter(|t| *t == "uq-autostart-a").count(),
+        2,
+        "{units:?}"
+    );
+    assert_eq!(units.iter().filter(|t| *t == "uq-autostart-b").count(), 1);
+    let out = rows(&r.runner, &[with_retry("a.desktop")]).await;
+    assert_eq!(out[0]["status"], "failed");
+}
+
+#[tokio::test]
+async fn stop_now_ends_a_running_app_without_calling_it_a_failure() {
+    let r = rig();
+    let plan = vec![entry("a.desktop", &["app"], 0)];
+    start(&r.runner, plan.clone()).await;
+    settle().await;
+    assert!(!stop_now(&r.runner, "nope.desktop", || {}).await);
+    assert!(stop_now(&r.runner, "a.desktop", || {}).await);
+    settle().await;
+    assert_eq!(r.fake.stops.lock().unwrap().len(), 1);
+    let out = rows(&r.runner, &plan).await;
+    assert_eq!(out[0]["status"], "exited");
+    // Nothing runs now, so there is nothing to stop.
+    assert!(!stop_now(&r.runner, "a.desktop", || {}).await);
+}
+
+#[tokio::test]
+async fn run_now_starts_an_app_that_is_not_running_once() {
+    let r = rig();
+    let e = entry("a.desktop", &["app"], 600);
+    // Not started by the login plan (it is still waiting for its delay) counts as running.
+    assert!(run_now(&r.runner, &e, Vec::new(), || {}).await);
+    settle().await;
+    assert_eq!(r.fake.calls().len(), 1);
+    assert!(
+        !run_now(&r.runner, &e, Vec::new(), || {}).await,
+        "already running"
+    );
+    assert!(stop_now(&r.runner, "a.desktop", || {}).await);
+    settle().await;
+    assert!(run_now(&r.runner, &e, Vec::new(), || {}).await);
+    assert_eq!(r.fake.calls().len(), 2);
+    let off = Resolved {
+        plan: Plan::Off,
+        ..e
+    };
+    assert!(!run_now(&r.runner, &off, Vec::new(), || {}).await);
+}
+
+#[tokio::test(start_paused = true)]
+async fn rows_say_how_long_after_login_an_app_started() {
+    let r = rig();
+    let plan = vec![entry("a.desktop", &["app"], 7)];
+    start(&r.runner, plan.clone()).await;
+    settle().await;
+    let out = rows(&r.runner, &plan).await;
+    assert_eq!(out[0]["start_in"], 7);
+    assert_eq!(out[0]["started_after"], 7);
 }
