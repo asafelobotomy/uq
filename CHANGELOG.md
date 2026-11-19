@@ -11,6 +11,10 @@ All notable changes to uQ are listed here. The format follows
 
 - **Start hidden for startup apps.** Each app on the Startup page has a minimise button: when it is on, the app starts out of the way. An app with a system tray icon is sent to the tray, and an app without one is minimised to its tab on the bar (restore it from there). The row says which happened. It only touches the windows of the app uQ started at login.
 
+### Documentation
+
+- **Providers outside `/usr`.** docs/integrating.md says that `Activatable=true` also works with a service file in the user's own `~/.local/share/dbus-1/services/`, for an app that can't install into `/usr`, and that `Activate` only returns (uQ launches nothing for a provider).
+
 ## [0.3.14] - 2026-11-19
 
 ### Added
