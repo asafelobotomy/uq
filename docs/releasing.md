@@ -39,7 +39,11 @@ From [the road to 1.0](superpowers/plans/2026-11-09-uq-road-to-1.0.md):
    `pkgver`, resets `pkgrel=1` and regenerates `packaging/uq/.SRCINFO`.
 3. `bash tests/shell/version_test.sh`, then commit (`release: vX.Y.Z`) and merge to `main` with
    CI green.
-4. Tag the merge commit and push the tag:
+4. Merging the release PR is the whole release. `.github/workflows/tag-release.yml` sees the new
+   `Cargo.toml` version on `main`, creates the `vX.Y.Z` tag on the merge commit and starts
+   `release.yml` on it (a tag made with `GITHUB_TOKEN` doesn't trigger workflows, so it is
+   started explicitly). To tag by hand instead (for example a release candidate from another
+   commit):
 
    ```bash
    git tag -a vX.Y.Z -m "uQ X.Y.Z"

@@ -9,10 +9,15 @@ name: Release
 # guaranteed byte-identical to `git archive` (or to themselves over time). So the AUR PKGBUILD's
 # source is the release *asset* uq-<tag>.tar.gz uploaded here, and its sha256sums entry is the
 # checksum of exactly that file.
+#
+# tag-release.yml makes the tag when a release PR merges. A tag made with GITHUB_TOKEN does not
+# trigger the push event below, so it starts this workflow with workflow_dispatch on the tag
+# (github.ref_name is then the tag, exactly as for a pushed tag).
 
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
 
 permissions: {}
 
