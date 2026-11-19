@@ -58,7 +58,7 @@ hl.animation({ leaf = "windowsIn",  enabled = true, speed = 2.73, bezier = "ease
 hl.animation({ leaf = "windowsOut", enabled = true, speed = 0.99, bezier = "linear",       style = "popin 87%" })
 hl.animation({ leaf = "fade",       enabled = true, speed = 2.02, bezier = "quick" })
 hl.animation({ leaf = "layers",     enabled = true, speed = 2.54, bezier = "easeOutQuint" })
-hl.animation({ leaf = "workspaces", enabled = true, speed = 1.29, bezier = "almostLinear", style = "fade" })
+hl.animation({ leaf = "workspaces", enabled = true, speed = 1.29, bezier = "almostLinear", style = "slide" })
 hl.env("XCURSOR_THEME", "Bibata-Modern-Classic")
 hl.env("XCURSOR_SIZE", "24")
 hl.env("HYPRCURSOR_SIZE", "24")

@@ -7,6 +7,10 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **Windows stay solid when you change workspace or screen.** The workspace animation faded windows out and in, so for a moment the wallpaper showed through. Windows now slide instead, and never turn transparent.
+
 ## [0.3.18] - 2026-11-19
 
 ### Fixed

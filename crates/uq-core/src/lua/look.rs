@@ -21,7 +21,7 @@ pub const ANIMATION_LEAVES: [(&str, f64, &str, Option<&str>); 7] = [
     ("windowsOut", 1.49, "linear", Some("popin 87%")),
     ("fade", 3.03, "quick", None),
     ("layers", 3.81, "easeOutQuint", None),
-    ("workspaces", 1.94, "almostLinear", Some("fade")),
+    ("workspaces", 1.94, "almostLinear", Some("slide")),
 ];
 
 /// Whole numbers without a `.0`, so the default output matches the old hand-written lines.
@@ -190,7 +190,7 @@ hl.animation({ leaf = "windowsIn",  enabled = true, speed = 4.1,  bezier = "ease
 hl.animation({ leaf = "windowsOut", enabled = true, speed = 1.49, bezier = "linear",       style = "popin 87%" })
 hl.animation({ leaf = "fade",       enabled = true, speed = 3.03, bezier = "quick" })
 hl.animation({ leaf = "layers",     enabled = true, speed = 3.81, bezier = "easeOutQuint" })
-hl.animation({ leaf = "workspaces", enabled = true, speed = 1.94, bezier = "almostLinear", style = "fade" })
+hl.animation({ leaf = "workspaces", enabled = true, speed = 1.94, bezier = "almostLinear", style = "slide" })
 "##;
 
     #[test]
