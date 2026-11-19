@@ -134,7 +134,7 @@ check() { echo "FAIL: $*"; bad=1; }
 app_log="$tmp/app.log"
 start_app() {
     : >"$app_log"
-    env XDG_RUNTIME_DIR="$rt" WAYLAND_DISPLAY="$wl" QT_QPA_PLATFORM=wayland LC_ALL=C.UTF-8 \
+    env XDG_RUNTIME_DIR="$rt" WAYLAND_DISPLAY="$wl" QT_QPA_PLATFORM=wayland QT_FORCE_STDERR_LOGGING=1 LC_ALL=C.UTF-8 \
         "$qmlbin" "$root/tests/live/fixtures/dialog-focus.qml" >"$app_log" 2>&1 &
     app=$!; pids+=($app)
     for _ in $(seq 1 60); do
