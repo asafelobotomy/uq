@@ -124,6 +124,25 @@ Scope {
         onPressed: BarLayout.toggleEdit(Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : "")
     }
 
+    // A window that takes the focus while a popup is open (a file manager's "New folder" dialog,
+    // a password prompt) must get the keyboard. A popup that asked for it (OnDemand, Exclusive)
+    // keeps it for itself, even though Hyprland says the window is focused, so the person types
+    // into the popup, or into nothing. The popup closes instead. look=see>do_'s own terminal
+    // opens without taking the focus (no_initial_focus), so it never gets here.
+    Connections {
+        target: Hyprland
+        function onActiveToplevelChanged() {
+            if (!Hyprland.activeToplevel)
+                return;
+            if (Surfaces.open !== "closed")
+                Surfaces.close();
+            if (ClipState.open)
+                ClipState.hide();
+            if (BarLayout.activePopup)
+                BarLayout.activePopup.hide();
+        }
+    }
+
     IpcHandler {
         id: ipc
         target: "uq"
