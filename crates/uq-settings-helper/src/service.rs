@@ -171,7 +171,11 @@ impl Helper {
             )));
         }
         self.authorize(sender, Action::GreeterTheme).await?;
-        let current: Option<toml::Table> = std::fs::read_to_string(self.cfg.greeter_toml())
+        // Read and write under one hold of the write lock, so a Settings change to `hide_users`
+        // or `reduce_motion` that lands in between is not overwritten with the old values.
+        let _g = self.lock.lock().await;
+        let path = self.cfg.greeter_toml();
+        let current: Option<toml::Table> = std::fs::read_to_string(&path)
             .ok()
             .and_then(|t| t.parse().ok());
         let flag = |k: &str| {
@@ -182,7 +186,7 @@ impl Helper {
                 .unwrap_or(false)
         };
         let body = templates::greeter(&theme, variant, flag("hide_users"), flag("reduce_motion"));
-        self.write(&self.cfg.greeter_toml(), body.as_bytes()).await
+        write_atomic(&path, body.as_bytes()).map_err(|e| failed(&path, e))
     }
 
     /// `SetGreeterWallpaper`: copy the passed file byte for byte to
