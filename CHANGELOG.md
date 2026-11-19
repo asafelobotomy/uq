@@ -12,6 +12,10 @@ All notable changes to uQ are listed here. The format follows
 - **Dolphin and every other KDE or Qt app now follow the uQ theme by default.** KDE apps ignored qt6ct's palette: they showed Breeze's light backgrounds, a Fusion-style look and recoloured red Breeze folders. The session now uses plasma-integration's `kde` platform theme (falling back to qt6ct if it isn't installed), and uqd writes uQ's colours, icon theme (Papirus), Kvantum widget style and fonts into `~/.config/kdeglobals` on every theme change, so apps switch live between velvet, gruvbox, forest and the rest, dark and light. uqd also creates the GTK, qt6ct and Kvantum files itself, so `uqctl setup --apps` is no longer a manual step (files you wrote are never replaced). The uQ shell keeps qt6ct. The package now depends on plasma-integration, papirus-icon-theme, adw-gtk-theme, inter-font, ttf-jetbrains-mono and xdg-desktop-portal-gtk.
 - **Flatpak, Electron and Qt 5 apps follow the theme too.** When Flatpak is installed, uqd adds read-only access to uQ's theme files (GTK css, kdeglobals, Kvantum and the rendered theme) to the user's global Flatpak override, keeping anything already there. xdg-desktop-portal-gtk passes dark or light to Flatpak, Electron and browser apps through the settings portal. Qt 5 apps use the same kdeglobals look with the optional plasma5-integration and kvantum-qt5.
 
+### Fixed
+
+- **Windows stay solid when you change workspace or screen.** The workspace animation faded windows out and in, so for a moment the wallpaper showed through. Windows now slide instead, and never turn transparent. `scripts/workspace-solid-live.sh` checks it on a real Hyprland and keeps a before/after GIF.
+
 ## [0.3.18] - 2026-11-19
 
 ### Fixed
