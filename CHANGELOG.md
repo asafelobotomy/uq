@@ -7,6 +7,8 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.14] - 2026-11-19
+
 ### Added
 
 - **The login screen follows your theme.** When you change theme (or its dark and light variant), uqd asks the root helper to match the login screen to it. A polkit rule (`49-uq-greeter-theme.rules`) lets an active local administrator (group `wheel`) do this one thing without a password; everything else about the login screen still asks. A theme the login screen doesn't ship, such as your own, leaves it as it was. Picking a different login theme in Settings is replaced at the next theme change.
