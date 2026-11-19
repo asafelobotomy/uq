@@ -66,6 +66,10 @@ Hyprland is pinned to **0.56.2–0.57.x** (`uq-hyprland-pin`): Manjaro ships 0.5
 0.57.1 as of 2026-11-08. The Lua API uQ uses is identical in the 0.56.2 and 0.57 sources; CI runs
 `Hyprland --verify-config` on every theme against Arch's current release.
 
+## ROM and retro-platform files
+
+The package ships file types and icons for game ROMs and disc images (`packaging/mime/`), so Dolphin, other file managers and `xdg-open` show "Super Nintendo ROM", "Wii disc image" and so on with a platform icon instead of a generic one. It reuses freedesktop's existing types (`application/x-nes-rom`, `application/x-gba-rom`, ...) and adds the ones they lack. Plain `.iso`, `.bin` and `.rom` files stay generic: the name doesn't say which platform they are for. Edit `scripts/gen-rom-mime.py` and rerun it to add a platform.
+
 ## Use
 
 ```bash

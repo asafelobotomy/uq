@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <path d="M10 8a4 4 0 0 1 4-4h30l10 10v38a4 4 0 0 1-4 4H14a4 4 0 0 1-4-4z" fill="#3d4350"/>
+  <path d="M44 4l10 10H48a4 4 0 0 1-4-4z" fill="#555c6b"/>
+  <rect x="15" y="19" width="34" height="24" rx="3" fill="#e8590c"/>
+  <rect x="17" y="48" width="30" height="6" rx="1.5" fill="#1f232b"/>
+  <path d="M21 50v2M25 50v2M29 50v2M33 50v2M37 50v2M41 50v2" stroke="#c9a227" stroke-width="1.6"/>
+  <text x="32" y="35.5" text-anchor="middle" font-family="Inter, Noto Sans, DejaVu Sans, sans-serif" font-weight="700" font-size="13.0" fill="#ffffff">AMI</text>
+</svg>
