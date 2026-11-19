@@ -1,5 +1,6 @@
 // Startup (spec §7.3): the apps that start when you log in, and the session's environment
-// variables. Apps found in the autostart folders can be turned on or off and delayed; apps and
+// variables. Apps found in the autostart folders can be turned on or off, delayed and started
+// hidden (in the tray, or minimized); apps and
 // commands added here can also be removed. The switches of Apps and scaling are listed
 // read-only. Everything goes through StartupModel. App names, commands, the lines a failed app
 // printed, and variable names and values are shown through UqLabel (plain text) only.
@@ -257,6 +258,7 @@ SettingsPage {
                         Layout.alignment: Qt.AlignTop
                         onEnabledChosen: on => sm.setEnabled(String(modelData.id), on)
                         onDelayChosen: secs => sm.setDelay(String(modelData.id), secs)
+                        onMinimizeChosen: on => sm.setMinimize(String(modelData.id), on)
                         onRemoveRequested: {
                             confirmRemove.appId = String(modelData.id);
                             confirmRemove.open();

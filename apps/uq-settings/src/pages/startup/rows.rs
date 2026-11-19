@@ -31,7 +31,12 @@ pub(crate) fn section_error(explained: &Value, key: &str) -> Value {
 pub(super) fn status_text(row: &Value, off_in_uq: bool) -> String {
     let reason = row["reason"].as_str();
     let text = match row["status"].as_str().unwrap_or_default() {
-        "running" => "Running",
+        "running" => match row["hidden"].as_str() {
+            Some("tray") => "Running, hidden in the tray",
+            Some("minimised") => "Running, minimised",
+            Some("no_window") => "Running (no window opened to hide)",
+            _ => "Running",
+        },
         "exited" => "Started, then finished",
         "failed" => {
             return if let Some(code) = row["exit"].as_i64() {
@@ -82,6 +87,7 @@ pub(super) fn app_row(row: &Value, section: &Value, explained: &Value) -> Value 
     json!({
         "id": id, "name": row["name"], "icon": row["icon"], "source": row["source"],
         "enabled": row["enabled"], "can_toggle": row["can_toggle"], "delay": row["delay"],
+        "minimize": row["minimize"] == true, "hidden": row["hidden"],
         "status": row["status"],
         "status_text": status_text(row, off_in_uq(row, section, id)),
         "reason": row["reason"], "exit": row["exit"], "signal": row["signal"],

@@ -68,6 +68,9 @@ pub enum Plan {
         argv: Vec<String>,
         cwd: Option<PathBuf>,
         delay: u32,
+        /// Hide the app's window once it opens: to the tray when it has an icon there,
+        /// minimised otherwise.
+        minimize: bool,
     },
     /// The user, or the entry itself, turned it off.
     Off,
@@ -88,6 +91,7 @@ pub struct Resolved {
     /// False for skipped entries.
     pub can_toggle: bool,
     pub delay: u32,
+    pub minimize: bool,
     pub plan: Plan,
     /// uQ's hidden copy of a system entry that no longer exists, for the sync to remove.
     pub orphan_copy: Option<PathBuf>,
@@ -235,6 +239,7 @@ struct Row {
     source: Source,
     enabled: bool,
     delay: u32,
+    minimize: bool,
 }
 
 impl Row {
@@ -254,8 +259,14 @@ impl Row {
                     Some(id) => launch::argv(compat.fix_for(id), id, argv.clone()).unwrap_or(argv),
                     None => argv,
                 };
-                let delay = self.delay;
-                (Plan::Run { argv, cwd, delay }, true, true)
+                let (delay, minimize) = (self.delay, self.minimize);
+                let run = Plan::Run {
+                    argv,
+                    cwd,
+                    delay,
+                    minimize,
+                };
+                (run, true, true)
             }
         };
         Resolved {
@@ -266,6 +277,7 @@ impl Row {
             enabled,
             can_toggle,
             delay: self.delay,
+            minimize: self.minimize,
             plan,
             orphan_copy: None,
         }
@@ -295,6 +307,7 @@ fn resolve_found(
                 enabled: false,
                 can_toggle: false,
                 delay: 0,
+                minimize: false,
                 plan: Plan::Skip(NOT_INSTALLED),
                 orphan_copy: Some(path.clone()),
             });
@@ -313,6 +326,7 @@ fn resolve_found(
         delay: choice
             .and_then(|c| c.delay)
             .unwrap_or(e.gnome_delay.unwrap_or(0).min(MAX_DELAY)),
+        minimize: choice.and_then(|c| c.minimize).unwrap_or(false),
     };
     let hidden = match source {
         Source::Yours => HIDDEN_YOURS,
@@ -335,6 +349,7 @@ fn resolve_added(
         source: Source::Added,
         enabled: a.enabled(),
         delay: a.delay().unwrap_or(0).min(MAX_DELAY),
+        minimize: a.minimize(),
     };
     match a {
         Added::Command { argv, .. } => row.finish(Ok((argv.clone(), None)), None, compat),

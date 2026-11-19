@@ -35,8 +35,12 @@ pub async fn list(
     plan: &[Resolved],
     commands: &BTreeMap<String, Vec<String>>,
 ) -> Vec<Value> {
-    let (statuses, spawner, why_not, sem, mut logs) = {
+    let (statuses, spawner, why_not, sem, mut logs, hidden) = {
         let r = lock(runner);
+        let hidden: BTreeMap<String, super::Hidden> = plan
+            .iter()
+            .filter_map(|e| Some((e.id.clone(), *r.hidden.get(&e.id)?)))
+            .collect();
         let statuses: BTreeMap<String, Status> = plan
             .iter()
             .filter_map(|e| Some((e.id.clone(), r.statuses.get(&e.id)?.clone())))
@@ -57,6 +61,7 @@ pub async fn list(
             r.not_run_reason(),
             r.tails.clone(),
             logs,
+            hidden,
         )
     };
     let mut alive = HashMap::new();
@@ -131,6 +136,9 @@ pub async fn list(
                 (None, Plan::Run { .. }) => ("not_started", Some(why_not.unwrap_or(NEXT_LOGIN))),
             };
             o.insert("status".into(), json!(status));
+            if let Some(h) = hidden.get(&e.id) {
+                o.insert("hidden".into(), json!(h.key()));
+            }
             if let Some(r) = reason {
                 o.insert("reason".into(), json!(r));
             }
@@ -153,6 +161,7 @@ fn row_base(e: &Resolved) -> Map<String, Value> {
         "enabled": e.enabled,
         "can_toggle": e.can_toggle,
         "delay": e.delay,
+        "minimize": e.minimize,
     });
     match v {
         Value::Object(o) => o,

@@ -17,7 +17,8 @@ fn scan_user_file_shadows_system() {
         Plan::Run {
             argv: s(&["user-x"]),
             cwd: None,
-            delay: 0
+            delay: 0,
+            minimize: false,
         }
     );
     let r = one(sys("x.desktop", &entry("sys-x", "")), &Autostart::default());
@@ -182,7 +183,8 @@ fn scan_applies_compat_fix() {
         Plan::Run {
             argv: want.clone(),
             cwd: Some(PathBuf::from("/srv")),
-            delay: 0
+            delay: 0,
+            minimize: false,
         }
     );
     // An added app gets the same fix.
@@ -203,7 +205,8 @@ fn scan_applies_compat_fix() {
         Plan::Run {
             argv: want,
             cwd: None,
-            delay: 0
+            delay: 0,
+            minimize: false,
         }
     );
     // A command has no desktop id, so no fix.
@@ -214,7 +217,8 @@ fn scan_applies_compat_fix() {
         Plan::Run {
             argv: s(&["foo", "--bar"]),
             cwd: None,
-            delay: 0
+            delay: 0,
+            minimize: false,
         }
     );
 }
@@ -257,7 +261,8 @@ fn scan_expands_field_codes() {
         Plan::Run {
             argv: s(&["foo", &path, "--icon", "ic", "Thing"]),
             cwd: None,
-            delay: 0
+            delay: 0,
+            minimize: false,
         }
     );
 }
@@ -363,7 +368,23 @@ fn scan_added_override_is_not_fixed_again() {
         Plan::Run {
             argv: s(&["foo", "--bar"]),
             cwd: None,
-            delay: 0
+            delay: 0,
+            minimize: false,
         }
     );
+}
+
+#[test]
+fn scan_minimize_comes_from_the_choice() {
+    let f = sys("a.desktop", &entry("a", ""));
+    let r = one(f.clone(), &Autostart::default());
+    assert!(!r.minimize);
+    let hidden = ok(json!({"files": [{"id": "a.desktop", "minimize": true}]}));
+    let r = one(f.clone(), &hidden);
+    assert!(r.minimize && r.enabled);
+    assert!(matches!(r.plan, Plan::Run { minimize: true, .. }), "{r:?}");
+    // An entry that is off keeps the choice for the page but doesn't run.
+    let both = ok(json!({"files": [{"id": "a.desktop", "enabled": false, "minimize": true}]}));
+    let r = one(f, &both);
+    assert_eq!((r.plan.clone(), r.minimize), (Plan::Off, true));
 }

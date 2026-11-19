@@ -354,6 +354,7 @@ fn write_autostart(
                     id: id.clone(),
                     enabled: None,
                     delay: None,
+                    minimize: None,
                 });
                 a.files.len() - 1
             }

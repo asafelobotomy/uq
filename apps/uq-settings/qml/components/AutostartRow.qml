@@ -39,6 +39,8 @@ ColumnLayout {
     signal enabledChosen(bool on)
     /// The delay was changed, in seconds.
     signal delayChosen(int secs)
+    /// **Start hidden** was switched: open the app hidden (in its tray icon, or minimised).
+    signal minimizeChosen(bool on)
     /// **Remove** was pressed (added entries only).
     signal removeRequested()
 
@@ -101,6 +103,25 @@ ColumnLayout {
                 color: row.failed ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.textColor
                 wrapMode: Text.Wrap
                 Layout.fillWidth: true
+            }
+        }
+        QQC2.ToolButton {
+            id: hideButton
+            objectName: "appMinimize"
+            text: "Start hidden"
+            icon.name: "view-hidden"
+            display: QQC2.AbstractButton.IconOnly
+            checkable: true
+            checked: row.app.minimize === true
+            enabled: row.idle && row.app.can_toggle === true
+            Accessible.name: "Start hidden"
+            Accessible.description: row.name
+            QQC2.ToolTip.visible: hovered
+            QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+            QQC2.ToolTip.text: "Start hidden: in the tray if the app has an icon there, minimized otherwise"
+            onToggled: {
+                row.minimizeChosen(hideButton.checked);
+                hideButton.checked = Qt.binding(() => row.app.minimize === true);
             }
         }
         Kirigami.Icon {

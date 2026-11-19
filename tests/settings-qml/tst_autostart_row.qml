@@ -27,6 +27,7 @@ TestCase {
             enabled: true,
             can_toggle: true,
             delay: 0,
+            minimize: false,
             status: "running",
             status_text: "Running",
             reason: null,
@@ -82,6 +83,24 @@ TestCase {
         const idle = make();
         idle.idle = false;
         verify(!child(idle, "appSwitch").enabled, "nothing while the page is busy");
+    }
+
+    function test_start_hidden_button() {
+        const row = make();
+        const hide = child(row, "appMinimize");
+        verify(hide.enabled);
+        verify(!hide.checked, "off unless the app is set to start hidden");
+        verify(child(make({ minimize: true }), "appMinimize").checked);
+        const chosen = [];
+        row.minimizeChosen.connect(on => chosen.push(on));
+        hide.toggle();
+        hide.toggled();
+        compare(chosen.length, 1);
+        compare(chosen[0], true);
+        verify(!child(make({ can_toggle: false }), "appMinimize").enabled);
+        const busy = make();
+        busy.idle = false;
+        verify(!child(busy, "appMinimize").enabled, "nothing while the page is busy");
     }
 
     function test_remove_only_for_added() {

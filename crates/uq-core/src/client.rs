@@ -89,8 +89,8 @@ pub trait Desktop {
     fn apply_profile(&self, id: &str) -> zbus::Result<String>;
     /// JSON report, with `active` empty.
     fn profile_off(&self) -> zbus::Result<String>;
-    /// JSON array of the startup apps: `{id, name, icon, source, enabled, can_toggle, delay,
-    /// status, reason?, exit?, signal?, log?, argv?}`.
+    /// JSON array of the startup apps: `{id, name, icon, source, enabled, can_toggle, delay, minimize,
+    /// status, hidden?, reason?, exit?, signal?, log?, argv?}`.
     fn list_autostart(&self) -> zbus::Result<String>;
     /// JSON `{rules, problems, missing}`: the window rules from apps, each with `enabled`.
     fn list_integration_rules(&self) -> zbus::Result<String>;

@@ -44,7 +44,7 @@ fn delay_line(name: &str, after: &Value) -> String {
     }
 }
 
-/// What changed in one entry, in summary words: on/off first, then the delay.
+/// What changed in one entry, in summary words: on/off first, then the delay, then start hidden.
 fn entry_lines(name: &str, before: &Value, after: &Value, out: &mut Vec<String>) {
     let on = |v: &Value| v.get("enabled").and_then(Value::as_bool);
     let start = out.len();
@@ -58,6 +58,14 @@ fn entry_lines(name: &str, before: &Value, after: &Value, out: &mut Vec<String>)
     let delay = |v: &'_ Value| v.get("delay").filter(|d| !d.is_null()).cloned();
     if delay(before) != delay(after) {
         out.push(delay_line(name, after));
+    }
+    let hide = |v: &Value| v.get("minimize").and_then(Value::as_bool).unwrap_or(false);
+    if hide(before) != hide(after) {
+        out.push(if hide(after) {
+            format!("Startup app {name} set to start hidden")
+        } else {
+            format!("Startup app {name} set to start normally")
+        });
     }
     if out.len() == start && before != after {
         out.push(format!("Startup app {name} changed"));

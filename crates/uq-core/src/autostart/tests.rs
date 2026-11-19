@@ -325,3 +325,44 @@ fn refusals_are_plain() {
         }
     }
 }
+
+#[test]
+fn minimize_is_a_known_field_and_round_trips() {
+    let a = ok(json!({
+        "files": [{"id": "a.desktop", "minimize": true}],
+        "added": [{"name": "Sync", "app": "s.desktop", "minimize": true},
+                  {"name": "Cmd", "argv": ["x"]}],
+    }));
+    assert_eq!(a.files[0].minimize, Some(true));
+    assert!(a.added[0].minimize() && !a.added[1].minimize());
+    let section = a.section();
+    assert_eq!(section["files"][0]["minimize"], true);
+    assert_eq!(section["added"][0]["minimize"], true);
+    // Off is not written, so older files and new ones look alike.
+    assert!(section["added"][1].get("minimize").is_none());
+    assert_eq!(
+        Autostart::from_section(&section, &a).unwrap().section(),
+        section
+    );
+}
+
+#[test]
+fn minimize_must_be_on_or_off() {
+    let bad = |v| Autostart::from_section(&v, &Autostart::default()).unwrap_err();
+    let e = bad(json!({"files": [{"id": "a.desktop", "minimize": "yes"}]}));
+    assert!(e.to_string().contains("on or off"), "{e}");
+    let e = bad(json!({"added": [{"name": "x", "argv": ["x"], "minimize": 1}]}));
+    assert!(e.to_string().contains("on or off"), "{e}");
+    // A choice that only says "minimize" is a choice; one with nothing set still isn't.
+    assert!(
+        ok(json!({"files": [{"id": "a.desktop", "minimize": false}]})).files[0].minimize
+            == Some(false)
+    );
+    assert!(
+        Autostart::from_section(
+            &json!({"files": [{"id": "a.desktop"}]}),
+            &Autostart::default()
+        )
+        .is_err()
+    );
+}

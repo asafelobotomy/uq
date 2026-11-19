@@ -327,6 +327,78 @@ async fn clearing_delay_and_enabled_removes_choice() {
 }
 
 #[tokio::test]
+async fn start_hidden_round_trips_and_clears() {
+    let (r, page, _d) = rig().await;
+    let hide = |id: &str, on| Op::SetMinimize { id: id.into(), on };
+    let out = run(&page, hide("nm-applet.desktop", true)).await;
+    assert_eq!(out.error, None);
+    assert_eq!(
+        section(&r, "autostart")["files"],
+        json!([{"id": "nm-applet.desktop", "enabled": null, "delay": null, "minimize": true}])
+    );
+    assert_eq!(app(&out.state, "nm-applet.desktop")["minimize"], true);
+
+    // Off again: a choice that sets nothing goes.
+    let out = run(&page, hide("nm-applet.desktop", false)).await;
+    assert_eq!(out.error, None);
+    assert_eq!(section(&r, "autostart")["files"], json!([]));
+    assert_eq!(app(&out.state, "nm-applet.desktop")["minimize"], false);
+
+    // It is kept beside the other choices.
+    assert_eq!(run(&page, on("notes.desktop", false)).await.error, None);
+    assert_eq!(run(&page, hide("notes.desktop", true)).await.error, None);
+    assert_eq!(run(&page, hide("notes.desktop", false)).await.error, None);
+    assert_eq!(
+        section(&r, "autostart")["files"],
+        json!([{"id": "notes.desktop", "enabled": false, "delay": null}])
+    );
+}
+
+#[tokio::test]
+async fn added_entry_can_start_hidden() {
+    let (r, page, _d) = rig().await;
+    let out = run(
+        &page,
+        Op::AddCommand {
+            name: "Sync".into(),
+            command: "syncthing --no-browser".into(),
+        },
+    )
+    .await;
+    assert_eq!(out.error, None);
+    let id = section(&r, "autostart")["added"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let out = run(
+        &page,
+        Op::SetMinimize {
+            id: id.clone(),
+            on: true,
+        },
+    )
+    .await;
+    assert_eq!(out.error, None);
+    assert_eq!(section(&r, "autostart")["added"][0]["minimize"], true);
+    assert_eq!(app(&out.state, &id)["minimize"], true);
+}
+
+#[test]
+fn status_names_how_a_hidden_app_was_hidden() {
+    use super::rows::status_text;
+    let row = |h: Value| json!({"status": "running", "hidden": h});
+    assert_eq!(
+        status_text(&row(json!("tray")), false),
+        "Running, hidden in the tray"
+    );
+    assert_eq!(
+        status_text(&row(json!("minimised")), false),
+        "Running, minimised"
+    );
+    assert_eq!(status_text(&row(Value::Null), false), "Running");
+}
+
+#[tokio::test]
 async fn set_var_blocked_name_shows_message() {
     let (r, page, _d) = rig().await;
     assert_eq!(run(&page, set_var(None, "FOO", "1")).await.error, None);

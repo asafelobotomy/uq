@@ -43,6 +43,10 @@ pub mod qobject {
         #[qinvokable]
         fn set_delay(self: Pin<&mut StartupModel>, id: &QString, secs: i32);
 
+        /// Start an app hidden at login: to its tray icon, or minimised when it has none.
+        #[qinvokable]
+        fn set_minimize(self: Pin<&mut StartupModel>, id: &QString, on: bool);
+
         /// Start an installed app (by its desktop id) at login.
         #[qinvokable]
         fn add_app(self: Pin<&mut StartupModel>, id: &QString);
@@ -152,6 +156,16 @@ impl StartupModel {
             Op::SetDelay {
                 id: id.to_string(),
                 delay: u32::try_from(secs).ok(),
+            },
+        );
+    }
+
+    fn set_minimize(self: Pin<&mut Self>, id: &QString, on: bool) {
+        model_core::start(
+            self,
+            Op::SetMinimize {
+                id: id.to_string(),
+                on,
             },
         );
     }

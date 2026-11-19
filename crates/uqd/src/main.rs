@@ -81,7 +81,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let data_dirs = xdg_data_dirs();
     desktop.prune_launch_counts(&|id| desktop_file_installed(id, &data_dirs));
     // The only place the real spawner is made (F1).
-    let autostart = AutostartConfig::system(dev, session);
+    let autostart = AutostartConfig::system(dev, session).with_hider(Arc::new(
+        uqd::autostart::hide::SystemHider::new(HyprSocket::from_env()),
+    ));
     let (conn, shared) =
         serve_with(zbus::connection::Builder::session(), desktop, autostart).await?;
     tracing::info!("serving org.uq.Desktop1");

@@ -43,6 +43,12 @@ pub enum Op {
         id: String,
         delay: Option<u32>,
     },
+    /// Start the app hidden (to its tray icon, or minimised). `false` on a found entry clears
+    /// the choice; a found entry left with no choice at all is removed.
+    SetMinimize {
+        id: String,
+        on: bool,
+    },
     /// An installed app, by desktop id.
     AddApp {
         desktop_id: String,
@@ -164,7 +170,22 @@ impl StartupState {
             }
             let files = list_mut(o, "files")?;
             choice_mut(files, id)["delay"] = json!(delay);
-            files.retain(|c| !(c["enabled"].is_null() && c["delay"].is_null()));
+            prune_choices(files);
+            Ok(())
+        })
+        .await
+    }
+
+    async fn set_minimize(&self, proxy: &DesktopProxy<'_>, id: &str, on: bool) -> zbus::Result<()> {
+        write_section(proxy, "autostart", |o| {
+            let added = list_mut(o, "added")?;
+            if let Some(i) = find(added, "id", id) {
+                added[i]["minimize"] = json!(on);
+                return Ok(());
+            }
+            let files = list_mut(o, "files")?;
+            choice_mut(files, id)["minimize"] = if on { json!(true) } else { Value::Null };
+            prune_choices(files);
             Ok(())
         })
         .await
@@ -262,6 +283,7 @@ impl PageLogic for StartupState {
             Op::Refresh => Ok(()),
             Op::SetEnabled { id, on } => self.set_enabled(p, &id, on).await,
             Op::SetDelay { id, delay } => self.set_delay(p, &id, delay).await,
+            Op::SetMinimize { id, on } => self.set_minimize(p, &id, on).await,
             Op::AddApp { desktop_id } => self.add_app(p, &desktop_id).await,
             Op::AddCommand { name, command } => self.add_command(p, &name, &command).await,
             Op::Remove { id } => self.remove(p, &id).await,
@@ -350,3 +372,8 @@ pub(crate) async fn explain(proxy: &DesktopProxy<'_>, domain: &str) -> zbus::Res
 
 #[cfg(test)]
 mod tests;
+
+/// Drop the choices that set nothing.
+fn prune_choices(files: &mut Vec<Value>) {
+    files.retain(|c| !(c["enabled"].is_null() && c["delay"].is_null() && c["minimize"].is_null()));
+}

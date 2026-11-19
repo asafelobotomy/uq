@@ -79,6 +79,7 @@ fn with_choice(mut row: Value, state: &Autostart) -> Value {
     if let Some(d) = choice.delay {
         row["delay"] = json!(d);
     }
+    row["minimize"] = json!(choice.minimize == Some(true));
     if row["can_toggle"] != true {
         return row;
     }
@@ -95,7 +96,8 @@ fn with_choice(mut row: Value, state: &Autostart) -> Value {
 
 fn added_row(a: &Added) -> Value {
     let mut row = json!({"id": a.id(), "name": a.name(), "icon": null, "source": "added",
-        "enabled": a.enabled(), "can_toggle": true, "delay": a.delay().unwrap_or(0)});
+        "enabled": a.enabled(), "can_toggle": true, "delay": a.delay().unwrap_or(0),
+        "minimize": a.minimize()});
     if a.enabled() {
         set_status(&mut row, "not_started", Some(NEXT_LOGIN));
     } else {
