@@ -399,6 +399,23 @@ SettingsPage {
         }
 
         SettingsCard {
+            title: "Startup banner"
+            iconName: "utilities-terminal"
+
+            SwitchRow {
+                objectName: "startupBanner"
+                settingId: "startup-banner"
+                iconName: "utilities-terminal"
+                label: "Show the uQ banner when the computer starts and shuts down"
+                highlight: App.highlight
+                value: !!(page.snap.banner && page.snap.banner.on)
+                enabled: page.idle
+                Layout.fillWidth: true
+                onChosen: on => lm.setStartupBanner(on)
+            }
+        }
+
+        SettingsCard {
             title: "Automatic login"
             iconName: "system-switch-user"
 

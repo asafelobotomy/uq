@@ -200,6 +200,21 @@ async fn logind_rejects_anything_outside_the_set_before_asking_polkit() {
 }
 
 #[tokio::test]
+async fn the_startup_banner_switch_is_a_marker_file() {
+    let f = Fixture::new(true);
+    let marker = f.path("etc/uq/banner-off");
+    f.helper.set_startup_banner(":1.5", false).await.unwrap();
+    assert!(marker.is_file());
+    // Off twice, then on, then on again: each is fine.
+    f.helper.set_startup_banner(":1.5", false).await.unwrap();
+    f.helper.set_startup_banner(":1.5", true).await.unwrap();
+    assert!(!marker.exists());
+    f.helper.set_startup_banner(":1.5", true).await.unwrap();
+    assert!(f.checks().iter().all(|c| c.1 == Action::Greeter));
+    assert_eq!(f.checks().len(), 4);
+}
+
+#[tokio::test]
 async fn sync_greeter_theme_keeps_the_other_settings() {
     let f = Fixture::new(true);
     f.helper

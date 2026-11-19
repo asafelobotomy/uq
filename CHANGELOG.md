@@ -7,6 +7,10 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **The boot and shutdown banner turns itself on.** Installing or updating uQ enables `uq-banner-boot.service` and `uq-banner-shutdown.service`. Settings → Login screen → **Startup banner** switches it off (it creates `/etc/uq/banner-off`, which the units check), and updates keep it off. They still never touch the bootloader or the kernel command line.
+
 ## [0.3.15] - 2026-11-19
 
 ### Added

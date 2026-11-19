@@ -211,6 +211,7 @@ pub trait Helper {
     fn set_greeter_monitors(&self, json: &str) -> zbus::Result<()>;
     fn clear_greeter_monitors(&self) -> zbus::Result<()>;
     fn set_auto_login(&self, user: &str) -> zbus::Result<()>;
+    fn set_startup_banner(&self, on: bool) -> zbus::Result<()>;
 }
 
 pub const HELPER_NAME: &str = "org.uq.SettingsHelper1";

@@ -339,7 +339,7 @@ async fn auto_login_and_greeter_files_over_the_bus() {
 }
 
 #[tokio::test]
-async fn introspection_lists_exactly_the_eight_methods() {
+async fn introspection_lists_exactly_the_nine_methods() {
     let s = Setup::new().await;
     let reply = s
         .client
@@ -376,6 +376,7 @@ async fn introspection_lists_exactly_the_eight_methods() {
             "SetGreeterMonitors",
             "SetGreeterWallpaper",
             "SetLogindPowerActions",
+            "SetStartupBanner",
             "SyncGreeterTheme"
         ]
     );

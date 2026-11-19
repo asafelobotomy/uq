@@ -25,5 +25,27 @@ for f in 'packaging/banner/uq-banner "$pkgdir/usr/lib/uq/uq-banner"' \
          'packaging/banner/uq-banner-shutdown.service "$pkgdir/usr/lib/systemd/system/uq-banner-shutdown.service"'; do
     grep -qF -- "$f" "$root/packaging/uq/PKGBUILD" || bad "PKGBUILD does not install: $f"
 done
+# The units stay off while Settings' marker exists.
+for u in boot shutdown; do
+    grep -qx 'ConditionPathExists=!/etc/uq/banner-off' "$root/packaging/banner/uq-banner-$u.service" ||
+        bad "uq-banner-$u.service doesn't honour /etc/uq/banner-off"
+done
+# uq.install enables the units on install and update, unless the marker exists.
+inst="$root/packaging/uq/uq.install"
+mkdir -p "$t/bin"
+printf '#!/bin/sh\necho "$@" >> "%s/systemctl.log"\n' "$t" > "$t/bin/systemctl"; chmod +x "$t/bin/systemctl"
+run_hook() { # $1 = hook, $2 = marker path to test with
+    rm -f "$t/systemctl.log"
+    sed "s#/etc/uq/banner-off#$2#" "$inst" > "$t/uq.install"
+    PATH="$t/bin:$PATH" bash -c ". '$t/uq.install'; $1" > /dev/null
+}
+for hook in post_install post_upgrade; do
+    run_hook "$hook" "$t/absent"
+    grep -q 'enable --quiet uq-banner-boot.service uq-banner-shutdown.service' "$t/systemctl.log" 2>/dev/null ||
+        bad "$hook doesn't enable the banner units"
+    : > "$t/present"
+    run_hook "$hook" "$t/present"
+    [ ! -s "$t/systemctl.log" ] || bad "$hook enabled the banner although it was switched off"
+done
 [ "$fail" = 0 ] && echo "banner: ok"
 exit "$fail"
