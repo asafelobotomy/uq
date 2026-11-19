@@ -25,6 +25,16 @@ pub enum GreeterCmd {
         #[arg(long, value_name = "FILE", default_value = GREETER_MONITORS)]
         file: PathBuf,
     },
+    /// Match the login screen's theme to the given theme (uqd runs this after each theme change;
+    /// an active local administrator needs no password). Fails quietly-but-nonzero for a theme
+    /// the login screen doesn't ship, such as your own.
+    #[command(hide = true)]
+    SyncTheme {
+        #[arg(long)]
+        theme: String,
+        #[arg(long)]
+        variant: String,
+    },
 }
 
 /// Written by uq-settings-helper's `SetGreeterMonitors`.
@@ -227,6 +237,7 @@ pub fn main(cmd: &GreeterCmd) -> ExitCode {
     let res = match cmd {
         GreeterCmd::Enable => enable(&root, uid, &mut SystemRunner),
         GreeterCmd::Disable => disable(&root, uid, &mut SystemRunner),
+        GreeterCmd::SyncTheme { .. } => unreachable!("handled by sync_theme in main"),
         GreeterCmd::MonitorsLua { file } => {
             return match monitors_lua(file) {
                 Ok(lines) => {
@@ -457,5 +468,33 @@ mod tests {
         fs::write(&file, vec![b'#'; uq_core::lua::MAX_GREETER_MONITORS + 10]).unwrap();
         assert!(monitors_lua(&file).is_err());
         assert!(monitors_lua(dir.path()).is_err(), "a directory");
+    }
+}
+
+#[zbus::proxy(
+    interface = "org.uq.SettingsHelper1",
+    default_service = "org.uq.SettingsHelper1",
+    default_path = "/org/uq/SettingsHelper1"
+)]
+trait Helper {
+    fn sync_greeter_theme(&self, theme: &str, variant: &str) -> zbus::Result<()>;
+}
+
+/// `sync-theme`: ask uq-settings-helper (system bus, polkit-checked) to write the theme.
+pub async fn sync_theme(theme: &str, variant: &str) -> ExitCode {
+    let res: zbus::Result<()> = async {
+        let conn = zbus::Connection::system().await?;
+        HelperProxy::new(&conn)
+            .await?
+            .sync_greeter_theme(theme, variant)
+            .await
+    }
+    .await;
+    match res {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("uqctl: the login screen's theme was not changed: {e}");
+            ExitCode::FAILURE
+        }
     }
 }

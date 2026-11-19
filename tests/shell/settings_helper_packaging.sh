@@ -72,7 +72,7 @@ if command -v xmllint >/dev/null 2>&1; then
 
     # The polkit actions and their defaults.
     def() { xmllint --xpath "string(//action[@id=\"$1\"]/defaults/$2)" "$policy"; }
-    for a in org.uq.settings.power org.uq.settings.greeter; do
+    for a in org.uq.settings.power org.uq.settings.greeter org.uq.settings.greeter-theme; do
         [ "$(def "$a" allow_active)" = auth_admin_keep ] || no "$a allow_active isn't auth_admin_keep"
         [ "$(def "$a" allow_any)" = auth_admin ] || no "$a allow_any isn't auth_admin"
         [ "$(def "$a" allow_inactive)" = auth_admin ] || no "$a allow_inactive isn't auth_admin"
@@ -80,12 +80,17 @@ if command -v xmllint >/dev/null 2>&1; then
     for k in allow_any allow_inactive allow_active; do
         [ "$(def org.uq.settings.autologin "$k")" = auth_admin ] || no "org.uq.settings.autologin $k isn't auth_admin (never kept)"
     done
-    [ "$(xmllint --xpath 'count(//action)' "$policy")" = 3 ] || no "org.uq.settings.policy should have exactly 3 actions"
+    [ "$(xmllint --xpath 'count(//action)' "$policy")" = 4 ] || no "org.uq.settings.policy should have exactly 4 actions"
 else
     grep -q '<allow own="org.uq.SettingsHelper1"/>' "$conf" || no "org.uq.SettingsHelper1.conf lacks the root owner rule"
 fi
 grep -q '<allow_active>yes</allow_active>\|<allow_any>yes</allow_any>\|<allow_inactive>yes</allow_inactive>' "$policy" &&
     no "org.uq.settings.policy allows an action without authentication"
+
+# The rule that skips the prompt covers the theme action only, for active local wheel members.
+rules="$root/packaging/polkit/49-uq-greeter-theme.rules"
+[ "$(grep -c 'action.id ==' "$rules")" = 1 ] && grep -q 'action.id == "org.uq.settings.greeter-theme"' "$rules" || no "the polkit rule must name only org.uq.settings.greeter-theme"
+grep -q 'subject.local && subject.active && subject.isInGroup("wheel")' "$rules" || no "the polkit rule must require a local, active wheel member"
 
 # --- tmpfiles.d -------------------------------------------------------------------------------
 grep -qx 'd /var/lib/uq-greeter 0755 root root -' "$tmpfiles" || no "tmpfiles lacks /var/lib/uq-greeter (root 0755)"
@@ -101,6 +106,7 @@ for line in \
     'install -Dm644 packaging/dbus/org.uq.SettingsHelper1.conf "$pkgdir/usr/share/dbus-1/system.d/org.uq.SettingsHelper1.conf"' \
     'install -Dm644 packaging/uq-settings-helper.service "$pkgdir/usr/lib/systemd/system/uq-settings-helper.service"' \
     'install -Dm644 packaging/polkit/org.uq.settings.policy "$pkgdir/usr/share/polkit-1/actions/org.uq.settings.policy"' \
+    'install -Dm644 packaging/polkit/49-uq-greeter-theme.rules "$pkgdir/usr/share/polkit-1/rules.d/49-uq-greeter-theme.rules"' \
     'install -dm755 "$pkgdir/etc/uq" "$pkgdir/etc/systemd/logind.conf.d"'; do
     grep -qF "  $line" "$pkgbuild" || no "PKGBUILD lacks: $line"
 done

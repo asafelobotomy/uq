@@ -339,7 +339,7 @@ async fn auto_login_and_greeter_files_over_the_bus() {
 }
 
 #[tokio::test]
-async fn introspection_lists_exactly_the_seven_methods() {
+async fn introspection_lists_exactly_the_eight_methods() {
     let s = Setup::new().await;
     let reply = s
         .client
@@ -375,7 +375,8 @@ async fn introspection_lists_exactly_the_seven_methods() {
             "SetGreeterAppearance",
             "SetGreeterMonitors",
             "SetGreeterWallpaper",
-            "SetLogindPowerActions"
+            "SetLogindPowerActions",
+            "SyncGreeterTheme"
         ]
     );
     assert!(!iface.contains("<property") && !iface.contains("<signal"));

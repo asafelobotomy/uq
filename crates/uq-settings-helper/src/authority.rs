@@ -18,16 +18,25 @@ pub enum Action {
     Greeter,
     /// `org.uq.settings.autologin` (`auth_admin`, never kept).
     AutoLogin,
+    /// `org.uq.settings.greeter-theme` (`auth_admin_keep`; the shipped polkit rule lets an
+    /// active local administrator do it without a prompt): only the login screen's theme.
+    GreeterTheme,
 }
 
 impl Action {
-    pub const ALL: [Action; 3] = [Self::Power, Self::Greeter, Self::AutoLogin];
+    pub const ALL: [Action; 4] = [
+        Self::Power,
+        Self::Greeter,
+        Self::AutoLogin,
+        Self::GreeterTheme,
+    ];
 
     pub fn id(self) -> &'static str {
         match self {
             Self::Power => "org.uq.settings.power",
             Self::Greeter => "org.uq.settings.greeter",
             Self::AutoLogin => "org.uq.settings.autologin",
+            Self::GreeterTheme => "org.uq.settings.greeter-theme",
         }
     }
 }

@@ -1,0 +1,14 @@
+[Unit]
+Description=uQ boot banner
+DefaultDependencies=no
+After=systemd-vconsole-setup.service
+Before=sysinit.target
+ConditionPathExists=/dev/console
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/uq/uq-banner boot
+TimeoutSec=5
+
+[Install]
+WantedBy=sysinit.target

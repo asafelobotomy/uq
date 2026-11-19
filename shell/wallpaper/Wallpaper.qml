@@ -166,12 +166,21 @@ PanelWindow {
         }
     }
 
+    // Nothing chosen (no picture, no folder, no colour): uQ's own backdrop, in the theme's colours.
+    readonly property bool useBackdrop: imagePath === "" && !slideshow
+        && !(entry && typeof entry.color === "string" && entry.color !== "")
+
+    UqBackdrop {
+        anchors.fill: parent
+        visible: win.useBackdrop
+    }
+
     Crossfade {
         anchors.fill: parent
         target: win.target
         fit: win.fit
         span: win.spanning ? win.spanBox : null
-        color: W.fallbackColor(win.entry, Theme.bg)
+        color: win.useBackdrop ? "transparent" : W.fallbackColor(win.entry, Theme.bg)
         reduceMotion: win.reduceMotion
         fadeMs: win.fadeMs
         // A slideshow skips a bad slide without flashing the colour.
