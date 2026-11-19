@@ -3,6 +3,8 @@ Description=uQ shutdown banner
 DefaultDependencies=no
 Before=shutdown.target
 ConditionPathExists=/dev/console
+# Settings → Login screen → Startup banner creates this file to turn the banner off.
+ConditionPathExists=!/etc/uq/banner-off
 
 [Service]
 Type=oneshot

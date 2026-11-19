@@ -66,6 +66,10 @@ pub mod qobject {
         /// Log you in automatically when the computer starts, or stop doing so.
         #[qinvokable]
         fn set_auto_login(self: Pin<&mut LoginScreenModel>, on: bool);
+
+        /// Show the uQ banner when the computer starts and shuts down, or stop showing it.
+        #[qinvokable]
+        fn set_startup_banner(self: Pin<&mut LoginScreenModel>, on: bool);
     }
 
     impl cxx_qt::Threading for LoginScreenModel {}
@@ -184,5 +188,9 @@ impl LoginScreenModel {
 
     fn set_auto_login(self: Pin<&mut Self>, on: bool) {
         model_core::start(self, Op::SetAutoLogin { on });
+    }
+
+    fn set_startup_banner(self: Pin<&mut Self>, on: bool) {
+        model_core::start(self, Op::SetStartupBanner { on });
     }
 }

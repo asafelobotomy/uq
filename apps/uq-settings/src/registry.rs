@@ -822,7 +822,7 @@ static USERS_SETTINGS: [SearchEntry; 2] = [
     ),
 ];
 
-static LOGIN_SCREEN_SETTINGS: [SearchEntry; 6] = [
+static LOGIN_SCREEN_SETTINGS: [SearchEntry; 7] = [
     entry(
         "greeter-theme",
         "Login screen theme",
@@ -847,6 +847,11 @@ static LOGIN_SCREEN_SETTINGS: [SearchEntry; 6] = [
         "greeter-reduce-motion",
         "Login screen motion",
         &["greeter", "animations", "reduce motion"],
+    ),
+    entry(
+        "startup-banner",
+        "Startup banner",
+        &["boot", "shutdown", "ascii", "logo", "splash", "console"],
     ),
     entry(
         "auto-login",

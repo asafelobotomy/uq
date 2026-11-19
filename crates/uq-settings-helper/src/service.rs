@@ -244,6 +244,23 @@ impl Helper {
         remove(&path).map_err(|e| failed(&path, e))
     }
 
+    /// `SetStartupBanner`: switch the boot and shutdown banner on (remove `/etc/uq/banner-off`)
+    /// or off (create it). The banner units check that file, and package updates never touch it.
+    pub async fn set_startup_banner(&self, sender: &str, on: bool) -> Result<(), HelperError> {
+        self.authorize(sender, Action::Greeter).await?;
+        let path = self.cfg.banner_off();
+        if on {
+            let _g = self.lock.lock().await;
+            remove(&path).map_err(|e| failed(&path, e))
+        } else {
+            self.write(
+                &path,
+                b"# The uQ boot and shutdown banner is off (uQ Settings). Delete this file to turn it on.\n",
+            )
+            .await
+        }
+    }
+
     /// `SetAutoLogin`: set (or with `""`, remove) `[initial_session]` in `/etc/uq/greetd.toml`.
     /// The user must exist with a regular uid and must not be locked or expired; the command is
     /// always the uQ session.
@@ -478,6 +495,16 @@ impl HelperIface {
         let _busy = self.helper.activity.begin();
         let sender = sender_of(&header)?;
         self.helper.clear_greeter_monitors(&sender).await
+    }
+
+    async fn set_startup_banner(
+        &self,
+        on: bool,
+        #[zbus(header)] header: zbus::message::Header<'_>,
+    ) -> Result<(), HelperError> {
+        let _busy = self.helper.activity.begin();
+        let sender = sender_of(&header)?;
+        self.helper.set_startup_banner(&sender, on).await
     }
 
     async fn set_auto_login(

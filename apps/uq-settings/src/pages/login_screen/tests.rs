@@ -167,6 +167,23 @@ async fn auto_login_on_and_off() {
 }
 
 #[tokio::test]
+async fn startup_banner_off_and_on() {
+    let t = setup(true, false).await;
+    let out = run(&t.page, Op::Refresh).await;
+    assert_eq!(out.state["banner"]["on"], true, "on unless switched off");
+
+    let out = run(&t.page, Op::SetStartupBanner { on: false }).await;
+    assert_eq!(out.error, None);
+    assert_eq!(out.state["banner"]["on"], false);
+    assert!(t.helper.read("etc/uq/banner-off").is_some());
+
+    let out = run(&t.page, Op::SetStartupBanner { on: true }).await;
+    assert_eq!(out.error, None);
+    assert_eq!(out.state["banner"]["on"], true);
+    assert!(t.helper.read("etc/uq/banner-off").is_none());
+}
+
+#[tokio::test]
 async fn a_user_the_helper_refuses_shows_its_reason() {
     let mut t = setup(true, false).await;
     t.page.me = "ghost".into();

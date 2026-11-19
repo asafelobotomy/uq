@@ -11,6 +11,9 @@ pub const LOGIND_DROPIN: &str = "etc/systemd/logind.conf.d/50-uq.conf";
 pub const GREETER_TOML: &str = "etc/uq/greeter.toml";
 /// The greeter's optional monitor layout.
 pub const GREETER_MONITORS: &str = "etc/uq/greeter-monitors.toml";
+/// Present while the boot and shutdown banner is switched off in Settings; the banner units
+/// start only when it is absent. An update never touches it.
+pub const BANNER_OFF: &str = "etc/uq/banner-off";
 /// uQ's greetd config; the helper edits only its `[initial_session]` table.
 pub const GREETD_TOML: &str = "etc/uq/greetd.toml";
 /// The greeter's wallpaper: a byte copy of the user's image, never decoded here.
@@ -60,6 +63,10 @@ impl Config {
 
     pub fn greeter_monitors(&self) -> PathBuf {
         self.at(GREETER_MONITORS)
+    }
+
+    pub fn banner_off(&self) -> PathBuf {
+        self.at(BANNER_OFF)
     }
 
     pub fn greetd_toml(&self) -> PathBuf {

@@ -22,6 +22,8 @@ use super::sysbus::{self, HELPER, SystemBus, failure, settle};
 pub const GREETD_TOML: &str = "etc/uq/greetd.toml";
 pub const GREETER_TOML: &str = "etc/uq/greeter.toml";
 pub const GREETER_MONITORS: &str = "etc/uq/greeter-monitors.toml";
+/// Present while the boot and shutdown banner is switched off.
+pub const BANNER_OFF: &str = "etc/uq/banner-off";
 pub const GREETER_WALLPAPER: &str = "var/lib/uq-greeter/wallpaper";
 pub const RENDERED: &str = "usr/share/uq/themes/rendered";
 /// The largest picture the login screen takes (Phase 5 §4.1).
@@ -59,6 +61,10 @@ pub enum Op {
     AutomaticDisplays,
     /// Auto-login for the current user (`true`) or nobody.
     SetAutoLogin {
+        on: bool,
+    },
+    /// The boot and shutdown banner on (`true`) or off.
+    SetStartupBanner {
         on: bool,
     },
 }
@@ -328,6 +334,19 @@ impl PageLogic for LoginScreenState {
                 let r = self.helper().await?.clear_greeter_monitors().await;
                 self.saved(r)
             }
+            Op::SetStartupBanner { on } => {
+                let r = self.helper().await?.set_startup_banner(on).await;
+                let ok = r.is_ok();
+                settle(r, &HELPER)?;
+                if ok {
+                    self.notice(if on {
+                        "The startup banner is on. It shows at the next start and shutdown."
+                    } else {
+                        "The startup banner is off, and updates keep it off."
+                    });
+                }
+                Ok(())
+            }
             Op::SetAutoLogin { on } => {
                 if on && self.me.is_empty() {
                     return Err(failure("Your user name couldn't be found."));
@@ -381,6 +400,7 @@ impl PageLogic for LoginScreenState {
             },
             "monitors": {"set": self.at(GREETER_MONITORS).is_file()},
             "auto_login": {"user": self.auto_login_user(), "me": self.me},
+            "banner": {"on": !self.at(BANNER_OFF).exists()},
             "notice": {"seq": seq, "text": text},
         }))
     }
