@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <circle cx="32" cy="32" r="28" fill="#3d4350"/>
+  <circle cx="32" cy="32" r="26" fill="none" stroke="#5a6171" stroke-width="1.5"/>
+  <circle cx="32" cy="32" r="9" fill="#1f232b"/>
+  <circle cx="32" cy="32" r="3.5" fill="#d7dae0"/>
+  <path d="M10 17a28 28 0 0 1 18-12" fill="none" stroke="#ffffff" stroke-opacity=".28" stroke-width="3" stroke-linecap="round"/>
+  <rect x="6" y="24" width="52" height="16" rx="3" fill="#5c6370"/>
+  <text x="32" y="36.4" text-anchor="middle" font-family="Inter, Noto Sans, DejaVu Sans, sans-serif" font-weight="700" font-size="13.0" fill="#ffffff">CUE</text>
+</svg>

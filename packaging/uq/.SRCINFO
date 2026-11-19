@@ -16,6 +16,7 @@ pkgbase = uq
 	depends = uq-hyprland-pin>=0.56.2
 	depends = dbus
 	depends = glib2
+	depends = shared-mime-info
 	depends = qt6ct
 	depends = gcc-libs
 	depends = quickshell>=0.3.1
