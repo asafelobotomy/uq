@@ -1,0 +1,46 @@
+name: dialogtmp
+on:
+  push:
+    branches: ['claude/project-thread-r0kswp']
+permissions:
+  contents: read
+jobs:
+  dialogtmp:
+    # The shell on a real Hyprland (scripts/smoke-shell.sh). Hyprland cannot start without a DRM
+    # device, even with only headless outputs, and a job container is created before any step
+    # could load a module. So this job runs on the runner VM itself: it loads vkms (a virtual KMS
+    # card, rendered in software) and runs the test in an Arch container given only that card.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Load vkms
+        run: |
+          # vkms is in linux-modules on newer Azure kernels, linux-modules-extra on older ones.
+          sudo modprobe vkms 2>/dev/null || {
+            sudo apt-get update -q && sudo apt-get install -y -q "linux-modules-extra-$(uname -r)" && sudo modprobe vkms
+          }
+          card=""
+          for c in /sys/class/drm/card*; do
+            case "${c##*/}" in *-*) continue ;; esac   # connectors (card0-Virtual-1), not cards
+            [ "$(basename "$(readlink -f "$c/device")")" = vkms ] && card=/dev/dri/${c##*/}
+          done
+          [ -n "$card" ] || { echo "::error::vkms loaded but no vkms card found"; ls -l /sys/class/drm; exit 1; }
+          echo "vkms card: $card"
+          echo "SMOKE_CARD=$card" >> "$GITHUB_ENV"
+      # vkms gives Hyprland a card, so the shell must run here: a skip (exit 77) would hide a
+      # regression, and fails the job like any other error.
+      - name: dialog only
+        run: |
+          docker run --rm --device "$SMOKE_CARD" -e SMOKE_CARD -e SMOKE_UID="$(id -u)" \
+            -v "$GITHUB_WORKSPACE:/src" archlinux:latest bash /src/scripts/tmp-dialog-only.sh
+      - name: Keep the screenshots and GIFs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: smoke-captures
+          path: captures/
+          if-no-files-found: ignore
+
