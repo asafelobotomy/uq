@@ -11,7 +11,17 @@ bad() { echo "FAIL: $*"; fail=1; }
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 cp -r "$root/packaging/mime" "$tmp/before"
 python3 "$root/scripts/gen-rom-mime.py" >/dev/null || bad "gen-rom-mime.py failed"
-diff -r "$tmp/before" "$root/packaging/mime" >/dev/null || {
+python3 - "$tmp/before" "$root/packaging/mime" <<'P' || {
+import filecmp, sys
+
+
+def same(c):
+    return not (c.left_only or c.right_only or c.diff_files or c.funny_files) and all(same(d) for d in c.subdirs.values())
+
+
+sys.exit(0 if same(filecmp.dircmp(sys.argv[1], sys.argv[2])) else 1)
+P
+
     bad "packaging/mime is stale: run python3 scripts/gen-rom-mime.py"
     rm -rf "$root/packaging/mime" && cp -r "$tmp/before" "$root/packaging/mime"
 }
