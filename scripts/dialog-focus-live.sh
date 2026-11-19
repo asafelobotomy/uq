@@ -170,13 +170,17 @@ start_app
 expect_dialog "after popups" def 2-after-popups
 stop_app
 
-# --- 3. a popup open when the dialog opens ---------------------------------------------------------
-ipc open appmenu >/dev/null; sleep 0.8
-start_app
-[ "$(active_title)" = focus-dialog ] || check "popup open: the dialog is not focused (active: '$(active_title)')"
-expect_dialog "popup open" ghi 3-popup-open
-ipc close appmenu >/dev/null; sleep 0.5
-stop_app
+# --- 3. a popup open when the dialog opens: the dialog must get the keyboard, and the popup must go -----
+n=0
+for popup in appmenu quicksettings lookseedo powermenu; do
+    n=$((n + 1))
+    ipc open "$popup" >/dev/null; sleep 0.8
+    start_app
+    [ "$(active_title)" = focus-dialog ] || check "$popup open: the dialog is not focused (active: '$(active_title)')"
+    expect_dialog "$popup open" "g$n" 3-$popup-open
+    ipc close "$popup" >/dev/null; sleep 0.5
+    stop_app
+done
 
 # --- 4. pointer wandering: over the bar, the parent, the dialog; click on the parent --------------
 start_app
