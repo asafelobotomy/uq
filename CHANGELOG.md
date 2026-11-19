@@ -9,6 +9,10 @@ All notable changes to uQ are listed here. The format follows
 
 ## [0.3.16] - 2026-11-19
 
+### Fixed
+
+- **look=see>do_ finds more documents.** The file index now follows linked folders (a Documents folder that is a link to another drive was never searched), matches several words in any order (`tax return` finds `Tax_Return-2026.pdf`), and fills shallow folders first, so a full index no longer leaves out top-level files.
+
 ### Changed
 
 - **The boot and shutdown banner turns itself on.** Installing or updating uQ enables `uq-banner-boot.service` and `uq-banner-shutdown.service`. Settings → Login screen → **Startup banner** switches it off (it creates `/etc/uq/banner-off`, which the units check), and updates keep it off. They still never touch the bootloader or the kernel command line.
