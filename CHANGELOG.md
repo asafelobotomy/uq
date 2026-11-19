@@ -11,6 +11,7 @@ All notable changes to uQ are listed here. The format follows
 
 ### Changed
 
+- **Num Lock is on by default,** on the login screen and in the desktop (and so on the lock screen). To turn it off, add `hl.config({ input = { numlock_by_default = false } })` to `user.lua`.
 - **The app menu, quick settings and the power menu open without a stall.** They used to create a new window each time, and the shell waited 30 to 40 ms for that window's first frame. Their windows now stay in place, out of sight and out of the way, and the menu fades in and out instead (the shell uses a little more memory at rest).
 
 ### Security

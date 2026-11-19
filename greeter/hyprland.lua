@@ -27,6 +27,8 @@ hl.config({
     },
     input = {
         kb_layout    = "us",
+        -- The password field takes digits from the numpad.
+        numlock_by_default = true,
         follow_mouse = 1,
     },
     misc = {
