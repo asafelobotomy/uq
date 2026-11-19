@@ -152,7 +152,7 @@ expect_dialog() {
     local what=$1 word=$2
     send "type $word" "sleep 500"; drain
     if grep -q "dialog:.*$word" "$app_log"; then echo "ok: $what (dialog got '$word')"
-    else check "$what: the dialog did not get '$word' (active: '$(active_title)'; app saw: $(grep -E '^(parent|dialog):' "$app_log" | tr '\n' ' '))"; fi
+    else check "$what: the dialog did not get '$word' (active: '$(active_title)'; app log: $(tail -n 6 "$app_log" | tr '\n' '|'))"; fi
     still "$3"
 }
 ipcs() { for s in "$@"; do ipc open "$s" >/dev/null; sleep 0.8; ipc close "$s" >/dev/null; sleep 0.6; done; }
