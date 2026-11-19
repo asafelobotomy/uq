@@ -7,15 +7,17 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.17] - 2026-11-19
+
+### Fixed
+
+- **look=see>do_ finds more documents.** The file index now follows linked folders (a Documents folder that is a link to another drive was never searched), matches several words in any order (`tax return` finds `Tax_Return-2026.pdf`), and fills shallow folders first, so a full index no longer leaves out top-level files.
+
 ### Added
 
 - **ROM and retro-platform files are recognised and have icons.** uQ installs `uq-roms.xml` (shared-mime-info) and one icon per platform, so Dolphin, other file managers and `xdg-open` show "Super Nintendo ROM", "Game Boy Advance ROM", "Wii disc image" and so on, with a cartridge, card or disc icon labelled with the platform. It covers NES/Famicom Disk System, SNES, N64, Game Boy, GBC, GBA, DS, 3DS, Switch, GameCube, Wii, Wii U, Sega (SG-1000 to Dreamcast), Sony (PBP, Vita), Xbox, Atari, PC Engine, Neo Geo, WonderSwan, MSX and a few home computers, plus `.cue` and `.chd` discs. Existing freedesktop types (`application/x-nes-rom` and the rest) are reused and only gain extensions, a plainer name and an icon; ambiguous extensions (`.bin`, `.iso`, `.rom`, `.md`) are left alone. `scripts/gen-rom-mime.py` generates the files and `tests/shell/rom_mime.sh` checks them.
 
 ## [0.3.16] - 2026-11-19
-
-### Fixed
-
-- **look=see>do_ finds more documents.** The file index now follows linked folders (a Documents folder that is a link to another drive was never searched), matches several words in any order (`tax return` finds `Tax_Return-2026.pdf`), and fills shallow folders first, so a full index no longer leaves out top-level files.
 
 ### Changed
 
