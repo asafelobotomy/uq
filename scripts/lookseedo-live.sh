@@ -48,6 +48,11 @@ printf '[Desktop Entry]\nType=Application\nName=Kitty\nExec=kitty\nIcon=utilitie
 # Recents and the pinned squares, as the shell saves them.
 printf '{"v":1,"pins":["","","","",""],"recents":["foot"]}' >"$tmp/state/uq/lookseedo.json"
 
+# Files to search: Documents is a link to another drive, as on many setups.
+mkdir -p "$tmp/home" "$tmp/drive/Documents/Taxes"
+: >"$tmp/drive/Documents/Taxes/Tax_Return-2026.pdf"; : >"$tmp/drive/Documents/cv-final.odt"
+ln -s "$tmp/drive/Documents" "$tmp/home/Documents"
+
 dbus-daemon --session --address="unix:path=$tmp/bus" --nofork --nopidfile >"$tmp/dbus.log" 2>&1 &
 pids+=($!)
 
@@ -80,7 +85,7 @@ hc configerrors | grep -v '^\s*$' | sed 's/^/config error: /'
 
 shell_env=(env XDG_RUNTIME_DIR="$rt" WAYLAND_DISPLAY="$wl" HYPRLAND_INSTANCE_SIGNATURE="$sig"
     DBUS_SESSION_BUS_ADDRESS="unix:path=$tmp/bus" PATH="$tmp/bin:$(dirname "$uqctl"):$PATH"
-    XDG_STATE_HOME="$tmp/state" XDG_DATA_HOME="$tmp/data" QT_QPA_PLATFORM=wayland LC_ALL=C.UTF-8)
+    XDG_STATE_HOME="$tmp/state" XDG_DATA_HOME="$tmp/data" UQ_SEARCH_ROOTS="$tmp/home" QT_QPA_PLATFORM=wayland LC_ALL=C.UTF-8)
 "${shell_env[@]}" qs -p "$root/shell" --no-duplicate >"$tmp/qs.log" 2>&1 &
 pids+=($!)
 for _ in $(seq 1 50); do hc layers -j | grep -q uq-bar && break; sleep 0.2; done
@@ -151,6 +156,13 @@ still 4-pinned
 send "type fo" "sleep 800"; drain; still 5-searching
 send "key Escape" "sleep 600"; drain
 wait_layers 0 || check "Escape did not close look=see>do_"
+
+# --- 3b. documents: found by name through a linked Documents folder, several words in any order ---
+ipc open >/dev/null; wait_layers 1 || fail "look=see>do_ did not reopen for the file search"
+sleep 2
+send "type return tax" "sleep 1000"; drain; still 5b-documents
+send "key Escape" "sleep 600"; drain
+wait_layers 0 || check "Escape did not close look=see>do_ after the file search"
 
 # --- 4. a > command drops the terminal; Enter opens it; clicking it hands over ---------------
 ipc open >/dev/null; wait_layers 1 || fail "look=see>do_ did not reopen"
