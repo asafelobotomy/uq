@@ -3,13 +3,18 @@
 //! plus files elsewhere on the system through `plocate` when it is installed ("System files").
 //!
 //! The index covers the home folder and the drives mounted under `/mnt`, `/media` and
-//! `/run/media/<user>`. Hidden files and folders, symbolic links and build or package folders
-//! (`node_modules`, `target`, `__pycache__`, …) are left out, and it stops at [`MAX_ENTRIES`]. It
+//! `/run/media/<user>`. Hidden files and folders and build or package folders (`node_modules`,
+//! `target`, `__pycache__`, …) are left out. Symbolic links are followed (`~/Documents` is often a
+//! link to another drive), once per target folder, never into `/` or the system folders. The walk
+//! goes level by level, so when it stops at [`MAX_ENTRIES`] the shallow files (the user's
+//! Documents) are in and only the deepest are missing. It
 //! is built on a blocking thread, off the request path, when look=see>do_ opens and the last build
 //! is older than [`STALE_AFTER`]; searches use the last finished build meanwhile. One search is a
 //! linear pass over pre-lowercased names: a few milliseconds for 100 000 entries.
 
 use super::calc::ProviderItem;
+use std::collections::{HashSet, VecDeque};
+use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
@@ -164,17 +169,32 @@ fn skip_dir(name: &str) -> bool {
     SKIP_DIRS.contains(&name)
 }
 
-/// Build the index over `roots` (`now`: for "recent"). Never follows symbolic links.
+/// Targets of symbolic links that are never followed: the system folders.
+fn system_target(p: &Path) -> bool {
+    p == Path::new("/")
+        || ["/proc", "/sys", "/dev", "/run"]
+            .iter()
+            .any(|s| p.starts_with(s))
+}
+
+/// Build the index over `roots` (`now`: for "recent"), level by level. Follows symbolic links to
+/// files and, once each, to folders (so a link back to a parent can't loop).
 pub fn build(roots: &[PathBuf], now: SystemTime) -> Index {
     let mut idx = Index::default();
-    let mut stack: Vec<(PathBuf, usize)> = roots.iter().map(|r| (r.clone(), 0)).collect();
+    let mut queue: VecDeque<(PathBuf, usize)> = roots.iter().map(|r| (r.clone(), 0)).collect();
+    let mut seen: HashSet<(u64, u64)> = HashSet::new();
+    for (r, _) in &queue {
+        if let Ok(m) = std::fs::metadata(r) {
+            seen.insert((m.dev(), m.ino()));
+        }
+    }
     let recent = |m: &std::fs::Metadata| {
         m.modified()
             .ok()
             .and_then(|t| now.duration_since(t).ok())
             .is_some_and(|d| d.as_secs() < RECENT_DAYS * 86_400)
     };
-    while let Some((dir, depth)) = stack.pop() {
+    while let Some((dir, depth)) = queue.pop_front() {
         let Ok(rd) = std::fs::read_dir(&dir) else {
             continue;
         };
@@ -191,25 +211,41 @@ pub fn build(roots: &[PathBuf], now: SystemTime) -> Index {
             let Ok(ft) = e.file_type() else { continue };
             let path = e.path();
             let Some(p) = path.to_str() else { continue };
-            let kind = if ft.is_dir() {
+            // What the entry is, looking through a link; `meta` is that of the target.
+            let (is_dir, is_file, meta) = if ft.is_symlink() {
+                let Ok(m) = std::fs::metadata(&path) else {
+                    continue; // a dangling link
+                };
+                (m.is_dir(), m.is_file(), m)
+            } else {
+                let Ok(m) = e.metadata() else { continue };
+                (ft.is_dir(), ft.is_file(), m)
+            };
+            let kind = if is_dir {
                 if skip_dir(name) {
                     continue;
                 }
-                if depth + 1 < MAX_DEPTH {
-                    stack.push((path.clone(), depth + 1));
+                let new_dir = seen.insert((meta.dev(), meta.ino()));
+                if ft.is_symlink() {
+                    let outside = std::fs::canonicalize(&path).is_ok_and(|t| system_target(&t));
+                    if !new_dir || outside {
+                        continue;
+                    }
+                }
+                if depth + 1 < MAX_DEPTH && new_dir {
+                    queue.push_back((path.clone(), depth + 1));
                 }
                 Kind::Folder
-            } else if ft.is_file() {
+            } else if is_file {
                 Kind::of_file(name)
             } else {
                 continue;
             };
-            let recent = e.metadata().map(|m| recent(&m)).unwrap_or(false);
             idx.entries.push(Entry {
                 path: p.into(),
                 name: name.to_lowercase().into(),
                 kind,
-                recent,
+                recent: recent(&meta),
             });
         }
     }
@@ -271,6 +307,21 @@ fn name_score(q: &str, name: &str) -> Option<f64> {
     }
 }
 
+/// How well a name matches a query of one or more words: one word as [`name_score`]; several, every
+/// word must be in the name, in any order and across `-`, `_` and spaces ("tax return" finds
+/// `Tax_Return-2026.pdf`), scored a little under the weakest word.
+fn query_score(words: &[&str], name: &str) -> Option<f64> {
+    match words {
+        [] => None,
+        [one] => name_score(one, name),
+        many => many
+            .iter()
+            .map(|w| name_score(w, name))
+            .collect::<Option<Vec<f64>>>()
+            .map(|s| s.into_iter().fold(1.0, f64::min) * 0.9),
+    }
+}
+
 /// The best [`PER_KIND`] rows of each type for `query`, as provider rows. Scores sit under an
 /// app's name match: at most 0.8.
 pub fn search(idx: &Index, query: &str) -> Vec<(Kind, Vec<ProviderItem>)> {
@@ -278,9 +329,10 @@ pub fn search(idx: &Index, query: &str) -> Vec<(Kind, Vec<ProviderItem>)> {
     if q.chars().count() < 2 {
         return Vec::new();
     }
+    let words: Vec<&str> = q.split_whitespace().collect();
     let mut per: Vec<Vec<(f64, &Entry)>> = vec![Vec::new(); Kind::ALL.len()];
     for e in &idx.entries {
-        let Some(s) = name_score(&q, &e.name) else {
+        let Some(s) = query_score(&words, &e.name) else {
             continue;
         };
         let s = s * 0.75 + if e.recent { 0.05 } else { 0.0 };
@@ -489,10 +541,102 @@ mod tests {
         let paths: Vec<&str> = idx.entries.iter().map(|e| &*e.path).collect();
         assert!(paths.iter().any(|p| p.ends_with("report-2026.pdf")));
         assert!(paths.iter().any(|p| p.ends_with("/Taxes")));
-        for gone in ["target", "node_modules", ".hidden", "docs-link"] {
+        for gone in ["target", "node_modules", ".hidden"] {
             assert!(!paths.iter().any(|p| p.contains(gone)), "{gone}: {paths:?}");
         }
         assert!(!idx.truncated);
+    }
+
+    #[test]
+    fn index_follows_links_once_and_never_loops() {
+        let d = tree();
+        let idx = build(&[d.path().to_path_buf()], SystemTime::now());
+        let paths: Vec<&str> = idx.entries.iter().map(|e| &*e.path).collect();
+        // `docs-link` points at Documents, which is walked once, under whichever name comes first.
+        assert_eq!(
+            paths.iter().filter(|p| p.ends_with("notes.md")).count(),
+            1,
+            "{paths:?}"
+        );
+        // A link back to a parent doesn't loop.
+        std::os::unix::fs::symlink(d.path(), d.path().join("Documents/up")).unwrap();
+        let idx = build(&[d.path().to_path_buf()], SystemTime::now());
+        assert!(!idx.truncated);
+    }
+
+    /// The bug behind "I searched for a document and got nothing": `~/Documents` is a link to
+    /// another drive, and links were skipped.
+    #[test]
+    fn documents_folder_that_is_a_link_is_searched() {
+        let home = tempfile::tempdir().unwrap();
+        let drive = tempfile::tempdir().unwrap();
+        fs::create_dir_all(drive.path().join("Documents/Taxes")).unwrap();
+        fs::write(
+            drive.path().join("Documents/Taxes/tax-return-2026.pdf"),
+            "x",
+        )
+        .unwrap();
+        fs::write(drive.path().join("Documents/cv.odt"), "x").unwrap();
+        std::os::unix::fs::symlink(
+            drive.path().join("Documents"),
+            home.path().join("Documents"),
+        )
+        .unwrap();
+        // A link to a single file, and a dangling one.
+        std::os::unix::fs::symlink(
+            drive.path().join("Documents/cv.odt"),
+            home.path().join("cv-link.odt"),
+        )
+        .unwrap();
+        std::os::unix::fs::symlink(home.path().join("nowhere"), home.path().join("gone.pdf"))
+            .unwrap();
+        let idx = build(&[home.path().to_path_buf()], SystemTime::now());
+        let found = search(&idx, "tax-return");
+        assert_eq!(found[0].0, Kind::Document);
+        assert_eq!(found[0].1[0].title, "tax-return-2026.pdf");
+        assert!(found[0].1[0].subtitle.ends_with("/Documents/Taxes"));
+        let docs = search(&idx, "cv");
+        assert_eq!(docs[0].1.len(), 2, "{docs:?}");
+        assert!(search(&idx, "gone").is_empty());
+    }
+
+    #[test]
+    fn shallow_files_survive_truncation() {
+        let d = tempfile::tempdir().unwrap();
+        fs::write(d.path().join("important.pdf"), "x").unwrap();
+        let deep = d.path().join("a/b/c");
+        fs::create_dir_all(&deep).unwrap();
+        for i in 0..50 {
+            fs::write(deep.join(format!("junk{i}.txt")), "x").unwrap();
+        }
+        // Breadth-first: with room for only a few entries the top level still comes first.
+        let top: Vec<_> = build(&[d.path().to_path_buf()], SystemTime::now())
+            .entries
+            .iter()
+            .take(3)
+            .map(|e| e.name.to_string())
+            .collect();
+        assert!(top.contains(&"important.pdf".to_string()), "{top:?}");
+    }
+
+    #[test]
+    fn several_words_match_across_separators_in_any_order() {
+        let d = tempfile::tempdir().unwrap();
+        for f in ["Tax_Return-2026.pdf", "tax notes.md", "return.txt"] {
+            fs::write(d.path().join(f), "x").unwrap();
+        }
+        let idx = build(&[d.path().to_path_buf()], SystemTime::now());
+        let titles = |q: &str| -> Vec<String> {
+            search(&idx, q)
+                .into_iter()
+                .flat_map(|(_, r)| r)
+                .map(|r| r.title)
+                .collect()
+        };
+        assert_eq!(titles("tax return"), vec!["Tax_Return-2026.pdf"]);
+        assert_eq!(titles("return tax"), vec!["Tax_Return-2026.pdf"]);
+        assert_eq!(titles("  tax   notes "), vec!["tax notes.md"]);
+        assert!(titles("tax nothing").is_empty());
     }
 
     #[test]

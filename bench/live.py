@@ -40,18 +40,6 @@ def stat(pid):
     return int(r[11]) + int(r[12]), int(r[13]) + int(r[14])
 
 
-def ctxsw(pid):
-    total = 0
-    for t in os.listdir(f"/proc/{pid}/task"):
-        try:
-            for line in open(f"/proc/{pid}/task/{t}/status"):
-                if "ctxt_switches" in line:
-                    total += int(line.split()[1])
-        except OSError:
-            pass
-    return total
-
-
 def thread_ctxsw(pid):
     """{tid: (name, context switches)}; for finding out which threads wake while idle."""
     out = {}
@@ -74,15 +62,19 @@ def status_kb(pid, key):
 
 def idle_sample(pid, seconds, prefix):
     quiet_start(seconds)
-    s0, w0, t0, th0 = stat(pid), ctxsw(pid), time.monotonic(), thread_ctxsw(pid)
+    s0, t0, th0 = stat(pid), time.monotonic(), thread_ctxsw(pid)
     time.sleep(seconds)
-    s1, w1, t1, th1 = stat(pid), ctxsw(pid), time.monotonic(), thread_ctxsw(pid)
+    s1, t1, th1 = stat(pid), time.monotonic(), thread_ctxsw(pid)
+    # Per-thread deltas: a thread that exits mid-window takes its count out of a process-wide sum,
+    # which made the total negative. Threads in both samples count their change, new ones count in
+    # full, and exited ones are skipped.
+    w = sum(max(0, n - th0.get(t, (c, 0))[1]) for t, (c, n) in th1.items())
     dt = t1 - t0
     busy = sorted(((n - th0.get(t, (c, 0))[1]) / dt, c, t) for t, (c, n) in th1.items())[::-1]
     print(f"{prefix} wakeups per thread:", ", ".join(f"{c}[{t}]={r:.2f}/s" for r, c, t in busy if r > 0.05), flush=True)
     put(f"{prefix}_idle_cpu_pct", (s1[0] - s0[0]) / CLK / dt * 100, "pct")
     put(f"{prefix}_idle_children_cpu_pct", (s1[1] - s0[1]) / CLK / dt * 100, "pct")
-    put(f"{prefix}_idle_wakeups_per_s", (w1 - w0) / dt, "per_s")
+    put(f"{prefix}_idle_wakeups_per_s", w / dt, "per_s")
     put(f"{prefix}_idle_rss", status_kb(pid, "VmRSS") * 1024, "bytes")
     put(f"{prefix}_threads", status_kb(pid, "Threads"), "count")
 
