@@ -13,6 +13,8 @@ ExecCondition=/bin/sh -c 'test -n "$HYPRLAND_INSTANCE_SIGNATURE" && test -S "$XD
 # QS_ICON_THEME: the icon theme uqd renders from the theme (%S is ~/.local/state). The session
 # runs Qt through qt6ct, which has no icon theme of its own; without it the icons go blank.
 # Optional (-): a first start before uqd has rendered falls back to Qt's default lookup.
+# The shell keeps qt6ct: apps use the `kde` platform theme (base.lua), the shell's own look doesn't depend on it.
+Environment=QT_QPA_PLATFORMTHEME=qt6ct
 EnvironmentFile=-%S/uq/theme/shell.env
 ExecStart=/usr/bin/qs -p /usr/share/uq/shell
 # The clipboard history is part of the shell: start it with the shell (it stops with the session).

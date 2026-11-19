@@ -53,8 +53,16 @@ end)
 
 hl.env("XCURSOR_SIZE", "24")
 hl.env("HYPRCURSOR_SIZE", "24")
--- Qt apps read uQ's colour scheme through qt6ct (see `uqctl setup`).
-hl.env("QT_QPA_PLATFORMTHEME", "qt6ct")
+-- Qt apps get uQ's colours, icons, fonts and widget style from ~/.config/kdeglobals through
+-- plasma-integration's `kde` platform theme (Dolphin and every other KDE app need it), which
+-- also themes plain Qt apps. Without it, plain Qt apps fall back to qt6ct (`uqctl setup`).
+local function have_file(path)
+    local f = io.open(path, "r")
+    if f then f:close() end
+    return f ~= nil
+end
+local kde_theme = have_file("/usr/lib/qt6/plugins/platformthemes/KDEPlasmaPlatformTheme6.so")
+hl.env("QT_QPA_PLATFORMTHEME", kde_theme and "kde" or "qt6ct")
 
 -----------------------
 ---- LOOK AND FEEL ----

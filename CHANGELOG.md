@@ -7,6 +7,10 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **Dolphin and every other KDE or Qt app now follow the uQ theme by default.** KDE apps ignored qt6ct's palette: they showed Breeze's light backgrounds, a Fusion-style look and recoloured red Breeze folders. The session now uses plasma-integration's `kde` platform theme (falling back to qt6ct if it isn't installed), and uqd writes uQ's colours, icon theme (Papirus), Kvantum widget style and fonts into `~/.config/kdeglobals` on every theme change, so apps switch live between velvet, gruvbox, forest and the rest, dark and light. uqd also creates the GTK, qt6ct and Kvantum files itself, so `uqctl setup --apps` is no longer a manual step (files you wrote are never replaced). The uQ shell keeps qt6ct. The package now depends on plasma-integration, papirus-icon-theme, adw-gtk-theme, inter-font and ttf-jetbrains-mono.
+
 ## [0.3.18] - 2026-11-19
 
 ### Fixed

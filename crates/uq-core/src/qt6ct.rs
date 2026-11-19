@@ -79,7 +79,7 @@ pub fn with_icon_theme(existing: &str, theme_dir: &Path, icon: &str) -> Option<S
 }
 
 /// A font family that is safe inside a qt6ct QFont string: no quotes, commas or line breaks.
-fn safe_family(f: &str) -> bool {
+pub(crate) fn safe_family(f: &str) -> bool {
     !f.trim().is_empty()
         && f.len() < 100
         && !f
