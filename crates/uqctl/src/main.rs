@@ -12,6 +12,7 @@ mod settings_app;
 mod settings_cmd;
 mod setup;
 mod theme_cmd;
+mod wallpaper_cmd;
 mod welcome_cmd;
 
 use clap::{Parser, Subcommand};
@@ -113,6 +114,11 @@ enum Cmd {
     Clip {
         #[command(subcommand)]
         cmd: clip_cmd::ClipCmd,
+    },
+    /// Show the wallpaper, or set a picture as it (`uqctl wallpaper set -- PICTURE`).
+    Wallpaper {
+        #[command(subcommand)]
+        cmd: wallpaper_cmd::WallpaperCmd,
     },
     /// Print recent setting changes: id, time, origin and summary, newest first.
     History {
@@ -295,6 +301,11 @@ async fn run(cmd: Cmd) -> Result<(), String> {
     if let Cmd::Theme { cmd } = cmd {
         return theme_cmd::run(&profile_cmd::connect().await?, cmd).await;
     }
+    if let Cmd::Wallpaper { cmd } = cmd {
+        let lines = wallpaper_cmd::run(&profile_cmd::connect().await?, cmd).await?;
+        lines.iter().for_each(|l| println!("{l}"));
+        return Ok(());
+    }
     let conn = zbus::Connection::session().await.map_err(describe)?;
     let proxy = zbus::Proxy::new(&conn, NAME, PATH, NAME)
         .await
@@ -420,6 +431,7 @@ async fn run(cmd: Cmd) -> Result<(), String> {
         | Cmd::Profile { .. }
         | Cmd::Keys { .. }
         | Cmd::Theme { .. }
+        | Cmd::Wallpaper { .. }
         | Cmd::Launch { .. } => {
             unreachable!("handled before connecting")
         }
