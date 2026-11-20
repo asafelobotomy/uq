@@ -1,6 +1,6 @@
 # Pages from other apps
 
-Five apps ship a page for uQ Settings from their own repository. A page appears under **Apps**
+Twelve apps ship a page for uQ Settings from their own repository. A page appears under **Apps**
 in Settings when the app's package is installed, within a few seconds and with no restart, and
 goes when the package is removed. Without uQ the page files do nothing.
 
@@ -17,7 +17,19 @@ the [Settings design](superpowers/specs/2026-11-10-uq-settings-enhancements-desi
 | Memory and swap | `xzram` | [XZram](https://github.com/asafelobotomy/XZram) | Five tabs (`uq_api` 3): memory and swap in use with pressure and a health check; zram size, compression and priority; kernel tuning (swappiness and four more); swap files (create, resize, remove); snapshots (take, restore, delete, trim, undo the last change). Every change shows its plan and streams progress | `xzram` | Nothing: it runs `xzram` when asked | Any change to zram, tuning, swap files or snapshots | merged |
 | Tailscale | `scale-tail` | [scale_tail](https://github.com/asafelobotomy/scale_tail) | Connects and disconnects, picks an exit node, accepts routes, allows local network access, lists devices, shows the sign-in link and signs out | `scale_tail` | `tailscaled` | None. A one-time `sudo tailscale set --operator=$USER` lets a normal user change settings | merged |
 
-The packages are optional dependencies of `uq` (`optdepends`). Where a page is changed, the app's
+Pages added since the five above (all on `uq_api` 3, each checked by the same workflow):
+
+| Page | Id | Repo | What it covers | Package |
+|---|---|---|---|---|
+| Security | `oysterav-security` | [oysterAV](https://github.com/asafelobotomy/oysterAV) | First-time setup, status, scans and rootkit checks with progress, history, quarantine, scheduled scans, real-time protection, preferences | `oysterav` |
+| AppImages | `appimages` | [appOFholding](https://github.com/asafelobotomy/appofholding) | Updates (with progress), the library and each app's policy, background checks, versions kept, sandbox, oysterAV scans, adding from a link, going back a version | `appofholding` |
+| Downloads | `hauler` | [hauler](https://github.com/asafelobotomy/hauler) | Downloads now, adding one, history and how long it's kept, folder and space, leftovers, HTTPS-only, scanning, saved logins | `hauler` |
+| Software | `software` | [bindaru](https://github.com/asafelobotomy/bindaru) | Searching and installing from the Arch repositories and the AUR (with the recipe review), installed software, repositories, scans | `bindaru` |
+| Game library | `romforge` | [romforge](https://github.com/asafelobotomy/romforge) | A read-only view of the library with simple options; the rest stays in the app | `romforge` / `romforge-bin` |
+| Emoji and macros | `emobie` | [emobie](https://github.com/asafelobotomy/emobie) | Settings, macros and deleted macros | `emobie` |
+| Bindle | `bindle` | [bindle](https://github.com/asafelobotomy/bindle) | The setup Bindle last applied, bindleUP (check and update with progress), what's new, and what Bindle changed with undo | `bindle` |
+
+The first five packages are optional dependencies of `uq` (`optdepends`); the others come with Bindle. Where a page is changed, the app's
 own package carries it, so updating the app updates its page.
 
 ## Where the work happens
@@ -28,6 +40,6 @@ never write `user.lua`.
 
 ## Checking them
 
-`.github/workflows/companions.yml` checks every companion repo's `uq/` folder against this uQ each
+`.github/workflows/companions.yml` checks all twelve companion repos' `uq/` folders against this uQ each
 week and when the page loader changes. For a manual check in a real session, see
 [`notes/settings-slice-e-live-check.md`](notes/settings-slice-e-live-check.md).
