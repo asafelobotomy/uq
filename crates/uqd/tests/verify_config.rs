@@ -818,7 +818,7 @@ fn base_lua_binds_equal_the_default_table() {
             .filter(|l| !l.contains("XF86Launch9"))
             .collect(),
     );
-    assert_eq!(a.len(), 66, "{from_base}");
+    assert_eq!(a.len(), 67, "{from_base}");
     assert_eq!(a, b, "base.lua and the default table have drifted apart");
 }
 
@@ -939,7 +939,7 @@ fn hostile_binds_run_as_one_call_each() {
     let after = &lines[unbind..];
     let calls = after.iter().filter(|l| **l == "hl.bind").count();
     // 58 defaults, two mouse hooks, the capture submap's placeholder bind and two binds per hostile name.
-    assert_eq!(calls, 67 + 2 * hostile.len(), "{text}");
+    assert_eq!(calls, 68 + 2 * hostile.len(), "{text}");
     assert_eq!(bind_lines(&text).len(), calls, "{text}");
     assert!(!text.contains("hl.exec_cmd:x"), "{text}");
     assert!(!text.contains("hl.exec_cmd:\"x"), "{text}");
