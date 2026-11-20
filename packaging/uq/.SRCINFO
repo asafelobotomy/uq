@@ -64,6 +64,7 @@ pkgbase = uq
 	optdepends = grim: screenshots (Print)
 	optdepends = slurp: pick an area for a screenshot (Print)
 	optdepends = wl-clipboard: copy screenshots to the clipboard (Copy in the preview)
+	optdepends = qview: Mark up and Open in the screenshot preview; the image viewer
 	optdepends = kate: KWrite, a plain text editor
 	options = !lto
 	backup = etc/pam.d/uq-greetd
