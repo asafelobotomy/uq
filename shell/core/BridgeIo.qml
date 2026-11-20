@@ -8,7 +8,9 @@ Item {
 
     Process {
         id: proc
-        command: ["uqctl", "bridge"]
+        // setpriv --pdeathsig: the unit keeps KillMode=process (apps the shell opened outlive a
+        // shell restart), so a long-running helper has to end itself when the shell goes.
+        command: ["/usr/bin/setpriv", "--pdeathsig", "TERM", "--", "uqctl", "bridge"]
         stdinEnabled: true
         running: Bridge.processWanted
         stdout: SplitParser {

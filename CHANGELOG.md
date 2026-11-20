@@ -7,6 +7,12 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **The shell's helpers stop with the shell.** `uqctl bridge`, `uqctl clip watch`, `nmcli monitor` and the notification `gdbus monitor` kept running after the shell stopped or crashed, until their next write failed, so a restarted shell could briefly run two of each. They now end as soon as the shell does. Apps opened from the shell still outlive a shell restart.
+- **No error from a widget answer that arrives too late.** A widget's D-Bus answer that arrived after the shell reloaded or the widget was removed logged `TypeError: Cannot call method 'deliver' of null`. It is now dropped quietly.
+- **No more "Unable to assign [undefined] to bool" from the window tabs.** A tab drawn a moment before its window's details arrived logged it, up to dozens of times a day.
+
 ## [0.3.20] - 2026-11-20
 
 ### Changed
