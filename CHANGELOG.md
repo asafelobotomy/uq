@@ -7,6 +7,8 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.21] - 2026-11-20
+
 ### Fixed
 
 - **The shell's helpers stop with the shell.** `uqctl bridge`, `uqctl clip watch`, `nmcli monitor` and the notification `gdbus monitor` kept running after the shell stopped or crashed, until their next write failed, so a restarted shell could briefly run two of each. They now end as soon as the shell does. Apps opened from the shell still outlive a shell restart.
