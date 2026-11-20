@@ -33,4 +33,10 @@ TestCase {
         compare(S.status({ copied: true }, true, false), "Discarded");
         verify(S.status({ copied: false }, false, true).indexOf("Couldn't copy") === 0);
     }
+
+    function test_viewer() {
+        compare(S.where("/home/me/Pictures/Screenshots/c.png", "/home/me"), "c.png in ~/Pictures/Screenshots");
+        compare(S.viewerCommand("/a/-b.png", false), ["uqview", "--", "/a/-b.png"]);
+        compare(S.viewerCommand("/a/b c.png", true), ["uqview", "--markup", "/a/b c.png"]);
+    }
 }

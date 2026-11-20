@@ -85,6 +85,7 @@ Shell settings (all go through `uqd`; values are validated there):
 uqctl pin add org.mozilla.firefox      # also: pin rm <id>, pin list
 uqctl weather set "Paris" [--pick 2]   # geocodes, prints the top 5, stores one; weather off
 uqctl idle set lock 300                # dim | lock | screen-off | suspend | locked-screen-off; secs or off
+uqctl wallpaper set -- ~/Pictures/sea.jpg  # [--output DP-1] [--fit fill|fit|center|tile|span]; wallpaper get
 uqctl notif backend builtin            # auto | notifi | builtin | swaync | mako | dunst
 uqctl privacy public-ip on             # or: privacy launches off
 uqctl mouse speed -0.3                 # -1..1; also: accel default|adaptive|flat,

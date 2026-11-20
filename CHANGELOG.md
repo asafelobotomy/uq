@@ -7,6 +7,13 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.26] - 2026-11-20
+
+### Added
+
+- **Mark up and Open in the screenshot preview.** With [uQview](https://github.com/asafelobotomy/qview) installed, the preview has a Mark up button that opens the capture straight in uQview's Mark up (arrows, boxes, text, numbers, highlighter, pixelate, crop) and an Open button. Marking up a screenshot had gone with satty in 0.3.9. The caption now says which folder the capture went to next to its name.
+- **`uqctl wallpaper set -- PICTURE`** uses a picture as the wallpaper on every display (or one, with `--output`), optionally with `--fit fill|fit|center|tile|span`. It stops a folder slideshow there, shows in Settings, and `uqctl undo` takes it back. `uqctl wallpaper get` lists each display's wallpaper. uQview's Set as wallpaper uses it.
+
 ## [0.3.25] - 2026-11-20
 
 ### Added

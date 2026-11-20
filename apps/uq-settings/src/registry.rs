@@ -391,6 +391,9 @@ static SHELL_SETTINGS: [SearchEntry; 20] = [
             "snip",
             "region",
             "satty",
+            "mark up",
+            "annotate",
+            "uqview",
         ],
     ),
 ];
