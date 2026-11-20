@@ -49,6 +49,7 @@ pkgbase = uq
 	optdepends = scdr: CPU priorities for the focused app and builds (enable scdr-session; uQ starts it)
 	optdepends = tailscale: exit-node and VPN status in the shell
 	optdepends = bluez: Bluetooth status in the shell and the Bluetooth settings page
+	optdepends = cups: the Printers settings page
 	optdepends = power-profiles-daemon: power profile switching
 	optdepends = hyprlock: fallback lock for the SUPER+CTRL+L recovery bind
 	optdepends = noti-fi: notification backend

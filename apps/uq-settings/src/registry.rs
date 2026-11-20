@@ -1037,6 +1037,43 @@ static BLUETOOTH_SETTINGS: [SearchEntry; 4] = [
     ),
 ];
 
+static PRINTERS_SETTINGS: [SearchEntry; 4] = [
+    entry(
+        "printers-list",
+        "Your printers",
+        &[
+            "printer",
+            "printing",
+            "default printer",
+            "pause",
+            "remove printer",
+            "cups",
+        ],
+    ),
+    entry(
+        "printers-queue",
+        "Documents waiting to print",
+        &["print queue", "jobs", "cancel printing", "stuck"],
+    ),
+    entry(
+        "printers-test",
+        "Print a test page",
+        &["test page", "check printer"],
+    ),
+    entry(
+        "printers-add",
+        "Add a printer",
+        &[
+            "add printer",
+            "network printer",
+            "usb printer",
+            "driver",
+            "scan",
+            "pdf printer",
+        ],
+    ),
+];
+
 static NETWORK_SETTINGS: [SearchEntry; 8] = [
     entry(
         "wifi",
@@ -1082,7 +1119,7 @@ static NETWORK_SETTINGS: [SearchEntry; 8] = [
     ),
 ];
 
-static CORE_PAGES: [PageInfo; 22] = [
+static CORE_PAGES: [PageInfo; 23] = [
     PageInfo {
         id: "appearance",
         name: "Appearance",
@@ -1153,6 +1190,15 @@ static CORE_PAGES: [PageInfo; 22] = [
         category: Category::Devices,
         qml: "pages/BluetoothPage.qml",
         settings: &BLUETOOTH_SETTINGS,
+        domains: &[],
+    },
+    PageInfo {
+        id: "printers",
+        name: "Printers",
+        icon: "printer",
+        category: Category::Devices,
+        qml: "pages/PrintersPage.qml",
+        settings: &PRINTERS_SETTINGS,
         domains: &[],
     },
     PageInfo {
@@ -1686,6 +1732,7 @@ mod tests {
                 "input",
                 "sound",
                 "bluetooth",
+                "printers",
                 "network",
                 "shell",
                 "profiles",
@@ -1718,17 +1765,19 @@ mod tests {
         assert_eq!(v[6]["categoryName"], "Devices");
         assert_eq!(v[7]["qml"], "pages/BluetoothPage.qml");
         assert_eq!(v[7]["categoryName"], "Devices");
-        assert_eq!(v[8]["qml"], "pages/NetworkPage.qml");
-        assert_eq!(v[8]["categoryName"], "Connections");
-        assert_eq!(v[9]["qml"], "pages/ShellPage.qml");
-        assert_eq!(v[9]["categoryName"], "uQ");
-        assert_eq!(v[13]["qml"], "pages/KeybindsPage.qml");
-        assert_eq!(v[13]["categoryName"], "uQ");
-        assert_eq!(v[13]["domains"], serde_json::json!(["keybinds"]));
-        assert_eq!(v[14]["qml"], "pages/StartupPage.qml");
-        assert_eq!(v[14]["category"], "system");
-        assert_eq!(v[14]["categoryName"], "System");
-        assert_eq!(v[14]["domains"], serde_json::json!(["autostart", "env"]));
+        assert_eq!(v[8]["qml"], "pages/PrintersPage.qml");
+        assert_eq!(v[8]["categoryName"], "Devices");
+        assert_eq!(v[9]["qml"], "pages/NetworkPage.qml");
+        assert_eq!(v[9]["categoryName"], "Connections");
+        assert_eq!(v[10]["qml"], "pages/ShellPage.qml");
+        assert_eq!(v[10]["categoryName"], "uQ");
+        assert_eq!(v[14]["qml"], "pages/KeybindsPage.qml");
+        assert_eq!(v[14]["categoryName"], "uQ");
+        assert_eq!(v[14]["domains"], serde_json::json!(["keybinds"]));
+        assert_eq!(v[15]["qml"], "pages/StartupPage.qml");
+        assert_eq!(v[15]["category"], "system");
+        assert_eq!(v[15]["categoryName"], "System");
+        assert_eq!(v[15]["domains"], serde_json::json!(["autostart", "env"]));
     }
 
     #[test]
@@ -2036,14 +2085,34 @@ mod tests {
     }
 
     #[test]
-    fn bluetooth_ends_the_devices_pages() {
+    fn bluetooth_follows_sound() {
         let page = find("bluetooth").expect("the bluetooth page is registered");
         assert_eq!(page.category, Category::Devices);
         assert_eq!(page.qml, "pages/BluetoothPage.qml");
         assert!(page.domains.is_empty(), "it changes no uQ setting");
         let ids: Vec<_> = core_pages().iter().map(|p| p.id).collect();
         let at = ids.iter().position(|id| *id == "bluetooth").unwrap();
+        assert_eq!(ids[at - 1], "sound");
+        assert_eq!(ids[at + 1], "printers");
+    }
+
+    #[test]
+    fn printers_ends_the_devices_pages() {
+        let page = find("printers").expect("the printers page is registered");
+        assert_eq!(page.category, Category::Devices);
+        assert_eq!(page.qml, "pages/PrintersPage.qml");
+        assert!(page.domains.is_empty(), "it changes no uQ setting");
+        let ids: Vec<_> = core_pages().iter().map(|p| p.id).collect();
+        let at = ids.iter().position(|id| *id == "printers").unwrap();
         assert_eq!(ids[at + 1], "network");
+        for id in [
+            "printers-list",
+            "printers-queue",
+            "printers-test",
+            "printers-add",
+        ] {
+            assert!(page.settings.iter().any(|s| s.id == id), "{id}");
+        }
     }
 
     #[test]

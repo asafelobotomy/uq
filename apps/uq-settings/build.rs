@@ -92,6 +92,7 @@ fn main() {
         QmlFile::from("qml/welcome/DoneStep.qml"),
         QmlFile::from("qml/pages/NetworkPage.qml"),
         QmlFile::from("qml/pages/BluetoothPage.qml"),
+        QmlFile::from("qml/pages/PrintersPage.qml"),
         QmlFile::from("qml/pages/SoundPage.qml"),
     ]))
     .qt_module("Gui")
@@ -126,6 +127,7 @@ fn main() {
         "src/network_model.rs",
         "src/bluetooth_model.rs",
         "src/sound_model.rs",
+        "src/printers_model.rs",
     ])
     .cpp_file("cpp/window.cpp");
     // KColorScheme and KSharedConfig (cpp/window.cpp): Kirigami's colours come from a KDE colour

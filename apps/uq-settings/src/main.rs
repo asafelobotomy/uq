@@ -33,6 +33,7 @@ mod pages;
 mod plugin_host;
 mod plugins;
 mod power_model;
+mod printers_model;
 mod profiles_model;
 mod region_model;
 mod registry;
