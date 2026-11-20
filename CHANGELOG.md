@@ -7,6 +7,12 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.27] - 2026-11-20
+
+### Changed
+
+- **look=see>do_'s terminal stays docked under it.** A `>` command opens the terminal beneath the pill at the drop-down's size and keeps it there: clicking it to type in it no longer closes look=see>do_ or turns it into a loose floating window, and the terminal no longer opens tiled or full screen when its window rules don't take. The next `>` command opens a new tab in the same terminal (kitty, over a remote-control socket only that window listens on; other terminals get a new docked window and the old one is minimised to the Open windows island). When look=see>do_ closes (Esc, Super+Space, or focus going to another window) the terminal is tucked away, and it grows back in under the pill the next time look=see>do_ opens.
+
 ## [0.3.26] - 2026-11-20
 
 ### Added

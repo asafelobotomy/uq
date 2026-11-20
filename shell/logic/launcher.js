@@ -239,3 +239,17 @@ function appEntries(list) {
     }
     return out;
 }
+
+// The strip over the terminal docked under look=see>do_: what is running in it, or what Enter
+// does next. `name` is the terminal's, `tabs` whether a command opens a tab in it (else a new
+// window), `state` the run's ("" | "sending" | "sent"), `run` whether a `>` command is typed.
+function dockText(name, tabs, state, run) {
+    var where = tabs ? "a new tab of " + name : "a new " + name + " window";
+    if (state === "sending")
+        return "Opening " + where + "…";
+    if (state === "sent")
+        return "Running in " + name + " below. Click it to type there; Esc tucks it away.";
+    if (run)
+        return "Enter runs it in " + where;
+    return name + " is below. Type > and a command to run it in " + where + ".";
+}

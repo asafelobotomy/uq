@@ -15,6 +15,9 @@ QtObject {
     // The confirm step the power menu opens at ("reboot" | "poweroff", from the app menu's
     // restart and shut-down buttons), or "". Set by toggle(), cleared when the menu closes.
     property string powerConfirm: ""
+    // The window address ("0x…") of the terminal look=see>do_ keeps docked under its pill, or "".
+    // Focus going to it doesn't close look=see>do_ (LauncherRoutes).
+    property string dockedTerminal: ""
 
     // Search generation shared by every launcher surface. It lives here, not on a window, so a
     // reloaded or second surface can't restart it below what the bridge has already seen.

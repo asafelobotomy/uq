@@ -1,20 +1,22 @@
 #!/usr/bin/env bash
 # look=see>do_ on a real (headless) Hyprland with the real shell, driven by a virtual keyboard and
 # pointer (tests/live/tools/uqinput): Recents and the five pinned squares, what hides when typing
-# starts, filling a square, and the terminal that drops from the pill for a `>` command.
+# starts, filling a square, and the terminal that drops from the pill for a `>` command and stays
+# docked under it: a click on it keeps look=see>do_, the next command is a new tab, closing tucks
+# it away and opening brings it back.
 #
 #   scripts/lookseedo-live.sh
 #
 # With UQ_CAPTURE_DIR set (CI does) it keeps a screenshot of each step and a GIF of the whole run.
-# Needs the same as scripts/drag-live.sh. The bridge has no uqd here, so the terminal is the
-# fallback `kitty -e`, which a stub turns into foot, and systemd-run (the launch scope) is a stub
-# that just runs the command. Exit 0 when it ran and the checks held; 77 when this environment
+# Needs the same as scripts/drag-live.sh, and kitty. The bridge has no uqd here, so the terminal is
+# the fallback `kitty -e` (the real kitty, for its tabs), and systemd-run (the launch scope) is a
+# stub that just runs the command. Exit 0 when it ran and the checks held; 77 when this environment
 # can't run it; 1 when a check failed.
 set -u
 root=$(cd "$(dirname "$0")/.." && pwd)
 
 skip() { echo "SKIP: $*"; exit 77; }
-for bin in Hyprland hyprctl qs dbus-daemon jq foot socat gcc wayland-scanner; do
+for bin in Hyprland hyprctl qs dbus-daemon jq foot kitty socat gcc wayland-scanner; do
     command -v "$bin" >/dev/null 2>&1 || skip "$bin is not installed"
 done
 ls /dev/dri/card* >/dev/null 2>&1 || skip "no DRM device"
@@ -30,7 +32,7 @@ fail() { echo "FAIL: $*"; for f in hypr qs; do [ -f "$tmp/$f.log" ] && { echo "-
 
 "$root/tests/live/tools/build-uqinput.sh" "$tmp/uqinput" || skip "uqinput didn't build"
 
-# Stubs: the scope the launch runs in, and the terminal uQ falls back to.
+# Stub: the scope the launch runs in.
 mkdir -p "$tmp/bin" "$tmp/data/applications" "$tmp/state/uq"
 cat >"$tmp/bin/systemd-run" <<'SH'
 #!/bin/sh
@@ -38,12 +40,7 @@ while [ $# -gt 0 ] && [ "$1" != -- ]; do shift; done
 shift
 exec "$@"
 SH
-cat >"$tmp/bin/kitty" <<'SH'
-#!/bin/sh
-shift
-exec foot "$@"
-SH
-chmod +x "$tmp/bin/systemd-run" "$tmp/bin/kitty"
+chmod +x "$tmp/bin/systemd-run"
 printf '[Desktop Entry]\nType=Application\nName=Kitty\nExec=kitty\nIcon=utilities-terminal\n' >"$tmp/data/applications/kitty.desktop"
 # Recents and the pinned squares, as the shell saves them.
 printf '{"v":1,"pins":["","","","",""],"recents":["foot"]}' >"$tmp/state/uq/lookseedo.json"
@@ -164,27 +161,82 @@ send "type return tax" "sleep 1000"; drain; still 5b-documents
 send "key Escape" "sleep 600"; drain
 wait_layers 0 || check "Escape did not close look=see>do_ after the file search"
 
-# --- 4. a > command drops the terminal; Enter opens it; clicking it hands over ---------------
+# --- 4. a > command drops the terminal; Enter docks it under the pill --------------------------
 ipc open >/dev/null; wait_layers 1 || fail "look=see>do_ did not reopen"
 sleep 1
 send "type > echo hello from look=see" "sleep 900"; drain; still 6-terminal-drop
 before=$(hc clients -j | jq 'length')
-send "key Return" "sleep 2500"; drain
+send "key Return" "sleep 3000"; drain
 after=$(hc clients -j | jq 'length')
 [ "$after" -gt "$before" ] || check "Enter opened no terminal window ($before -> $after clients)"
-term=$(hc clients -j | jq -c '.[] | select(.class == "foot")' | head -n1)
+kitty_json() { hc clients -j | jq -c '[.[] | select(.class == "kitty")][0] // empty'; }
+term=$(kitty_json)
 echo "terminal: $term"
+[ -n "$term" ] || fail "no kitty window"
+taddr=$(echo "$term" | jq -r .address)
 [ "$(echo "$term" | jq -r '.floating')" = true ] || check "the terminal is not floating"
 [ "$(echo "$term" | jq -r '.size[0]')" -ge 600 ] || check "the terminal is not as wide as the pill ($(echo "$term" | jq -c .size))"
+[ "$(echo "$term" | jq -r '.size[1]')" -le 260 ] || check "the terminal is not the drop-down's height ($(echo "$term" | jq -c .size))"
 [ "$(echo "$term" | jq -r '.at[1]')" -gt $((ly + 44)) ] || check "the terminal is not under the pill ($(echo "$term" | jq -c .at), pill at $ly)"
 [ "$(layers)" = 1 ] || check "look=see>do_ closed when the terminal opened"
-[ "$(active)" != foot ] || check "the terminal took focus from look=see>do_"
+[ "$(active)" != kitty ] || check "the terminal took focus from look=see>do_"
+docked_at=$(echo "$term" | jq -c '{at, size}')
 still 7-terminal-open
+
+# --- 5. clicking the terminal keeps look=see>do_ open, the terminal where it was ---------------
 read -r tx ty < <(echo "$term" | jq -r '"\(.at[0] + 100) \(.at[1] + 100)"')
 send "move $tx $ty" "sleep 300" "button 272 down" "sleep 80" "button 272 up" "sleep 1500"; drain
-wait_layers 0 || check "look=see>do_ stayed after the terminal was clicked"
-[ "$(active)" = foot ] || check "the terminal is not focused after the click (active: $(active))"
+[ "$(layers)" = 1 ] || check "look=see>do_ closed when the terminal was clicked"
+[ "$(active)" = kitty ] || check "the terminal is not focused after the click (active: $(active))"
+[ "$(kitty_json | jq -c '{at, size}')" = "$docked_at" ] || check "the terminal moved or changed size when clicked ($(kitty_json | jq -c '{at, size}'), was $docked_at)"
+[ "$(kitty_json | jq -r .floating)" = true ] || check "the terminal stopped floating when clicked"
 still 8-terminal-focused
+
+# --- 6. back in the pill, the next > command is a new tab in the same terminal -----------------
+send "move $((lx + 200)) $((ly + 22))" "sleep 300" "button 272 down" "sleep 80" "button 272 up" "sleep 600"
+send "mod ctrl down" "key a" "mod ctrl up" "type > echo second command" "sleep 900"; drain; still 9-second-command
+before=$(hc clients -j | jq 'length')
+send "key Return" "sleep 2500"; drain
+after=$(hc clients -j | jq 'length')
+[ "$after" = "$before" ] || check "the second command opened a window instead of a tab ($before -> $after clients)"
+sockf=$(find "$rt" -maxdepth 1 -name 'uq-lookseedo-kitty-*.sock' | head -n1)
+if [ -n "$sockf" ]; then
+    tabs=$(env XDG_RUNTIME_DIR="$rt" kitty @ --to "unix:$sockf" ls 2>/dev/null | jq '[.[].tabs[]] | length')
+    echo "kitty tabs: $tabs"
+    [ "${tabs:-0}" = 2 ] || check "the docked kitty has ${tabs:-no} tabs, not 2"
+else
+    check "the docked kitty has no remote-control socket in $rt"
+fi
+[ "$(layers)" = 1 ] || check "look=see>do_ closed after the second command"
+still 10-second-tab
+
+# --- 7. Esc closes look=see>do_ and tucks the terminal away -------------------------------------
+send "key Escape" "sleep 1200"; drain
+wait_layers 0 || check "Escape did not close look=see>do_ with the terminal docked"
+ws=$(hc clients -j | jq -r --arg a "$taddr" '.[] | select(.address == $a) | .workspace.name')
+[ "$ws" = special:uq-lookseedo ] || check "the terminal was not tucked away when look=see>do_ closed (workspace $ws)"
+still 11-tucked-away
+
+# --- 8. opening look=see>do_ brings it back, docked as before ------------------------------------
+# Another window first, for step 9 to click on.
+hc dispatch 'hl.dsp.exec_cmd("foot")' >/dev/null
+for _ in $(seq 1 30); do hc clients -j | jq -e '.[] | select(.class == "foot")' >/dev/null && break; sleep 0.2; done
+sleep 1
+ipc open >/dev/null; wait_layers 1 || fail "look=see>do_ did not reopen with a tucked-away terminal"
+for f in 0 1 2 3 4 5; do sleep 0.08; still "12-back-$f"; done
+sleep 1.2
+back=$(kitty_json)
+[ "$(echo "$back" | jq -r .workspace.name)" = "$(hc activeworkspace -j | jq -r .name)" ] || check "the terminal did not come back to the workspace shown ($(echo "$back" | jq -c .workspace))"
+[ "$(echo "$back" | jq -c '{at, size}')" = "$docked_at" ] || check "the terminal came back somewhere else ($(echo "$back" | jq -c '{at, size}'), was $docked_at)"
+[ "$(active)" != kitty ] || check "the terminal took focus when it came back"
+still 13-back
+
+# --- 9. a click on another window closes look=see>do_ and tucks the terminal away again -------
+send "move 120 640" "sleep 300" "button 272 down" "sleep 80" "button 272 up" "sleep 1500"; drain
+wait_layers 0 || check "a click elsewhere did not close look=see>do_"
+ws=$(hc clients -j | jq -r --arg a "$taddr" '.[] | select(.address == $a) | .workspace.name')
+[ "$ws" = special:uq-lookseedo ] || check "the terminal was not tucked away after a click elsewhere (workspace $ws)"
+still 14-clicked-away
 
 if [ -n "$grabber" ]; then
     sleep 0.5; kill "$grabber" 2>/dev/null
@@ -192,6 +244,7 @@ if [ -n "$grabber" ]; then
         -vf "scale=960:-1:flags=lanczos,split[a][b];[a]palettegen[p];[b][p]paletteuse" "$cap/lookseedo.gif" 2>&1 | tail -n 3
     rm -rf "$cap/frames"; ls -l "$cap"
 fi
+grep "lookseedo dock" "$tmp/qs.log"
 echo "--- qs.log (tail)"; tail -n 12 "$tmp/qs.log"
 [ "$bad" = 0 ] && echo "lookseedo-live: all checks held"
 exit "$bad"

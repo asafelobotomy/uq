@@ -139,13 +139,19 @@ Scope {
     // a password prompt) must get the keyboard. A popup that asked for it (OnDemand, Exclusive)
     // keeps it for itself, even though Hyprland says the window is focused, so the person types
     // into the popup, or into nothing. The popup closes instead. look=see>do_'s own terminal
-    // opens without taking the focus (no_initial_focus), so it never gets here.
+    // opens without taking the focus (no_initial_focus), and focus on it once docked (clicked)
+    // keeps look=see>do_ open: it hands the keyboard over itself.
     Connections {
         target: Hyprland
         function onActiveToplevelChanged() {
-            if (!Hyprland.activeToplevel)
+            var t = Hyprland.activeToplevel;
+            if (!t)
                 return;
-            if (Surfaces.open !== "closed")
+            var a = String(t.address || "");
+            if (a !== "" && a.indexOf("0x") !== 0)
+                a = "0x" + a;
+            var docked = Surfaces.open === "lookseedo" && a !== "" && a === Surfaces.dockedTerminal;
+            if (Surfaces.open !== "closed" && !docked)
                 Surfaces.close();
             if (ClipState.open)
                 ClipState.hide();
