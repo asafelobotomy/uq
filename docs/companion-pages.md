@@ -1,6 +1,6 @@
 # Pages from other apps
 
-Five apps ship a page for uQ Settings from their own repository. A page appears under **Apps**
+Six apps ship a page for uQ Settings from their own repository. A page appears under **Apps**
 in Settings when the app's package is installed, within a few seconds and with no restart, and
 goes when the package is removed. Without uQ the page files do nothing.
 
@@ -16,6 +16,7 @@ the [Settings design](superpowers/specs/2026-11-10-uq-settings-enhancements-desi
 | Notifications | `noti-fi` | [noti-fi](https://github.com/asafelobotomy/noti-fi) | Do not disturb, automatic do-not-disturb (full screen, screen sharing), history length and whether it's kept, notification groups; per-app rules are shown, not edited | `noti-fi` | `notifd` (the page says so when it's stopped) | None | merged |
 | Memory and swap | `xzram` | [XZram](https://github.com/asafelobotomy/XZram) | Five tabs (`uq_api` 3): memory and swap in use with pressure and a health check; zram size, compression and priority; kernel tuning (swappiness and four more); swap files (create, resize, remove); snapshots (take, restore, delete, trim, undo the last change). Every change shows its plan and streams progress | `xzram` | Nothing: it runs `xzram` when asked | Any change to zram, tuning, swap files or snapshots | merged |
 | Tailscale | `scale-tail` | [scale_tail](https://github.com/asafelobotomy/scale_tail) | Connects and disconnects, picks an exit node, accepts routes, allows local network access, lists devices, shows the sign-in link and signs out | `scale_tail` | `tailscaled` | None. A one-time `sudo tailscale set --operator=$USER` lets a normal user change settings | merged |
+| Media player | `reelo` | [reelo](https://github.com/asafelobotomy/reelo) | Makes reelo the default player for video and music, and sets resume, play-next-in-folder, keep-the-screen-on, hardware decoding, subtitles, preferred languages and the library folder its start screen lists | `reelo` | Nothing: it runs `reelo` when asked | None | merged |
 
 The packages are optional dependencies of `uq` (`optdepends`). Where a page is changed, the app's
 own package carries it, so updating the app updates its page.
