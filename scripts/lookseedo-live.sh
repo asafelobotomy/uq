@@ -218,6 +218,10 @@ ws=$(hc clients -j | jq -r --arg a "$taddr" '.[] | select(.address == $a) | .wor
 still 11-tucked-away
 
 # --- 8. opening look=see>do_ brings it back, docked as before ------------------------------------
+# Another window first, for step 9 to click on.
+hc dispatch 'hl.dsp.exec_cmd("foot")' >/dev/null
+for _ in $(seq 1 30); do hc clients -j | jq -e '.[] | select(.class == "foot")' >/dev/null && break; sleep 0.2; done
+sleep 1
 ipc open >/dev/null; wait_layers 1 || fail "look=see>do_ did not reopen with a tucked-away terminal"
 for f in 0 1 2 3 4 5; do sleep 0.08; still "12-back-$f"; done
 sleep 1.2
@@ -227,8 +231,8 @@ back=$(kitty_json)
 [ "$(active)" != kitty ] || check "the terminal took focus when it came back"
 still 13-back
 
-# --- 9. a click elsewhere closes look=see>do_ and tucks the terminal away again ----------------
-send "move 1200 680" "sleep 300" "button 272 down" "sleep 80" "button 272 up" "sleep 1500"; drain
+# --- 9. a click on another window closes look=see>do_ and tucks the terminal away again -------
+send "move 120 640" "sleep 300" "button 272 down" "sleep 80" "button 272 up" "sleep 1500"; drain
 wait_layers 0 || check "a click elsewhere did not close look=see>do_"
 ws=$(hc clients -j | jq -r --arg a "$taddr" '.[] | select(.address == $a) | .workspace.name')
 [ "$ws" = special:uq-lookseedo ] || check "the terminal was not tucked away after a click elsewhere (workspace $ws)"
@@ -240,6 +244,7 @@ if [ -n "$grabber" ]; then
         -vf "scale=960:-1:flags=lanczos,split[a][b];[a]palettegen[p];[b][p]paletteuse" "$cap/lookseedo.gif" 2>&1 | tail -n 3
     rm -rf "$cap/frames"; ls -l "$cap"
 fi
+grep "lookseedo dock" "$tmp/qs.log"
 echo "--- qs.log (tail)"; tail -n 12 "$tmp/qs.log"
 [ "$bad" = 0 ] && echo "lookseedo-live: all checks held"
 exit "$bad"

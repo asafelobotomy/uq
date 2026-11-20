@@ -606,7 +606,9 @@ PanelWindow {
         onTriggered: {
             if (!root.shown)
                 return;
-            if (root.focusOnTerminal())
+            var keep = root.focusOnTerminal();
+            console.debug("uq: lookseedo dock: grab cleared, " + (keep ? "on the terminal" : "closing"));
+            if (keep)
                 root.grabbed = false;
             else
                 Surfaces.close();
@@ -620,8 +622,10 @@ PanelWindow {
             if (!root.shown || root.grabbed)
                 return;
             var t = Hyprland.activeToplevel;
-            if (t && !root.focusOnTerminal())
+            if (t && !root.focusOnTerminal()) {
+                console.debug("uq: lookseedo dock: focus went to " + root.addressOf(t) + ", closing");
                 Surfaces.close();
+            }
         }
         function onRawEvent(event) {
             // ADDRESS (without 0x): the docked terminal was closed (its last tab ended).
@@ -724,10 +728,7 @@ PanelWindow {
     Item {
         id: panel
         width: parent.width
-        // Keyboard focus back on look=see>do_ (the pill clicked after the terminal was): take
-        // the focus grab back.
-        readonly property bool windowActive: Window.active
-        onWindowActiveChanged: if (windowActive && root.shown && !root.grabbed) root.regrab()
+
         implicitHeight: pill.height + (body.visible ? Theme.gapIn + body.height : 0)
 
         Rectangle {
@@ -1216,6 +1217,15 @@ PanelWindow {
                 onDone: Surfaces.close()
                 onOpenChanged: if (!open && root.shown) field.forceActiveFocus()
             }
+        }
+        // After the docked terminal was clicked, the first click back on look=see>do_ only
+        // takes the focus grab (and the keyboard) back.
+        MouseArea {
+            anchors.fill: parent
+            z: 10
+            enabled: !root.grabbed
+            visible: enabled
+            onPressed: root.regrab()
         }
     }
 }
