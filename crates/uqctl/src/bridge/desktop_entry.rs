@@ -48,12 +48,24 @@ pub(super) fn parse_entry(text: &str) -> Result<LaunchEntry, String> {
 pub struct Dirs {
     pub(super) home: Option<PathBuf>,
     pub(super) system: Vec<PathBuf>,
+    /// `XDG_RUNTIME_DIR`: where the terminal look=see>do_ docks listens for new tabs.
+    pub(super) runtime: Option<PathBuf>,
 }
 
 impl Dirs {
     /// `home` and `system` are `applications` folders.
     pub fn new(home: Option<PathBuf>, system: Vec<PathBuf>) -> Dirs {
-        Dirs { home, system }
+        Dirs {
+            home,
+            system,
+            runtime: None,
+        }
+    }
+
+    /// The same, with a runtime folder for the docked terminal's socket.
+    pub fn with_runtime(mut self, runtime: Option<PathBuf>) -> Dirs {
+        self.runtime = runtime;
+        self
     }
 
     pub fn from_env() -> Dirs {
@@ -69,6 +81,7 @@ impl Dirs {
                 .map(|d| PathBuf::from(d).join("applications"))
                 .collect(),
         )
+        .with_runtime(get("XDG_RUNTIME_DIR").map(PathBuf::from))
     }
 
     fn all(&self) -> impl Iterator<Item = &PathBuf> {

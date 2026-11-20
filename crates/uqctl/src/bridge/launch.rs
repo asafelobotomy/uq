@@ -108,6 +108,30 @@ pub struct Plan {
     pub command: String,
     pub record: Option<String>,
     pub place: Option<Place>,
+    /// For a terminal docked under look=see>do_: the handle that opens a new tab in it later
+    /// (`Launch {run_id, terminal: true, tab}`); None when the terminal can't take tabs.
+    pub tabs: Option<String>,
+}
+
+/// Whether `argv0` is kitty, the terminal that can be asked for a new tab from outside (over a
+/// remote-control socket that only the docked window listens on).
+fn is_kitty(argv0: &str) -> bool {
+    Path::new(argv0).file_name().is_some_and(|n| n == "kitty")
+}
+
+/// A docked terminal's handle: `kitty-` and 8 lowercase hex digits. It names the socket, so
+/// nothing else can be slipped into the path.
+pub fn valid_tabs_handle(h: &str) -> bool {
+    h.strip_prefix("kitty-").is_some_and(|x| {
+        x.len() == 8
+            && x.bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    })
+}
+
+/// The socket a docked terminal with handle `h` listens on, in the runtime folder (0700).
+fn tabs_socket(runtime: &Path, h: &str) -> PathBuf {
+    runtime.join(format!("uq-lookseedo-{h}.sock"))
 }
 
 const FALLBACK_TERMINAL: [&str; 2] = ["kitty", "-e"];
@@ -205,13 +229,81 @@ pub fn plan(
             Some(Value::Bool(b)) => *b,
             Some(_) => return Err("terminal must be true or false".into()),
         };
+        let flag = |k: &str| match obj.get(k) {
+            None | Some(Value::Null) => Ok(false),
+            Some(Value::Bool(b)) => Ok(*b),
+            Some(_) => Err(format!("{k} must be true or false")),
+        };
+        let dock = flag("dock")?;
+        let tab = match obj.get("tab") {
+            None | Some(Value::Null) => None,
+            Some(Value::String(h)) if valid_tabs_handle(h) => Some(h.as_str()),
+            Some(_) => return Err("tab must be a docked terminal's handle".into()),
+        };
+        if (dock || tab.is_some()) && !in_terminal {
+            return Err("dock and tab need terminal: true".into());
+        }
         // In a terminal the window stays until Enter, so the output can be read. The command is
         // an argument of the script ($1), never part of its text.
+        let script = "eval \"$1\"; s=$?; printf '\\n[exited with %s: press Enter to close] ' \"$s\"; read _; exit \"$s\"";
+        let run_args = || {
+            let mut v: Vec<String> = ["sh", "-c", script, "sh"].map(String::from).to_vec();
+            v.push(cmd.clone());
+            v
+        };
+        if let Some(h) = tab {
+            // A new tab in the docked terminal: kitty's own client asks the window over its
+            // socket, and the command runs as that window's child.
+            let sock = dirs
+                .runtime
+                .as_deref()
+                .map(|r| tabs_socket(r, h))
+                .filter(|p| p.exists())
+                .ok_or("the docked terminal is closed")?;
+            let prefix = terminal_prefix(dirs, terminal);
+            let kitty = if is_kitty(&prefix[0]) {
+                prefix[0].clone()
+            } else {
+                "kitty".to_string()
+            };
+            let mut argv = vec![
+                kitty,
+                "@".into(),
+                "--to".into(),
+                format!("unix:{}", sock.display()),
+                "launch".into(),
+                "--type=tab".into(),
+            ];
+            argv.extend(run_args());
+            let quoted: Vec<String> = argv.iter().map(|a| shell_quote(a)).collect();
+            return Ok(Plan {
+                command: quoted.join(" "),
+                record: None,
+                place: None,
+                tabs: None,
+            });
+        }
+        let mut tabs = None;
         let argv: Vec<String> = if in_terminal {
-            let script = "eval \"$1\"; s=$?; printf '\\n[exited with %s: press Enter to close] ' \"$s\"; read _; exit \"$s\"";
             let mut v = terminal_prefix(dirs, terminal);
-            v.extend(["sh", "-c", script, "sh"].map(String::from));
-            v.push(cmd);
+            if dock
+                && is_kitty(&v[0])
+                && let Some(runtime) = dirs.runtime.as_deref()
+            {
+                let h = format!("kitty-{rand:08x}");
+                let listen = format!("unix:{}", tabs_socket(runtime, &h).display());
+                v.splice(
+                    1..1,
+                    [
+                        "-o".to_string(),
+                        "allow_remote_control=socket-only".into(),
+                        "--listen-on".into(),
+                        listen,
+                    ],
+                );
+                tabs = Some(h);
+            }
+            v.extend(run_args());
             v
         } else {
             vec!["sh".to_string(), "-c".to_string(), cmd]
@@ -225,6 +317,7 @@ pub fn plan(
             command: scope_command("run", &argv, rand),
             record: None,
             place,
+            tabs,
         });
     }
     if let Some(argv) = obj.get("argv") {
@@ -247,6 +340,7 @@ pub fn plan(
             command: scope_command(app, &argv, rand),
             record: None,
             place: None,
+            tabs: None,
         });
     }
     let id = obj
@@ -279,6 +373,7 @@ pub fn plan(
         command: scope_command(id.strip_suffix(".desktop").unwrap_or(id), &argv, rand),
         record: Some(id.to_string()),
         place: None,
+        tabs: None,
     })
 }
 
@@ -354,7 +449,10 @@ pub async fn launch(
             .call("RecordLaunch", &[Value::String(id.clone())])
             .await;
     }
-    Ok(Value::Null)
+    Ok(match plan.tabs {
+        Some(h) => serde_json::json!({ "tabs": h }),
+        None => Value::Null,
+    })
 }
 
 #[cfg(test)]

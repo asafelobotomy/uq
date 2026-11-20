@@ -134,6 +134,15 @@ pub enum Action {
         w: i64,
         h: i64,
     },
+    /// [`Action::Place`] for a window that must float there: the terminal look=see>do_ keeps
+    /// docked under its pill, made floating first in case it opened tiled.
+    Dock {
+        address: String,
+        x: i64,
+        y: i64,
+        w: i64,
+        h: i64,
+    },
     Dpms {
         on: bool,
     },
@@ -357,6 +366,13 @@ impl Action {
                 w: int_in(a, "w", 1, 32_768)?,
                 h: int_in(a, "h", 1, 32_768)?,
             },
+            "dock" => Action::Dock {
+                address: address(a)?,
+                x: int_in(a, "x", -65_536, 65_536)?,
+                y: int_in(a, "y", -65_536, 65_536)?,
+                w: int_in(a, "w", 1, 32_768)?,
+                h: int_in(a, "h", 1, 32_768)?,
+            },
             "dpms" => Action::Dpms {
                 on: a
                     .get("on")
@@ -459,6 +475,26 @@ impl Action {
                 w,
                 h,
             } => vec![
+                d(format!(
+                    "hl.dsp.window.resize({{ x = {w}, y = {h}, window = {} }})",
+                    win(address)
+                )),
+                d(format!(
+                    "hl.dsp.window.move({{ x = {x}, y = {y}, window = {} }})",
+                    win(address)
+                )),
+            ],
+            Action::Dock {
+                address,
+                x,
+                y,
+                w,
+                h,
+            } => vec![
+                d(format!(
+                    "hl.dsp.window.float({{ action = \"enable\", window = {} }})",
+                    win(address)
+                )),
                 d(format!(
                     "hl.dsp.window.resize({{ x = {w}, y = {h}, window = {} }})",
                     win(address)
@@ -1180,6 +1216,42 @@ mod tests {
     }
 
     #[test]
+    fn dock_floats_then_places() {
+        let w = r#""address:0x55d0c0ffee""#;
+        assert_eq!(
+            lua(
+                "dock",
+                json!({"address": A, "x": 320, "y": 230, "w": 640, "h": 220})
+            ),
+            [
+                format!(
+                    "return hl.dispatch(hl.dsp.window.float({{ action = \"enable\", window = {w} }}))"
+                ),
+                format!(
+                    "return hl.dispatch(hl.dsp.window.resize({{ x = 640, y = 220, window = {w} }}))"
+                ),
+                format!(
+                    "return hl.dispatch(hl.dsp.window.move({{ x = 320, y = 230, window = {w} }}))"
+                ),
+            ]
+        );
+        assert!(
+            Action::from_call(
+                "dock",
+                &json!({"address": A, "x": 0, "y": 0, "w": 0, "h": 1})
+            )
+            .is_err()
+        );
+        assert!(
+            Action::from_call(
+                "dock",
+                &json!({"address": "nope", "x": 0, "y": 0, "w": 1, "h": 1})
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
     fn rejects_unknown_action() {
         let e = Action::from_call("kill", &json!({"address": A})).unwrap_err();
         assert!(e.contains("unknown action"), "{e}");
@@ -1681,6 +1753,10 @@ mod tests {
             (
                 "place",
                 json!({"address": A, "x": -20, "y": 72, "w": 800, "h": 600}),
+            ),
+            (
+                "dock",
+                json!({"address": A, "x": 320, "y": 230, "w": 640, "h": 220}),
             ),
         ];
         let mut body = String::new();

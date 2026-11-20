@@ -276,6 +276,7 @@ async fn dispatch_sends_eval_and_maps_errors() {
         command: "c".into(),
         record: None,
         place: None,
+        tabs: None,
     };
     dispatch(&h, &p).await.unwrap();
     assert_eq!(dispatch(&h, &p).await.unwrap_err(), "nope");
@@ -338,4 +339,84 @@ fn placed_terminal_run_floats_without_taking_focus() {
         plan(Some(&none), &d, 1, &runs, None, None).unwrap().place,
         None
     );
+}
+
+#[test]
+fn docked_kitty_listens_for_tabs_and_a_tab_goes_through_its_socket() {
+    let rt = tempfile::tempdir().unwrap();
+    let d = Dirs::new(None, vec![]).with_runtime(Some(rt.path().into()));
+    let mut runs = RunState::default();
+    run_item("> make", 5, &mut runs).unwrap();
+    // Docked: kitty (the fallback) listens on a socket of its own, and the handle comes back.
+    let dock = json!({"run_id": "run-5", "terminal": true, "dock": true});
+    let p = plan(Some(&dock), &d, 0xab, &runs, None, None).unwrap();
+    assert_eq!(p.tabs.as_deref(), Some("kitty-000000ab"));
+    let sock = rt.path().join("uq-lookseedo-kitty-000000ab.sock");
+    assert!(
+        p.command.contains(&format!(
+            "-- 'kitty' '-o' 'allow_remote_control=socket-only' '--listen-on' 'unix:{}' '-e' 'sh' '-c'",
+            sock.display()
+        )),
+        "{}",
+        p.command
+    );
+    // Not docked, or no runtime folder: no socket and no handle.
+    let plain = json!({"run_id": "run-5", "terminal": true});
+    let p = plan(Some(&plain), &d, 0xab, &runs, None, None).unwrap();
+    assert!(
+        p.tabs.is_none() && !p.command.contains("listen-on"),
+        "{}",
+        p.command
+    );
+    let p = plan(Some(&dock), &Dirs::new(None, vec![]), 1, &runs, None, None).unwrap();
+    assert!(p.tabs.is_none(), "{}", p.command);
+
+    // A tab: refused while the socket isn't there (the terminal closed), then kitty's client.
+    let tab = json!({"run_id": "run-5", "terminal": true, "tab": "kitty-000000ab"});
+    assert_eq!(
+        plan(Some(&tab), &d, 1, &runs, None, None).unwrap_err(),
+        "the docked terminal is closed"
+    );
+    std::fs::write(&sock, "").unwrap();
+    let p = plan(Some(&tab), &d, 1, &runs, None, None).unwrap();
+    assert!(
+        p.command.starts_with(&format!(
+            "'kitty' '@' '--to' 'unix:{}' 'launch' '--type=tab' 'sh' '-c' 'eval \"$1\"",
+            sock.display()
+        )),
+        "{}",
+        p.command
+    );
+    assert!(p.command.ends_with("'sh' 'make'"), "{}", p.command);
+    assert!(p.place.is_none() && p.tabs.is_none());
+
+    // Handles are only ever kitty- and 8 hex digits; dock and tab need a terminal.
+    for bad in [
+        json!({"run_id": "run-5", "terminal": true, "tab": "../x"}),
+        json!({"run_id": "run-5", "terminal": true, "tab": "kitty-000000AB"}),
+        json!({"run_id": "run-5", "terminal": true, "tab": 3}),
+        json!({"run_id": "run-5", "terminal": true, "dock": "yes"}),
+        json!({"run_id": "run-5", "dock": true}),
+        json!({"run_id": "run-5", "tab": "kitty-000000ab"}),
+    ] {
+        assert!(plan(Some(&bad), &d, 1, &runs, None, None).is_err(), "{bad}");
+    }
+}
+
+#[test]
+fn a_docked_terminal_that_is_not_kitty_has_no_tabs() {
+    let rt = tempfile::tempdir().unwrap();
+    let apps = tempfile::tempdir().unwrap();
+    std::fs::write(
+        apps.path().join("foot.desktop"),
+        "[Desktop Entry]\nType=Application\nName=Foot\nExec=foot\n",
+    )
+    .unwrap();
+    let d = Dirs::new(Some(apps.path().into()), vec![]).with_runtime(Some(rt.path().into()));
+    let mut runs = RunState::default();
+    run_item("> ls", 2, &mut runs).unwrap();
+    let dock = json!({"run_id": "run-2", "terminal": true, "dock": true});
+    let p = plan(Some(&dock), &d, 1, &runs, Some("foot.desktop"), None).unwrap();
+    assert!(p.tabs.is_none(), "{}", p.command);
+    assert!(p.command.contains("-- 'foot' '-e' 'sh'"), "{}", p.command);
 }

@@ -18,6 +18,17 @@ TestCase {
         compare(L.resultsStale(false, undefined, ""), false);
     }
 
+    // The strip over the docked terminal: tabs where the terminal takes them, else a window.
+    function test_dock_text() {
+        compare(L.dockText("kitty", true, "", false),
+                "kitty is below. Type > and a command to run it in a new tab of kitty.");
+        compare(L.dockText("kitty", true, "", true), "Enter runs it in a new tab of kitty");
+        compare(L.dockText("Foot", false, "", true), "Enter runs it in a new Foot window");
+        compare(L.dockText("kitty", true, "sending", true), "Opening a new tab of kitty…");
+        compare(L.dockText("kitty", true, "sent", true),
+                "Running in kitty below. Click it to type there; Esc tucks it away.");
+    }
+
     function test_classify() {
         compare(L.classify("=1+1"), "calc");
         compare(L.classify("  =1"), "calc");

@@ -19,8 +19,11 @@ import "../logic/lookhome.js" as H
 // calculator, Run and other providers. Apps and windows are matched here; the bridge sends the
 // rest. Before anything is typed it shows the apps opened lately (Recents) and five pinned
 // squares the person fills; both go away as soon as there is text. A `>` command drops the
-// default terminal down from the search pill; Enter opens that terminal, floating beneath the
-// pill with the command running in it, and look=see>do_ stays until the terminal is clicked. Logic lives in launcher.js and rank.js; everything shown from apps or providers goes
+// default terminal down from the search pill; Enter opens that terminal docked beneath the pill,
+// the drop-down's size, with the command running in it. The terminal belongs to look=see>do_:
+// clicking it keeps look=see>do_ open, the next `>` command opens a new tab in it (kitty; other
+// terminals get a new docked window), it is tucked away when look=see>do_ closes and comes back,
+// growing in like a new window, when it opens again. Logic lives in launcher.js and rank.js; everything shown from apps or providers goes
 // through UqText, and Enter only ever makes bridge calls (Launch / Activate / Dispatch).
 PanelWindow {
     id: root
@@ -54,8 +57,9 @@ PanelWindow {
     property var defaultTerminal: null
     // "" | "sending" (Launch asked for) | "sent" (its window is on screen). Typing again clears it.
     property string termState: ""
-    property string termAddress: ""
     property var termBefore: ({})
+    // The handle the Launch for a new docked terminal gave back, until its window shows.
+    property string pendingTabs: ""
     property int termTries: 0
     readonly property int termHeight: 220
     readonly property int pillHeight: 44
@@ -64,7 +68,21 @@ PanelWindow {
         ? String(defaultTerminal.name) : "a terminal"
     readonly property string command: L.classify(query) === "run" ? query.trim().slice(1).trim() : ""
     readonly property bool runMode: pinSlot < 0 && command !== ""
-    readonly property bool homeShown: pinSlot < 0 && query.trim() === ""
+    readonly property bool homeShown: pinSlot < 0 && query.trim() === "" && !dockStrip
+
+    // --- the docked terminal: the one a `>` command opened, kept with look=see>do_ ---
+    // Its window, the handle that opens a new tab in it ("" when the terminal can't take tabs)
+    // and whether it is tucked away (look=see>do_ closed). wipe() leaves these alone.
+    property string dockAddress: ""
+    property string dockTabs: ""
+    property bool dockHidden: false
+    readonly property bool docked: shown && dockAddress !== "" && !dockHidden
+    // With the terminal docked, an empty field or a `>` command shows a one-line strip and the
+    // terminal right under it, instead of Recents and the drop-down.
+    readonly property bool dockStrip: docked && pinSlot < 0 && (query.trim() === "" || runMode)
+    // False once a click went to the docked terminal: look=see>do_ stays open without its focus
+    // grab, and closes when focus goes to any other window. Clicking the pill takes it back.
+    property bool grabbed: true
     readonly property var squares: H.squares(LauncherState.pins, appList)
 
     // --- search state (all cleared by wipe()) ---
@@ -119,8 +137,9 @@ PanelWindow {
         deadline.stop();
         copied.stop();
         termWatch.stop();
+        grabLost.stop();
         termState = "";
-        termAddress = "";
+        grabbed = true;
         pinSlot = -1;
         editPins = false;
         field.text = "";
@@ -409,30 +428,50 @@ PanelWindow {
         });
     }
 
-    // Enter on a `>` command: open the default terminal beneath the pill with the command
-    // running in it. look=see>do_ stays (the terminal doesn't take focus); clicking the terminal
-    // focuses it, which closes look=see>do_ and leaves the floating terminal.
+    // Enter on a `>` command. With a terminal docked that takes tabs, a new tab in it; else the
+    // default terminal opens docked beneath the pill (a docked one that can't take tabs is
+    // minimised to the Open windows island first). look=see>do_ stays either way.
     function openInTerminal(item) {
         if (Bridge.locked || termState === "sending")
             return;
+        error = "";
+        if (dockAlive() && dockTabs !== "") {
+            termState = "sending";
+            Bridge.call("Launch", [{ run_id: item.id, terminal: true, tab: dockTabs }]).then(function () {
+                root.termState = "sent";
+            }).catch(function (e) {
+                console.warn("uq: a new tab in the docked terminal failed: " + e);
+                root.termState = "";
+                root.releaseDock();
+                root.openNew(item);
+            });
+            return;
+        }
+        if (dockAlive())
+            releaseDock();
+        openNew(item);
+    }
+
+    function openNew(item) {
         var before = {};
         var vals = Hyprland.toplevels.values;
         for (var i = 0; i < vals.length; i++)
             before[addressOf(vals[i])] = true;
         termBefore = before;
-        error = "";
+        pendingTabs = "";
         var sc = screen;
-        var place = { x: Math.round(((sc ? sc.width : 1280) - root.width) / 2),
-                      y: root.margins.top + pillHeight + Theme.gapIn + sentHeight + Theme.gapOut * 2 + Theme.gapIn,
-                      w: Math.round(root.width), h: termHeight,
+        var r = dockRect(1);
+        // The window rules take the monitor's own coordinates.
+        var place = { x: r.x - (sc ? sc.x : 0), y: r.y - (sc ? sc.y : 0), w: r.w, h: r.h,
                       monitor: sc ? String(sc.name) : "" };
         termState = "sending";
-        Bridge.call("Launch", [{ run_id: item.id, terminal: true, place: place }]).then(function () {
-            termTries = 0;
+        Bridge.call("Launch", [{ run_id: item.id, terminal: true, dock: true, place: place }]).then(function (v) {
+            root.pendingTabs = v && typeof v.tabs === "string" ? v.tabs : "";
+            root.termTries = 0;
             termWatch.restart();
         }).catch(function (e) {
             console.warn("uq: Launch (run in a terminal) failed: " + e);
-            termState = "";
+            root.termState = "";
             if (root.shown)
                 root.error = F.failureText("Couldn't open " + root.termName, e);
         });
@@ -443,7 +482,82 @@ PanelWindow {
         return a !== "" && a.indexOf("0x") !== 0 ? "0x" + a : a;
     }
 
-    // Looks for the window the terminal opened: the first one that wasn't there before.
+    // Where the docked terminal goes, in layout coordinates: under the pill and its strip, as
+    // wide as look=see>do_. `scale` < 1 gives the same box shrunk about its centre, which is
+    // where a tucked-away terminal waits so that it grows in when it comes back.
+    function dockRect(scale) {
+        var sc = screen;
+        var w = Math.round(root.implicitWidth), h = termHeight;
+        var x = (sc ? sc.x : 0) + Math.round(((sc ? sc.width : 1280) - w) / 2);
+        var y = (sc ? sc.y : 0) + root.margins.top + pillHeight + Theme.gapIn + sentHeight
+            + Theme.gapOut * 2 + Theme.gapIn;
+        var s = scale > 0 ? scale : 1;
+        return { x: Math.round(x + w * (1 - s) / 2), y: Math.round(y + h * (1 - s) / 2),
+                 w: Math.round(w * s), h: Math.round(h * s) };
+    }
+
+    // Whether the docked terminal's window is still there; forgets it once it's gone.
+    function dockAlive() {
+        if (dockAddress === "")
+            return false;
+        var vals = Hyprland.toplevels.values;
+        for (var i = 0; i < vals.length; i++)
+            if (addressOf(vals[i]) === dockAddress)
+                return true;
+        forgetDock();
+        return false;
+    }
+    function forgetDock() {
+        dockAddress = "";
+        dockTabs = "";
+        dockHidden = false;
+    }
+    // The workspace shown on look=see>do_'s screen.
+    function activeWsId() {
+        var m = screen ? Hyprland.monitorFor(screen) : null;
+        var ws = m && m.activeWorkspace ? m.activeWorkspace : Hyprland.focusedWorkspace;
+        return ws ? ws.id : 1;
+    }
+    function placeDock(scale) {
+        var r = dockRect(scale);
+        return Bridge.call("Dispatch", ["dock", { address: dockAddress, x: r.x, y: r.y, w: r.w, h: r.h }]);
+    }
+    // look=see>do_ closed: the terminal goes to a special workspace of its own (it isn't in the
+    // Open windows island while away), shrunk a little so it grows back in.
+    function hideDock() {
+        if (dockHidden || !dockAlive())
+            return;
+        dockHidden = true;
+        Bridge.call("Dispatch", ["move", { address: dockAddress, workspace: "special:uq-lookseedo" }]).then(function () {
+            return root.placeDock(0.87);
+        }).catch(function (e) { console.warn("uq: tuck the terminal away: " + e); });
+    }
+    // look=see>do_ opened again: the terminal comes back under the pill on the workspace shown.
+    function showDock() {
+        if (!dockHidden || !dockAlive())
+            return;
+        dockHidden = false;
+        Bridge.call("Dispatch", ["move", { address: dockAddress, workspace: activeWsId() }]).then(function () {
+            return root.placeDock(1);
+        }).catch(function (e) { console.warn("uq: bring the terminal back: " + e); });
+    }
+    // A docked terminal that can't take a tab: minimised to the Open windows island, where it
+    // can still be found, so a new one can dock.
+    function releaseDock() {
+        if (dockAlive())
+            Bridge.call("Dispatch", ["minimise", { address: dockAddress, from_ws: activeWsId() }])
+                .catch(function (e) { console.warn("uq: minimise the terminal: " + e); });
+        forgetDock();
+    }
+    function regrab() {
+        grabLost.stop();
+        grabbed = true;
+        field.forceActiveFocus();
+    }
+
+    // Looks for the window the terminal opened: the first one that wasn't there before. It
+    // becomes the docked terminal, placed (and made floating) again in case its window rules
+    // didn't take.
     Timer {
         id: termWatch
         interval: 120
@@ -454,9 +568,15 @@ PanelWindow {
             for (var i = 0; i < vals.length; i++) {
                 var a = root.addressOf(vals[i]);
                 if (a !== "" && !root.termBefore[a]) {
-                    root.termAddress = a;
-                    root.termState = "sent";
                     stop();
+                    root.dockAddress = a;
+                    root.dockTabs = root.pendingTabs;
+                    root.dockHidden = false;
+                    root.termState = "sent";
+                    if (root.shown)
+                        root.placeDock(1).catch(function (e) { console.warn("uq: dock the terminal: " + e); });
+                    else
+                        root.hideDock();
                     return;
                 }
             }
@@ -469,13 +589,45 @@ PanelWindow {
         }
     }
 
-    // Focus reaching that terminal (a click on it, or any other way) ends look=see>do_.
+    // Focus on the docked terminal (or the one opening) keeps look=see>do_.
+    function focusOnTerminal() {
+        var t = Hyprland.activeToplevel;
+        if (!t)
+            return false;
+        var a = addressOf(t);
+        return a !== "" && ((dockAddress !== "" && a === dockAddress)
+                            || (termState === "sending" && !termBefore[a]));
+    }
+    // A click outside look=see>do_ ends its focus grab. On the docked terminal it stays open;
+    // anywhere else it closes. Hyprland's focus has moved by the time this fires.
+    Timer {
+        id: grabLost
+        interval: 200
+        onTriggered: {
+            if (!root.shown)
+                return;
+            if (root.focusOnTerminal())
+                root.grabbed = false;
+            else
+                Surfaces.close();
+        }
+    }
     Connections {
         target: Hyprland
+        // Without the grab (the terminal was clicked), focus going to any other window closes
+        // look=see>do_, which tucks the terminal away.
         function onActiveToplevelChanged() {
+            if (!root.shown || root.grabbed)
+                return;
             var t = Hyprland.activeToplevel;
-            if (root.shown && root.termAddress !== "" && t && root.addressOf(t) === root.termAddress)
+            if (t && !root.focusOnTerminal())
                 Surfaces.close();
+        }
+        function onRawEvent(event) {
+            // ADDRESS (without 0x): the docked terminal was closed (its last tab ended).
+            if (event.name === "closewindow" && root.dockAddress !== ""
+                    && "0x" + String(event.data).split(",")[0] === root.dockAddress)
+                root.forgetDock();
         }
     }
 
@@ -502,6 +654,10 @@ PanelWindow {
         openedOn = shown ? (Outputs.primaryScreen(Quickshell.screens)
                             || screenFor(Hyprland.focusedMonitor)) : null;
         wipe();
+        if (shown)
+            showDock();
+        else
+            hideDock();
         if (shown) {
             Qt.callLater(field.forceActiveFocus);
             Bridge.call("ListProfiles", []).then(function (v) {
@@ -557,9 +713,10 @@ PanelWindow {
     Timer { id: copied; interval: 600 }
 
     HyprlandFocusGrab {
+        id: grab
         windows: [root]
-        active: root.visible
-        onCleared: Surfaces.close()
+        active: root.visible && root.grabbed
+        onCleared: grabLost.restart()
     }
 
     // The search pill and, under it, the card that drops from it: Recents and the pinned
@@ -567,6 +724,10 @@ PanelWindow {
     Item {
         id: panel
         width: parent.width
+        // Keyboard focus back on look=see>do_ (the pill clicked after the terminal was): take
+        // the focus grab back.
+        readonly property bool windowActive: Window.active
+        onWindowActiveChanged: if (windowActive && root.shown && !root.grabbed) root.regrab()
         implicitHeight: pill.height + (body.visible ? Theme.gapIn + body.height : 0)
 
         Rectangle {
@@ -637,7 +798,7 @@ PanelWindow {
             width: parent.width
             height: col.implicitHeight + Theme.gapOut * 2
             visible: root.sections.length > 0 || root.homeShown || root.runMode || root.pinSlot >= 0
-                     || root.termState !== "" || root.error !== "" || root.searchError !== ""
+                     || root.termState !== "" || root.dockStrip || root.error !== "" || root.searchError !== ""
                      || root.emojiHint || copied.running
                      || (root.searched !== "" && root.deadlinePassed)
             radius: Theme.radius
@@ -657,7 +818,7 @@ PanelWindow {
                     Layout.preferredHeight: Math.min(results.implicitHeight, root.maxListHeight)
                     // Recents and the picker show with an empty field; once there is text the
                     // list is the search's, and a `>` command has the terminal instead.
-                    visible: root.sections.length > 0 && !root.runMode
+                    visible: root.sections.length > 0 && !root.runMode && !root.dockStrip
                              && !(root.query.trim() !== "" && root.searched === "" && root.pinSlot < 0)
                     contentHeight: results.implicitHeight
                     clip: true
@@ -902,7 +1063,7 @@ PanelWindow {
                     id: termDrop
                     objectName: "lookseedoTerminal"
                     Layout.fillWidth: true
-                    readonly property bool open: root.runMode && root.termState !== "sent"
+                    readonly property bool open: root.runMode && root.termState !== "sent" && !root.docked
                     Layout.preferredHeight: open ? root.termHeight : 0
                     visible: Layout.preferredHeight > 0
                     clip: true
@@ -965,12 +1126,12 @@ PanelWindow {
                     }
                 }
 
-                // After Enter: the terminal is on screen under the pill. Click it to work in it.
+                // The terminal is docked under the pill: what Enter does next, or what is running.
                 Rectangle {
                     objectName: "lookseedoSent"
                     Layout.fillWidth: true
                     Layout.preferredHeight: root.sentHeight
-                    visible: root.termState === "sent"
+                    visible: root.dockStrip || (root.termState === "sent" && !root.docked)
                     radius: Theme.radius - 2
                     color: Theme.surfaceAlt
                     UqText {
@@ -978,7 +1139,8 @@ PanelWindow {
                         anchors.leftMargin: Theme.gapOut
                         anchors.rightMargin: Theme.gapOut
                         verticalAlignment: Text.AlignVCenter
-                        text: "Running in " + root.termName + ". Click the terminal to switch to it."
+                        elide: Text.ElideRight
+                        text: L.dockText(root.termName, root.dockTabs !== "", root.termState, root.runMode)
                         color: Theme.accent
                     }
                 }
@@ -1026,7 +1188,7 @@ PanelWindow {
                     objectName: "lookseedoHint"
                     Layout.fillWidth: true
                     Layout.topMargin: Theme.gapIn
-                    visible: root.termState !== "sent"
+                    visible: root.termState !== "sent" && !root.dockStrip
                     text: root.pinSlot >= 0 ? "Enter pins the app   Esc goes back"
                         : (root.runMode ? "Enter runs it in " + root.termName + "   Shift+Enter runs it in the background"
                         : (root.homeShown ? "Alt+1 to 5 open a pinned app   = maths   > terminal   : emoji"

@@ -105,6 +105,7 @@ pub fn plan(
         command: scope_command(&format!("action-{}", action.id), &argv, rand),
         record: None,
         place: None,
+        tabs: None,
     })
 }
 

@@ -1,0 +1,46 @@
+# TEMPORARY (removed before merge): only scripts/lookseedo-live.sh, for quick iterations.
+name: lookseedo-dev
+on:
+  push:
+    branches: ['claude/project-thread-1fosd5']
+permissions:
+  contents: read
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Load vkms
+        run: |
+          sudo modprobe vkms 2>/dev/null || {
+            sudo apt-get update -q && sudo apt-get install -y -q "linux-modules-extra-$(uname -r)" && sudo modprobe vkms
+          }
+          card=""
+          for c in /sys/class/drm/card*; do
+            case "${c##*/}" in *-*) continue ;; esac
+            [ "$(basename "$(readlink -f "$c/device")")" = vkms ] && card=/dev/dri/${c##*/}
+          done
+          echo "SMOKE_CARD=$card" >> "$GITHUB_ENV"
+      - name: lookseedo-live
+        run: |
+          docker run --rm --device "$SMOKE_CARD" -e SMOKE_CARD -e SMOKE_UID="$(id -u)" \
+            -v "$GITHUB_WORKSPACE:/src" archlinux:latest bash -c '
+            set -eu
+            pacman -Syu --noconfirm --needed rust dbus hyprland quickshell qt6-declarative jq foot kitty ttf-dejavu grim slurp wl-clipboard diffutils ffmpeg python seatd socat gcc pkgconf wayland libxkbcommon >/dev/null
+            useradd -m -u "$SMOKE_UID" tester
+            chmod 666 "$SMOKE_CARD"
+            SEATD_VTBOUND=0 seatd -u tester -l error &
+            su tester -c "set -e
+              cd /src
+              cargo build --locked -p uqctl
+              export XDG_RUNTIME_DIR=\$(mktemp -d) LIBSEAT_BACKEND=seatd UQCTL=/src/target/debug/uqctl UQ_CAPTURE_DIR=/src/captures
+              timeout 300 scripts/lookseedo-live.sh"'
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: lookseedo-captures
+          path: captures/
+          if-no-files-found: ignore
