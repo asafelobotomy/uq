@@ -599,19 +599,38 @@ PanelWindow {
                             || (termState === "sending" && !termBefore[a]));
     }
     // A click outside look=see>do_ ends its focus grab. On the docked terminal it stays open;
-    // anywhere else it closes. Hyprland's focus has moved by the time this fires.
+    // anywhere else it closes. Hyprland's focus follows the click a moment later, so this looks
+    // a few times (up to about 600 ms) before deciding the click went elsewhere.
+    property int grabLooks: 0
+    property string grabFrom: ""
     Timer {
         id: grabLost
-        interval: 200
+        interval: 50
+        repeat: true
+        onRunningChanged: if (running) {
+            root.grabLooks = 0;
+            root.grabFrom = Hyprland.activeToplevel ? root.addressOf(Hyprland.activeToplevel) : "";
+        }
         onTriggered: {
-            if (!root.shown)
+            if (!root.shown) {
+                stop();
                 return;
-            var keep = root.focusOnTerminal();
-            console.debug("uq: lookseedo dock: grab cleared, " + (keep ? "on the terminal" : "closing"));
-            if (keep)
+            }
+            root.grabLooks++;
+            if (root.focusOnTerminal()) {
+                stop();
                 root.grabbed = false;
-            else
-                Surfaces.close();
+                return;
+            }
+            // Focus moved to another window: no need to wait.
+            var now = Hyprland.activeToplevel ? root.addressOf(Hyprland.activeToplevel) : "";
+            if (root.grabLooks < 12 && (now === "" || now === root.grabFrom))
+                return;
+            stop();
+            var t = Hyprland.activeToplevel;
+            console.debug("uq: lookseedo dock: grab cleared, focus on " + (t ? root.addressOf(t) : "nothing")
+                          + " (docked: " + root.dockAddress + "), closing");
+            Surfaces.close();
         }
     }
     Connections {
