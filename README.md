@@ -283,7 +283,7 @@ checks are in [docs/notes/settings-slice-b-live-check.md](docs/notes/settings-sl
 Every shortcut uQ sets up is listed here by what it does, with its keys, grouped as Apps and
 desktop, Windows, Workspaces, Sound and brightness, Media, and Profiles. The defaults:
 Open a terminal (Super + Return), Close the window (Super + Q), Float or tile the window
-(Super + V), Log out (Super + Shift + M), Open look=see>do_ (Super + Space), Open look=see>do_ for emoji (Super + period; it needs the shell's emoji shortcut, which comes with the emoji picker), Open the clipboard history (Super + Shift + V), Open the app menu
+(Super + V), Log out (Super + Shift + M), Open look=see>do_ (Super + Space), Open look=see>do_ for emoji (Super + period; it needs the shell's emoji shortcut, which comes with the emoji picker), Open the calculator (Calculator key), Open the clipboard history (Super + Shift + V), Open the app menu
 (tap Super), Open quick settings (Super + A), Open notifications (Super + N), Lock the screen
 (Super + L), Open the power menu (Super + Escape), the three layouts (Super + Alt + D, M and S),
 focus with Super + the arrows, workspaces 1 to 10 with Super + the number (Shift moves the
@@ -494,6 +494,11 @@ See [`docs/companion-pages.md`](docs/companion-pages.md).
   (`>cmd`) and any installed search providers.
 - `SUPER+.` opens look=see>do_ at `:`, the emoji search. It needs an emoji provider (emobie);
   without one look=see>do_ says "No emoji provider installed".
+- The keyboard's Calculator key opens look=see>do_ at `=`, the calculator. It takes
+  `+ - * / ^ mod`, `×` and `÷`, `2pi` and `3(1+1)`, `18% of 2450` and `2450 + 18%`, `5!`,
+  `sin(30°)`, `1,234`, `1e3`, `0xff`, `255 in hex|bin|oct`, `ans` (the last result you copied)
+  and sqrt, cbrt, sin, cos, tan, asin, acos, atan, sinh, cosh, tanh, ln, log, log2, exp, abs,
+  round, floor and ceil. Enter copies the result.
 - Tapping `SUPER` (left SUPER, pressed and released alone) opens or closes the app menu. It
   doesn't open when you press and release another key or mouse button while SUPER is held. On
   Hyprland 0.56 it can still open if you release SUPER while that other key is still down.
