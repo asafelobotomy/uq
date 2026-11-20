@@ -521,7 +521,13 @@ fn end_with_parent() {
     // that matters here (an unsupported kernel just leaves the old behaviour).
     unsafe {
         let parent = libc::getppid();
-        libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM as libc::c_ulong, 0, 0, 0);
+        libc::prctl(
+            libc::PR_SET_PDEATHSIG,
+            libc::SIGTERM as libc::c_ulong,
+            0,
+            0,
+            0,
+        );
         // The parent may have gone between our start and the prctl: then nobody will signal.
         if libc::getppid() != parent {
             std::process::exit(0);
