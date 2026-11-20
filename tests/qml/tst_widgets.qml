@@ -360,6 +360,57 @@ TestCase {
         verify(h.slotAt(0) === first, "delegates kept");
     }
 
+    // A widget that sets `hidden` stays loaded but takes no room; its view follows the bar.
+    function test_widget_can_hide_itself() {
+        fake.widgets = [entry("h", "hider", "bar", 10), entry("g", "good", "bar", 20)];
+        var h = createTemporaryObject(hostComp, tc, { kind: "bar", bridge: fake });
+        tryCompare(h, "loadedCount", 1);
+        var s = h.slotAt(0);
+        verify(s.loaded);
+        verify(s.hiddenByWidget);
+        verify(!s.shown, "takes no room");
+        verify(!s.visible);
+        verify(s.item.ctx.view.shown, "still watching while its bar shows");
+        compare(h.implicitWidth, 26, "only the other widget's cell");
+        s.onScreen = false;
+        verify(!s.item.ctx.view.shown);
+        s.onScreen = true;
+
+        s.item.hidden = false;
+        tryCompare(h, "loadedCount", 2);
+        verify(s.shown);
+        verify(s.item.ctx.view.shown);
+        s.item.hidden = true;
+        tryCompare(h, "loadedCount", 1);
+        compare(Widgets.log, []);
+    }
+
+    function test_apps_group_hidden_when_only_tile_hides_itself() {
+        fake.widgets = [entry("hq", "hider", "quick")];
+        var g = createTemporaryObject(appsComp, tc, { bridge: fake });
+        wait(50);
+        compare(g.loadedCount, 0);
+        verify(!g.shown);
+    }
+
+    // A popup declares `property var ctx` (undefined until set): it still gets the widget's ctx.
+    function test_detail_view_gets_ctx() {
+        fake.widgets = [entry("q", "good", "quick")];
+        var g = createTemporaryObject(appsComp, tc, { bridge: fake });
+        tryCompare(g, "loadedCount", 1);
+        var s = findChild(g, "detail");
+        verify(s !== null);
+        var slot = null;
+        for (var i = 0; i < 10 && slot === null; i++) {
+            var host = g.children[1];
+            slot = host && host.slotAt ? host.slotAt(0) : null;
+        }
+        verify(slot !== null && slot.loaded);
+        slot.ctx.openPopup();
+        tryVerify(function () { return s.item !== null; });
+        verify(s.item.ctx === slot.ctx, "the popup's ctx is the widget's");
+    }
+
     function test_apps_group_hidden_when_empty() {
         var g = createTemporaryObject(appsComp, tc, { bridge: fake });
         compare(g.loadedCount, 0);

@@ -12,6 +12,26 @@ All notable changes to uQ are listed here. The format follows
 - **Mark up and Open in the screenshot preview.** With [Qview](https://github.com/asafelobotomy/qview) installed, the preview has a Mark up button that opens the capture straight in Qview's Mark up (arrows, boxes, text, numbers, highlighter, pixelate, crop) and an Open button. Marking up a screenshot had gone with satty in 0.3.9. The caption now says which folder the capture went to next to its name.
 - **`uqctl wallpaper set -- PICTURE`** uses a picture as the wallpaper on every display (or one, with `--output`), optionally with `--fit fill|fit|center|tile|span`. It stops a folder slideshow there, shows in Settings, and `uqctl undo` takes it back. `uqctl wallpaper get` lists each display's wallpaper. Qview's Set as wallpaper uses it.
 
+## [0.3.23] - 2026-11-20
+
+### Fixed
+
+- **Open KDE and Qt apps change with the theme.** uqd rewrote `kdeglobals` on a theme change but never told running apps, so Dolphin, Kate, Okular and other windows using the `kde` platform theme kept the old colours, style and icons until restarted. uqd now sends the signals Plasma sends after changing `kdeglobals` (KGlobalSettings palette and style, KIconLoader icons).
+
+### Changed
+
+- **Every companion page is checked.** The weekly companion check now covers all twelve apps with a uQ Settings page (oysterAV, appOFholding, hauler, bindaru, romforge, emobie and Bindle as well as the first five), and `docs/companion-pages.md` lists them.
+
+## [0.3.22] - 2026-11-20
+
+### Added
+
+- **Bar widgets can hide themselves.** A widget whose root item sets `property bool hidden: true` stays loaded but takes no room in the Status island, the "…" list or quick settings, and keeps watching for the moment to come back (`docs/integrating.md`). Bindle's bindleUP icon uses it to show only when updates are ready.
+
+### Fixed
+
+- **Widget popups get their `ctx`.** A widget popup that declared `property var ctx` (as the template and the docs show) was never handed it, because the property starts out `undefined` and that was read as "this popup has no ctx". Its text and buttons stayed empty. The bar popups, island popups and quick-settings detail views now hand `ctx` to any popup that declares it.
+
 ## [0.3.21] - 2026-11-20
 
 ### Fixed
