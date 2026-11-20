@@ -63,6 +63,48 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          repository: asafelobotomy/oysterAV
+          ref: main
+          path: companions/oysterav
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: asafelobotomy/appofholding
+          ref: main
+          path: companions/appofholding
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: asafelobotomy/hauler
+          ref: main
+          path: companions/hauler
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: asafelobotomy/bindaru
+          ref: main
+          path: companions/bindaru
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: asafelobotomy/romforge
+          ref: main
+          path: companions/romforge
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: asafelobotomy/emobie
+          ref: main
+          path: companions/emobie
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: asafelobotomy/bindle
+          ref: main
+          path: companions/bindle
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
           repository: asafelobotomy/reelo
           ref: main
           path: companions/reelo
@@ -73,4 +115,7 @@ jobs:
         run: |
           scripts/check-companion-pages.sh target/debug/uqctl \
             companions/scdr/uq companions/crumbs/uq companions/noti-fi/uq \
-            companions/xzram/uq companions/scale_tail/uq companions/reelo/uq
+            companions/xzram/uq companions/scale_tail/uq companions/oysterav/uq \
+            companions/appofholding/uq companions/hauler/uq companions/bindaru/uq \
+            companions/romforge/uq companions/emobie/uq companions/bindle/uq \
+            companions/reelo/uq
