@@ -621,6 +621,8 @@ PanelWindow {
                     p = JSON.parse(text);
                 } catch (e) {
                 }
+                if (!p)
+                    console.debug("uq: lookseedo dock: hyprctl cursorpos said " + text);
                 root.pointerAt(p && typeof p.x === "number" ? p : null);
             }
         }
@@ -634,7 +636,8 @@ PanelWindow {
             Bridge.call("Dispatch", ["focus_window", { address: dockAddress, keep_pointer: true }])
                 .catch(function (e) { console.warn("uq: focus the terminal: " + e); });
         } else {
-            console.debug("uq: lookseedo dock: grab cleared away from the terminal, closing");
+            console.debug("uq: lookseedo dock: grab cleared at " + JSON.stringify(p) + ", terminal at "
+                          + JSON.stringify(r) + (docked ? "" : " (not docked)") + ", closing");
             Surfaces.close();
         }
     }
