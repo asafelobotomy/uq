@@ -512,9 +512,35 @@ fn quiet_broken_pipe() {
     }));
 }
 
+/// Ask the kernel to send SIGTERM when the process that started us exits, even on SIGKILL or a
+/// crash. The shell runs `bridge` and `clip watch` for as long as it is up, and uq-shell.service
+/// keeps `KillMode=process` (apps the shell opened outlive a restart), so these have to end
+/// themselves. Doing it here saves the shell an extra `setpriv` exec per helper.
+fn end_with_parent() {
+    // SAFETY: getppid and prctl(PR_SET_PDEATHSIG) take no pointers and can't fail in a way
+    // that matters here (an unsupported kernel just leaves the old behaviour).
+    unsafe {
+        let parent = libc::getppid();
+        libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM as libc::c_ulong, 0, 0, 0);
+        // The parent may have gone between our start and the prctl: then nobody will signal.
+        if libc::getppid() != parent {
+            std::process::exit(0);
+        }
+    }
+}
+
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> ExitCode {
     let cli = Cli::parse();
+    if matches!(
+        cli.cmd,
+        Cmd::Bridge { .. }
+            | Cmd::Clip {
+                cmd: clip_cmd::ClipCmd::Watch
+            }
+    ) {
+        end_with_parent();
+    }
     if !matches!(cli.cmd, Cmd::Bridge { .. }) {
         quiet_broken_pipe();
     }

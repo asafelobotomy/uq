@@ -134,8 +134,8 @@ Singleton {
 
     Process {
         id: watcher
-        // Ends with the shell (setpriv --pdeathsig; see BridgeIo.qml).
-        command: ["/usr/bin/setpriv", "--pdeathsig", "TERM", "--", "uqctl", "clip", "watch"]
+        // Ends with the shell: uqctl sets its own parent-death signal (see BridgeIo.qml).
+        command: ["uqctl", "clip", "watch"]
         running: true
         stdout: SplitParser {
             onRead: data => {
