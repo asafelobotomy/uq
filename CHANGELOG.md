@@ -7,9 +7,25 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.25] - 2026-11-20
+
 ### Added
 
 - **A Printers page in Settings.** It shows every printer, which one is the default, what each is doing (ready, printing, paused, out of paper, can't be reached…) and the documents waiting, live. You can make a printer the default, pause and resume it, print a test page, cancel one document or all of them, change its name, location and printing defaults (paper size, two-sided, color, quality, paper type and tray, and the rest of its options), and remove it. **Add a printer** looks for printers on the network and USB ports and adds them without a driver when they can (most printers since about 2010), or with a matching installed driver; a network printer that isn't found can be added by its address. It talks to CUPS directly over its local socket, as you: no password prompt and no terminal, and changing printers is allowed to administrators, as CUPS decides. When printing is installed but switched off, **Turn on printing** starts it. This replaces system-config-printer, the last default settings window that didn't follow the uQ theme; the printing service's own web page is linked for the rare printer that needs more. The package gains an optional dependency on cups.
+
+## [0.3.24] - 2026-11-20
+
+### Added
+
+- **A calculator that replaces KCalc.** look=see>do_'s `=` calculator now takes `×` `÷` `−` and
+  `**`, `mod` and `7 % 3`, implied multiplication (`2pi`, `3(1+1)`), desk-calculator percentages
+  (`2450 + 18%` is 2891), factorials (`5!`), degrees (`sin(30°)`), `1,234,567`, `1e-3`,
+  `0xff`/`0b101`/`0o17`, a trailing `in hex`, `in bin` or `in oct`, `ans` (the last result you
+  copied), and cbrt, asin, acos, atan, sinh, cosh, tanh, log2, exp, floor and ceil. Whole numbers
+  up to 2^53 print in full. Bindle no longer installs KCalc on uQ.
+- **The Calculator key opens it.** A new default shortcut, "Open the calculator", binds the
+  keyboard's Calculator key to look=see>do_ at `=`. Change or turn it off in Settings > Keyboard
+  shortcuts.
 
 ## [0.3.23] - 2026-11-20
 

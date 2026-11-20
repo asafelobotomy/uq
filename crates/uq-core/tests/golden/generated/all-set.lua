@@ -74,6 +74,7 @@ hl.bind("SUPER + V", hl.dsp.window.float({ action = "toggle" }), { description =
 hl.bind("SUPER + SHIFT + M", hl.dsp.exec_cmd("command -v hyprshutdown >/dev/null 2>&1 && hyprshutdown || hyprctl dispatch 'hl.dsp.exit()'"), { description = "uq:uq.exit" })
 hl.bind("SUPER + K", hl.dsp.global("uq:lookseedo"), { description = "uq:uq.lookseedo" })
 hl.bind("SUPER + period", hl.dsp.global("uq:emoji"), { description = "uq:uq.emoji" })
+hl.bind("XF86Calculator", hl.dsp.global("uq:calc"), { description = "uq:uq.calc" })
 hl.bind("SUPER + SHIFT + V", hl.dsp.global("uq:clip"), { description = "uq:uq.clip" })
 hl.bind("SUPER + SUPER_L", hl.dsp.global("uq:appmenu"), { release = true, description = "uq:uq.appmenu" })
 hl.bind("SUPER + A", hl.dsp.global("uq:quick-settings"), { description = "uq:uq.quick-settings" })
