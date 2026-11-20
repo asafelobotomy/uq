@@ -9,7 +9,8 @@ import "../core"
 import "../logic/screenshot.js" as S
 
 // The floating preview every screenshot ends in (never a new window): the capture, where it was
-// saved, and Copy, Discard and a close button. `uq-screenshot` calls
+// saved, and Copy, Mark up, Open, Discard and a close button (Mark up and Open only when the qview
+// image viewer is installed; it's checked each time a preview shows). `uq-screenshot` calls
 //   qs ipc -p /usr/share/uq/shell call screenshot present <file.png> <copied|none>
 // once the file is saved (and, normally, already on the clipboard). It stays for SHOW_MS, or
 // while the pointer is over it, and never takes keyboard focus; the window's input mask covers
@@ -22,6 +23,7 @@ PanelWindow {
     property var shot: null            // S.show() state, or null when nothing is showing
     property bool copyFailed: false
     property bool discarded: false
+    property bool hasViewer: false
     readonly property bool shown: shot !== null && !Bridge.locked
     readonly property real dpr: screen ? screen.devicePixelRatio : 1
 
@@ -42,6 +44,7 @@ PanelWindow {
         root.copyFailed = false;
         root.discarded = false;
         root.shot = s;
+        viewerCheck.running = true;
         hideTimer.interval = S.SHOW_MS;
         hideTimer.restart();
         return true;
@@ -56,6 +59,13 @@ PanelWindow {
         copier.command = ["sh", "-c", "exec wl-copy --type image/png < \"$1\" >/dev/null 2>&1", "sh", root.shot.path];
         copier.running = true;
         hideTimer.restart();
+    }
+    // Hands the capture to the viewer (detached, so it outlives the shell) and closes the preview.
+    function view(markup) {
+        if (root.shot === null || root.discarded || !root.hasViewer)
+            return;
+        Quickshell.execDetached(S.viewerCommand(root.shot.path, markup));
+        root.close();
     }
     function discard() {
         if (root.shot === null)
@@ -121,6 +131,13 @@ PanelWindow {
         }
     }
     Process { id: remover }
+    Process {
+        id: viewerCheck
+        command: ["sh", "-c", "command -v " + S.VIEWER + " >/dev/null"]
+        onExited: function (code) {
+            root.hasViewer = code === 0;
+        }
+    }
 
     // A small button: the primary one is filled with the accent, the others are outlined.
     component ShotButton: Rectangle {
@@ -194,7 +211,7 @@ PanelWindow {
                     }
                     UqText {
                         Layout.fillWidth: true
-                        text: root.shot ? S.baseName(root.shot.path) : ""
+                        text: root.shot ? S.where(root.shot.path, Quickshell.env("HOME")) : ""
                         color: Theme.textMuted
                     }
                 }
@@ -244,14 +261,19 @@ PanelWindow {
                     onActivated: root.copy()
                 }
                 ShotButton {
-                    label: "Discard"
-                    onActivated: root.discard()
+                    label: "Mark up"
+                    visible: root.hasViewer
+                    onActivated: root.view(true)
+                }
+                ShotButton {
+                    label: "Open"
+                    visible: root.hasViewer
+                    onActivated: root.view(false)
                 }
                 Item { Layout.fillWidth: true }
-                UqText {
-                    text: root.shot ? S.folderLabel(root.shot.path, Quickshell.env("HOME")) : ""
-                    color: Theme.textMuted
-                    Layout.maximumWidth: 150
+                ShotButton {
+                    label: "Discard"
+                    onActivated: root.discard()
                 }
             }
         }

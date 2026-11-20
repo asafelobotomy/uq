@@ -52,3 +52,15 @@ function status(state, discarded, failed) {
         return "Couldn't copy, is wl-clipboard installed?";
     return state.copied ? "Copied to clipboard" : "Saved";
 }
+
+// "c.png in ~/Pictures/Screenshots" (the caption's second line).
+function where(p, home) {
+    return baseName(p) + " in " + folderLabel(p, home);
+}
+
+// The image viewer's command for the capture: open it, or (markup) open it straight in Mark up.
+// The path is its own argument, after "--" so a name starting with "-" stays a name.
+var VIEWER = "qview";
+function viewerCommand(p, markup) {
+    return markup ? [VIEWER, "--markup", p] : [VIEWER, "--", p];
+}

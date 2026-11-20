@@ -45,7 +45,12 @@ cat >"$tmp/bin/kitty" <<'SH'
 shift
 exec foot "$@"
 SH
-chmod +x "$tmp/bin/systemd-run" "$tmp/bin/kitty"
+# A stand-in for the qview image viewer: the preview's Mark up and Open hand the capture to it.
+cat >"$tmp/bin/qview" <<SH
+#!/bin/sh
+printf '%s\n' "\$@" >"$tmp/qview.args"
+SH
+chmod +x "$tmp/bin/systemd-run" "$tmp/bin/kitty" "$tmp/bin/qview"
 printf '[Desktop Entry]\nType=Application\nName=Kitty\nExec=kitty\nIcon=utilities-terminal\n' >"$tmp/data/applications/kitty.desktop"
 # Recents and the pinned squares, as the shell saves them.
 printf '{"v":1,"pins":["","","","",""],"recents":["foot"]}' >"$tmp/state/uq/lookseedo.json"
@@ -180,10 +185,10 @@ g=$(newest)
 clip_matches "$g" || check "the clipboard doesn't hold the second screenshot"
 sleep 0.8; still 3-second
 
-# --- 4. Discard deletes the file ----------------------------------------------------------------
+# --- 4. Discard (the last button) deletes the file ----------------------------------------------
 read -r lx ly lw lh <<<"$(geom)"
 btn_y=$((ly + lh - 12 - 14))
-click $((lx + 12 + 145)) "$btn_y"
+click $((lx + lw - 12 - 30)) "$btn_y"
 sleep 0.3; still 4-discarded
 [ ! -e "$g" ] || check "Discard left $g behind"
 wait_layers 0 || check "the preview stayed after Discard"
@@ -198,6 +203,19 @@ read -r lx ly lw lh <<<"$(geom)"
 click $((lx + lw - 12 - 14)) $((ly + 12 + 14))
 wait_layers 0 || check "the close button didn't dismiss the preview"
 [ "$(nshots)" = "$n" ] || check "dismissing deleted a file"
+
+# --- 5b. Mark up hands the capture to qview and closes the preview --------------------------------
+sleep 1.1
+snap screen || check "a capture for Mark up failed: $(cat "$tmp/snap.out")"
+wait_layers 1 || check "no preview for the Mark up capture"
+m=$(newest)
+read -r lx ly lw lh <<<"$(geom)"
+click $((lx + 135)) $((ly + lh - 12 - 14))
+wait_layers 0 || check "the preview stayed after Mark up"
+for _ in $(seq 1 20); do [ -s "$tmp/qview.args" ] && break; sleep 0.25; done
+[ "$(cat "$tmp/qview.args" 2>/dev/null)" = "$(printf -- '--markup\n%s' "$m")" ] ||
+    check "Mark up ran qview with: $(tr '\n' ' ' <"$tmp/qview.args" 2>/dev/null)"
+[ -e "$m" ] || check "Mark up deleted the capture"
 
 # --- 6. it goes away by itself ------------------------------------------------------------------
 # The pointer is still over where the card was: it stays while hovered, so move away first.
