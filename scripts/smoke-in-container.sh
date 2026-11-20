@@ -74,5 +74,10 @@ su tester -c "set -e
     cd /src
     export XDG_RUNTIME_DIR=\$(mktemp -d) LIBSEAT_BACKEND=seatd UQCTL=/src/target/debug/uqctl UQ_CAPTURE_DIR=/src/captures
     timeout 240 scripts/workspace-solid-live.sh" || { r=$?; [ "$r" = 77 ] || rc=$r; }
+echo "=========== shutdown-live"
+su tester -c "set -e
+    cd /src
+    export XDG_RUNTIME_DIR=\$(mktemp -d) LIBSEAT_BACKEND=seatd
+    timeout 120 scripts/shutdown-live.sh" || { r=$?; [ "$r" = 77 ] || rc=$r; }
 kill %1 2>/dev/null || true
 exit "$rc"

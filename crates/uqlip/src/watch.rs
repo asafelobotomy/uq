@@ -36,8 +36,26 @@ pub enum Event {
     Copied(Captured),
     /// The selection changed to something the policy refused or that had no usable type.
     Ignored,
-    /// The compositor offers no data-control protocol.
+    /// The compositor offers no data-control protocol, or the connection failed for another
+    /// reason (already logged): there is nothing to watch.
     Unsupported,
+    /// The compositor closed the connection: it is shutting down (logout, shutdown, a crash).
+    Closed,
+}
+
+/// Whether a Wayland error means the compositor went away (the socket hung up), rather than a
+/// protocol error or a bug on either side.
+fn compositor_gone(e: &io::Error) -> bool {
+    use wayland_client::backend::WaylandError;
+    let kind = match e.get_ref().and_then(|i| i.downcast_ref::<WaylandError>()) {
+        Some(WaylandError::Io(io)) => io.kind(),
+        Some(WaylandError::Protocol(_)) => return false,
+        None => e.kind(),
+    };
+    matches!(
+        kind,
+        io::ErrorKind::BrokenPipe | io::ErrorKind::ConnectionReset | io::ErrorKind::UnexpectedEof
+    )
 }
 
 enum Request {
@@ -452,9 +470,18 @@ pub fn spawn(events: Sender<Event>, policy: Policy, max_bytes: u64) -> io::Resul
             } else {
                 wlr::run(conn, events.clone(), policy, max_bytes, rx, wake_r)
             };
-            if let Err(e) = r {
-                tracing::error!("the Wayland connection ended: {e}");
-                let _ = events.send(Event::Unsupported);
+            match r {
+                Ok(()) => {}
+                // Normal at logout and shutdown: the compositor exits before the session's
+                // services are stopped.
+                Err(e) if compositor_gone(&e) => {
+                    tracing::info!("the compositor closed the Wayland connection ({e})");
+                    let _ = events.send(Event::Closed);
+                }
+                Err(e) => {
+                    tracing::error!("the Wayland connection ended: {e}");
+                    let _ = events.send(Event::Unsupported);
+                }
             }
         })?;
     let _ = HashMap::<(), ()>::new;
@@ -463,4 +490,37 @@ pub fn spawn(events: Sender<Event>, policy: Policy, max_bytes: u64) -> io::Resul
         wake: wake_w,
         which,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::compositor_gone;
+    use std::io;
+    use wayland_client::backend::{WaylandError, protocol::ProtocolError};
+
+    #[test]
+    fn a_hung_up_socket_means_the_compositor_has_gone() {
+        for kind in [io::ErrorKind::BrokenPipe, io::ErrorKind::ConnectionReset] {
+            let e = io::Error::other(WaylandError::Io(kind.into()));
+            assert!(compositor_gone(&e), "{kind:?}");
+        }
+        assert!(compositor_gone(&io::ErrorKind::BrokenPipe.into()));
+    }
+
+    #[test]
+    fn other_errors_are_still_errors() {
+        let proto = WaylandError::Protocol(ProtocolError {
+            code: 1,
+            object_id: 3,
+            object_interface: "ext_data_control_device_v1".into(),
+            message: "bad".into(),
+        });
+        assert!(!compositor_gone(&io::Error::other(proto)));
+        assert!(!compositor_gone(&io::Error::other(WaylandError::Io(
+            io::ErrorKind::PermissionDenied.into()
+        ))));
+        assert!(!compositor_gone(&io::Error::other(
+            "no data-control protocol"
+        )));
+    }
 }

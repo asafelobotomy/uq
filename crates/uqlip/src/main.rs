@@ -73,9 +73,14 @@ fn serve(stream: UnixStream, daemon: Arc<Mutex<Daemon>>) {
 }
 
 fn main() {
-    tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .init();
+    // wayland-backend logs every connection error it returns to us, and we log those ourselves
+    // with what they mean (a compositor exiting at logout is not an error). Keep it quiet unless
+    // RUST_LOG asks for it by name.
+    let mut filter = tracing_subscriber::EnvFilter::from_default_env();
+    if !std::env::var("RUST_LOG").is_ok_and(|v| v.contains("wayland_backend")) {
+        filter = filter.add_directive("wayland_backend=off".parse().unwrap());
+    }
+    tracing_subscriber::fmt().with_env_filter(filter).init();
     let config = Config::load(&config_path());
     let dir = data_dir();
     let store = match Store::open(&dir, config.limits()) {
@@ -161,9 +166,14 @@ fn main() {
                 d.expire_due();
             }
             Ok(Event::Ignored) => {}
-            Ok(Event::Unsupported) => {
-                tracing::error!("this compositor can't be watched: no data-control protocol");
-                daemon.lock().unwrap().protocol = "none";
+            // Already logged where it happened, with the real reason.
+            Ok(Event::Unsupported) => daemon.lock().unwrap().protocol = "none",
+            // The session is ending. Exit cleanly (Restart=on-failure leaves it stopped); the next
+            // session's shell starts it again, on that session's compositor.
+            Ok(Event::Closed) => {
+                let _ = std::fs::remove_file(&sock);
+                tracing::info!("stopping: the compositor has gone");
+                return;
             }
             Err(RecvTimeoutError::Timeout) => daemon.lock().unwrap().expire_due(),
             Err(RecvTimeoutError::Disconnected) => break,
