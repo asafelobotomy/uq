@@ -7,6 +7,12 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.28] - 2026-11-20
+
+### Added
+
+- **Shut down in… on quick settings' System tab.** Pick 15 min, 30 min, 1 hour or 2 hours, or Custom to type a time (`45`, `90m`, `1h30`, `1:30`; up to 24 hours), and uQ shuts the computer down then, the same way the power menu's Shut down does. While it's set, the tab shows a live countdown, the clock time it will happen and Cancel. Notifications warn 5 minutes and 1 minute before, each with a Cancel shutdown button. It still goes ahead with the screen locked, survives the shell restarting, and is dropped (with a notification) instead of firing if the computer was asleep when it came due. The package now depends on libnotify for `notify-send`.
+
 ## [0.3.27] - 2026-11-20
 
 ### Changed

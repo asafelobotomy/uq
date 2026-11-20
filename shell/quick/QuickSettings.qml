@@ -284,6 +284,11 @@ PanelWindow {
                             Layout.fillWidth: true
                         }
 
+                        ShutdownGroup {
+                            Layout.fillWidth: true
+                            active: root.shown
+                        }
+
                         ProfileGroup {
                             Layout.fillWidth: true
                             active: root.shown

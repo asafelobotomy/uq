@@ -682,6 +682,13 @@ Any input removes the dim. While media is playing, dim and screens off wait, but
 happens (unless the `idle.media_blocks_lock` setting is on). Stay awake in quick settings blocks
 every stage.
 
+**Shut down in…** (quick settings, System tab) turns the computer off after 15 minutes,
+30 minutes, 1 hour, 2 hours, or a time you type under Custom (`45`, `90m`, `1h30` or `1:30`, up
+to 24 hours). While it's set, the tab shows the countdown, the time it will happen and Cancel. A
+notification warns 5 minutes and 1 minute before, with a Cancel shutdown button. It goes ahead with
+the screen locked, and survives the shell restarting, but not logging out. If the computer was
+asleep when the time came, it doesn't shut down on waking; a notification says it was skipped.
+
 uQ is also a polkit authentication agent: when an app asks for admin rights (`pkexec`, a
 settings app), a dialog opens on the focused monitor. The first agent to register for the session
 wins, so if another one is running (KDE's, GNOME's, lxpolkit) it handles the prompts instead. The
