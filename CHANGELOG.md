@@ -7,6 +7,8 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.22] - 2026-11-20
+
 ### Added
 
 - **Bar widgets can hide themselves.** A widget whose root item sets `property bool hidden: true` stays loaded but takes no room in the Status island, the "…" list or quick settings, and keeps watching for the moment to come back (`docs/integrating.md`). Bindle's bindleUP icon uses it to show only when updates are ready.
