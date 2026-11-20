@@ -9,7 +9,7 @@ import "../core"
 import "../logic/screenshot.js" as S
 
 // The floating preview every screenshot ends in (never a new window): the capture, where it was
-// saved, and Copy, Mark up, Open, Discard and a close button (Mark up and Open only when the qview
+// saved, and Copy, Mark up, Open, Discard and a close button (Mark up and Open only when the uqview
 // image viewer is installed; it's checked each time a preview shows). `uq-screenshot` calls
 //   qs ipc -p /usr/share/uq/shell call screenshot present <file.png> <copied|none>
 // once the file is saved (and, normally, already on the clipboard). It stays for SHOW_MS, or

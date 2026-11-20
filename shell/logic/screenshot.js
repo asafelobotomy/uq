@@ -60,7 +60,7 @@ function where(p, home) {
 
 // The image viewer's command for the capture: open it, or (markup) open it straight in Mark up.
 // The path is its own argument, after "--" so a name starting with "-" stays a name.
-var VIEWER = "qview";
+var VIEWER = "uqview";
 function viewerCommand(p, markup) {
     return markup ? [VIEWER, "--markup", p] : [VIEWER, "--", p];
 }

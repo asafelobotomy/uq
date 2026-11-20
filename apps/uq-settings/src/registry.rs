@@ -393,7 +393,7 @@ static SHELL_SETTINGS: [SearchEntry; 20] = [
             "satty",
             "mark up",
             "annotate",
-            "qview",
+            "uqview",
         ],
     ),
 ];
