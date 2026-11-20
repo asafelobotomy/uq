@@ -216,6 +216,7 @@ impl Action {
             Action::Shell { name } => match name.as_str() {
                 "lookseedo" => "Opens look=see>do_",
                 "emoji" => "Opens look=see>do_ for emoji",
+                "calc" => "Opens look=see>do_ as a calculator",
                 "clip" => "Opens the clipboard history",
                 "appmenu" => "Opens the app menu",
                 "quick-settings" => "Opens quick settings",

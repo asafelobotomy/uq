@@ -12,6 +12,20 @@ All notable changes to uQ are listed here. The format follows
 - **Mark up and Open in the screenshot preview.** With [Qview](https://github.com/asafelobotomy/qview) installed, the preview has a Mark up button that opens the capture straight in Qview's Mark up (arrows, boxes, text, numbers, highlighter, pixelate, crop) and an Open button. Marking up a screenshot had gone with satty in 0.3.9. The caption now says which folder the capture went to next to its name.
 - **`uqctl wallpaper set -- PICTURE`** uses a picture as the wallpaper on every display (or one, with `--output`), optionally with `--fit fill|fit|center|tile|span`. It stops a folder slideshow there, shows in Settings, and `uqctl undo` takes it back. `uqctl wallpaper get` lists each display's wallpaper. Qview's Set as wallpaper uses it.
 
+## [0.3.24] - 2026-11-20
+
+### Added
+
+- **A calculator that replaces KCalc.** look=see>do_'s `=` calculator now takes `×` `÷` `−` and
+  `**`, `mod` and `7 % 3`, implied multiplication (`2pi`, `3(1+1)`), desk-calculator percentages
+  (`2450 + 18%` is 2891), factorials (`5!`), degrees (`sin(30°)`), `1,234,567`, `1e-3`,
+  `0xff`/`0b101`/`0o17`, a trailing `in hex`, `in bin` or `in oct`, `ans` (the last result you
+  copied), and cbrt, asin, acos, atan, sinh, cosh, tanh, log2, exp, floor and ceil. Whole numbers
+  up to 2^53 print in full. Bindle no longer installs KCalc on uQ.
+- **The Calculator key opens it.** A new default shortcut, "Open the calculator", binds the
+  keyboard's Calculator key to look=see>do_ at `=`. Change or turn it off in Settings > Keyboard
+  shortcuts.
+
 ## [0.3.23] - 2026-11-20
 
 ### Fixed
