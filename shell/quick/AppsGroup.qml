@@ -50,12 +50,13 @@ ColumnLayout {
 
     Loader {
         id: detail
+        objectName: "detail"
         Layout.fillWidth: true
         active: root.detailSlot !== null && root.detailSlot.loaded && root.detailSlot.popup !== null
         visible: active
         sourceComponent: root.detailSlot ? root.detailSlot.popup : null
         onLoaded: {
-            if (item.ctx !== undefined)
+            if ("ctx" in item)
                 item.ctx = root.detailSlot.ctx;
         }
     }

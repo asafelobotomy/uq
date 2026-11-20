@@ -21,6 +21,7 @@ Item {
     property var widgets: kind === "bar" ? W.barLayout(registry.list, max).shown
                                          : W.inSlot(registry.list, "quick")
     readonly property var overflow: kind === "bar" ? W.barLayout(registry.list, max).overflow : []
+    // Slots that are loaded and not hidden by their widget.
     property int loadedCount: 0
     property bool showMore: kind === "bar"
     readonly property bool moreShown: showMore && overflow.length > 0
@@ -41,7 +42,7 @@ Item {
         var n = 0;
         for (var i = 0; i < rep.count; i++) {
             var it = rep.itemAt(i);
-            if (it && it.loaded)
+            if (it && it.shown)
                 n++;
         }
         loadedCount = n;
@@ -106,7 +107,7 @@ Item {
                 onScreen: host.onScreen
                 width: host.kind === "bar" ? host.cell : grid.width
                 widget: ({ id: wid, name: name, qmlUrl: qmlUrl })
-                onLoadedChanged: host.recount()
+                onShownChanged: host.recount()
                 onPopupRequested: function (open) { host.popupRequested(s, open); }
             }
             onItemAdded: host.recount()

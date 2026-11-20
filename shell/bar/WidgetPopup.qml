@@ -53,7 +53,7 @@ PopupWindow {
             active: pop.visible
             sourceComponent: pop.content
             onLoaded: {
-                if (pop.ctx !== null && item.ctx !== undefined)
+                if (pop.ctx !== null && "ctx" in item)
                     item.ctx = pop.ctx;
             }
         }

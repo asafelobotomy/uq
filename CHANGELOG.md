@@ -19,6 +19,16 @@ All notable changes to uQ are listed here. The format follows
   keyboard's Calculator key to look=see>do_ at `=`. Change or turn it off in Settings > Keyboard
   shortcuts.
 
+## [0.3.22] - 2026-11-20
+
+### Added
+
+- **Bar widgets can hide themselves.** A widget whose root item sets `property bool hidden: true` stays loaded but takes no room in the Status island, the "…" list or quick settings, and keeps watching for the moment to come back (`docs/integrating.md`). Bindle's bindleUP icon uses it to show only when updates are ready.
+
+### Fixed
+
+- **Widget popups get their `ctx`.** A widget popup that declared `property var ctx` (as the template and the docs show) was never handed it, because the property starts out `undefined` and that was read as "this popup has no ctx". Its text and buttons stayed empty. The bar popups, island popups and quick-settings detail views now hand `ctx` to any popup that declares it.
+
 ## [0.3.21] - 2026-11-20
 
 ### Fixed

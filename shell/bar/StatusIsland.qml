@@ -133,7 +133,10 @@ Island {
                     id: orow
                     required property var modelData
                     spacing: Theme.gapIn * 2
+                    // A widget that hid itself has no row.
+                    visible: !oslot.hiddenByWidget
                     Slot {
+                        id: oslot
                         kind: "bar"
                         cell: root.cell
                         widget: orow.modelData
