@@ -8,17 +8,18 @@ import "../notif"
 import "../session"
 
 // Everything that opens the launchers from outside the bar, routed to Surfaces: the Hyprland
-// global shortcuts (base.lua binds `uq:lookseedo`, `uq:emoji`, `uq:appmenu`, `uq:quick-settings` and
+// global shortcuts (base.lua binds `uq:lookseedo`, `uq:emoji`, `uq:calc`, `uq:appmenu`, `uq:quick-settings` and
 // `uq:notif-centre`, the last routed to NotifBackend, `uq:lock`, routed to Session,
 // `uq:power-menu`, and `uq:edit-bar`, routed to BarLayout's edit mode) and the shell IPC target `uq`. No windows in here, so it also loads headless (tests/shell/bar_loads.sh).
 // Shortcuts and IPC pass no screen, so a surface opens on Hyprland.focusedMonitor.
 Scope {
     id: root
 
-    // True once all eight shortcuts and the IPC handler exist with the names base.lua and the
+    // True once all the shortcuts and the IPC handler exist with the names base.lua and the
     // README use (tests/shell/bar_loads.sh prints it).
     readonly property bool routed: lookseedoKey.appid === "uq" && lookseedoKey.name === "lookseedo"
         && emojiKey.appid === "uq" && emojiKey.name === "emoji"
+        && calcKey.appid === "uq" && calcKey.name === "calc"
         && clipKey.appid === "uq" && clipKey.name === "clip"
         && appMenuKey.appid === "uq" && appMenuKey.name === "appmenu"
         && quickSettingsKey.appid === "uq" && quickSettingsKey.name === "quick-settings"
@@ -48,6 +49,16 @@ Scope {
         name: "emoji"
         description: "Open look=see>do_ to search for emoji"
         onPressed: Surfaces.openWith("lookseedo", ":")
+    }
+
+    // The Calculator key: look=see>do_ opened at "=", the calculator. Already open, its query
+    // becomes "=".
+    GlobalShortcut {
+        id: calcKey
+        appid: "uq"
+        name: "calc"
+        description: "Open look=see>do_ as a calculator"
+        onPressed: Surfaces.openWith("lookseedo", "=")
     }
 
     // SUPER+SHIFT+V: the clipboard history (uqlip). Ignored while locked.

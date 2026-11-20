@@ -93,7 +93,7 @@ pub fn default_of(id: &str) -> Option<&'static Default> {
     DEFAULTS.iter().find(|d| d.id == id)
 }
 
-static DEFAULTS: [Default; 66] = [
+static DEFAULTS: [Default; 67] = [
     Default {
         id: "uq.terminal",
         label: "Open a terminal",
@@ -157,6 +157,18 @@ static DEFAULTS: [Default; 66] = [
         group: Group::AppsAndDesktop,
         combo: Some("SUPER + period"),
         action: DefaultAction::Global("emoji"),
+        locked: false,
+        repeating: false,
+        release: false,
+        mouse: false,
+    },
+    // The keyboard's Calculator key: look=see>do_ at "=" (uQ has no calculator app).
+    Default {
+        id: "uq.calc",
+        label: "Open the calculator",
+        group: Group::AppsAndDesktop,
+        combo: Some("XF86Calculator"),
+        action: DefaultAction::Global("calc"),
         locked: false,
         repeating: false,
         release: false,
@@ -852,8 +864,8 @@ mod tests {
 
     #[test]
     fn table_has_60_rows_58_bound() {
-        assert_eq!(defaults().len(), 66);
-        assert_eq!(defaults().iter().filter(|d| d.combo.is_some()).count(), 64);
+        assert_eq!(defaults().len(), 67);
+        assert_eq!(defaults().iter().filter(|d| d.combo.is_some()).count(), 65);
     }
 
     #[test]
@@ -897,7 +909,7 @@ mod tests {
             let c = parse(d.combo.unwrap()).unwrap_or_else(|e| panic!("{}: {e}", d.id));
             assert!(seen.insert(c), "{} repeats a combo", d.id);
         }
-        assert_eq!(seen.len(), 64);
+        assert_eq!(seen.len(), 65);
     }
 
     #[test]

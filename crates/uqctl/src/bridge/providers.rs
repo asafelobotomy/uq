@@ -742,7 +742,8 @@ impl Providers {
         match provider.as_str() {
             "calc" => {
                 let q = lock(&self.state).calc.clone();
-                match (id.as_str(), q.as_deref().and_then(calc::evaluate)) {
+                // Copying the row makes its value `ans` for the next sum.
+                match (id.as_str(), q.as_deref().and_then(calc::remember)) {
                     ("calc", Some(result)) => Ok(json!({ "copy": result })),
                     _ => Err("unknown calculator result".into()),
                 }
