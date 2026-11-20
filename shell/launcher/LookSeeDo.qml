@@ -4,6 +4,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Hyprland
+import Quickshell.Io
 import Quickshell.Widgets
 import "../core"
 import "../logic/launcher.js" as L
@@ -137,7 +138,6 @@ PanelWindow {
         deadline.stop();
         copied.stop();
         termWatch.stop();
-        grabLost.stop();
         termState = "";
         grabbed = true;
         pinSlot = -1;
@@ -550,7 +550,6 @@ PanelWindow {
         forgetDock();
     }
     function regrab() {
-        grabLost.stop();
         grabbed = true;
         field.forceActiveFocus();
     }
@@ -598,41 +597,48 @@ PanelWindow {
         return a !== "" && ((dockAddress !== "" && a === dockAddress)
                             || (termState === "sending" && !termBefore[a]));
     }
-    // A click outside look=see>do_ ends its focus grab. On the docked terminal it stays open;
-    // anywhere else it closes. Hyprland's focus follows the click a moment later, so this looks
-    // a few times (up to about 600 ms) before deciding the click went elsewhere.
-    property int grabLooks: 0
-    property string grabFrom: ""
-    Timer {
-        id: grabLost
-        interval: 50
-        repeat: true
-        onRunningChanged: if (running) {
-            root.grabLooks = 0;
-            root.grabFrom = Hyprland.activeToplevel ? root.addressOf(Hyprland.activeToplevel) : "";
+    // A click outside look=see>do_ ends its focus grab. Hyprland doesn't hand that click's focus
+    // on while the grab holds it, so where the pointer is says where it went: on the docked
+    // terminal, look=see>do_ stays (without the grab) and the terminal is given the keyboard;
+    // anywhere else, look=see>do_ closes.
+    function grabCleared() {
+        if (!shown)
+            return;
+        if (!docked) {
+            Surfaces.close();
+            return;
         }
-        onTriggered: {
-            if (!root.shown) {
-                stop();
-                return;
+        if (!cursorReader.running)
+            cursorReader.running = true;
+    }
+    Process {
+        id: cursorReader
+        command: ["hyprctl", "cursorpos", "-j"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var p = null;
+                try {
+                    p = JSON.parse(text);
+                } catch (e) {
+                }
+                root.pointerAt(p && typeof p.x === "number" ? p : null);
             }
-            root.grabLooks++;
-            if (root.focusOnTerminal()) {
-                stop();
-                root.grabbed = false;
-                return;
-            }
-            // Focus moved to another window: no need to wait.
-            var now = Hyprland.activeToplevel ? root.addressOf(Hyprland.activeToplevel) : "";
-            if (root.grabLooks < 12 && (now === "" || now === root.grabFrom))
-                return;
-            stop();
-            var t = Hyprland.activeToplevel;
-            console.debug("uq: lookseedo dock: grab cleared, focus on " + (t ? root.addressOf(t) : "nothing")
-                          + " (docked: " + root.dockAddress + "), closing");
+        }
+    }
+    function pointerAt(p) {
+        if (!shown)
+            return;
+        var r = dockRect(1);
+        if (p && docked && p.x >= r.x && p.x < r.x + r.w && p.y >= r.y && p.y < r.y + r.h) {
+            grabbed = false;
+            Bridge.call("Dispatch", ["focus_window", { address: dockAddress, keep_pointer: true }])
+                .catch(function (e) { console.warn("uq: focus the terminal: " + e); });
+        } else {
+            console.debug("uq: lookseedo dock: grab cleared away from the terminal, closing");
             Surfaces.close();
         }
     }
+
     Connections {
         target: Hyprland
         // Without the grab (the terminal was clicked), focus going to any other window closes
@@ -739,7 +745,7 @@ PanelWindow {
         id: grab
         windows: [root]
         active: root.visible && root.grabbed
-        onCleared: grabLost.restart()
+        onCleared: root.grabCleared()
     }
 
     // The search pill and, under it, the card that drops from it: Recents and the pinned
