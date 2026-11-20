@@ -429,6 +429,17 @@ local GESTURE_DIRS = __GESTURE_DIRS__
 local calls = {}
 -- exec_cmd strings seen while a given hl.on("<event>", fn) callback runs.
 local hook, in_hook = nil, {}
+-- base.lua's shutdown hook stops the shell with os.execute (it must block): record it, never run it.
+local executed = {}
+os.execute = function(cmd)
+  cmd = tostring(cmd)
+  calls[#calls + 1] = "os.execute:" .. cmd
+  if hook then
+    in_hook[hook] = (in_hook[hook] or "") .. cmd .. "\n"
+    executed[hook] = (executed[hook] or "") .. cmd .. "\n"
+  end
+  return true, "exit", 0
+end
 -- What each returned proxy stands for, e.g. `hl.dsp.global(uq:lookseedo)`, and every hl.bind
 -- call as {key, dsp, opts}.
 local desc = setmetatable({}, { __mode = "k" })
@@ -581,6 +592,10 @@ for _, want in ipairs({
   if not (in_hook[want[1]] or ""):find(want[2], 1, true) then
     error("missing in " .. want[1] .. " hook: " .. want[2])
   end
+end
+-- The shell and uqlip are stopped and waited for before Hyprland closes its socket.
+if not (executed["hyprland.shutdown"] or ""):find("systemctl --user stop uq-shell.service uqlip.service", 1, true) then
+  error("the shutdown hook must stop uq-shell and uqlip with os.execute (blocking), not exec_cmd")
 end
 local start = in_hook["hyprland.start"] or ""
 if start:find("uqd.service &&", 1, true) or start:find("&& systemctl --user restart uq-shell", 1, true) then
