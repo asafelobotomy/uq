@@ -18,7 +18,7 @@ the [Settings design](superpowers/specs/2026-11-10-uq-settings-enhancements-desi
 | Tailscale | `scale-tail` | [scale_tail](https://github.com/asafelobotomy/scale_tail) | Connects and disconnects, picks an exit node, accepts routes, allows local network access, lists devices, shows the sign-in link and signs out | `scale_tail` | `tailscaled` | None. A one-time `sudo tailscale set --operator=$USER` lets a normal user change settings | merged |
 | Media player | `reelo` | [reelo](https://github.com/asafelobotomy/reelo) | Makes reelo the default player for video and music, and sets resume, play-next-in-folder, keep-the-screen-on, hardware decoding, subtitles, preferred languages and the library folder its start screen lists | `reelo` | Nothing: it runs `reelo` when asked | None | merged |
 
-Pages added since the five above (all on `uq_api` 3, each checked by the same workflow):
+Pages added since the first five above (all on `uq_api` 3, each checked by the same workflow):
 
 | Page | Id | Repo | What it covers | Package |
 |---|---|---|---|---|
@@ -30,7 +30,7 @@ Pages added since the five above (all on `uq_api` 3, each checked by the same wo
 | Emoji and macros | `emobie` | [emobie](https://github.com/asafelobotomy/emobie) | Settings, macros and deleted macros | `emobie` |
 | Bindle | `bindle` | [bindle](https://github.com/asafelobotomy/bindle) | The setup Bindle last applied, bindleUP (check and update with progress), what's new, and what Bindle changed with undo | `bindle` |
 
-The first five packages are optional dependencies of `uq` (`optdepends`); the others come with Bindle. Where a page is changed, the app's
+The first six packages are optional dependencies of `uq` (`optdepends`); the others come with Bindle. Where a page is changed, the app's
 own package carries it, so updating the app updates its page.
 
 ## Where the work happens
