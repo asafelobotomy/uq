@@ -7,6 +7,8 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.24] - 2026-11-20
+
 ### Added
 
 - **A calculator that replaces KCalc.** look=see>do_'s `=` calculator now takes `×` `÷` `−` and
@@ -18,6 +20,16 @@ All notable changes to uQ are listed here. The format follows
 - **The Calculator key opens it.** A new default shortcut, "Open the calculator", binds the
   keyboard's Calculator key to look=see>do_ at `=`. Change or turn it off in Settings > Keyboard
   shortcuts.
+
+## [0.3.23] - 2026-11-20
+
+### Fixed
+
+- **Open KDE and Qt apps change with the theme.** uqd rewrote `kdeglobals` on a theme change but never told running apps, so Dolphin, Kate, Okular and other windows using the `kde` platform theme kept the old colours, style and icons until restarted. uqd now sends the signals Plasma sends after changing `kdeglobals` (KGlobalSettings palette and style, KIconLoader icons).
+
+### Changed
+
+- **Every companion page is checked.** The weekly companion check now covers all twelve apps with a uQ Settings page (oysterAV, appOFholding, hauler, bindaru, romforge, emobie and Bindle as well as the first five), and `docs/companion-pages.md` lists them.
 
 ## [0.3.22] - 2026-11-20
 

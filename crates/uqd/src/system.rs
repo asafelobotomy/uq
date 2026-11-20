@@ -11,7 +11,34 @@ pub trait SystemSettings: Send + Sync {
     /// Restart uQ's shell (`uq-shell.service`) if it is running, so it starts again with the
     /// icon theme in the `shell.env` just written: Quickshell reads it only at start.
     fn restart_shell(&self) -> std::io::Result<()>;
+    /// Tell running KDE/Qt apps that kdeglobals changed, as Plasma does: rewriting the file
+    /// alone leaves every open window (Dolphin, Kate, Okular...) in the old colours, style and
+    /// icons until it is restarted.
+    fn notify_kde_apps(&self) -> std::io::Result<()>;
 }
+
+/// The D-Bus signals Plasma sends after it rewrites kdeglobals, as (object path, signal,
+/// arguments) for `gdbus emit`: KGlobalSettings' palette (0), font (1) and style (2) changes,
+/// which the `kde` platform theme (plasma-integration) reloads from kdeglobals, and
+/// KIconLoader's icon theme change.
+pub const KDE_CHANGE_SIGNALS: [(&str, &str, &[&str]); 4] = [
+    (
+        "/KGlobalSettings",
+        "org.kde.KGlobalSettings.notifyChange",
+        &["0", "0"],
+    ),
+    (
+        "/KGlobalSettings",
+        "org.kde.KGlobalSettings.notifyChange",
+        &["1", "0"],
+    ),
+    (
+        "/KGlobalSettings",
+        "org.kde.KGlobalSettings.notifyChange",
+        &["2", "0"],
+    ),
+    ("/KIconLoader", "org.kde.KIconLoader.iconChanged", &["0"]),
+];
 
 /// `gsettings get` output as plain text: no type prefix, no quotes around a string.
 fn gvariant_text(out: &str) -> String {
@@ -127,6 +154,30 @@ impl SystemSettings for GSettings {
             .then(|| gvariant_text(&String::from_utf8_lossy(&out.stdout)))
     }
 
+    fn notify_kde_apps(&self) -> std::io::Result<()> {
+        // gdbus comes with glib2, like gsettings. The numbers are GVariant text (int32).
+        for (path, signal, args) in KDE_CHANGE_SIGNALS {
+            let status = std::process::Command::new("gdbus")
+                .args([
+                    "emit",
+                    "--session",
+                    "--object-path",
+                    path,
+                    "--signal",
+                    signal,
+                ])
+                .args(args)
+                .stdout(std::process::Stdio::null())
+                .status()?;
+            if !status.success() {
+                return Err(std::io::Error::other(format!(
+                    "gdbus emit {signal} failed: {status}"
+                )));
+            }
+        }
+        Ok(())
+    }
+
     fn restart_shell(&self) -> std::io::Result<()> {
         // try-restart: a stopped shell (a dev session, or one the user stopped) stays stopped.
         // --no-block: uqd must not wait on a unit that may be waiting on uqd's bus.
@@ -152,6 +203,8 @@ pub struct FakeSystem {
     pub fail: std::sync::atomic::AtomicBool,
     /// How many times `restart_shell` was called.
     pub shell_restarts: std::sync::atomic::AtomicUsize,
+    /// How many times `notify_kde_apps` was called.
+    pub kde_notifies: std::sync::atomic::AtomicUsize,
     /// What `read` answers per `(schema, key)`.
     pub values: std::sync::Mutex<std::collections::HashMap<(String, String), String>>,
 }
@@ -184,6 +237,11 @@ impl SystemSettings for FakeSystem {
             .unwrap()
             .get(&(schema.to_string(), key.to_string()))
             .cloned()
+    }
+    fn notify_kde_apps(&self) -> std::io::Result<()> {
+        self.kde_notifies
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        Ok(())
     }
     fn restart_shell(&self) -> std::io::Result<()> {
         self.shell_restarts
