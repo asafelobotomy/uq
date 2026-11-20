@@ -1313,8 +1313,15 @@ impl Desktop {
                         size: theme.fonts.size,
                         style: if kvantum { "kvantum" } else { "Fusion" },
                     };
-                    if let Err(e) = uq_core::kdeglobals::sync_look(&self.paths, &look) {
-                        tracing::warn!("kdeglobals look: {e}");
+                    match uq_core::kdeglobals::sync_look(&self.paths, &look) {
+                        // Open KDE/Qt windows reload kdeglobals only when told to.
+                        Ok(true) => {
+                            if let Err(e) = self.sys.notify_kde_apps() {
+                                tracing::warn!("telling KDE apps about the new look: {e}");
+                            }
+                        }
+                        Ok(false) => {}
+                        Err(e) => tracing::warn!("kdeglobals look: {e}"),
                     }
                     // Flatpak apps: read-only access to the theme files, so they follow too.
                     if let Err(e) = uq_core::flatpak::sync(&self.paths) {
@@ -1572,6 +1579,31 @@ mod tests {
         let body = fs::read_to_string(&conf).unwrap();
         assert!(body.contains("Theme=Papirus-Light"), "{body}");
         assert_eq!(body.matches("[Icons]").count(), 1, "{body}");
+    }
+
+    #[tokio::test]
+    async fn open_kde_apps_are_told_when_kdeglobals_changes() {
+        use std::sync::atomic::Ordering::SeqCst;
+        let mut r = rig();
+        r.desktop
+            .set_theme("gruvbox", Variant::Dark, Origin::Settings)
+            .await
+            .unwrap();
+        let after_first = r.sys.kde_notifies.load(SeqCst);
+        assert!(after_first >= 1, "the first look written is announced");
+        r.desktop
+            .set_theme("gruvbox", Variant::Light, Origin::Settings)
+            .await
+            .unwrap();
+        assert_eq!(r.sys.kde_notifies.load(SeqCst), after_first + 1);
+
+        // Without Hyprland nothing is written, so nothing is announced.
+        let mut off = rig_with(false, |_| {});
+        off.desktop
+            .set_theme("gruvbox", Variant::Light, Origin::Settings)
+            .await
+            .unwrap();
+        assert_eq!(off.sys.kde_notifies.load(SeqCst), 0);
     }
 
     #[tokio::test]

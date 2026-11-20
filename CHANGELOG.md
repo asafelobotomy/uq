@@ -11,6 +11,16 @@ All notable changes to uQ are listed here. The format follows
 
 - **A Printers page in Settings.** It shows every printer, which one is the default, what each is doing (ready, printing, paused, out of paper, can't be reached…) and the documents waiting, live. You can make a printer the default, pause and resume it, print a test page, cancel one document or all of them, change its name, location and printing defaults (paper size, two-sided, color, quality, paper type and tray, and the rest of its options), and remove it. **Add a printer** looks for printers on the network and USB ports and adds them without a driver when they can (most printers since about 2010), or with a matching installed driver; a network printer that isn't found can be added by its address. It talks to CUPS directly over its local socket, as you: no password prompt and no terminal, and changing printers is allowed to administrators, as CUPS decides. When printing is installed but switched off, **Turn on printing** starts it. This replaces system-config-printer, the last default settings window that didn't follow the uQ theme; the printing service's own web page is linked for the rare printer that needs more. The package gains an optional dependency on cups.
 
+## [0.3.23] - 2026-11-20
+
+### Fixed
+
+- **Open KDE and Qt apps change with the theme.** uqd rewrote `kdeglobals` on a theme change but never told running apps, so Dolphin, Kate, Okular and other windows using the `kde` platform theme kept the old colours, style and icons until restarted. uqd now sends the signals Plasma sends after changing `kdeglobals` (KGlobalSettings palette and style, KIconLoader icons).
+
+### Changed
+
+- **Every companion page is checked.** The weekly companion check now covers all twelve apps with a uQ Settings page (oysterAV, appOFholding, hauler, bindaru, romforge, emobie and Bindle as well as the first five), and `docs/companion-pages.md` lists them.
+
 ## [0.3.22] - 2026-11-20
 
 ### Added
