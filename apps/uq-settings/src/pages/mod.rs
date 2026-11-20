@@ -18,6 +18,7 @@ pub mod login_screen;
 pub mod look;
 pub mod network;
 pub mod power;
+pub mod printers;
 pub mod profiles;
 pub mod prompt;
 pub mod proxies;

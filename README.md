@@ -128,7 +128,7 @@ default layout, per-workspace rules, dwindle/master/scrolling options) and Shell
 24-hour clock, launcher providers on/off and order, terminal for `Terminal=true` apps, idle,
 notification and privacy settings), Displays (arrangement, mode, scale, rotation, mirroring, VRR)
 and Input (keyboard layouts and switch combo, repeat, mouse, touchpad, per-device settings).
-It also has Sound, Bluetooth and Network, Power, Users, Login screen, Date and time, Region,
+It also has Sound, Bluetooth, Printers and Network, Power, Users, Login screen, Date and time, Region,
 Default apps and About, and the pages described below (Profiles, Window rules, History, Keyboard
 shortcuts, Startup, Apps and scaling).
 Animations, monitor lines and keyboard layouts now come from `generated.lua`, so an

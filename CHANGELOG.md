@@ -7,12 +7,19 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
-## [0.3.25] - 2026-11-20
+## [0.3.26] - 2026-11-20
 
 ### Added
 
 - **Mark up and Open in the screenshot preview.** With [uQview](https://github.com/asafelobotomy/qview) installed, the preview has a Mark up button that opens the capture straight in uQview's Mark up (arrows, boxes, text, numbers, highlighter, pixelate, crop) and an Open button. Marking up a screenshot had gone with satty in 0.3.9. The caption now says which folder the capture went to next to its name.
 - **`uqctl wallpaper set -- PICTURE`** uses a picture as the wallpaper on every display (or one, with `--output`), optionally with `--fit fill|fit|center|tile|span`. It stops a folder slideshow there, shows in Settings, and `uqctl undo` takes it back. `uqctl wallpaper get` lists each display's wallpaper. uQview's Set as wallpaper uses it.
+
+## [0.3.25] - 2026-11-20
+
+### Added
+
+- **A Printers page in Settings.** It shows every printer, which one is the default, what each is doing (ready, printing, paused, out of paper, can't be reached…) and the documents waiting, live. You can make a printer the default, pause and resume it, print a test page, cancel one document or all of them, change its name, location and printing defaults (paper size, two-sided, color, quality, paper type and tray, and the rest of its options), and remove it. **Add a printer** looks for printers on the network and USB ports and adds them without a driver when they can (most printers since about 2010), or with a matching installed driver; a network printer that isn't found can be added by its address. It talks to CUPS directly over its local socket, as you: no password prompt and no terminal, and changing printers is allowed to administrators, as CUPS decides. When printing is installed but switched off, **Turn on printing** starts it. This replaces system-config-printer, the last default settings window that didn't follow the uQ theme; the printing service's own web page is linked for the rare printer that needs more. The package gains an optional dependency on cups.
+- **reelo is uQ's media player.** The new [reelo](https://github.com/asafelobotomy/reelo) (libmpv in a Qt Quick window that follows the uQ theme, with MPRIS for the media widget and keys) is an optional dependency, and its **Media player** page under Settings › Apps is checked with the other companion pages. Bindle installs it and makes it the default player in place of VLC/mpv.
 
 ## [0.3.24] - 2026-11-20
 
