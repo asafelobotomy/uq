@@ -40,6 +40,7 @@ optdepends=(
   'crum-bs: uninstall apps with their leftovers and clean up storage'
   'xzram: the Memory and swap page in Settings'
   'scale_tail: the Tailscale page and quick-settings tile'
+  'reelo: the default media player, themed like uQ, with the Media player page'
   'greetd: the uQ login screen (run0 uqctl greeter enable)'
   'kwallet-pam: unlock KDE Wallet at the uQ login screen'
   'networkmanager-openvpn: OpenVPN connections on the Network settings page'

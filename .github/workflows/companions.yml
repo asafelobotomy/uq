@@ -103,6 +103,12 @@ jobs:
           ref: main
           path: companions/bindle
           persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: asafelobotomy/reelo
+          ref: main
+          path: companions/reelo
+          persist-credentials: false
       - name: Build uqctl
         run: cargo build -j 2 -p uqctl --locked
       - name: Check each companion's pages
@@ -111,4 +117,5 @@ jobs:
             companions/scdr/uq companions/crumbs/uq companions/noti-fi/uq \
             companions/xzram/uq companions/scale_tail/uq companions/oysterav/uq \
             companions/appofholding/uq companions/hauler/uq companions/bindaru/uq \
-            companions/romforge/uq companions/emobie/uq companions/bindle/uq
+            companions/romforge/uq companions/emobie/uq companions/bindle/uq \
+            companions/reelo/uq
