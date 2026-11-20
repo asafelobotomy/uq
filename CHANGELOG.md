@@ -11,6 +11,20 @@ All notable changes to uQ are listed here. The format follows
 
 - **reelo is uQ's media player.** The new [reelo](https://github.com/asafelobotomy/reelo) (libmpv in a Qt Quick window that follows the uQ theme, with MPRIS for the media widget and keys) is an optional dependency, and its **Media player** page under Settings › Apps is checked with the other companion pages. Bindle installs it and makes it the default player in place of VLC/mpv.
 
+## [0.3.24] - 2026-11-20
+
+### Added
+
+- **A calculator that replaces KCalc.** look=see>do_'s `=` calculator now takes `×` `÷` `−` and
+  `**`, `mod` and `7 % 3`, implied multiplication (`2pi`, `3(1+1)`), desk-calculator percentages
+  (`2450 + 18%` is 2891), factorials (`5!`), degrees (`sin(30°)`), `1,234,567`, `1e-3`,
+  `0xff`/`0b101`/`0o17`, a trailing `in hex`, `in bin` or `in oct`, `ans` (the last result you
+  copied), and cbrt, asin, acos, atan, sinh, cosh, tanh, log2, exp, floor and ceil. Whole numbers
+  up to 2^53 print in full. Bindle no longer installs KCalc on uQ.
+- **The Calculator key opens it.** A new default shortcut, "Open the calculator", binds the
+  keyboard's Calculator key to look=see>do_ at `=`. Change or turn it off in Settings > Keyboard
+  shortcuts.
+
 ## [0.3.23] - 2026-11-20
 
 ### Fixed

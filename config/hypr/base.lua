@@ -174,6 +174,8 @@ hl.bind(mainMod .. " + SHIFT + M", hl.dsp.exec_cmd("command -v hyprshutdown >/de
 hl.bind(mainMod .. " + Space",   hl.dsp.global("uq:lookseedo"))
 -- SUPER+.: look=see>do_ opened at ":", the emoji search (an emoji provider such as emobie answers it).
 hl.bind(mainMod .. " + period",  hl.dsp.global("uq:emoji"))
+-- The Calculator key: look=see>do_ opened at "=", its calculator.
+hl.bind("XF86Calculator",        hl.dsp.global("uq:calc"))
 -- SUPER+SHIFT+V: the clipboard history (uqlip).
 hl.bind(mainMod .. " + SHIFT + V", hl.dsp.global("uq:clip"))
 hl.bind(mainMod .. " + SUPER_L", hl.dsp.global("uq:appmenu"), { release = true })
