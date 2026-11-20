@@ -21,8 +21,11 @@ Item {
     property bool onScreen: true
 
     readonly property bool loaded: loader.status === Loader.Ready && loader.item !== null
-    // An unloaded slot takes no room.
-    readonly property bool shown: loaded
+    // A loaded widget may hide itself with `property bool hidden: true` (an update icon with
+    // nothing to update): it stays loaded and keeps running, but takes no room.
+    readonly property bool hiddenByWidget: loaded && loader.item.hidden === true
+    // An unloaded or hidden slot takes no room.
+    readonly property bool shown: loaded && !hiddenByWidget
     readonly property var item: loaded ? loader.item : null
     // The widget's optional `popup` Component (bar popup or quick detail view).
     readonly property var popup: item && item.popup !== undefined ? item.popup : null
@@ -45,7 +48,9 @@ Item {
         slot: slot.kind
         registry: slot.registry
         bridge: slot.bridge
-        shown: slot.loaded && slot.visible && slot.onScreen
+        // A widget that hid itself can't be on screen, but it still has to watch for the moment
+        // to come back, so its view follows the bar or panel holding it.
+        shown: slot.loaded && slot.onScreen && (slot.hiddenByWidget || slot.visible)
         onFailed: function (reason) { slot.fail(reason); }
         onPopupRequested: function (open) { slot.popupRequested(open); }
     }
