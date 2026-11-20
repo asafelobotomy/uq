@@ -106,14 +106,20 @@ QtObject {
 
     function request(call, args, cb, wrap) {
         var gen = generation;
+        // The answer can come after this context is destroyed (the shell reloaded, the widget
+        // was removed): `ctx` is null by then and there is no one left to answer.
+        function back(a) {
+            if (ctx)
+                ctx.deliver(gen, cb, a);
+        }
         if (!bridge || !alive) {
-            Qt.callLater(function () { ctx.deliver(gen, cb, { error: "not available" }); });
+            Qt.callLater(function () { back({ error: "not available" }); });
             return;
         }
         bridge.call(call, args).then(function (v) {
-            ctx.deliver(gen, cb, wrap ? { value: v } : v);
+            back(wrap ? { value: v } : v);
         }).catch(function (e) {
-            ctx.deliver(gen, cb, { error: String(e) });
+            back({ error: String(e) });
         });
     }
 

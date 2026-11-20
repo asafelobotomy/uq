@@ -158,8 +158,8 @@ Item {
     // --- fingerprint ---
     // When fprintd-list was last run or the context last started: both are throttled by it.
     property double fprintAttemptMs: -L.FPRINT_RETRY_MS
-    // fprintd-list runs in a row that found no finger (failed, no reader, none enrolled, not
-    // installed). Each one doubles the wait before the next, up to fprintMaxWaitMs, so a machine
+    // fprintd-list runs in a row that found no finger (failed, no reader, none
+    // enrolled). Each one doubles the wait before the next, up to fprintMaxWaitMs, so a machine
     // without a fingerprint reader doesn't start a process (and wake fprintd) every 10 s for as
     // long as the lock lasts. A finger listed resets it; the first retry is still after 10 s, so
     // fprintd coming back late after resume is still caught quickly.
@@ -206,7 +206,7 @@ Item {
     // every FPRINT_RETRY_MS (longer after several misses in a row, see fprintMisses), for as long
     // as the lock lasts. This also covers resume (fprintd often isn't back yet on the first try).
     function fprintEnded() {
-        if (done || fp.active)
+        if (done || fp.active || fprintMissing)
             return;
         var gap = Math.min(L.FPRINT_RETRY_MS * Math.pow(2, Math.max(0, fprintMisses - 1)), fprintMaxWaitMs);
         var wait = Math.max(L.FPRINT_RETRY_MS, gap) - (Date.now() - fprintAttemptMs);
@@ -227,7 +227,20 @@ Item {
         }
     }
 
+    // fprintd isn't installed: there is no fingerprint to wait for, so stop asking for this lock
+    // (the next lock checks again). Only the password is offered.
+    property bool fprintMissing: false
+    function fprintUnavailable() {
+        if (fprintMissing)
+            return;
+        fprintMissing = true;
+        fpRetry.stop();
+        console.info("uq-lock: fprintd-list not installed, fingerprint off for this lock");
+    }
+
     function listFingers() {
+        if (fprintMissing)
+            return;
         fprintAttemptMs = Date.now();
         fprintList.didStart = false;
         fprintList.running = true;
@@ -246,6 +259,10 @@ Item {
                 return;
             gotExit = false;
             gotOut = false;
+            if (exitCode === 127) {
+                auth.fprintUnavailable();
+                return;
+            }
             if (L.fprintListed(outText, exitCode)) {
                 auth.fprintMisses = 0;
                 auth.startFprint();
@@ -254,7 +271,9 @@ Item {
                 auth.fprintEnded();
             }
         }
-        command: ["fprintd-list", auth.user]
+        // Through sh so that a missing fprintd-list is a plain exit 127, decided once per lock,
+        // and never a "Process failed to start" warning.
+        command: ["/bin/sh", "-c", "command -v fprintd-list >/dev/null || exit 127; exec fprintd-list \"$1\"", "sh", auth.user]
         stdout: StdioCollector {
             onStreamFinished: {
                 fprintList.outText = text;
@@ -268,12 +287,10 @@ Item {
             gotExit = true;
             conclude();
         }
-        // A failed start (fprintd not installed) reports only runningChanged: poll again later.
+        // A failed start (no /bin/sh) reports only runningChanged.
         onRunningChanged: {
-            if (!running && !didStart) {
-                auth.fprintMisses += 1;
-                auth.fprintEnded();
-            }
+            if (!running && !didStart)
+                auth.fprintUnavailable();
         }
     }
 

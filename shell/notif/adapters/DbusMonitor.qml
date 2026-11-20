@@ -83,7 +83,8 @@ QtObject {
     }
 
     property Process proc: Process {
-        command: ["gdbus", "monitor", "--session", "--dest", root.name, "--object-path", root.path]
+        // Ends with the shell (setpriv --pdeathsig; see BridgeIo.qml).
+        command: ["/usr/bin/setpriv", "--pdeathsig", "TERM", "--", "gdbus", "monitor", "--session", "--dest", root.name, "--object-path", root.path]
         stdout: SplitParser {
             onRead: data => root.handle(data)
         }

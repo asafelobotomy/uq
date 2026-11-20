@@ -43,8 +43,15 @@ local session_env = "WAYLAND_DISPLAY XDG_CURRENT_DESKTOP HYPRLAND_INSTANCE_SIGNA
 hl.on("hyprland.start", function()
     hl.exec_cmd("test -n \"$UQ_DEV_SESSION\" || { dbus-update-activation-environment --systemd " .. session_env .. "; systemctl --user restart uqd.service; systemctl --user restart uq-shell.service; systemctl --user -q is-enabled scdr-session.service && systemctl --user restart scdr-session.service; }")
 end)
+-- The shell and uqlip are stopped here and waited for (os.execute blocks; exec_cmd doesn't):
+-- Hyprland closes its Wayland socket right after this hook, and a shell that loses its compositor
+-- first exits with an error (a failed unit in the journal at every logout and shutdown). The
+-- timeout keeps a hung stop from holding up the logout.
 hl.on("hyprland.shutdown", function()
-    hl.exec_cmd("test -n \"$UQ_DEV_SESSION\" || { systemctl --user stop uq-shell.service; systemctl --user stop uqd.service; systemctl --user stop scdr-session.service; }")
+    if (os.getenv("UQ_DEV_SESSION") or "") == "" then
+        os.execute("timeout 5 systemctl --user stop uq-shell.service uqlip.service")
+    end
+    hl.exec_cmd("test -n \"$UQ_DEV_SESSION\" || { systemctl --user stop uqd.service; systemctl --user stop scdr-session.service; }")
 end)
 
 -----------------------------

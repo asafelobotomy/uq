@@ -696,7 +696,10 @@ Island {
                 required property var modelData
                 required property int index
                 // This tab's window, as last read.
-                readonly property var win: root.tabInfo[modelData] || ({ address: modelData, title: "", cls: "" })
+                // The placeholder (tabKeys can run ahead of tabInfo for a moment) has every field
+                // a binding reads as a bool, so none of them gets undefined.
+                readonly property var win: root.tabInfo[modelData]
+                    || ({ address: modelData, title: "", cls: "", focused: false, minimised: false })
                 // Dragging: this tab follows the pointer; the tabs it passes step aside.
                 transform: Translate {
                     x: root.dragIndex < 0 ? 0

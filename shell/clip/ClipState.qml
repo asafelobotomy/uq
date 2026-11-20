@@ -134,6 +134,7 @@ Singleton {
 
     Process {
         id: watcher
+        // Ends with the shell: uqctl sets its own parent-death signal (see BridgeIo.qml).
         command: ["uqctl", "clip", "watch"]
         running: true
         stdout: SplitParser {

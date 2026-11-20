@@ -87,7 +87,9 @@ Singleton {
     // polled instead (and the monitor tried again with the retry).
     property double monFailedAt: 0
     property Process nmMonitor: Process {
-        command: ["nmcli", "monitor"]
+        // Ends with the shell (setpriv --pdeathsig; see BridgeIo.qml). A missing nmcli is
+        // setpriv exiting 127: running still goes false, so the retry below is unchanged.
+        command: ["/usr/bin/setpriv", "--pdeathsig", "TERM", "--", "nmcli", "monitor"]
         running: Net.retryDue(root.monFailedAt, Date.now(), root.retryMs)
         stdout: SplitParser {
             onRead: root.changed.restart()

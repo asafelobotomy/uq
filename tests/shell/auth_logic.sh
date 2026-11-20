@@ -7,7 +7,8 @@
 #   fpask : fprintd-list (stub) lists a finger, and the fingerprint stack prompts (pam_unix): the
 #           context aborts without ever responding, then fprintd-list is polled again 10 s later.
 #   fpfail: fprintd-list exits 1 -> polled again at the 10 s throttle.
-#   fpnone: fprintd-list not on PATH (failed start) -> polled again at the 10 s throttle.
+#   fpnone: fprintd-list not on PATH -> checked once, then fingerprint is off for the lock: no
+#           retries and no "Process failed to start" warnings.
 #   info  : a stack that sends two info messages (as pam_faillock does when the account is locked)
 #           before failing -> the failure shows those messages, not "Authentication failed" (L21).
 #   hang  : a stack whose module never answers (pam_exec sleeping) -> the watchdog (shortened to
@@ -142,10 +143,11 @@ none esc 'timed out'
 check fpask 'Relaying pam message'
 none fpask 'Got response'
 none fpask 'uq-lock: fingerprint Success'
-# pw, fpfail and fpask share counting stubs; fpnone counts through Quickshell's failed-start warning.
+# pw, fpfail and fpask share counting stubs.
 n=$(calls "$tmp/bin-listed"); [ "$n" -ge 2 ] || { echo "FAIL (fpask): fprintd-list polled $n times, want >= 2"; fail=1; }
 n=$(calls "$tmp/bin-fail"); [ "$n" -ge 4 ] || { echo "FAIL (fpfail+pw+info+hang+esc): fprintd-list polled $n times, want >= 4"; fail=1; }
-n=$(grep -c 'Process failed to start' "$tmp/out-fpnone"); [ "$n" -ge 2 ] || { echo "FAIL (fpnone): $n start attempts, want >= 2"; fail=1; }
+none fpnone 'Process failed to start'
+n=$(grep -c 'fprintd-list not installed' "$tmp/out-fpnone"); [ "$n" = 1 ] || { echo "FAIL (fpnone): said not installed $n times, want 1"; fail=1; }
 if [ "$fail" != 0 ] || [ -n "${SHOW:-}" ]; then
     for s in pw fpask fpfail fpnone info hang esc; do echo "== $s"; cat "$tmp/out-$s"; done
 fi
