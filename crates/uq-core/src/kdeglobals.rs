@@ -1,5 +1,5 @@
 //! Name uQ's terminal in `~/.config/kdeglobals`, so Dolphin's "Open Terminal Here" (F4) and other
-//! KDE apps open kitty.
+//! KDE apps open kyko (or kitty, where kyko is not installed).
 //!
 //! KDE apps launch a terminal through KTerminalLauncherJob, which reads
 //! `[General] TerminalApplication` from `kdeglobals` and falls back to Konsole. Outside Plasma
@@ -11,9 +11,9 @@ use crate::atomic::atomic_write;
 use crate::paths::Paths;
 use std::path::{Path, PathBuf};
 
-/// The terminal KDE apps should open: the program uQ's terminal shortcut runs
-/// (`keybinds::defaults::TERMINAL`).
-pub const TERMINAL_APP: &str = "kitty";
+/// The terminals KDE apps should open, in the order uQ's terminal shortcut tries them
+/// (`keybinds::defaults::TERMINAL`): the first one installed is named.
+pub const TERMINAL_APPS: [&str; 2] = ["kyko", "kitty"];
 
 const KEY: &str = "TerminalApplication";
 
@@ -93,13 +93,13 @@ fn on_path(bin: &str) -> Option<PathBuf> {
     })
 }
 
-/// Add uQ's terminal to `kdeglobals` when it names none and kitty is installed. `Ok(true)` when
-/// the file changed; a missing file is created.
+/// Add uQ's terminal to `kdeglobals` when it names none and kyko or kitty is installed.
+/// `Ok(true)` when the file changed; a missing file is created.
 pub fn ensure_terminal(p: &Paths) -> std::io::Result<bool> {
-    if on_path(TERMINAL_APP).is_none() {
-        return Ok(false);
+    match TERMINAL_APPS.into_iter().find(|t| on_path(t).is_some()) {
+        Some(t) => ensure_terminal_at(&conf_path(p), t),
+        None => Ok(false),
     }
-    ensure_terminal_at(&conf_path(p), TERMINAL_APP)
 }
 
 fn ensure_terminal_at(path: &Path, terminal: &str) -> std::io::Result<bool> {
@@ -334,9 +334,12 @@ mod tests {
     use crate::keybinds::defaults::TERMINAL;
 
     #[test]
-    fn terminal_is_the_one_the_shortcut_runs() {
+    fn terminals_are_the_ones_the_shortcut_runs_in_its_order() {
+        let [first, second] = TERMINAL_APPS;
         assert!(
-            TERMINAL.ends_with(&format!(" -- {TERMINAL_APP}")),
+            TERMINAL.ends_with(&format!(
+                "'command -v {first} >/dev/null && exec {first}; exec {second}'"
+            )),
             "{TERMINAL}"
         );
     }

@@ -11,6 +11,13 @@ All notable changes to uQ are listed here. The format follows
 
 - **reelo is uQ's media player.** The new [reelo](https://github.com/asafelobotomy/reelo) (libmpv in a Qt Quick window that follows the uQ theme, with MPRIS for the media widget and keys) is an optional dependency, and its **Media player** page under Settings › Apps is checked with the other companion pages. Bindle installs it and makes it the default player in place of VLC/mpv.
 
+### Changed
+
+- **kyko is uQ's terminal.** SUPER+Return, terminal apps launched from the menu, the desktop's
+  "Open terminal" and the KDE terminal setting now use [kyko](https://github.com/asafelobotomy/kyko)
+  (images, ligatures, the kitty keyboard protocol, splits and sessions that survive a restart).
+  kitty is still used where kyko is not installed, and a terminal you chose in Settings is kept.
+
 ## [0.3.24] - 2026-11-20
 
 ### Added

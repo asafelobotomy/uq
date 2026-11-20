@@ -160,7 +160,7 @@ pub struct ShellSettings {
     /// `true` is `HH:mm`, `false` is the 12-hour clock.
     #[serde(deserialize_with = "lenient_true")]
     pub clock_24h: bool,
-    /// A desktop id for `Terminal=true` launches; `None` means kitty.
+    /// A desktop id for `Terminal=true` launches; `None` means kyko, else kitty.
     #[serde(
         skip_serializing_if = "Option::is_none",
         deserialize_with = "lenient_terminal"

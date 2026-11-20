@@ -110,15 +110,22 @@ pub struct Plan {
     pub place: Option<Place>,
 }
 
-const FALLBACK_TERMINAL: [&str; 2] = ["kitty", "-e"];
+/// The terminal a launch falls back to: the first of uQ's terminals that is installed (kyko,
+/// else kitty), and kitty when neither is found, so the launch still says what it wanted.
+pub(crate) fn fallback_terminal() -> &'static str {
+    uq_core::kdeglobals::TERMINAL_APPS
+        .into_iter()
+        .find(|t| binary_exists(t))
+        .unwrap_or("kitty")
+}
 
 /// The argv that runs a command in a terminal: the chosen terminal's own `Exec` (field codes
 /// stripped) and then its `X-TerminalArgExec`, else `-e`. Anything wrong with the terminal
 /// (none chosen, not installed, hidden, `TryExec` missing, bad `Exec`, or itself a terminal
-/// app) gives `kitty -e`: a launch is never refused over the terminal. Nothing here goes
+/// app) gives `fallback_terminal() -e`: a launch is never refused over the terminal. Nothing here goes
 /// through a shell.
 pub(crate) fn terminal_prefix(dirs: &Dirs, terminal: Option<&str>) -> Vec<String> {
-    let fallback = || FALLBACK_TERMINAL.map(String::from).to_vec();
+    let fallback = || vec![fallback_terminal().to_string(), "-e".to_string()];
     let Some(id) = terminal.filter(|t| valid_pinned_id(t)) else {
         return fallback();
     };
