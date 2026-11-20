@@ -75,6 +75,7 @@ PanelWindow {
     // Its window, the handle that opens a new tab in it ("" when the terminal can't take tabs)
     // and whether it is tucked away (look=see>do_ closed). wipe() leaves these alone.
     property string dockAddress: ""
+    onDockAddressChanged: Surfaces.dockedTerminal = dockAddress
     property string dockTabs: ""
     property bool dockHidden: false
     readonly property bool docked: shown && dockAddress !== "" && !dockHidden
