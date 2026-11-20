@@ -181,6 +181,15 @@ The slot size is fixed: draw inside it. A widget may define `property Component 
 same `ctx`. Popups close on a click outside, on Esc and when the screen locks. Widgets are never
 drawn over the lock screen.
 
+### Hiding itself
+
+A widget that only matters some of the time (an update icon with nothing to update) can declare
+`property bool hidden` on its root item and set it to `true`. It stays loaded and keeps running,
+but its slot takes no room: no cell in the bar, no row in the "…" list, no tile in quick
+settings (and an Apps group with only hidden tiles is hidden). While it is hidden,
+`ctx.view.shown` follows whether its bar or panel is showing, so it can keep watching for the
+moment to come back. Older uQ ignores the property and always shows the widget.
+
 ### `ctx`
 
 The root item gets one property, `ctx` (declare `property var ctx`). It is set before
