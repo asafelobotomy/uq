@@ -166,8 +166,14 @@ pub fn with_colors(existing: &str, scheme: &str) -> Option<String> {
         ),
     }
     theirs.extend(ours.into_iter().filter(|(h, _)| h.starts_with("[Colors:")));
+    let out = render_groups(theirs);
+    (out != existing).then_some(out)
+}
+
+/// The text of `groups`: blank-line separated groups, no trailing blank lines inside a group.
+fn render_groups(groups: Vec<(String, Vec<String>)>) -> String {
     let mut out = String::new();
-    for (h, lines) in theirs {
+    for (h, lines) in groups {
         let body: Vec<&str> = {
             let mut v: Vec<&str> = lines.iter().map(String::as_str).collect();
             while v.last().is_some_and(|l| l.trim().is_empty()) {
@@ -190,7 +196,116 @@ pub fn with_colors(existing: &str, scheme: &str) -> Option<String> {
             out.push('\n');
         }
     }
+    out
+}
+
+/// Whether the file still says `ColorScheme=uQ`, or has no colours of its own at all.
+fn is_uq_scheme(theirs: &[(String, Vec<String>)]) -> bool {
+    let has_colors = theirs.iter().any(|(h, _)| h.starts_with("[Colors:"));
+    let is_uq = theirs.iter().any(|(h, l)| {
+        h == "[General]"
+            && l.iter().any(|l| {
+                key_of(l) == Some("ColorScheme")
+                    && l.split_once('=').is_some_and(|(_, v)| v.trim() == SCHEME)
+            })
+    });
+    is_uq || !has_colors
+}
+
+/// What KDE apps read from `kdeglobals` besides colours: the icon theme, the widget style and
+/// the fonts. With the `kde` platform theme (plasma-integration) this file is how Dolphin and
+/// every other KDE app learn uQ's look.
+pub struct Look<'a> {
+    pub icons: &'a str,
+    pub ui_font: &'a str,
+    pub mono_font: &'a str,
+    pub size: u8,
+    /// `kvantum` when Kvantum is installed, otherwise `Fusion`.
+    pub style: &'a str,
+}
+
+/// KDE's font string: `family,pointSize,pixelSize,styleHint,weight,italic,underline,strikeout,
+/// fixedPitch,...`.
+fn kfont(family: &str, size: u8, fixed: bool) -> String {
+    format!(
+        "{family},{size},-1,5,400,0,0,0,{},0,0,0,0,0,0,1",
+        u8::from(fixed)
+    )
+}
+
+fn set_key_in(groups: &mut Vec<(String, Vec<String>)>, group: &str, key: &str, value: &str) {
+    let line = format!("{key}={value}");
+    match groups.iter_mut().find(|(h, _)| h == group) {
+        Some((_, lines)) => match lines.iter().position(|l| key_of(l) == Some(key)) {
+            Some(i) => lines[i] = line,
+            None => {
+                // Before the blank lines that separate this group from the next.
+                let end = lines
+                    .iter()
+                    .rposition(|l| !l.trim().is_empty())
+                    .map_or(0, |i| i + 1);
+                lines.insert(end, line);
+            }
+        },
+        None => groups.push((group.to_string(), vec![line])),
+    }
+}
+
+/// `existing` with uQ's colours (see [`with_colors`]) and `look`: `[Icons] Theme`, `[KDE]
+/// widgetStyle` and the fonts. `None` when nothing changes. Like the colours, the look is only
+/// written while the file is uQ's (it still says `ColorScheme=uQ`, or it has no colours): a
+/// file KDE's System Settings wrote is theirs.
+pub fn with_look(existing: &str, scheme: &str, look: &Look) -> Option<String> {
+    let base = with_colors(existing, scheme);
+    let text = base.as_deref().unwrap_or(existing);
+    let mut g = groups(text);
+    if !is_uq_scheme(&g) {
+        return base;
+    }
+    if crate::settings::valid_theme_name(look.icons) {
+        set_key_in(&mut g, "[Icons]", "Theme", look.icons);
+    }
+    if look.style == "kvantum" || look.style == "Fusion" {
+        set_key_in(&mut g, "[KDE]", "widgetStyle", look.style);
+    }
+    if crate::qt6ct::safe_family(look.ui_font) && crate::qt6ct::safe_family(look.mono_font) {
+        let ui = kfont(look.ui_font, look.size, false);
+        for key in ["font", "menuFont", "toolBarFont"] {
+            set_key_in(&mut g, "[General]", key, &ui);
+        }
+        let small = kfont(look.ui_font, look.size.saturating_sub(2).max(8), false);
+        set_key_in(&mut g, "[General]", "smallestReadableFont", &small);
+        set_key_in(
+            &mut g,
+            "[General]",
+            "fixed",
+            &kfont(look.mono_font, look.size, true),
+        );
+    }
+    // Colours last, as with_colors leaves them, so a second pass changes nothing.
+    g.sort_by_key(|(h, _)| h.starts_with("[Colors:"));
+    let out = render_groups(g);
     (out != existing).then_some(out)
+}
+
+/// Write uQ's colours and look into `~/.config/kdeglobals` (see [`with_look`]). `Ok(true)` when
+/// the file changed; no rendered scheme yet is `Ok(false)`.
+pub fn sync_look(p: &Paths, look: &Look) -> std::io::Result<bool> {
+    let scheme = match std::fs::read_to_string(p.theme_dir.join("kde/uq.colors")) {
+        Ok(s) => s,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(e) => return Err(e),
+    };
+    let path = conf_path(p);
+    let existing = match std::fs::read_to_string(&path) {
+        Ok(s) => s,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(e) => return Err(e),
+    };
+    match with_look(&existing, &scheme, look) {
+        Some(new) => atomic_write(&path, &new).map(|()| true),
+        None => Ok(false),
+    }
 }
 
 /// Put uQ's colour scheme into `~/.config/kdeglobals` (see [`with_colors`]). `Ok(true)` when the
@@ -350,5 +465,61 @@ mod tests {
         let theirs =
             "[General]\nColorScheme=BreezeDark\n\n[Colors:Window]\nBackgroundNormal=1,1,1\n";
         assert_eq!(with_colors(theirs, SCHEME_TXT), None);
+    }
+
+    const SCHEME: &str = "[General]\nColorScheme=uQ\n\n[Colors:Window]\nBackgroundNormal=1,2,3\n";
+
+    fn look(icons: &str) -> Look<'_> {
+        Look {
+            icons,
+            ui_font: "Inter",
+            mono_font: "JetBrains Mono",
+            size: 11,
+            style: "kvantum",
+        }
+    }
+
+    #[test]
+    fn look_sets_icons_style_and_fonts_and_keeps_the_rest() {
+        let new = with_look(
+            "[General]\nTerminalApplication=kitty\n",
+            SCHEME,
+            &look("Papirus-Dark"),
+        )
+        .unwrap();
+        assert!(new.contains("TerminalApplication=kitty"), "{new}");
+        assert!(new.contains("[Icons]\nTheme=Papirus-Dark"), "{new}");
+        assert!(new.contains("[KDE]\nwidgetStyle=kvantum"), "{new}");
+        assert!(
+            new.contains("font=Inter,11,-1,5,400,0,0,0,0,0,0,0,0,0,0,1"),
+            "{new}"
+        );
+        assert!(
+            new.contains("fixed=JetBrains Mono,11,-1,5,400,0,0,0,1,"),
+            "{new}"
+        );
+        assert!(new.contains("[Colors:Window]"), "{new}");
+        assert_eq!(
+            with_look(&new, SCHEME, &look("Papirus-Dark")),
+            None,
+            "second pass is a no-op: {new:?}"
+        );
+    }
+
+    #[test]
+    fn look_changes_with_the_theme() {
+        let a = with_look("", SCHEME, &look("Papirus-Dark")).unwrap();
+        let b = with_look(&a, SCHEME, &look("Papirus-Light")).unwrap();
+        assert!(
+            b.contains("Theme=Papirus-Light") && !b.contains("Papirus-Dark"),
+            "{b}"
+        );
+    }
+
+    #[test]
+    fn look_leaves_a_users_own_scheme_alone() {
+        let theirs =
+            "[General]\nColorScheme=BreezeDark\n\n[Colors:Window]\nBackgroundNormal=9,9,9\n";
+        assert_eq!(with_look(theirs, SCHEME, &look("Papirus-Dark")), None);
     }
 }

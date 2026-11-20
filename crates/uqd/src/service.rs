@@ -1291,15 +1291,34 @@ impl Desktop {
                     if let Err(e) = self.sys.apply(&theme) {
                         tracing::warn!("system settings: {e}");
                     }
-                    // Qt's icons, fonts and palette marker, in a qt6ct.conf `uqctl setup --apps`
-                    // wrote (and only then); the same opt-in gives KDE/Kirigami apps uQ's colours.
+                    // Every Qt and GTK app follows the theme without a manual step: create
+                    // the per-app config files that are missing (never replacing one the user
+                    // wrote), then write the look into them. Kvantum is used when installed
+                    // and not switched off in Settings.
+                    let kvantum = self.state.settings.appearance.kvantum
+                        && kvantum_base(Path::new(&self.kvantum_dir)).is_some();
+                    if let Err(e) = uq_core::stub::install_consumers(&self.paths, kvantum) {
+                        tracing::warn!("app theme files: {e}");
+                    }
+                    // Qt's icons, fonts and palette marker, in a qt6ct.conf uQ wrote.
                     if let Err(e) = uq_core::qt6ct::sync(&self.paths, &theme) {
                         tracing::warn!("qt6ct look: {e}");
                     }
-                    if uq_core::qt6ct::is_opted_in(&self.paths)
-                        && let Err(e) = uq_core::kdeglobals::sync_colors(&self.paths)
-                    {
-                        tracing::warn!("kdeglobals colours: {e}");
+                    // KDE apps (Dolphin, Kirigami) read colours, icons, style and fonts from
+                    // kdeglobals through the `kde` platform theme.
+                    let look = uq_core::kdeglobals::Look {
+                        icons: &theme.icons.theme,
+                        ui_font: &theme.fonts.ui,
+                        mono_font: &theme.fonts.mono,
+                        size: theme.fonts.size,
+                        style: if kvantum { "kvantum" } else { "Fusion" },
+                    };
+                    if let Err(e) = uq_core::kdeglobals::sync_look(&self.paths, &look) {
+                        tracing::warn!("kdeglobals look: {e}");
+                    }
+                    // Flatpak apps: read-only access to the theme files, so they follow too.
+                    if let Err(e) = uq_core::flatpak::sync(&self.paths) {
+                        tracing::warn!("flatpak override: {e}");
                     }
                     // KDE apps' terminal (Dolphin's "Open Terminal Here"), unless one is named.
                     if let Err(e) = uq_core::kdeglobals::ensure_terminal(&self.paths) {
@@ -1511,29 +1530,48 @@ mod tests {
         let mut r = rig();
         r.desktop.startup().await;
         let conf = uq_core::kdeglobals::conf_path(r.desktop.paths());
-        if kitty {
-            assert_eq!(
-                fs::read_to_string(&conf).unwrap(),
-                "[General]\nTerminalApplication=kitty\n"
-            );
-        } else {
-            assert!(!conf.exists(), "no kitty: nothing to name");
-        }
+        let body = fs::read_to_string(&conf).unwrap();
+        assert_eq!(
+            body.contains("TerminalApplication=kitty"),
+            kitty,
+            "no kitty: nothing to name\n{body}"
+        );
         // A terminal the user chose stays.
         fs::write(&conf, "[General]\nTerminalApplication=konsole\n").unwrap();
         r.desktop
             .set_theme("gruvbox", Variant::Dark, Origin::Settings)
             .await
             .unwrap();
-        assert_eq!(
-            fs::read_to_string(&conf).unwrap(),
-            "[General]\nTerminalApplication=konsole\n"
-        );
+        let body = fs::read_to_string(&conf).unwrap();
+        assert!(body.contains("TerminalApplication=konsole"), "{body}");
+        assert!(!body.contains("kitty"), "{body}");
 
         // Without Hyprland (a uqd left running in another desktop) nothing is written.
         let mut off = rig_with(false, |_| {});
         off.desktop.startup().await;
         assert!(!uq_core::kdeglobals::conf_path(off.desktop.paths()).exists());
+    }
+
+    #[tokio::test]
+    async fn kdeglobals_carries_uqs_look_and_follows_the_theme() {
+        let mut r = rig();
+        r.desktop
+            .set_theme("gruvbox", Variant::Dark, Origin::Settings)
+            .await
+            .unwrap();
+        let conf = uq_core::kdeglobals::conf_path(r.desktop.paths());
+        let body = fs::read_to_string(&conf).unwrap();
+        assert!(body.contains("ColorScheme=uQ"), "{body}");
+        assert!(body.contains("[Icons]\nTheme=Papirus-Dark"), "{body}");
+        assert!(body.contains("widgetStyle="), "{body}");
+        assert!(body.contains("[Colors:View]"), "{body}");
+        r.desktop
+            .set_theme("gruvbox", Variant::Light, Origin::Settings)
+            .await
+            .unwrap();
+        let body = fs::read_to_string(&conf).unwrap();
+        assert!(body.contains("Theme=Papirus-Light"), "{body}");
+        assert_eq!(body.matches("[Icons]").count(), 1, "{body}");
     }
 
     #[tokio::test]
