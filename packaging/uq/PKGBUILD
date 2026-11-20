@@ -4,7 +4,7 @@
 # pkgver is the Cargo.toml version with '-rc.N' written 'rcN' (pacman forbids '-');
 # scripts/bump-version.sh keeps them in step.
 pkgname=uq
-pkgver=0.3.24
+pkgver=0.3.25
 pkgrel=1
 _tag=${pkgver/rc/-rc.}
 # The uq-hyprland-pin this release's config/hypr/base.lua is tested with: equal to
@@ -33,6 +33,7 @@ optdepends=(
   'scdr: CPU priorities for the focused app and builds (enable scdr-session; uQ starts it)'
   'tailscale: exit-node and VPN status in the shell'
   'bluez: Bluetooth status in the shell and the Bluetooth settings page'
+  'cups: the Printers settings page'
   'power-profiles-daemon: power profile switching'
   'hyprlock: fallback lock for the SUPER+CTRL+L recovery bind'
   'noti-fi: notification backend'
