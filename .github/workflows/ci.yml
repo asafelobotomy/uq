@@ -63,6 +63,35 @@ jobs:
             QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -import apps/uq-settings/qml -input tests/settings-qml
             node --test 'web/uq-tokens/test/*.test.js' 'tests/pages/*.test.js'"
 
+  native-uq-theme:
+    # native/uq-theme: the theme-follow files the Qt and Rust apps vendor. Their tests (parsing,
+    # and following a replaced file and a swapped theme/ folder), and check-uq-theme.sh's
+    # checksums matching the files.
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - name: Install Rust, Qt and CMake
+        run: pacman -Syu --noconfirm --needed rust qt6-base cmake gcc make git
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Rust module
+        run: |
+          cargo test --manifest-path native/uq-theme/test/Cargo.toml --locked
+          cargo clippy --manifest-path native/uq-theme/test/Cargo.toml --locked --all-targets -- -D warnings
+          rustfmt --check --edition 2024 native/uq-theme/uq_theme.rs
+      - name: C++ module
+        run: |
+          cmake -S native/uq-theme/test -B /tmp/uqtheme-build
+          cmake --build /tmp/uqtheme-build
+          QT_QPA_PLATFORM=offscreen ctest --test-dir /tmp/uqtheme-build --output-on-failure
+      - name: check-uq-theme.sh is up to date
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          native/uq-theme/gen-check.sh
+          git diff --exit-code -- native/uq-theme
+          native/uq-theme/check-uq-theme.sh "$(head -n1 native/uq-theme/uq_theme.rs | grep -oE '[0-9.]+$')" native/uq-theme/uq_theme.rs native/uq-theme/uqtheme.h native/uq-theme/uqtheme.cpp
+
   smoke:
     # The shell on a real Hyprland (scripts/smoke-shell.sh). Hyprland cannot start without a DRM
     # device, even with only headless outputs, and a job container is created before any step

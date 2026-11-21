@@ -19,6 +19,7 @@ for t in tests/shell/*.sh; do bash "$t"; done
 QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -import shell -input tests/qml
 QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -import apps/uq-settings/qml -input tests/settings-qml
 node --test 'web/uq-tokens/test/*.test.js'
+cargo test --manifest-path native/uq-theme/test/Cargo.toml   # + cmake -S native/uq-theme/test for the C++ copy
 cargo deny check advisories
 ```
 

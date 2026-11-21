@@ -7,6 +7,10 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **`native/uq-theme`, one theme-follow module for native apps** (uq-theme 1.0.0). Qt 6 C++ (`uqtheme.h`/`.cpp`) and Rust (`uq_theme.rs`) copies that read and check `tokens.json` and follow it with a file watch, including uqd's swap of the whole `theme/` folder, with a drift check for CI. Bindle, bindaru, uQview, appOFholding, reelo and XZram use it in place of their own copies, and stop checking the file once a second.
+
 ### Fixed
 
 - **Shut down in… shows the time in your clock format.** With the 12-hour clock chosen in Settings › Date and time, quick settings said "at 23:05"; it now says "at 11:05 PM".

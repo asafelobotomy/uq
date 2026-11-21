@@ -1,0 +1,10 @@
+# Builds and runs the C++ uq-theme tests: cmake -S native/uq-theme/test -B build && ctest --test-dir build
+cmake_minimum_required(VERSION 3.21)
+project(uqtheme_tests LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_AUTOMOC ON)
+find_package(Qt6 REQUIRED COMPONENTS Core Test)
+enable_testing()
+add_executable(tst_uqtheme tst_uqtheme.cpp ../uqtheme.cpp ../uqtheme.h)
+target_link_libraries(tst_uqtheme PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME tst_uqtheme COMMAND tst_uqtheme)
