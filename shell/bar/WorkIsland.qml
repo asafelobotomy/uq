@@ -211,7 +211,8 @@ Island {
     }
     // A dialog or other window an app opened from one of its windows shares that window's tab
     // (Work.groupChildren): `children` on each.
-    readonly property var here: Work.windowsHere(windows, monitorName, wsId, focusedAddr)
+    readonly property var here: Work.groupChildren(Work.windowsHere(windows, monitorName, wsId, focusedAddr),
+                                                   openedSeq, openedFrom)
     // The window that had focus when each window opened (address -> address): the likely parent
     // of a dialog. Kept for the windows still open.
     property var openedFrom: ({})
