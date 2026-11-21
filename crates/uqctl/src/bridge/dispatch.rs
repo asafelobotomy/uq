@@ -109,6 +109,12 @@ pub enum Action {
         address: String,
         steps: i64,
     },
+    /// Give this window a scrolling layout column of its own (`promote`): a window moved with
+    /// the pointer that Hyprland dropped into another window's column, where the shell showed it
+    /// would get a place of its own. The window is focused (the pointer stays put).
+    OwnColumn {
+        address: String,
+    },
     /// Which windows to hide on each workspace, by the window focused there: beside a Half
     /// window alone on its screen page, the next page's windows would show, so the shell hides
     /// them. Hyprland is handed the table and hides and shows windows itself the moment focus
@@ -299,6 +305,9 @@ impl Action {
                     n => n,
                 },
             },
+            "own_column" => Action::OwnColumn {
+                address: address(a)?,
+            },
             "page_hiding" => Action::PageHiding {
                 workspaces: match a.get("workspaces").and_then(Value::as_array) {
                     Some(list) if list.len() <= 32 => list
@@ -464,6 +473,10 @@ impl Action {
                     .chain(std::iter::repeat_n(swap, steps.unsigned_abs() as usize))
                     .collect()
             }
+            Action::OwnColumn { address } => vec![
+                d(format!("hl.dsp.focus({{ window = {} }})", win(address))),
+                d("hl.dsp.layout(\"promote\")".to_string()),
+            ],
             // All in the script (page_hiding_lua).
             Action::PageHiding { .. } => Vec::new(),
             // All in the script's scroll step.
@@ -736,6 +749,7 @@ fn script(action: &Action) -> String {
             | Action::ColumnWidth { .. }
             | Action::Columns { .. }
             | Action::MoveColumn { .. }
+            | Action::OwnColumn { .. }
             | Action::Scroll { .. }
     );
     let mut s = String::from(PRELUDE);
@@ -1308,6 +1322,21 @@ mod tests {
     }
 
     #[test]
+    fn own_column() {
+        let l = lua("own_column", json!({"address": A}));
+        assert_eq!(l.len(), 2, "focus, then promote");
+        assert!(l[0].contains("hl.dsp.focus"));
+        assert!(l[1].contains("hl.dsp.layout(\"promote\")"));
+        assert!(
+            script(&Action::from_call("own_column", &json!({"address": A})).unwrap())
+                .contains("no_warps"),
+            "the pointer stays put"
+        );
+        assert!(Action::from_call("own_column", &json!({})).is_err());
+        assert!(Action::from_call("own_column", &json!({"address": "nope"})).is_err());
+    }
+
+    #[test]
     fn move_column() {
         let l = lua("move_column", json!({"address": A, "steps": -2}));
         assert_eq!(l.len(), 3, "focus, then one swap a step");
@@ -1743,6 +1772,7 @@ mod tests {
                 json!({"windows": [{"address": A, "fraction": 0.5}], "pin": {"address": A, "x": 16}}),
             ),
             ("move_column", json!({"address": A, "steps": -1})),
+            ("own_column", json!({"address": A})),
             ("scroll", json!({"address": A, "x": 16})),
             (
                 "page_hiding",

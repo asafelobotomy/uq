@@ -131,6 +131,43 @@ jobs:
           path: captures/
           if-no-files-found: ignore
 
+  windows:
+    # Window handling end to end with timings (scripts/windows-live.sh: open, Half, the resize grip,
+    # tab moves and drops, Super+drag, minimise and restore, float, fullscreen, workspaces, close)
+    # and look=see>do_'s docked terminal, on the real shell and Hyprland, on vkms like the smoke job.
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Load vkms
+        run: |
+          sudo modprobe vkms 2>/dev/null || {
+            sudo apt-get update -q && sudo apt-get install -y -q "linux-modules-extra-$(uname -r)" && sudo modprobe vkms
+          }
+          card=""
+          for c in /sys/class/drm/card*; do
+            case "${c##*/}" in *-*) continue ;; esac
+            [ "$(basename "$(readlink -f "$c/device")")" = vkms ] && card=/dev/dri/${c##*/}
+          done
+          [ -n "$card" ] || { echo "::error::vkms loaded but no vkms card found"; exit 1; }
+          echo "SMOKE_CARD=$card" >> "$GITHUB_ENV"
+      - name: Window handling on Hyprland
+        run: |
+          docker run --rm --device "$SMOKE_CARD" -e SMOKE_CARD -e SMOKE_UID="$(id -u)" -e SMOKE_ONLY="windows-live" \
+            -v "$GITHUB_WORKSPACE:/src" archlinux:latest bash /src/scripts/smoke-in-container.sh
+      - name: Timings
+        if: always()
+        run: '[ -f captures/windows-perf.md ] && { echo "### Window handling"; echo; cat captures/windows-perf.md; } >> "$GITHUB_STEP_SUMMARY" || true'
+      - name: Keep the screenshots
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-captures
+          path: captures/
+          if-no-files-found: ignore
+
   settings-live:
     # The Settings live checks (tests/live: slices A–G, keybinds and E) against this checkout's uqd
     # and a headless Hyprland on the uQ config, on vkms like the smoke job. The checks that need a person, a login or real

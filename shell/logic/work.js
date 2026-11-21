@@ -151,6 +151,63 @@ function windowsHere(windows, monitor, wsId, focused) {
     return out;
 }
 
+// Windows an app opens from one of its windows (preferences, a confirmation, a file chooser)
+// share that window's tab. Hyprland floats such a window (it has a parent) but doesn't say which
+// window is the parent, so a floating window counts as a child of another window of the same
+// process (pid) opened before it: the one that had focus when it opened (`from`, address ->
+// address), else the last one opened before it. Both are minimised or neither. `list` is
+// windowsHere's; `opened` maps address -> opening order. Returns the list without the children,
+// each window with `children` (addresses, oldest first; [] for none) and `focused` when it or one
+// of its children is.
+function groupChildren(list, opened, from) {
+    var src = list || [], ord = opened || {}, fr = from || {};
+    function seq(w) { return typeof ord[w.address] === "number" ? ord[w.address] : Number.MAX_SAFE_INTEGER; }
+    var parentOf = {};
+    for (var i = 0; i < src.length; i++) {
+        var c = src[i];
+        if (!c.floating || !(c.pid > 0))
+            continue;
+        var best = null;
+        for (var j = 0; j < src.length; j++) {
+            var p = src[j];
+            if (p === c || p.pid !== c.pid || p.minimised !== c.minimised || seq(p) >= seq(c))
+                continue;
+            if (fr[c.address] === p.address) {
+                best = p;
+                break;
+            }
+            if (best === null || seq(p) > seq(best))
+                best = p;
+        }
+        if (best !== null)
+            parentOf[c.address] = best.address;
+    }
+    // A child's child belongs to the same top window.
+    function top(a) {
+        var seen = 0;
+        while (parentOf[a] !== undefined && seen++ < 32)
+            a = parentOf[a];
+        return a;
+    }
+    var kids = {}, out = [];
+    for (var k = 0; k < src.length; k++)
+        if (parentOf[src[k].address] !== undefined) {
+            var t = top(src[k].address);
+            (kids[t] = kids[t] || []).push(src[k]);
+        }
+    for (var m = 0; m < src.length; m++) {
+        var w = src[m];
+        if (parentOf[w.address] !== undefined)
+            continue;
+        var mine = (kids[w.address] || []).slice().sort(function (a, b) { return seq(a) - seq(b); });
+        var g = Object.assign({}, w);
+        g.children = mine.map(function (x) { return x.address; });
+        g.focused = w.focused || mine.some(function (x) { return x.focused; });
+        out.push(g);
+    }
+    return out;
+}
+
 // "screen" (the default) is the order the windows sit in on screen: left to right, as the
 // scrolling layout's columns run.
 var SORTS = ["screen", "opened", "activity", "pin", "usage", "name"];

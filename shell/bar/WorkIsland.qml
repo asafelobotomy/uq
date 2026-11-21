@@ -95,14 +95,22 @@ Island {
             var a = Work.normAddr(t.address);
             if (a !== null)
                 seq[a] = openedSeq[a] !== undefined ? openedSeq[a] : nextSeq++;
-            var minimised = t.workspace ? t.workspace.name === "special:minimized" : false;
+            // A move Hyprland has announced, before Quickshell's lists show it (wsMoved).
+            var wsName = t.workspace ? t.workspace.name : "", moved = a !== null ? wsMoved[a] : undefined;
+            if (moved !== undefined && moved.name !== wsName)
+                wsName = moved.name;
+            var minimised = wsName === "special:minimized";
+            // Its tag says which workspace it came from; until the tag arrives, the one it was on.
+            var from = minimised ? Min.wsFromTags(o.tags) : null;
+            if (minimised && from === null && moved !== undefined)
+                from = moved.from;
             out.push({
                 address: t.address,
                 cls: o["class"] ? String(o["class"]) : "",
                 title: t.title || "",
                 wsId: t.workspace ? t.workspace.id : null,
                 minimised: minimised,
-                minimisedFrom: minimised ? Min.wsFromTags(o.tags) : null,
+                minimisedFrom: from,
                 monitor: t.monitor ? t.monitor.name : "",
                 pid: typeof o.pid === "number" ? o.pid : 0,
                 x: o.at ? Number(o.at[0]) || 0 : 0,
@@ -126,6 +134,13 @@ Island {
         }
     }
     property string windowsKey: ""
+    // Windows Hyprland said it moved (movewindowv2), by address: {name (the workspace name it
+    // gave), at, from (the workspace it was on: a minimised window's tab needs it before its tag
+    // arrives)}. The toplevels' workspaces only follow with the next refresh, ~200 ms later; until
+    // then the tabs go by this, so a minimised window's tab greys at once (it used to drop out of
+    // the strip for that moment and come back greyed). Dropped a second on, once the refreshes
+    // have long caught up.
+    property var wsMoved: ({})
     Component.onCompleted: {
         focusedAddr = activeAddr();
         noteSeen = Work.noteArrived(null, NotifBackend.latest, NotifBackend.count).seen;
@@ -194,7 +209,13 @@ Island {
         target: DesktopEntries.applications
         function onValuesChanged() { root.appCache = {}; }
     }
-    readonly property var here: Work.windowsHere(windows, monitorName, wsId, focusedAddr)
+    // A dialog or other window an app opened from one of its windows shares that window's tab
+    // (Work.groupChildren): `children` on each.
+    readonly property var here: Work.groupChildren(Work.windowsHere(windows, monitorName, wsId, focusedAddr),
+                                                   openedSeq, openedFrom)
+    // The window that had focus when each window opened (address -> address): the likely parent
+    // of a dialog. Kept for the windows still open.
+    property var openedFrom: ({})
     readonly property var ordered: {
         var ctx = { opened: openedSeq, activity: {}, pinIndex: {}, usage: {}, name: {}, lastOrder: memo.order, lastMin: memo.min };
         var pins = Settings.values.pinned || [];
@@ -291,6 +312,17 @@ Island {
     }
     // Focus a window; a minimised one comes back to the workspace it left.
     function choose(w) {
+        var kids = w.children || [];
+        if (!w.minimised && kids.length > 0) {
+            // A window with a dialog open: its page comes into view, and the dialog (the last
+            // one opened) gets focus, as it is the one waiting for an answer.
+            var dialog = kids[kids.length - 1];
+            Bridge.call("Dispatch", ["focus_window", { address: w.address, keep_pointer: true }])
+                .then(function () {
+                    return Bridge.call("Dispatch", ["focus_window", { address: dialog, keep_pointer: true }]);
+                }).catch(function (e) { console.warn("uq: focus a window's dialog: " + e); });
+            return;
+        }
         if (w.minimised) {
             var t = toplevelFor(w.address);
             var ws = t && t.lastIpcObject ? Min.wsFromTags(t.lastIpcObject.tags) : null;
@@ -303,6 +335,10 @@ Island {
             if (last !== null)
                 args.after = last;
             Bridge.call("Dispatch", ["restore", args]);
+            // Its dialogs come back with it, after it.
+            kids.forEach(function (c) {
+                Bridge.call("Dispatch", ["restore", { address: c, to_ws: ws }]).catch(function () {});
+            });
         } else if (!w.focused) {
             // The pointer stays put; a window out of view (a scrolled-away column) is brought
             // into view by the focus itself.
@@ -313,6 +349,13 @@ Island {
         var d = Work.buildDispatch(name, { addr: w.address, ws: root.wsId }, args);
         if (d !== null)
             Bridge.call("Dispatch", d);
+        // Minimised or moved to another workspace, its dialogs go with it.
+        if (name === "minimise" || name === "move")
+            (w.children || []).forEach(function (c) {
+                var dc = Work.buildDispatch(name, { addr: c, ws: root.wsId }, args);
+                if (dc !== null)
+                    Bridge.call("Dispatch", dc);
+            });
     }
     // A tiled window in the scrolling layout, sized by its column (not real fullscreen, 2).
     function inColumn(w) {
@@ -460,8 +503,33 @@ Island {
         function onRawEvent(event) {
             if (event.name === "changefloatingmode" || event.name === "pin"
                     || event.name === "openwindow" || event.name === "closewindow"
-                    || event.name === "movewindowv2" || event.name === "workspacev2")
+                    || event.name === "movewindowv2" || event.name === "workspacev2") {
                 root.refresh();
+                if (event.name === "openwindow") {
+                    var opened = Work.normAddr("0x" + String(event.data).split(",")[0]), was = root.activeAddr();
+                    if (opened !== null && was !== "" && was !== opened) {
+                        var of = {};
+                        for (var ka in root.openedFrom)
+                            if (root.openedSeq[ka] !== undefined)
+                                of[ka] = root.openedFrom[ka];
+                        of[opened] = was;
+                        root.openedFrom = of;
+                    }
+                }
+                if (event.name === "movewindowv2") {
+                    // "address,workspace id,workspace name"
+                    var parts = String(event.data).split(",");
+                    var moved = parts.length >= 3 ? Work.normAddr("0x" + parts[0]) : null;
+                    if (moved !== null) {
+                        var mv = Object.assign({}, root.wsMoved);
+                        var was = root.windows.find(function (w) { return Work.normAddr(w.address) === moved; });
+                        mv[moved] = { name: parts.slice(2).join(","), at: Date.now(),
+                                      from: was && typeof was.wsId === "number" && was.wsId > 0 ? was.wsId : null };
+                        root.wsMoved = mv;
+                        Qt.callLater(root.rebuild);
+                    }
+                }
+            }
             // Quickshell sets the title itself from this event: no need to ask Hyprland again.
             // Throttled, not debounced: a title that never stops changing still shows.
             else if (event.name === "windowtitlev2") {
@@ -485,6 +553,11 @@ Island {
             if (!root.asked)
                 return;
             root.asked = false;
+            var now = Date.now(), kept = ({});
+            for (var k in root.wsMoved)
+                if (now - root.wsMoved[k].at < 1000)
+                    kept[k] = root.wsMoved[k];
+            root.wsMoved = kept;
             root.rebuild();
         }
     }

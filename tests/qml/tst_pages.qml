@@ -210,4 +210,29 @@ TestCase {
         var stacked = [win("0xa", 16, 1856), { address: "0xb", x: 16, y: 520, w: 1856, h: 476 }];
         compare(P.shared(stacked, "0xa", room, extra), null, "one column, however many windows");
     }
+
+    function test_edge_strips() {
+        // 1280 wide, columns' frames 17 px in (gaps_out 12 + gaps_in 5), border 2.
+        var bands = { left: 17, right: 17 };
+        var w = function (x, width) { return { x: x, w: width }; };
+        // The page before shows its last 5 px (and border) at the left edge.
+        compare(P.edgeStrips([w(-609, 614), w(19, 614), w(647, 614)], [], 0, 1280, bands, 2),
+                { left: true, right: false });
+        // ... and the next page's first window at the right edge.
+        compare(P.edgeStrips([w(19, 614), w(647, 614), w(1275, 614)], [], 0, 1280, bands, 2),
+                { left: false, right: true });
+        // Nothing beside the page: no strips.
+        compare(P.edgeStrips([w(19, 1242)], [], 0, 1280, bands, 2), { left: false, right: false });
+        // Far off screen: no sliver.
+        compare(P.edgeStrips([w(-1300, 614), w(19, 1242)], [], 0, 1280, bands, 2), { left: false, right: false });
+        // A floating window reaching into a strip keeps it off (it would be covered).
+        compare(P.edgeStrips([w(-609, 614), w(19, 614)], [w(4, 300)], 0, 1280, bands, 2),
+                { left: false, right: false });
+        compare(P.edgeStrips([w(-609, 614), w(19, 614)], [w(400, 300)], 0, 1280, bands, 2),
+                { left: true, right: false });
+        // A second screen, right of the first.
+        compare(P.edgeStrips([w(1280 - 609, 614), w(1299, 614)], [], 1280, 1280, bands, 2),
+                { left: true, right: false });
+        compare(P.edgeStrips([], [], 0, 0, bands, 2), { left: false, right: false });
+    }
 }
