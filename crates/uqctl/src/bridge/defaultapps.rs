@@ -1,6 +1,6 @@
 //! `DefaultApps`: the user's terminal, file manager and text editor, for the desktop menu's
-//! Open entries. The terminal is uQ's `shell.terminal` (else kitty, the terminal a launch falls
-//! back to); the others are the `inode/directory` and `text/plain` defaults in `mimeapps.list`,
+//! Open entries. The terminal is uQ's `shell.terminal` (else kyko, then kitty: the terminals a
+//! launch falls back to); the others are the `inode/directory` and `text/plain` defaults in `mimeapps.list`,
 //! the user's file before the system's. Each is `{id, name, icon}`, or null when none is set or
 //! its desktop entry is missing, hidden, not an app, or its `TryExec` isn't installed. Nothing
 //! here launches anything: the shell launches an id through `Launch`.
@@ -12,8 +12,8 @@ use std::path::{Path, PathBuf};
 use uq_core::mimeapps;
 use uq_core::settings::valid_pinned_id;
 
-/// The terminal a launch falls back to (launch.rs `FALLBACK_TERMINAL`).
-const FALLBACK_TERMINAL: &str = "kitty.desktop";
+/// The terminals a launch falls back to, in order (launch.rs `fallback_terminal`).
+const FALLBACK_TERMINALS: [&str; 2] = ["org.kyko.Kyko.desktop", "kitty.desktop"];
 const MAX_NAME: usize = 64;
 
 /// `{id, name, icon}` for a launchable desktop entry, else null.
@@ -50,7 +50,13 @@ pub fn resolve(dirs: &Dirs, terminal: Option<&str>, user: &Path, system: &[PathB
     let term = terminal
         .map(|t| app(dirs, t))
         .filter(|v| !v.is_null())
-        .unwrap_or_else(|| app(dirs, FALLBACK_TERMINAL));
+        .or_else(|| {
+            FALLBACK_TERMINALS
+                .into_iter()
+                .map(|t| app(dirs, t))
+                .find(|v| !v.is_null())
+        })
+        .unwrap_or(Value::Null);
     let by_mime = |mime| {
         mimeapps::lookup(user, system, mime)
             .map(|id| app(dirs, &id))
@@ -157,7 +163,7 @@ mod tests {
     }
 
     #[test]
-    fn terminal_falls_back_to_kitty() {
+    fn terminal_falls_back_to_kyko_then_kitty() {
         let (_t, dirs, list) = setup(
             &[(
                 "kitty.desktop",
@@ -172,6 +178,23 @@ mod tests {
         assert_eq!(
             resolve(&dirs, Some("missing.desktop"), &list, &[])["terminal"]["id"],
             "kitty.desktop"
+        );
+        let (_t, dirs, list) = setup(
+            &[
+                (
+                    "kitty.desktop",
+                    &format!("{APP}Name=kitty\nIcon=kitty\nExec=kitty\n"),
+                ),
+                (
+                    "org.kyko.Kyko.desktop",
+                    &format!("{APP}Name=kyko\nIcon=org.kyko.Kyko\nExec=kyko\n"),
+                ),
+            ],
+            "",
+        );
+        assert_eq!(
+            resolve(&dirs, None, &list, &[])["terminal"]["id"],
+            "org.kyko.Kyko.desktop"
         );
     }
 }

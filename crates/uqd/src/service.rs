@@ -1532,17 +1532,22 @@ mod tests {
 
     #[tokio::test]
     async fn kde_terminal_is_named_while_hyprland_runs_and_never_replaced() {
-        let kitty = std::env::var_os("PATH")
-            .is_some_and(|ps| std::env::split_paths(&ps).any(|d| d.join("kitty").is_file()));
+        let installed = |bin: &str| {
+            std::env::var_os("PATH")
+                .is_some_and(|ps| std::env::split_paths(&ps).any(|d| d.join(bin).is_file()))
+        };
+        // kyko where it is installed, else kitty, else nothing.
+        let wanted = uq_core::kdeglobals::TERMINAL_APPS
+            .into_iter()
+            .find(|t| installed(t));
         let mut r = rig();
         r.desktop.startup().await;
         let conf = uq_core::kdeglobals::conf_path(r.desktop.paths());
         let body = fs::read_to_string(&conf).unwrap();
-        assert_eq!(
-            body.contains("TerminalApplication=kitty"),
-            kitty,
-            "no kitty: nothing to name\n{body}"
-        );
+        match wanted {
+            Some(t) => assert!(body.contains(&format!("TerminalApplication={t}")), "{body}"),
+            None => assert!(!body.contains("TerminalApplication"), "{body}"),
+        }
         // A terminal the user chose stays.
         fs::write(&conf, "[General]\nTerminalApplication=konsole\n").unwrap();
         r.desktop

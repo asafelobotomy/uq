@@ -69,7 +69,7 @@ hl.workspace_rule({ workspace = "2", layout = "scrolling", monitor = "DP-1", def
 -- Keyboard shortcuts (uQ Settings). These replace base.lua's fallback copies.
 hl.unbind("all")
 hl.define_submap("uq_capture", function() hl.bind("SUPER + SHIFT + CTRL + ALT + XF86Launch9", hl.dsp.submap("reset")) end)
-hl.bind("SUPER + Return", hl.dsp.exec_cmd("systemd-run --user --scope --quiet --collect --slice=app.slice --unit=app-uq-kitty-$$ -- kitty"), { description = "uq:uq.terminal" })
+hl.bind("SUPER + Return", hl.dsp.exec_cmd("systemd-run --user --scope --quiet --collect --slice=app.slice --unit=app-uq-terminal-$$ -- sh -c 'command -v kyko >/dev/null && exec kyko; exec kitty'"), { description = "uq:uq.terminal" })
 hl.bind("SUPER + V", hl.dsp.window.float({ action = "toggle" }), { description = "uq:uq.float" })
 hl.bind("SUPER + SHIFT + M", hl.dsp.exec_cmd("command -v hyprshutdown >/dev/null 2>&1 && hyprshutdown || hyprctl dispatch 'hl.dsp.exit()'"), { description = "uq:uq.exit" })
 hl.bind("SUPER + K", hl.dsp.global("uq:lookseedo"), { description = "uq:uq.lookseedo" })
