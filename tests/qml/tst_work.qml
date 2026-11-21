@@ -105,6 +105,36 @@ TestCase {
         ];
     }
 
+    function test_dialogs_share_their_window_tab() {
+        function w(a, pid, floating, focused, minimised) {
+            return { address: a, pid: pid, floating: floating, focused: focused === true,
+                     minimised: minimised === true, title: a, cls: "app" };
+        }
+        var ids = function (l) { return l.map(function (x) { return [x.address, x.children, x.focused]; }); };
+        var opened = { "0xa": 0, "0xb": 1, "0xc": 2, "0xd": 3 };
+        // 0xc (focused) and 0xd float and come from 0xa's process: one tab, focused.
+        compare(ids(Work.groupChildren([w("0xa", 10, false), w("0xb", 20, false), w("0xc", 10, true, true),
+                                        w("0xd", 10, true)], opened)),
+                [["0xa", ["0xc", "0xd"], true], ["0xb", [], false]]);
+        // Two windows of one app: the dialog belongs to the one focused when it opened.
+        compare(ids(Work.groupChildren([w("0xa", 10, false), w("0xb", 10, false), w("0xc", 10, true)],
+                                       opened, { "0xc": "0xa" })),
+                [["0xa", ["0xc"], false], ["0xb", [], false]]);
+        // ... else to the last one opened before it.
+        compare(ids(Work.groupChildren([w("0xa", 10, false), w("0xb", 10, false), w("0xc", 10, true)], opened)),
+                [["0xa", [], false], ["0xb", ["0xc"], false]]);
+        // Tiled windows of one app, a floating window of another app, and a floating window
+        // opened before the app's other window: each its own tab.
+        compare(ids(Work.groupChildren([w("0xa", 10, false), w("0xb", 10, false), w("0xc", 30, true)], opened)).length, 3);
+        compare(ids(Work.groupChildren([w("0xa", 10, true), w("0xb", 10, false)], opened)).length, 2);
+        // A minimised window and its minimised dialog share the greyed tab; a dialog left on screen
+        // doesn't join a minimised window.
+        compare(ids(Work.groupChildren([w("0xa", 10, false, false, true), w("0xc", 10, true, false, true)], opened)),
+                [["0xa", ["0xc"], false]]);
+        compare(ids(Work.groupChildren([w("0xa", 10, false, false, true), w("0xc", 10, true)], opened)).length, 2);
+        compare(Work.groupChildren([], opened), []);
+    }
+
     function test_windows_here_are_this_workspace_and_its_minimised() {
         var h = Work.windowsHere(wins(), "DP-1", 1, "0xa");
         compare(h.map(function (w) { return w.address; }), ["0xa", "0xc"]);

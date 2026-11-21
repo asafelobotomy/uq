@@ -17,6 +17,20 @@ All notable changes to uQ are listed here. The format follows
 
 - **The calendar under the clock frames today** in the accent colour, instead of only making it bold.
 
+## [0.3.31] - 2026-11-21
+
+### Fixed
+
+- **An app's dialogs share its tab.** Preferences, "Save changes?" and other windows an app opens from one of its windows had a tab of their own in the Open windows island, and while a modal dialog was open the app's own tab did nothing when chosen. Now the dialog sits in the app's tab, the tab shows as focused while either has focus, and choosing it brings the app into view with the dialog in front and focused. Minimising or moving the app's window takes its dialogs along, and restoring it brings them back.
+- **Super+drag goes where the preview shows.** Dragging a window to the other half of a shared screen could drop it into the column of a window that slid under the pointer, stacked under it, instead of on the half the screen showed. It now lands on that half.
+- **No resize grip at the screen's edge beside a window on another page.** Dragging it made the window on screen shrink from its far side instead of moving its edge.
+- **A minimised window's tab greys at once.** It used to drop out of the Open windows island for about 200 ms and come back greyed.
+- **No sliver of the next window at the screen's edges.** The gap at a screen's edge is wider than the gap between columns, so 5 px of the window on the page beside the one shown peeked in. A strip of wallpaper now covers it while it's there (not where a floating window reaches the edge, and not over the scratchpad).
+
+### Added
+
+- `scripts/windows-live.sh`, a window handling run on the real shell and Hyprland, with a CI job of its own (`windows`): opening, Half and Full, tabs dragged along the bar and onto the screen, the resize grip, Super+drag, minimise and restore, floating, fullscreen, workspaces, the scratchpad, an app's dialog and closing, each checked and timed (latency, the shell's frames and CPU). The timings land in the job summary.
+
 ## [0.3.30] - 2026-11-21
 
 ### Fixed

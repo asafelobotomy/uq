@@ -528,7 +528,7 @@ asserts the shell reloads.
 
 - Only when `privacy.public_ip_lookup` is on **and** a VPN or Tailscale exit node is active.
 - Runs 5 s after the network settles, at most once every 60 s.
-- Only `country`, `country_code`, and (since 0.3.31, for the status island's VPN details) the
+- Only `country`, `country_code`, and (since 0.3.32, for the status island's VPN details) the
   public `ip`, `city`, `region` and `org` are kept; the coordinates, postcode, host name and
   time zone are discarded. The details show only in the VPN dropdown, and not while the screen
   is shared.

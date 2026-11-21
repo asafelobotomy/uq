@@ -19,6 +19,19 @@ chmod 666 "$card"
 # No VTs in a container: a VT-bound seat could never be opened.
 SEATD_VTBOUND=0 seatd -u tester -l error &
 rc=0
+# SMOKE_ONLY="windows-live lookseedo-live": only these scripts/*-live.sh (the CI job "windows").
+if [ -n "${SMOKE_ONLY:-}" ]; then
+    su tester -c "cd /src && cargo build --locked -p uqctl" || exit 1
+    for s in $SMOKE_ONLY; do
+        echo "=========== $s"
+        su tester -c "set -e
+            cd /src
+            export XDG_RUNTIME_DIR=\$(mktemp -d) LIBSEAT_BACKEND=seatd UQCTL=/src/target/debug/uqctl UQ_CAPTURE_DIR=/src/captures
+            timeout 480 scripts/$s.sh" || { r=$?; [ "$r" = 77 ] || rc=$r; }
+    done
+    kill %1 2>/dev/null || true
+    exit "$rc"
+fi
 su tester -c "set -e
     cd /src
     cargo build --locked -p uqctl -p uqd -p uqlip

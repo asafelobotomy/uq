@@ -170,6 +170,13 @@ PanelWindow {
     readonly property bool useBackdrop: imagePath === "" && !slideshow
         && !(entry && typeof entry.color === "string" && entry.color !== "")
 
+    // What this layer shows, for the edge strips that draw it again (WallpaperShown).
+    readonly property var shown: ({ target: win.target, fit: win.fit, span: win.spanning ? win.spanBox : null,
+        color: win.useBackdrop ? "transparent" : String(W.fallbackColor(win.entry, Theme.bg)),
+        backdrop: win.useBackdrop })
+    onShownChanged: WallpaperShown.set(win.modelData.name, win.shown)
+    Component.onCompleted: WallpaperShown.set(win.modelData.name, win.shown)
+
     UqBackdrop {
         anchors.fill: parent
         visible: win.useBackdrop
