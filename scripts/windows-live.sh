@@ -6,13 +6,13 @@
 #
 # One session walks through what people do with windows and checks what each step leaves behind:
 #   open      windows open; a lone window is Full, the next one gets a page of its own
-#   half      two windows made Half share the screen
-#   grip      the gap between them dragged with the pointer: only the gap moves
+#   half      both made Half: each keeps its own page, and no grip shows at the screen's edge
 #   tabmove   a tab dragged along the bar: the window's column follows
-#   tabdrop   a tab dragged down onto the screen: its window joins the page shown, focused
-#   superdrag Super+drag a window to the other half of the screen
+#   tabdrop   a tab dragged down onto the screen: its window fills the empty half, focused
+#   grip      the gap between that pair dragged with the pointer: only the gap moves
+#   superdrag Super+drag the left window to the right half: they swap, nothing gets stacked
 #   minimise  minimised to its tab, then restored by clicking the tab: back at the end, focused
-#   float     a floating window dragged half off the screen is brought back on it
+#   float     a floating window dragged half off the screen stays where it was put
 #   fullscreen real fullscreen hides the resize grips; leaving it brings them back
 #   workspace a window moved to workspace 2 and back, and to a special workspace and back
 #   close     windows closed: tabs and pages follow
@@ -190,6 +190,18 @@ tab_of() { # title -> "cx cy w" (centre, screen coordinates)
 tab_flag() { tabs | jq -r --arg t "$1" --arg k "$2" '.[] | select(.t == $t) | .[$k] | tostring' | head -n1; }
 tab_order() { tabs | jq -r 'sort_by(.x) | map(.t) | join(" | ")'; }
 col_order() { clients | jq -r '[.[] | select(.workspace.id == 1 and .floating == false)] | sort_by(.at[0]) | map(.title) | join(" | ")'; }
+# A window on the workspace shown must be on the screen or off it, not cut by its edge. A strip of
+# up to 8 px (a neighbouring page's frame, which the gaps don't cover) is counted as a sliver.
+slivers=0
+edge_ok() { # title context
+    local x w vis
+    x=$(wx "$1"); w=$(wwidth "$1")
+    [ -n "$x" ] || return 0
+    vis=$(( (x + w > 1280 ? 1280 : x + w) - (x < 0 ? 0 : x) ))
+    [ "$vis" -le 0 ] || [ "$vis" -ge "$w" ] && return 0
+    if [ "$vis" -le 8 ]; then echo "sliver: $vis px of $1 shows at the screen's edge $2"; slivers=$((slivers + 1)); return 0; fi
+    check "$1 is cut by the screen's edge $2 ($vis of $w px show)"
+}
 on_screen() { # title: fully inside the 1280x720 screen
     clients | jq -e --arg t "$1" '.[] | select(.title == $t) | (.at[0] >= 0 and .at[1] >= 0 and .at[0] + .size[0] <= 1280 and .at[1] + .size[1] <= 720)'
 }
@@ -222,8 +234,8 @@ v = sorted(float(m.group(1)) for l in sys.stdin if "frame rendered in" in l
 q = lambda f: v[min(len(v) - 1, int(f * len(v)))] if v else 0
 print(len(v), "%.1f" % q(0.5), "%.1f" % q(0.95), "%.1f" % (v[-1] if v else 0))')
     local n p50 p95 mx; read -r n p50 p95 mx <<<"$stats"
-    local qc hc_ ; qc=$(awk -v t="$qs" -v h="$hz" -v d="$dt" 'BEGIN{printf "%.1f", d > 0 ? 100 * t / h / (d / 1000) : 0}')
-    hc_=$(awk -v t="$hy" -v h="$hz" -v d="$dt" 'BEGIN{printf "%.1f", d > 0 ? 100 * t / h / (d / 1000) : 0}')
+    local qc hc_ ; qc=$(awk -v t="$qs" -v h="$hz" -v d="$dt" 'BEGIN{printf "%.1f", (d > 0 ? 100 * t / h / (d / 1000) : 0)}')
+    hc_=$(awk -v t="$hy" -v h="$hz" -v d="$dt" 'BEGIN{printf "%.1f", (d > 0 ? 100 * t / h / (d / 1000) : 0)}')
     echo "PERF $phase_name dur=${dt}ms latency=${phase_lat:--}ms frames=$n p50=$p50 p95=$p95 max=$mx shell_cpu=$qc% hypr_cpu=$hc_%"
     printf '| %s | %s | %s | %s | %s | %s | %s | %s | %s |\n' "$phase_name" "${phase_lat:--}" "${phase_what:--}" \
         "$n" "$p50" "$p95" "$mx" "$qc" "$hc_" >>"$tmp/perf.md"
@@ -258,40 +270,19 @@ on_screen w2 >/dev/null || check "the new window w2 should fill the screen"
 finish
 
 # ---- half -------------------------------------------------------------------------------------
+# Both made Half: each keeps its own screen page (the pages remember where they begin), so the
+# focused one shows on the left and the rest of the screen is empty desktop.
 begin half
 dispatch "[\"column_width\",{\"address\":\"$(addr_of w1)\",\"width\":\"half\"}]"
-t0=$(now_ms)
 dispatch_now "[\"column_width\",{\"address\":\"$(addr_of w2)\",\"width\":\"half\"}]"
-ms=$(wait_ms 5 '[ "$(clients | jq "[.[] | select(.size[0] < 700 and .at[0] >= 0 and .at[0] + .size[0] <= 1280)] | length")" -ge 2 ]')
-latency "$ms" "second Half dispatch until both share the screen"
+ms=$(wait_ms 5 '[ "$(wwidth w2)" -lt 700 ] && on_screen w2')
+latency "$ms" "Half dispatch until the window is Half on screen"
 settle
-for w in w1 w2; do on_screen $w >/dev/null || check "$w should be on screen as a Half pair"; done
+on_screen w2 >/dev/null || check "the focused Half window w2 should be on screen"
+[ "$(wwidth w2)" -lt 700 ] || check "w2 should be Half ($(wwidth w2) wide)"
 [ "$(col_order)" = "w1 | w2" ] || check "column order should be w1 | w2 (is $(col_order))"
-hc layers -j | grep -q uq-resize || check "no resize grip layer over the Half pair"
-finish
-
-# ---- grip -------------------------------------------------------------------------------------
-begin grip
-x1=$(wx w1); w1w=$(wwidth w1); x2=$(wx w2); w2w=$(wwidth w2)
-gx=$(( (x1 + w1w + x2) / 2 )); gy=360
-echo "gap between x=$((x1 + w1w)) and x=$x2: grabbing at $gx,$gy"
-send "move $((gx - 40)) $gy" "sleep 150" "move $gx $gy" "sleep 400" "button 272 down" "sleep 100"
-for i in $(seq 1 15); do send "move $((gx + i * 10)) $gy" "sleep 30"; done
-send "sleep 200" "button 272 up"
-drain
-t0=$(now_ms)
-ms=$(wait_ms 4 '[ "$(wwidth w1)" -ge $((w1w + 120)) ]')
-latency "$ms" "release until the columns have their new widths"
-settle
-nx1=$(wx w1); nw1=$(wwidth w1); nx2=$(wx w2); nw2=$(wwidth w2)
-echo "w1 $x1+$w1w -> $nx1+$nw1; w2 $x2+$w2w -> $nx2+$nw2"
-[ $(( nw1 - w1w )) -ge 120 ] && [ $(( nw1 - w1w )) -le 180 ] || check "w1 should be ~150 px wider after the grip drag (was $w1w, is $nw1)"
-[ $(( nx1 - x1 )) -le 3 ] && [ $(( x1 - nx1 )) -le 3 ] || check "w1's left edge should stay put ($x1 -> $nx1)"
-[ $(( (nx2 + nw2) - (x2 + w2w) )) -le 3 ] && [ $(( (x2 + w2w) - (nx2 + nw2) )) -le 3 ] || check "w2's right edge should stay put ($((x2 + w2w)) -> $((nx2 + nw2)))"
-# Put them back to Half for what follows.
-dispatch "[\"column_width\",{\"address\":\"$(addr_of w1)\",\"width\":\"half\"}]"
-dispatch "[\"column_width\",{\"address\":\"$(addr_of w2)\",\"width\":\"half\"}]"
-settle
+# Beside another page there is nothing to share: no grip at the screen's edge.
+hc layers -j | grep -q uq-resize && check "a resize grip is up at the screen's edge, beside a window on another page"
 finish
 
 # ---- tabmove ----------------------------------------------------------------------------------
@@ -303,18 +294,19 @@ read -r ux uy _ < <(tab_of w2)
 send "move $tx $ty" "sleep 300" "button 272 down" "sleep 100"
 for i in $(seq 1 10); do send "move $((tx + (ux + tw / 2 + 10 - tx) * i / 10)) $ty" "sleep 40"; done
 send "sleep 300" "button 272 up"
-drain; t0=$(now_ms)
+drain
 ms=$(wait_ms 4 '[ "$(col_order)" = "w2 | w1" ]')
 latency "$ms" "release until the columns swap"
 settle
 [ "$(col_order)" = "w2 | w1" ] || check "dragging w1's tab past w2's should swap their columns (order is $(col_order))"
 [ "$(tab_order)" = "w2 | w1" ] || check "the tabs should read w2 | w1 after the drag (they read $(tab_order))"
-for w in w1 w2; do on_screen $w >/dev/null || check "$w should still be on screen after the tab move"; done
+[ "$(active)" = w1 ] || check "the dragged tab's window should have focus (active '$(active)')"
+on_screen "$(active)" >/dev/null || check "the focused window should be on screen after the tab move"
 finish
 
 # ---- tabdrop ----------------------------------------------------------------------------------
-# A third window (its own Full page, after w1), then its tab is dragged onto the left half of the
-# page with w2 and w1.
+# A third window (its own Full page), then w2 is focused (Half, alone on its page) and w3's tab is
+# dragged down onto the screen: w3 fills the empty half beside w2.
 open_window w3
 wait_ms 10 '[ -n "$(addr_of w3)" ]' >/dev/null || fail "w3 never opened"
 settle 2
@@ -322,46 +314,82 @@ dispatch "[\"focus_window\",{\"address\":\"$(addr_of w2)\"}]"
 settle 2
 begin tabdrop
 echo "before: $(col_order); tabs $(tab_order)"
+on_screen w2 >/dev/null && [ "$(wwidth w2)" -lt 700 ] || check "w2 should show Half before the drop"
 read -r tx ty _ < <(tab_of w3)
 [ -n "${tx:-}" ] || fail "no tab for w3 ($(tabs))"
 send "move $tx $ty" "sleep 300" "button 272 down" "sleep 100"
-for i in $(seq 1 12); do send "move $((tx + (300 - tx) * i / 12)) $((ty + (400 - ty) * i / 12))" "sleep 40"; done
+for i in $(seq 1 12); do send "move $((tx + (900 - tx) * i / 12)) $((ty + (400 - ty) * i / 12))" "sleep 40"; done
 send "sleep 600"; drain
 layers_held=$(hc layers -j | jq -r '[.. | objects | select(has("namespace")) | .namespace] | unique | join(" ")')
 echo "layers while held over the screen: $layers_held"
+echo "$layers_held" | grep -q uq-tab-drop || check "no drop preview while the tab was held over the screen"
 shot tabdrop-held
 send "button 272 up"; drain
-ms=$(wait_ms 5 '[ "$(active)" = w3 ]')
-latency "$ms" "drop until the window is focused on the page"
+ms=$(wait_ms 5 '[ "$(active)" = w3 ] && on_screen w3')
+latency "$ms" "drop until the window is on the page, focused"
 settle 2
 echo "after: $(col_order)"
 on_screen w3 >/dev/null || check "w3 should be on screen after its tab was dropped there"
-[ "$(wx w3)" -lt 640 ] || check "w3 should be on the left half where it was dropped (x=$(wx w3))"
+on_screen w2 >/dev/null || check "w2 should stay on screen beside the dropped window"
+[ "$(wx w3)" -gt "$(wx w2)" ] || check "w3 should fill the empty right half beside w2 (w2 x=$(wx w2), w3 x=$(wx w3))"
 [ "$(active)" = w3 ] || check "the dropped window should have focus (active is '$(active)')"
 [ "$(wwidth w3)" -lt 700 ] || check "the dropped window should be Half (is $(wwidth w3) wide)"
 hc layers -j | grep -q uq-tab-drop && check "the drop preview stayed after the drop"
 finish
 
+# ---- grip -------------------------------------------------------------------------------------
+# The gap between the pair (w2 | w3) dragged 150 px right: w2 widens, w3 narrows, far edges stay.
+begin grip
+hc layers -j | grep -q uq-resize || check "no resize grip between the pair"
+x1=$(wx w2); w1w=$(wwidth w2); x2=$(wx w3); w2w=$(wwidth w3)
+gx=$(( (x1 + w1w + x2) / 2 )); gy=360
+echo "gap between x=$((x1 + w1w)) and x=$x2: grabbing at $gx,$gy"
+send "move $((gx - 40)) $gy" "sleep 150" "move $gx $gy" "sleep 400" "button 272 down" "sleep 100"
+for i in $(seq 1 15); do send "move $((gx + i * 10)) $gy" "sleep 30"; done
+send "sleep 200" "button 272 up"
+drain
+ms=$(wait_ms 4 '[ "$(wwidth w2)" -ge $((w1w + 120)) ]')
+latency "$ms" "release until the columns have their new widths"
+settle
+nx1=$(wx w2); nw1=$(wwidth w2); nx2=$(wx w3); nw2=$(wwidth w3)
+echo "w2 $x1+$w1w -> $nx1+$nw1; w3 $x2+$w2w -> $nx2+$nw2"
+d=$(( nw1 - w1w )); [ "$d" -ge 120 ] && [ "$d" -le 180 ] || check "w2 should be ~150 px wider after the grip drag (was $w1w, is $nw1)"
+d=$(( nx1 - x1 )); [ "${d#-}" -le 3 ] || check "w2's left edge should stay put ($x1 -> $nx1)"
+d=$(( (nx2 + nw2) - (x2 + w2w) )); [ "${d#-}" -le 3 ] || check "w3's right edge should stay put ($((x2 + w2w)) -> $((nx2 + nw2)))"
+on_screen w2 >/dev/null && on_screen w3 >/dev/null || check "both should stay on screen after the grip drag"
+# Back to Half each, for what follows.
+dispatch "[\"column_width\",{\"address\":\"$(addr_of w2)\",\"width\":\"half\"}]"
+dispatch "[\"column_width\",{\"address\":\"$(addr_of w3)\",\"width\":\"half\"}]"
+settle 2
+finish
+
 # ---- superdrag --------------------------------------------------------------------------------
 begin superdrag
-# Super+drag the window on the left half to the right half.
+# Super+drag the window on the left half of the pair to the right half: the two swap halves, and
+# nothing ends up stacked in another window's column.
 left=$(clients | jq -r '[.[] | select(.workspace.id == 1 and .floating == false and .at[0] >= 0 and .at[0] < 640 and .hidden == false)] | sort_by(.at[0]) | .[0].title')
 right=$(clients | jq -r '[.[] | select(.workspace.id == 1 and .floating == false and .at[0] >= 640 and .at[0] < 1280 and .hidden == false)] | sort_by(.at[0]) | .[0].title')
-echo "left half: $left, right half: $right"
+cols_before=$(clients | jq '[.[] | select(.workspace.id == 1 and .floating == false) | .at[0]] | unique | length')
+echo "left half: $left, right half: $right; $cols_before columns; order $(col_order)"
 read -r cx cy < <(clients | jq -r --arg t "$left" '.[] | select(.title==$t) | "\((.at[0] + .size[0]/2)|floor) \((.at[1] + .size[1]/2)|floor)"')
 send "move $cx $cy" "sleep 300" "mod super down" "sleep 100" "button 272 down" "sleep 100"
 for i in $(seq 1 12); do send "move $((cx + i * 55)) $cy" "sleep 40"; done
 send "sleep 800"; drain
 held_layers=$(hc layers -j | jq -r '[.. | objects | select(has("namespace")) | .namespace] | unique | join(" ")')
 echo "layers while held: $held_layers"
+snap "  held"
 echo "$held_layers" | grep -q uq-tab-drop || check "no drop preview while the window was held"
+shot superdrag-held
 send "button 272 up" "sleep 80" "mod super up"; drain
-ms=$(wait_ms 5 '[ "$(wx "$left")" -ge 640 ]')
+ms=$(wait_ms 5 '[ "$(wx "$left")" -ge 640 ] && [ "$(win "$left" floating)" = false ] && on_screen "$left"')
 latency "$ms" "release until the window is on the right half"
 settle 2
+cols_after=$(clients | jq '[.[] | select(.workspace.id == 1 and .floating == false) | .at[0]] | unique | length')
+[ "$cols_after" = "$cols_before" ] || check "the dropped window was stacked into another column ($cols_before columns before, $cols_after after)"
 [ "$(win "$left" floating)" = false ] || check "$left is still floating after the drop"
 [ "$(wx "$left")" -ge 640 ] || check "$left should be on the right half after the drag (x=$(wx "$left"))"
 on_screen "$left" >/dev/null || check "$left should be fully on screen after the drag"
+[ "$(win "$left" size | jq -r '.[1]')" -ge 600 ] || check "$left should be a full-height column, not stacked"
 [ "$(active)" = "$left" ] || check "the dragged window should keep focus (active is '$(active)')"
 finish
 
@@ -376,7 +404,7 @@ settle
 [ "$(win "$victim" workspace | jq -r .name)" = special:minimized ] || check "$victim should be on special:minimized"
 [ "$(active)" != "$victim" ] && [ -n "$(active)" ] || check "focus should move to another window after minimising (active '$(active)')"
 for w in $(clients | jq -r '.[] | select(.workspace.id == 1 and .hidden == false) | .title'); do
-    on_screen "$w" >/dev/null || [ "$(wx "$w")" -ge 1280 ] || check "$w is cut by the screen edge after the minimise"
+    edge_ok "$w" "after the minimise"
 done
 shot minimise-tab
 # Restore: click its tab.
@@ -407,10 +435,11 @@ read -r cx cy < <(clients | jq -r --arg t "$fw" '.[] | select(.title==$t) | "\((
 send "move $cx $cy" "sleep 300" "mod super down" "sleep 100" "button 272 down" "sleep 100"
 for i in $(seq 1 12); do send "move $((cx + (1250 - cx) * i / 12)) $cy" "sleep 40"; done
 send "sleep 300" "button 272 up" "sleep 80" "mod super up"; drain
-ms=$(wait_ms 5 '[ $(( $(wx "$fw") + $(wwidth "$fw") )) -le 1280 ]')
-latency "$ms" "release until the floating window is back inside the screen"
-settle
-on_screen "$fw" >/dev/null || check "the floating window $fw should be brought back inside the screen"
+ms=$(wait_ms 5 '[ $(( $(wx "$fw") + $(wwidth "$fw") )) -gt 1280 ]')
+latency "$ms" "release until the floating window is where the pointer left it"
+settle 2
+# Keep windows on screen leaves a window the user put partly off screen where they put it.
+[ $(( $(wx "$fw") + $(wwidth "$fw") )) -gt 1280 ] || check "the floating window $fw should stay where it was dragged, partly off screen (x=$(wx "$fw"))"
 [ "$(win "$fw" floating)" = true ] || check "$fw should still float"
 dispatch "[\"toggle_float\",{\"address\":\"$(addr_of "$fw")\"}]"
 settle 2
@@ -441,7 +470,7 @@ latency "$ms" "move to workspace 2 until Hyprland has it there"
 settle
 [ "$(hc activeworkspace -j | jq -r .id)" = 1 ] || check "moving a window away should not switch workspace"
 for w in $(clients | jq -r '.[] | select(.workspace.id == 1 and .hidden == false) | .title'); do
-    on_screen "$w" >/dev/null || [ "$(wx "$w")" -ge 1280 ] || check "$w is cut by the screen edge after $mw left"
+    edge_ok "$w" "after $mw left"
 done
 hc dispatch 'hl.dsp.focus({ workspace = 2 })' >/dev/null; settle
 [ "$(hc activeworkspace -j | jq -r .id)" = 2 ] || check "couldn't switch to workspace 2"
@@ -466,7 +495,7 @@ dispatch "[\"move\",{\"address\":\"$(addr_of "$sw")\",\"workspace\":1}]"; settle
 [ "$(win "$sw" workspace | jq -r .id)" = 1 ] || check "$sw should be back on workspace 1"
 [ -n "$(tab_of "$sw")" ] || check "$sw back from the scratchpad should have its tab again"
 for w in $(clients | jq -r '.[] | select(.workspace.id == 1 and .hidden == false) | .title'); do
-    on_screen "$w" >/dev/null || [ "$(wx "$w")" -ge 1280 ] || [ "$(( $(wx "$w") + $(wwidth "$w") ))" -le 0 ] || check "$w is cut by the screen edge"
+    edge_ok "$w" "after the scratchpad"
 done
 finish
 
@@ -481,7 +510,7 @@ settle 2
 [ -z "$(addr_of "$cw")" ] || check "$cw should be closed"
 [ -n "$(active)" ] || check "focus should go to another window after a close"
 for w in $(clients | jq -r '.[] | select(.workspace.id == 1 and .hidden == false) | .title'); do
-    on_screen "$w" >/dev/null || [ "$(wx "$w")" -ge 1280 ] || [ "$(( $(wx "$w") + $(wwidth "$w") ))" -le 0 ] || check "$w is cut by the screen edge after a close"
+    edge_ok "$w" "after a close"
 done
 finish
 
@@ -489,6 +518,7 @@ finish
 errs=$(grep -E 'TypeError|ReferenceError|is not a type|Cannot assign|Unable to assign|Cannot read property|is not a function|uq: .*(error|failed)|[A-Za-z]+\.qml:[0-9]+:[0-9]*:? ' "$tmp/qs.log" | grep -v 'frame rendered' | sort | uniq -c | sort -rn | head -n 15)
 [ -n "$errs" ] && { echo "--- shell warnings and errors"; echo "$errs"; }
 echo "$errs" | grep -qE 'TypeError|ReferenceError|is not a type|Cannot read property|is not a function' && check "QML errors in the shell log"
+echo "slivers of a neighbouring page's window seen at the screen's edge: $slivers"
 echo; echo "--- timings"; cat "$tmp/perf.md"
 [ -n "$cap" ] && cp "$tmp/perf.md" "$cap/windows-perf.md"
 [ -n "$cap" ] && ls -l "$cap" | grep windows-

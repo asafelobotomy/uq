@@ -325,12 +325,24 @@ Scope {
             return true;
         };
         var pre = root.listHolding(root.preDrag, addr), now = root.listHolding(root.tiled, addr);
+        var at = d.x === null ? null : Hold.place(root.monitors, d.x, d.y);
+        // Hyprland dropped it into another window's column (the columns closed up behind the
+        // lifted window, so a window ended up under the pointer), while the screen showed it would
+        // get a half of its own: give it its own column back, then look again with that.
+        if (pre !== null && now !== null && d.promoted !== true && at !== null
+                && Pages.columnCount(now) === Pages.columnCount(pre) - 1
+                && root.dropPlanFor(at.screen, addr, at.x, pre) !== null) {
+            root.pendingDrop = Object.assign({}, d, { promoted: true });
+            Bridge.call("Dispatch", ["own_column", { address: addr }])
+                .catch(function (e) { console.warn("uq: drag: " + e); })
+                .then(function () { root.refresh(); });
+            return true;
+        }
         // Anything else (it stacked into another column, or moved to another workspace): leave it
         // where Hyprland put it.
         if (pre === null || now === null || Pages.columnCount(pre) !== Pages.columnCount(now))
             return restoreFull();
         var back = Pages.columnIndex(pre, addr) - Pages.columnIndex(now, addr);
-        var at = d.x === null ? null : Hold.place(root.monitors, d.x, d.y);
         if (at !== null && root.dropPlanFor(at.screen, addr, at.x, pre) !== null) {
             root.dropTab(at.screen, addr, at.x, pre, back);
             return true;
