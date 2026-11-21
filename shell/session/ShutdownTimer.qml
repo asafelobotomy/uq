@@ -19,7 +19,8 @@ QtObject {
     property double now: Date.now() // ms, refreshed every second while scheduled
     readonly property bool active: scheduled !== null
     readonly property string countdown: T.countdownLabel(scheduled, now)
-    readonly property string at: T.atLabel(scheduled)
+    // Follows the 12/24-hour clock setting (Settings > Date and time).
+    readonly property string at: T.atLabel(scheduled, !(Settings.values.shell && Settings.values.shell.clock_24h === false))
 
     readonly property string runtimeDir: String(Quickshell.env("XDG_RUNTIME_DIR") || "")
     readonly property string statePath: runtimeDir !== "" ? runtimeDir + "/uq-shutdown-at" : ""

@@ -7,6 +7,11 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **Shut down in… shows the time in your clock format.** With the 12-hour clock chosen in Settings › Date and time, quick settings said "at 23:05"; it now says "at 11:05 PM".
+- uQ's weekly check of the companion Settings pages now covers uQview's page too (13 pages).
+
 ## [0.3.28] - 2026-11-20
 
 ### Added

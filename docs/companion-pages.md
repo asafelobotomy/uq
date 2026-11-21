@@ -28,6 +28,7 @@ Pages added since the first five above (all on `uq_api` 3, each checked by the s
 | Software | `software` | [bindaru](https://github.com/asafelobotomy/bindaru) | Searching and installing from the Arch repositories and the AUR (with the recipe review), installed software, repositories, scans | `bindaru` |
 | Game library | `romforge` | [romforge](https://github.com/asafelobotomy/romforge) | A read-only view of the library with simple options; the rest stays in the app | `romforge` / `romforge-bin` |
 | Emoji and macros | `emobie` | [emobie](https://github.com/asafelobotomy/emobie) | Settings, macros and deleted macros | `emobie` |
+| Picture viewer | `uqview` | [uqview](https://github.com/asafelobotomy/uqview) | Makes uQview the app for pictures, and its viewing and mark-up options | `uqview` |
 | Bindle | `bindle` | [bindle](https://github.com/asafelobotomy/bindle) | The setup Bindle last applied, bindleUP (check and update with progress), what's new, and what Bindle changed with undo | `bindle` |
 
 The first six packages are optional dependencies of `uq` (`optdepends`); the others come with Bindle. Where a page is changed, the app's
