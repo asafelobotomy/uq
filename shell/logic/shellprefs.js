@@ -1,8 +1,8 @@
 .pragma library
 
 // Pure helpers over Settings.values.shell. An older uqd may send no `shell` at all, so
-// undefined, null and missing keys all mean the defaults (every island on, 24-hour clock,
-// built-in provider order).
+// undefined, null and missing keys all mean the defaults (every island on, 24-hour clock, UK
+// dates, Celsius, built-in provider order).
 
 function islandOn(shell, id) {
     if (!shell || !shell.islands)
@@ -12,6 +12,25 @@ function islandOn(shell, id) {
 
 function clockFormat(shell) {
     return (shell && shell.clock_24h === false) ? "h:mm AP" : "HH:mm";
+}
+
+// shell.date_format: "us" (month first, weeks from Sunday) or "uk" (the default, and what any
+// other value means: day first, weeks from Monday).
+function dateFormat(shell) {
+    return shell && shell.date_format === "us" ? "us" : "uk";
+}
+
+// Qt date patterns for `dateFormat`: short (the bar), long (the bar at Large), full (the
+// calendar's heading), and the locale the calendar takes its first weekday from.
+function datePatterns(shell) {
+    if (dateFormat(shell) === "us")
+        return { short: "ddd, MMM d", long: "dddd, MMMM d", full: "dddd, MMMM d, yyyy", locale: "en_US" };
+    return { short: "ddd d MMM", long: "dddd d MMMM", full: "dddd d MMMM yyyy", locale: "en_GB" };
+}
+
+// shell.temp_unit: "f" (Fahrenheit) or "c" (the default, and what any other value means).
+function tempUnit(shell) {
+    return shell && shell.temp_unit === "f" ? "f" : "c";
 }
 
 // Whether a built-in provider is on (it is unless the saved preferences list it as off).

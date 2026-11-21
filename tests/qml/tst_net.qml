@@ -129,4 +129,58 @@ TestCase {
         compare(Net.failedStart(false), true);
         compare(Net.failedStart(true), false);
     }
+
+    function test_tailscale_details() {
+        var j = { Self: { TailscaleIPs: ["100.64.0.2", "fd7a::2"] }, ExitNodeStatus: { ID: "n1" },
+            Peer: { k: { ID: "n1", HostName: "nl-ams-wg-001", TailscaleIPs: ["100.80.0.9"],
+                Location: { City: "Amsterdam", Country: "Netherlands" } } } };
+        var t = Net.parseTailscale(j);
+        compare(t.exitNode, "nl-ams-wg-001");
+        compare(t.exitIp, "100.80.0.9");
+        compare(t.city, "Amsterdam");
+        compare(t.country, "Netherlands");
+        compare(t.selfIp, "100.64.0.2");
+        compare(Net.parseTailscale("x").city, "");
+    }
+
+    function test_nmcli_connection() {
+        var ovpn = "connection.id:Work\\: home\nconnection.type:vpn\n"
+            + "vpn.service-type:org.freedesktop.NetworkManager.openvpn\n"
+            + "vpn.data:remote = nl-12.example.net:1194, proto-tcp = yes, connection-type = tls\n"
+            + "GENERAL.DEVICES:tun0\nIP4.ADDRESS[1]:10.96.0.5/16\nIP4.GATEWAY:10.96.0.1\n"
+            + "IP6.ADDRESS[1]:fe80\\:\\:1/64\n";
+        var o = Net.parseNmcliConnection(ovpn);
+        compare(o.kind, "OpenVPN over TCP");
+        compare(o.server, "nl-12.example.net:1194");
+        compare(o.device, "tun0");
+        compare(o.address, "10.96.0.5/16");
+        var wg = Net.parseNmcliConnection("connection.type:wireguard\nGENERAL.DEVICES:wg0\nIP4.ADDRESS[1]:10.2.0.2/32\nIP4.GATEWAY:--\n");
+        compare(wg.kind, "WireGuard");
+        compare(wg.server, "");
+        compare(wg.gateway, "");
+        var oc = Net.parseNmcliConnection("connection.type:vpn\nvpn.service-type:org.freedesktop.NetworkManager.openconnect\nvpn.data:gateway = vpn.example.org, protocol = gp\n");
+        compare(oc.kind, "OpenConnect (gp)");
+        compare(oc.server, "vpn.example.org");
+        compare(Net.parseNmcliConnection(null).kind, "");
+        compare(Net.parseNmcliConnection("garbage").kind, "");
+    }
+
+    function test_vpn_rows() {
+        var nm = { kind: "WireGuard", server: "", device: "wg0", address: "10.2.0.2/32" };
+        var ip = { country_code: "NL", country: "NL", city: "Amsterdam", region: "North Holland",
+            ip: "203.0.113.9", org: "AS9009 M247" };
+        var rows = Net.vpnRows("Proton NL#12", nm, null, ip, false);
+        compare(rows.map(function (r) { return r.label; }),
+            ["Name", "Type", "Interface", "VPN address", "Location", "Public address", "Provider"]);
+        compare(rows[4].value, "Amsterdam, North Holland, NL");
+        // Sharing the screen: nothing that says where the computer is.
+        var shared = Net.vpnRows("Proton NL#12", { kind: "OpenVPN over UDP", server: "nl.example:1194" }, null, ip, true);
+        compare(shared.map(function (r) { return r.label; }), ["Name", "Type"]);
+        // Tailscale, no public lookup: the exit node's own place.
+        var ts = { exitNode: "nl-ams", exitIp: "100.80.0.9", city: "Amsterdam", country: "Netherlands", selfIp: "100.64.0.2" };
+        var trows = Net.vpnRows("nl-ams", null, ts, null, false);
+        compare(trows[1].value, "Tailscale exit node (WireGuard)");
+        compare(trows[2].value, "nl-ams · 100.80.0.9");
+        compare(trows[4].value, "Amsterdam, Netherlands");
+    }
 }

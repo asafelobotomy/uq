@@ -23,6 +23,10 @@ Singleton {
 
     property var vpnConn: null          // string | null, from nmcli
     property var exitNode: null         // string | null, from tailscale
+    // The status island's VPN dropdown: Net.parseNmcliConnection() of the active VPN (read when
+    // it changes and when the dropdown opens), and Net.parseTailscale() of the last status.
+    property var nmDetails: null
+    property var tsDetails: null
     readonly property bool vpnActive: Net.vpnActive(vpnConn, exitNode)
     readonly property string vpnLabel: vpnConn ? String(vpnConn) : (exitNode ? String(exitNode) : "")
 
@@ -52,6 +56,21 @@ Singleton {
         Bridge.call("NetworkChanged", [{ vpn_active: vpnActive }]).catch(function () {});
     }
     onVpnIdChanged: settle.restart()
+    onVpnConnChanged: refreshDetails()
+
+    // Read the active NetworkManager VPN's details again (the dropdown calls this as it opens).
+    function refreshDetails() {
+        if (!vpnConn) {
+            nmDetails = null;
+            return;
+        }
+        if (root.nmDetail.running) {
+            root.nmDetail.again = true;
+        } else {
+            root.nmDetail.name = String(vpnConn);
+            root.nmDetail.running = true;
+        }
+    }
 
     Component.onCompleted: {
         pollNetwork(true);
@@ -166,7 +185,9 @@ Singleton {
             root.tsFailedAt = 0;
             // Non-zero exit (tailscaled not running, logged out): looked at again in a minute.
             root.tsDownAt = res.ok ? 0 : Date.now();
-            root.exitNode = res.ok ? Net.parseTailscale(res.text).exitNode : null;
+            var parsed = res.ok ? Net.parseTailscale(res.text) : null;
+            root.exitNode = parsed ? parsed.exitNode : null;
+            root.tsDetails = parsed && parsed.exitNode ? parsed : null;
         }
         command: ["tailscale", "status", "--json"]
         stdout: StdioCollector {
@@ -188,8 +209,32 @@ Singleton {
             if (Net.failedStart(didStart)) {
                 root.tsFailedAt = Date.now();
                 root.exitNode = null;
+                root.tsDetails = null;
             }
             didStart = false;
+        }
+    }
+
+    // `nmcli -t connection show id <name>`: the active VPN's type, server, interface and address.
+    // The name is one argument (no shell); secrets stay hidden (no --show-secrets).
+    property Process nmDetail: Process {
+        id: nmDetail
+        property bool again: false
+        property string name: ""
+        command: ["nmcli", "-t", "connection", "show", "id", name]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                if (nmDetail.name === String(root.vpnConn))
+                    root.nmDetails = Net.parseNmcliConnection(text);
+            }
+        }
+        onRunningChanged: {
+            if (running)
+                return;
+            if (again) {
+                again = false;
+                root.refreshDetails();
+            }
         }
     }
 }

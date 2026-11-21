@@ -17,7 +17,8 @@ import "../notif"
 import "islands"
 
 // Widgets from other apps, tray, media, network/VPN, audio, battery and the quick-settings
-// button. Other apps' tray icons move to the Tray island while it is on the bar (as media
+// button. While a VPN is up a lock sits beside the network icon; a click on it shows the VPN's
+// name, type, server, addresses and where the internet sees the computer. Other apps' tray icons move to the Tray island while it is on the bar (as media
 // moves to Now playing).
 // Tray tooltips, track titles, SSIDs and VPN names are untrusted: they only reach UqText.
 Island {
@@ -30,7 +31,9 @@ Island {
     // Medium shows network, sound, battery (with its level) and the button; Large adds the
     // volume level, then, in what is left, widgets from other apps, media and tray icons.
     readonly property bool wideTier: size === "medium" || size === "large"
-    // The network counts as its icon here; its VPN label only takes what is left (at Large).
+    // The network counts as its icon here, and the VPN lock (beside it while a VPN is up) as one
+    // more icon.
+    readonly property bool showVpn: netItem.visible && vpnActive
     readonly property real fixedWidth: {
         var w = 0, n = 0;
         var parts = [audioItem, batteryItem, quickButton];
@@ -40,15 +43,13 @@ Island {
                 n++;
             }
         if (netItem.visible) {
-            w += iconSize;
+            w += iconSize + (showVpn ? 4 + iconSize : 0);
             n++;
         }
         return w + Math.max(0, n - 1) * Theme.gapIn;
     }
-    readonly property real vpnRoom: room - fixedWidth - 4
-    readonly property bool showVpn: size === "large" && vpnActive && vpnLabel !== "" && vpnRoom >= cell * 2
     readonly property real spare: size === "large"
-        ? Math.max(0, room - fixedWidth - Theme.gapIn - (showVpn ? vpnText.width + 4 : 0)) : 0
+        ? Math.max(0, room - fixedWidth - Theme.gapIn) : 0
     readonly property bool showWidgets: size === "large" && widgetHost.wanted && widgetHost.implicitWidth + Theme.gapIn <= spare
     readonly property real afterWidgets: spare - (showWidgets ? widgetHost.implicitWidth + Theme.gapIn : 0)
     readonly property bool showMedia: size === "large" && player !== null && !BarLayout.placed("media")
@@ -101,6 +102,89 @@ Island {
     readonly property string vpnLabel: VpnStatus.vpnLabel
     readonly property var ip: Bridge.publicIp
     readonly property string country: ip && ip.country_code && !Bridge.sharing ? String(ip.country_code) : ""
+
+    // The lock: the icon theme's VPN icon (a padlock in Papirus, Breeze and Adwaita), or its
+    // plain padlock.
+    readonly property string vpnIcon: Quickshell.iconPath("network-vpn-symbolic", true) !== ""
+        ? "network-vpn-symbolic" : "changes-prevent-symbolic"
+    readonly property var vpnRows: Net.vpnRows(vpnLabel, VpnStatus.vpnConn ? VpnStatus.nmDetails : null,
+        VpnStatus.tsDetails, ip, Bridge.sharing)
+    readonly property bool ipLookupOn: !(Settings.values.privacy && Settings.values.privacy.public_ip_lookup === false)
+    function toggleVpn() {
+        if (vpnPopup.open && vpnPopup.anchorItem === vpnButton) {
+            vpnPopup.hide();
+        } else {
+            VpnStatus.refreshDetails();
+            vpnPopup.show(vpnButton, vpnDetails);
+        }
+    }
+    LazyPopup {
+        id: vpnPopup
+    }
+    Component {
+        id: vpnDetails
+        ColumnLayout {
+            spacing: Theme.gapIn
+            width: Theme.fontSize * 24
+            RowLayout {
+                spacing: Theme.gapIn
+                IconImage {
+                    implicitSize: root.iconSize
+                    Layout.preferredWidth: root.iconSize
+                    Layout.preferredHeight: root.iconSize
+                    source: Quickshell.iconPath(root.vpnIcon, true)
+                }
+                UqText {
+                    text: root.vpnActive ? "VPN connected" : "No VPN"
+                    baseBold: true
+                    Layout.fillWidth: true
+                }
+            }
+            GridLayout {
+                columns: 2
+                columnSpacing: Theme.gapIn * 2
+                rowSpacing: 2
+                Layout.fillWidth: true
+                Repeater {
+                    model: root.vpnRows
+                    delegate: UqText {
+                        required property var modelData
+                        required property int index
+                        Layout.row: index
+                        Layout.column: 0
+                        text: modelData.label
+                        color: Theme.textMuted
+                    }
+                }
+                Repeater {
+                    model: root.vpnRows
+                    delegate: UqText {
+                        required property var modelData
+                        required property int index
+                        Layout.row: index
+                        Layout.column: 1
+                        Layout.fillWidth: true
+                        text: modelData.value
+                        baseFamily: modelData.label.indexOf("address") >= 0 ? Theme.fontMono : Theme.fontUi
+                    }
+                }
+            }
+            UqText {
+                visible: Bridge.sharing
+                text: "Where you connect from is hidden while the screen is shared."
+                color: Theme.textMuted
+                wrapMode: Text.Wrap
+                Layout.fillWidth: true
+            }
+            UqText {
+                visible: !Bridge.sharing && !root.ipLookupOn
+                text: "Turn on \"Look up my public IP address online\" in Settings to see where you appear to be."
+                color: Theme.textMuted
+                wrapMode: Text.Wrap
+                Layout.fillWidth: true
+            }
+        }
+    }
 
     // --- audio ---
     readonly property var sink: Pipewire.defaultAudioSink
@@ -230,12 +314,36 @@ Island {
                 Layout.preferredHeight: root.iconSize
                 source: Quickshell.iconPath(root.netIcon, true)
             }
-            UqText {
-                id: vpnText
+            // The VPN: a lock, the same size and kind as the icons beside it.
+            Item {
+                id: vpnButton
+                objectName: "vpnLock"
                 visible: root.showVpn
-                Layout.maximumWidth: Math.max(0, root.vpnRoom)
-                text: root.vpnLabel + (root.country !== "" ? " · " + root.country : "")
-                color: Theme.textMuted
+                readonly property bool open: vpnPopup.open && vpnPopup.anchorItem === vpnButton
+                Layout.preferredWidth: root.iconSize
+                Layout.preferredHeight: root.cell
+                Accessible.role: Accessible.Button
+                Accessible.name: "VPN: " + root.vpnLabel
+                Accessible.onPressAction: root.toggleVpn()
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: root.iconSize + 6
+                    height: root.iconSize + 6
+                    radius: Theme.radius - 2
+                    color: Theme.overlay
+                    visible: vpnButton.open || vpnMouse.containsMouse
+                }
+                IconImage {
+                    anchors.centerIn: parent
+                    implicitSize: root.iconSize
+                    source: Quickshell.iconPath(root.vpnIcon, true)
+                }
+                MouseArea {
+                    id: vpnMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    onClicked: root.toggleVpn()
+                }
             }
         }
 

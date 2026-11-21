@@ -88,6 +88,43 @@ fn lenient_edge_style<'de, D: Deserializer<'de>>(d: D) -> Result<EdgeStyle, D::E
     lenient_or(d, EdgeStyle::default)
 }
 
+/// How the bar writes dates (the clock island and its calendar).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum DateFormat {
+    /// Day before month ("Sat 21 Nov"), weeks from Monday.
+    #[default]
+    Uk,
+    /// Month before day ("Sat, Nov 21"), weeks from Sunday.
+    Us,
+}
+
+impl DateFormat {
+    pub const NAMES: [&str; 2] = ["uk", "us"];
+}
+
+fn lenient_date_format<'de, D: Deserializer<'de>>(d: D) -> Result<DateFormat, D::Error> {
+    lenient_or(d, DateFormat::default)
+}
+
+/// The unit every temperature the shell shows is in (weather, system monitor). Readings
+/// themselves stay Celsius; only what people read changes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TempUnit {
+    #[default]
+    C,
+    F,
+}
+
+impl TempUnit {
+    pub const NAMES: [&str; 2] = ["c", "f"];
+}
+
+fn lenient_temp_unit<'de, D: Deserializer<'de>>(d: D) -> Result<TempUnit, D::Error> {
+    lenient_or(d, TempUnit::default)
+}
+
 /// The five on/off switches the bar had before `shell.bar`. Still read, so a file from then
 /// gets an equivalent layout; nothing in uQ writes them any more.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -160,6 +197,12 @@ pub struct ShellSettings {
     /// `true` is `HH:mm`, `false` is the 12-hour clock.
     #[serde(deserialize_with = "lenient_true")]
     pub clock_24h: bool,
+    /// UK (day first, the default) or US (month first) dates in the bar.
+    #[serde(deserialize_with = "lenient_date_format")]
+    pub date_format: DateFormat,
+    /// Celsius (the default) or Fahrenheit, wherever the shell shows a temperature.
+    #[serde(deserialize_with = "lenient_temp_unit")]
+    pub temp_unit: TempUnit,
     /// A desktop id for `Terminal=true` launches; `None` means kitty.
     #[serde(
         skip_serializing_if = "Option::is_none",
@@ -189,6 +232,8 @@ impl Default for ShellSettings {
             bar: Some(BarLayout::default()),
             providers: Vec::new(),
             clock_24h: true,
+            date_format: DateFormat::Uk,
+            temp_unit: TempUnit::C,
             terminal: None,
             edge_indicators: true,
             edge_titles: false,
@@ -214,11 +259,13 @@ fn expect_bool(key: &str, v: &Value) -> Result<bool, SettingError> {
 
 impl ShellSettings {
     /// Every key of the `shell` section.
-    pub const FIELDS: [&str; 9] = [
+    pub const FIELDS: [&str; 11] = [
         "islands",
         "bar",
         "providers",
         "clock_24h",
+        "date_format",
+        "temp_unit",
         "terminal",
         "edge_indicators",
         "edge_titles",
@@ -342,6 +389,22 @@ impl ShellSettings {
         }
         if let Some(f) = obj.get("fit_windows") {
             out.fit_windows = expect_bool("shell.fit_windows", f)?;
+        }
+        if let Some(f) = obj.get("date_format") {
+            out.date_format = serde_json::from_value(f.clone()).map_err(|_| {
+                invalid(
+                    "shell.date_format",
+                    format!("expected one of {:?}", DateFormat::NAMES),
+                )
+            })?;
+        }
+        if let Some(u) = obj.get("temp_unit") {
+            out.temp_unit = serde_json::from_value(u.clone()).map_err(|_| {
+                invalid(
+                    "shell.temp_unit",
+                    format!("expected one of {:?}", TempUnit::NAMES),
+                )
+            })?;
         }
         if let Some(e) = obj.get("edge_style") {
             out.edge_style = serde_json::from_value(e.clone()).map_err(|_| {
@@ -526,6 +589,41 @@ mod tests {
         );
         let s: ShellSettings = serde_json::from_value(json!({"fit_windows": 3})).unwrap();
         assert!(s.fit_windows, "a wrong type keeps the default");
+    }
+
+    #[test]
+    fn date_format_and_temp_unit() {
+        let mut set = Settings::default();
+        assert_eq!(set.shell.date_format, DateFormat::Uk, "UK for a new user");
+        assert_eq!(set.shell.temp_unit, TempUnit::C, "Celsius for a new user");
+        set.set_section("shell", json!({"date_format": "us", "temp_unit": "f"}))
+            .unwrap();
+        assert_eq!(set.shell.date_format, DateFormat::Us);
+        assert_eq!(set.shell.temp_unit, TempUnit::F);
+        let v = set.section("shell").unwrap();
+        assert_eq!(
+            (v["date_format"].as_str(), v["temp_unit"].as_str()),
+            (Some("us"), Some("f"))
+        );
+        for bad in [
+            json!({"date_format": "iso"}),
+            json!({"temp_unit": "k"}),
+            json!({"temp_unit": 1}),
+        ] {
+            assert!(set.set_section("shell", bad.clone()).is_err(), "{bad}");
+        }
+        set.set_section("shell", json!({})).unwrap();
+        assert_eq!(
+            (set.shell.date_format, set.shell.temp_unit),
+            (DateFormat::Uk, TempUnit::C)
+        );
+        let s: ShellSettings =
+            serde_json::from_value(json!({"date_format": "eu", "temp_unit": 3})).unwrap();
+        assert_eq!(
+            (s.date_format, s.temp_unit),
+            (DateFormat::Uk, TempUnit::C),
+            "lenient load"
+        );
     }
 
     #[test]

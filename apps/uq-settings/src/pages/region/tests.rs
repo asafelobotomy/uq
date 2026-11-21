@@ -181,3 +181,32 @@ fn variable_edits() {
         ["LC_TIME=de_DE.UTF-8", "LANG=C.UTF-8"]
     );
 }
+
+#[tokio::test]
+async fn temperature_unit_is_uqs_own_setting() {
+    let (_rig, _fake, page) = setup().await;
+    let out = run(&page, Op::Refresh).await;
+    assert!(out.state["temp_unit"].is_null(), "no uqd, no unit");
+    let out = run(&page, Op::SetTempUnit { unit: "f".into() }).await;
+    assert_eq!(
+        out.error.as_deref(),
+        Some("uQ's settings service isn't running.")
+    );
+
+    let uqd = crate::pages::fake_uqd::rig(uq_core::state::State::default()).await;
+    let (rig, _fake, _) = setup().await;
+    let page = RegionState::with(rig.system(), PathBuf::from("/nonexistent"), fake_run)
+        .on_session(Some(uqd.client.clone()));
+    let out = run(&page, Op::Refresh).await;
+    assert_eq!(out.state["temp_unit"], "c");
+    let out = run(&page, Op::SetTempUnit { unit: "f".into() }).await;
+    assert_eq!(out.error, None);
+    assert_eq!(out.state["temp_unit"], "f");
+    assert_eq!(
+        uqd.state.lock().unwrap().settings.shell.temp_unit,
+        uq_core::settings::TempUnit::F
+    );
+    let out = run(&page, Op::SetTempUnit { unit: "k".into() }).await;
+    assert_eq!(out.error.as_deref(), Some("That isn't a temperature unit."));
+    assert_eq!(out.state["temp_unit"], "f");
+}
