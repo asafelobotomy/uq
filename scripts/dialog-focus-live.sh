@@ -194,6 +194,37 @@ echo "after a click on the parent, active: '$(active_title)'"
 expect_dialog "click on the parent" mno 5-click-parent
 stop_app
 
+# --- 5. a popup that opens takes the keyboard at once, wherever the pointer is -------------------
+# The app menu, quick settings and the power menu stay mapped between uses, so Hyprland's
+# focus-on-map never fires for them: they must ask for the keyboard themselves. With the pointer
+# resting on a window (not on the popup), keys typed straight after opening must reach the popup:
+# the window gets none of them, and Esc closes the popup.
+start_app
+read -r px py pw ph < <(rect focus-parent)
+send "move $((px + pw / 2)) $((py + ph - 30))" "sleep 400"; drain
+closed_by_esc() { [ "$(ipc close "$1")" = ignored ]; }
+leaked() { grep -q "$1" "$app_log"; }
+for popup in appmenu quicksettings powermenu; do
+    ipc open "$popup" >/dev/null; sleep 0.6
+    send "type zq$popup" "sleep 300"; drain
+    still "6-$popup-typed"
+    leaked "zq$popup" && check "$popup: typing after it opened went to the window, not the popup"
+    send "key Escape" "sleep 500"; drain
+    if closed_by_esc "$popup"; then echo "ok: $popup took the keyboard when it opened (Esc closed it)"
+    else check "$popup: Esc did not close it, so it never had the keyboard"; fi
+    sleep 0.4
+done
+# The app menu from its key (a tap of Super), then a search typed straight away.
+send "mod super down" "sleep 60" "mod super up" "sleep 700" "type zqsuper" "sleep 400"; drain
+still 7-appmenu-super
+leaked zqsuper && check "appmenu (Super): typing went to the window, not the search box"
+send "key Escape" "sleep 500"; drain
+if closed_by_esc appmenu; then echo "ok: appmenu from Super took the keyboard"
+else check "appmenu (Super): Esc did not close it"; fi
+# Once the popup is closed, the keyboard is back with the window.
+expect_dialog "after the popups closed" pqr 8-back
+stop_app
+
 
 if [ -n "$grabber" ]; then
     sleep 0.5; kill "$grabber" 2>/dev/null
