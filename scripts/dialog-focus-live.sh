@@ -221,6 +221,14 @@ leaked zqsuper && check "appmenu (Super): typing went to the window, not the sea
 send "key Escape" "sleep 500"; drain
 if closed_by_esc appmenu; then echo "ok: appmenu from Super took the keyboard"
 else check "appmenu (Super): Esc did not close it"; fi
+# The app menu from its button on the bar (the System island's first button), a real click, then
+# a search typed straight away. The pointer stays on the bar.
+send "move 39 38" "sleep 300" "button 272 down" "sleep 80" "button 272 up" "sleep 700" "type zqclick" "sleep 400"; drain
+still 7b-appmenu-click
+leaked zqclick && check "appmenu (button): typing went to the window, not the search box"
+send "key Escape" "sleep 500"; drain
+if closed_by_esc appmenu; then echo "ok: appmenu from its button took the keyboard"
+else check "appmenu (button): Esc did not close it, so the search box never had the keyboard"; fi
 # Once the popup is closed, the keyboard is back with the window.
 expect_dialog "after the popups closed" pqr 8-back
 stop_app
