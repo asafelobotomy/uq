@@ -23,10 +23,10 @@ TestCase {
     }
 
     function test_stacked_windows() {
-        // One column with two windows, beside a single one.
+        // One column with two windows, beside a single one (all on screen).
         var wins = [{ address: "0xa", x: 16, y: 56, w: 500, h: 300 },
                     { address: "0xb", x: 16, y: 380, w: 500, h: 616 },
-                    { address: "0xc", x: 540, y: 56, w: 438, h: 940 }];
+                    { address: "0xc", x: 540, y: 56, w: 388, h: 940 }];
         var g = G.grips(wins, mon, 4, 16);
         var col = g.filter(function (x) { return x.kind === "col"; });
         var row = g.filter(function (x) { return x.kind === "row"; });
