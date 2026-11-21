@@ -105,6 +105,9 @@ PanelWindow {
     }
 
     onShownChanged: {
+        grabIncludesBar = false;
+        if (shown)
+            barJoinsGrab.restart();
         openedOn = shown ? screenFor(Hyprland.focusedMonitor) : null;
         wipe();
         if (shown) {
@@ -149,10 +152,19 @@ PanelWindow {
 
     HyprlandFocusGrab {
         // The bar window is included so a click on the Status button toggles the panel closed
-        // instead of clearing the grab and reopening it.
-        windows: Surfaces.anchor && Surfaces.anchor.barWindow ? [root, Surfaces.anchor.barWindow] : [root]
+        // instead of clearing the grab and reopening it. It joins a moment after the grab starts:
+        // Hyprland hands the keyboard to the first window on a new grab's list, in no set order,
+        // and the bar takes no keyboard, so opening from the button left typing going nowhere.
+        windows: root.grabIncludesBar && Surfaces.anchor && Surfaces.anchor.barWindow
+            ? [root, Surfaces.anchor.barWindow] : [root]
         active: root.shown
         onCleared: Surfaces.close()
+    }
+    property bool grabIncludesBar: false
+    Timer {
+        id: barJoinsGrab
+        interval: 150
+        onTriggered: root.grabIncludesBar = root.shown
     }
 
     Rectangle {
