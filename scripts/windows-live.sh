@@ -59,9 +59,13 @@ assert s.endswith("}")
 probe = '''
     // windows-live.sh: where each tab is, in the bar window's coordinates.
     property string probeLast: ""
+    onTabInfoChanged: Qt.callLater(probeTimer.probe)
+    onTabKeysChanged: Qt.callLater(probeTimer.probe)
     Timer {
+        id: probeTimer
         interval: 150; running: true; repeat: true
-        onTriggered: {
+        onTriggered: probe()
+        function probe() {
             var out = [];
             for (var k = 0; k < tabsRep.count; k++) {
                 var it = tabsRep.itemAt(k);
@@ -75,7 +79,7 @@ probe = '''
             var s = JSON.stringify(out);
             if (s !== root.probeLast) {
                 root.probeLast = s;
-                console.log("UQPROBE " + s);
+                console.log("UQPROBE " + Date.now() + " " + s);
             }
         }
     }
@@ -181,7 +185,22 @@ wait_ms() { # timeout_s code
 }
 # Where the tabs are: the probe's last line, with the bar layer's corner added.
 bar_xy() { hc layers -j | jq -r '.. | objects | select(.namespace? == "uq-bar") | "\(.x) \(.y)"' | head -n1; }
-tabs() { grep 'UQPROBE ' "$tmp/qs.log" | tail -n1 | sed 's/.*UQPROBE //'; }
+tabs() { grep 'UQPROBE ' "$tmp/qs.log" | tail -n1 | sed 's/.*UQPROBE [0-9]* //'; }
+# When Hyprland sent the first event matching a pattern since the step began (ms since the epoch).
+event_ms() { awk -v t="$phase_t0" -v p="$1" '$1 * 1000 >= t && $2 ~ p { printf "%d\n", $1 * 1000; exit }' "$tmp/events.log"; }
+# When the tabs first met a jq condition at or after a time (ms since the epoch).
+probe_ms() { # since jq-condition
+    grep 'UQPROBE ' "$tmp/qs.log" | sed 's/.*UQPROBE //' | while read -r t j; do
+        [ "$t" -ge "$1" ] && echo "$j" | jq -e "$2" >/dev/null 2>&1 && { echo "$t"; break; }
+    done
+}
+# The shell's part of a latency: from Hyprland's event to the tabs showing it.
+shell_part() { # event-pattern jq-condition label
+    local e p; e=$(event_ms "$1"); [ -n "$e" ] || return 0
+    p=$(probe_ms "$e" "$2"); [ -n "$p" ] || return 0
+    echo "shell part ($3): $((p - e)) ms after Hyprland's event"
+    phase_what="$phase_what; the bar $((p - e)) ms after Hyprland's event"
+}
 tab_of() { # title -> "cx cy w" (centre, screen coordinates)
     local bx by; read -r bx by < <(bar_xy)
     tabs | jq -r --arg t "$1" --argjson bx "$bx" --argjson by "$by" \
@@ -258,6 +277,7 @@ tabms=$(wait_ms 5 '[ -n "$(tab_of w1)" ]')
 tabms=$([ "$tabms" = timeout ] && echo timeout || echo $(( map + tabms )))
 [ "$tabms" = timeout ] && check "w1 never got a tab"
 latency "$tabms" "launch until its tab is on the bar (window mapped at ${map} ms)"
+shell_part "^openwindow>>" 'any(.[]; .t == "w1")' open
 settle
 # ColumnPolicy: a lone window is Full.
 [ "$(wwidth w1)" -ge 1200 ] || check "a lone window should be Full (w1 is $(wwidth w1) wide)"
@@ -400,6 +420,7 @@ t0=$(now_ms)
 dispatch_now "[\"minimise\",{\"address\":\"$(addr_of "$victim")\",\"from_ws\":1}]"
 ms=$(wait_ms 4 '[ "$(tab_flag "$victim" m)" = true ]')
 latency "$ms" "minimise until its tab is greyed"
+shell_part "^movewindowv2>>" "any(.[]; .t == \"$victim\" and .m)" minimise
 settle
 [ "$(win "$victim" workspace | jq -r .name)" = special:minimized ] || check "$victim should be on special:minimized"
 [ "$(active)" != "$victim" ] && [ -n "$(active)" ] || check "focus should move to another window after minimising (active '$(active)')"
@@ -506,6 +527,7 @@ t0=$(now_ms)
 dispatch_now "[\"close\",{\"address\":\"$(addr_of "$cw")\"}]"
 ms=$(wait_ms 4 '[ -z "$(tab_of "$cw")" ]')
 latency "$ms" "close until its tab is gone"
+shell_part "^closewindow>>" "all(.[]; .t != \"$cw\")" close
 settle 2
 [ -z "$(addr_of "$cw")" ] || check "$cw should be closed"
 [ -n "$(active)" ] || check "focus should go to another window after a close"
