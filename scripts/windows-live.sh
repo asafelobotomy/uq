@@ -218,7 +218,17 @@ edge_ok() { # title context
     [ -n "$x" ] || return 0
     vis=$(( (x + w > 1280 ? 1280 : x + w) - (x < 0 ? 0 : x) ))
     [ "$vis" -le 0 ] || [ "$vis" -ge "$w" ] && return 0
-    if [ "$vis" -le 8 ]; then echo "sliver: $vis px of $1 shows at the screen's edge $2"; slivers=$((slivers + 1)); return 0; fi
+    if [ "$vis" -le 8 ]; then
+        # The edge strip draws the wallpaper over it.
+        slivers=$((slivers + 1))
+        local side=left; [ "$x" -gt 0 ] && side=right
+        local cover
+        cover=$(hc layers -j | jq -r --arg s "$side" '[.. | objects | select(.namespace? == "uq-edge-strip")
+            | select(if $s == "left" then .x == 0 else .x + .w == 1280 end) | .w] | max // 0')
+        echo "sliver: $vis px of $1 at the $side edge $2; strip over it: ${cover} px"
+        [ "$cover" -ge "$vis" ] || check "$vis px of $1 show at the $side edge $2 with no strip over them"
+        return 0
+    fi
     check "$1 is cut by the screen's edge $2 ($vis of $w px show)"
 }
 on_screen() { # title: fully inside the 1280x720 screen
@@ -286,6 +296,7 @@ wait_ms 10 '[ -n "$(addr_of w2)" ]' >/dev/null || fail "w2 never opened"
 settle
 [ "$(wwidth w2)" -ge 1200 ] || check "a window opened from a Full one should be Full (w2 is $(wwidth w2) wide)"
 on_screen w2 >/dev/null || check "the new window w2 should fill the screen"
+hc layers -j | grep -q uq-edge-strip && check "an edge strip is up though no window peeks in at the screen's edge"
 [ "$(active)" = w2 ] || check "the new window should have focus (active is '$(active)')"
 finish
 
@@ -545,7 +556,7 @@ errs=$(grep -E 'TypeError|ReferenceError|is not a type|Cannot assign|Unable to a
 [ -n "$errs" ] && { echo "--- shell warnings and errors"; echo "$errs"; }
 echo "$errs" | grep -qE 'TypeError|ReferenceError|is not a type|Cannot read property|is not a function' && check "QML errors in the shell log"
 echo "--- the shell's uq: messages"; grep 'uq: ' "$tmp/qs.log" | tail -n 20
-echo "slivers of a neighbouring page's window seen at the screen's edge: $slivers"
+echo "slivers of a neighbouring page's window at the screen's edge (each needs a strip over it): $slivers"
 echo; echo "--- timings"; cat "$tmp/perf.md"
 [ -n "$cap" ] && cp "$tmp/perf.md" "$cap/windows-perf.md"
 [ -n "$cap" ] && ls -l "$cap" | grep windows-
