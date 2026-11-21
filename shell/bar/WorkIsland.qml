@@ -460,8 +460,14 @@ Island {
         function onRawEvent(event) {
             if (event.name === "changefloatingmode" || event.name === "pin"
                     || event.name === "openwindow" || event.name === "closewindow"
-                    || event.name === "movewindowv2" || event.name === "workspacev2")
+                    || event.name === "movewindowv2" || event.name === "workspacev2") {
                 root.refresh();
+                // Quickshell moves the toplevel to its new workspace from the event itself: a
+                // minimised window's tab greys (and a restored one's comes back) now, not after
+                // the refresh settles (~200 ms). The rest (tags, size) follows with the refresh.
+                if (event.name === "movewindowv2")
+                    Qt.callLater(root.rebuild);
+            }
             // Quickshell sets the title itself from this event: no need to ask Hyprland again.
             // Throttled, not debounced: a title that never stops changing still shows.
             else if (event.name === "windowtitlev2") {

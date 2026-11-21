@@ -518,7 +518,7 @@ finish
 errs=$(grep -E 'TypeError|ReferenceError|is not a type|Cannot assign|Unable to assign|Cannot read property|is not a function|uq: .*(error|failed)|[A-Za-z]+\.qml:[0-9]+:[0-9]*:? ' "$tmp/qs.log" | grep -v 'frame rendered' | sort | uniq -c | sort -rn | head -n 15)
 [ -n "$errs" ] && { echo "--- shell warnings and errors"; echo "$errs"; }
 echo "$errs" | grep -qE 'TypeError|ReferenceError|is not a type|Cannot read property|is not a function' && check "QML errors in the shell log"
-echo "--- shell log lines from uQ"; grep -E 'UQDBG|uq: ' "$tmp/qs.log" | tail -n 40
+echo "--- the shell's uq: messages"; grep 'uq: ' "$tmp/qs.log" | tail -n 20
 echo "slivers of a neighbouring page's window seen at the screen's edge: $slivers"
 echo; echo "--- timings"; cat "$tmp/perf.md"
 [ -n "$cap" ] && cp "$tmp/perf.md" "$cap/windows-perf.md"

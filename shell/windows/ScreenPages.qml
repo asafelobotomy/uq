@@ -292,8 +292,11 @@ Scope {
             PageActions.dropHandler = null;
     }
 
-    // The windows (per workspace) as they were when a move with the pointer began.
+    // The windows (per workspace) as they were when a move with the pointer began, and where
+    // their pages began (starts, right).
     property var preDrag: ({})
+    property var preStarts: ({})
+    property var preRight: ({})
     // A window moved with the pointer (WindowDrag.drop), waiting for the look after it let go.
     property var pendingDrop: null
 
@@ -313,7 +316,6 @@ Scope {
     // (Hyprland un-maximizes it when it lifts it). Returns true when it did something.
     function applyPendingDrop() {
         var d = root.pendingDrop;
-        if (d !== null) console.log("UQDBG pending enabled=" + root.enabled);
         root.pendingDrop = null;
         if (d === null || !root.enabled)
             return false;
@@ -327,7 +329,13 @@ Scope {
         };
         var pre = root.listHolding(root.preDrag, addr), now = root.listHolding(root.tiled, addr);
         var at = d.x === null ? null : Hold.place(root.monitors, d.x, d.y);
-        console.log("UQDBG drop " + JSON.stringify(d) + " pre=" + (pre ? Pages.columnCount(pre) : "null") + " now=" + (now ? Pages.columnCount(now) : "null") + " at=" + JSON.stringify(at) + " plan=" + JSON.stringify(at && pre ? root.dropPlanFor(at.screen, addr, at.x, pre) : null));
+        // The drop is worked out on the pages as they were when the move began (what the preview
+        // showed): the reads since then saw the windows reflowed around the lifted one, and
+        // carried the pages' starts over from that.
+        if (pre !== null) {
+            root.starts = root.preStarts;
+            root.right = root.preRight;
+        }
         // Hyprland dropped it into another window's column (the columns closed up behind the
         // lifted window, so a window ended up under the pointer), while the screen showed it would
         // get a half of its own: give it its own column back, then look again with that.
@@ -583,8 +591,11 @@ Scope {
             };
         }
         function onActiveChanged() {
-            if (WindowDrag.active)
+            if (WindowDrag.active) {
                 root.preDrag = root.tiled;
+                root.preStarts = root.starts;
+                root.preRight = root.right;
+            }
         }
         function onEnded() {
             PageActions.dropHint = null;
