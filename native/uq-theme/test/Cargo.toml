@@ -1,0 +1,15 @@
+# Runs the Rust uq-theme tests: cargo test --manifest-path native/uq-theme/test/Cargo.toml
+[package]
+name = "uq-theme-test"
+version = "1.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[lib]
+path = "../uq_theme.rs"
+
+[dependencies]
+serde_json = "1"
+libc = "0.2"

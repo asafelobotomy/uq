@@ -96,7 +96,10 @@ watch on the file is lost after the first change.
 - **Web apps** (Tauri, Electron): vendor `web/uq-tokens/` from this repository. It maps the
   tokens to CSS custom properties, validates every value, and falls back to your own theme when
   uQ isn't there. Its README has the Tauri and Electron recipes.
-- **Qt and GTK apps** need nothing: `uqctl setup --apps` points GTK, qt6ct and Kvantum at uQ's
+- **Native apps with their own palette** (Qt 6 C++ or Rust, for example a QML `Theme`
+  singleton): vendor `native/uq-theme/`. It reads and checks the tokens and follows them with a
+  file watch, no polling; its README has the Rust and C++ recipes and a CI drift check.
+- **Qt and GTK apps** that use the desktop's own theme need nothing: `uqctl setup --apps` points GTK, qt6ct and Kvantum at uQ's
   theme.
 - **QML in a settings page or widget** gets the tokens as `ctx.theme` / `ctx.Theme`.
 
