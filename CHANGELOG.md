@@ -7,6 +7,12 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.30] - 2026-11-21
+
+### Fixed
+
+- **The app menu's search box takes your typing when you open it from its bar button.** Opened from the button, the menu's click-outside grab listed both the menu and the bar, and Hyprland hands the keyboard to whichever window comes first on a new grab's list, in no set order. When that was the bar, which takes no keyboard, typing went nowhere until the pointer moved onto the menu. The bar now joins the grab a moment later, so the menu always gets the keyboard. Quick settings had the same problem from its Status button. `scripts/dialog-focus-live.sh` now opens each popup and types straight away, from IPC, from a tap of Super and from a real click on the app-menu button.
+
 ## [0.3.29] - 2026-11-21
 
 ### Added
