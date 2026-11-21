@@ -223,9 +223,14 @@ edge_ok() { # title context
         # The edge strip draws the wallpaper over it.
         slivers=$((slivers + 1))
         local side=left; [ "$x" -gt 0 ] && side=right
-        local cover
-        cover=$(hc layers -j | jq -r --arg s "$side" '[.. | objects | select(.namespace? == "uq-edge-strip")
-            | select(if $s == "left" then .x == 0 else .x + .w == 1280 end) | .w] | max // 0')
+        # The strip follows the shell's batched refresh (about 200 ms), so give it a second.
+        local cover=0 i
+        for i in $(seq 20); do
+            cover=$(hc layers -j | jq -r --arg s "$side" '[.. | objects | select(.namespace? == "uq-edge-strip")
+                | select(if $s == "left" then .x == 0 else .x + .w == 1280 end) | .w] | max // 0')
+            [ "$cover" -ge "$vis" ] && break
+            sleep 0.05
+        done
         echo "sliver: $vis px of $1 at the $side edge $2; strip over it: ${cover} px"
         [ "$cover" -ge "$vis" ] || check "$vis px of $1 show at the $side edge $2 with no strip over them"
         return 0
