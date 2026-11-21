@@ -91,9 +91,10 @@ the new script into the apps along with the files. uQ's CI runs the tests in `te
 | bindaru | Rust |
 | uQview | Rust |
 | appOFholding | Rust |
+| kyko | Rust |
 | reelo | C++ |
 | XZram | C++ |
 
 hauler and noti-fi's panel follow uQ's generated KDE colour scheme instead (so Kirigami and
 qqc2-desktop-style controls match), with their own file watch. AV Morning Star and oysterAV
-(Python) and kyko have their own copies for now; romforge and emobie use `web/uq-tokens`.
+(Python) have their own copies for now; romforge and emobie use `web/uq-tokens`.
