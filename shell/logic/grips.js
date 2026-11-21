@@ -7,7 +7,8 @@
 // layout's columns; a dwindle or master split stacked the same way counts too), top to bottom.
 // A drag moves only the gap: the two windows on either side of it share what they had, so their
 // far edges stay put.
-//   - Between two columns side by side, a window gap apart: a "col" grip, the height they share.
+//   - Between two columns side by side, a window gap apart and both on the screen: a "col" grip,
+//     the height they share.
 //     Dragging it widens one column by what the other loses (both are resized).
 //   - Between two windows stacked in a column, a window gap apart: a "row" grip, the column's
 //     width. Dragging it sets the upper window's height; Hyprland gives the lower one the rest.
@@ -72,6 +73,11 @@ function grips(wins, mon, border, gap) {
         var l = cols[i], r = cols[i + 1];
         var left = l.x + l.w + b, right = r.x - b;
         if (Math.abs(right - left - g) > TOLERANCE)
+            continue;
+        // Both columns on this screen: a column off its edge (on another screen page) can't be
+        // shared with, and the layout keeps the focused one in view, so a drag there would
+        // move the far edges instead of the gap.
+        if (l.x - b < mon.x - TOLERANCE || r.x + r.w + b > mon.x + mon.width + TOLERANCE)
             continue;
         var top = Math.max(_top(l), _top(r)) - b, bottom = Math.min(_bottom(l), _bottom(r)) + b;
         if (bottom - top < 1)

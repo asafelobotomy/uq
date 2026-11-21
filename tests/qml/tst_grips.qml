@@ -23,10 +23,10 @@ TestCase {
     }
 
     function test_stacked_windows() {
-        // One column with two windows, beside a single one.
+        // One column with two windows, beside a single one (all on screen).
         var wins = [{ address: "0xa", x: 16, y: 56, w: 500, h: 300 },
                     { address: "0xb", x: 16, y: 380, w: 500, h: 616 },
-                    { address: "0xc", x: 540, y: 56, w: 438, h: 940 }];
+                    { address: "0xc", x: 540, y: 56, w: 388, h: 940 }];
         var g = G.grips(wins, mon, 4, 16);
         var col = g.filter(function (x) { return x.kind === "col"; });
         var row = g.filter(function (x) { return x.kind === "row"; });
@@ -46,11 +46,11 @@ TestCase {
         // Both columns off to the left: the gap isn't on this screen.
         compare(G.grips([{ address: "0xa", x: -1832, y: 56, w: 900, h: 940 },
                          { address: "0xb", x: -908, y: 56, w: 900, h: 940 }], mon, 4, 16).length, 0);
-        // A gap at the screen's edge is clipped to it.
-        var g = G.grips([{ address: "0xa", x: -908, y: 56, w: 900, h: 940 },
-                         { address: "0xb", x: 16, y: 56, w: 900, h: 940 }], mon, 4, 16);
-        compare(g.length, 1);
-        compare([g[0].x, g[0].w], [0, 12]);
+        // A gap at the screen's edge, beside a column off the screen (another page): no grip.
+        compare(G.grips([{ address: "0xa", x: -908, y: 56, w: 900, h: 940 },
+                         { address: "0xb", x: 16, y: 56, w: 900, h: 940 }], mon, 4, 16).length, 0);
+        compare(G.grips([{ address: "0xa", x: 16, y: 56, w: 438, h: 940 },
+                         { address: "0xb", x: 478, y: 56, w: 900, h: 940 }], mon, 4, 16).length, 0);
         compare(G.grips([], mon, 4, 16), []);
         compare(G.grips([{ address: "0xa", x: 0, y: 0, w: 10, h: 10 }], null, 4, 16), []);
     }

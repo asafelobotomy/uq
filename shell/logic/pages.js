@@ -254,3 +254,35 @@ function columnIndex(wins, addr) {
 function columnCount(wins) {
     return Grips.columns(wins).length;
 }
+
+// Strips at a screen's left and right edges that show the wallpaper over a sliver of the window
+// beside the page shown: the gaps at the screen's edge (gaps_out) are wider than the gap between
+// two columns, so a few pixels of the neighbouring page's window frame show there. `wins` are the
+// workspace's tiled windows and `others` its floating and pinned ones ({x, w} in the layout's
+// coordinates, window content without borders), `screenX` and `width` the screen's place and
+// width, `bands` {left, right} how wide each strip is (the edge gap before a column's frame), and
+// `border` the frame's width. Returns {left, right}: whether each strip is wanted. Not where a
+// floating window reaches into the strip (it would be covered).
+function edgeStrips(wins, others, screenX, width, bands, border) {
+    var b = border || 0, x0 = screenX, x1 = screenX + width;
+    var out = { left: false, right: false };
+    if (!bands || !(width > 0))
+        return out;
+    var list = wins || [];
+    for (var i = 0; i < list.length; i++) {
+        var l = list[i].x - b, r = list[i].x + list[i].w + b;
+        if (l < x0 && r > x0)
+            out.left = true;
+        if (r > x1 && l < x1)
+            out.right = true;
+    }
+    var fl = others || [];
+    for (var j = 0; j < fl.length; j++) {
+        var fl0 = fl[j].x - b, fr = fl[j].x + fl[j].w + b;
+        if (fl0 < x0 + bands.left && fr > x0)
+            out.left = false;
+        if (fr > x1 - bands.right && fl0 < x1)
+            out.right = false;
+    }
+    return out;
+}
