@@ -75,11 +75,16 @@ function countdownLabel(s, nowMs) {
     return "Shutting down in " + clock(remaining(s, nowMs));
 }
 
-// The wall-clock time of the shutdown, "at 23:45", from a Date for that moment's local time.
-function atLabel(s) {
+// The wall-clock time of the shutdown in local time: "at 23:45", or "at 11:45 PM" when the bar
+// clock is set to 12-hour (h24 === false; anything else means 24-hour, uQ's default).
+function atLabel(s, h24) {
     if (!_valid(s))
         return "";
     var d = new Date(s.deadline);
+    if (h24 === false) {
+        var h = d.getHours() % 12;
+        return "at " + (h === 0 ? 12 : h) + ":" + _pad(d.getMinutes()) + (d.getHours() < 12 ? " AM" : " PM");
+    }
     return "at " + _pad(d.getHours()) + ":" + _pad(d.getMinutes());
 }
 

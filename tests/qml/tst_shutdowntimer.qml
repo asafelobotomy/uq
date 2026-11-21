@@ -67,6 +67,11 @@ TestCase {
         var d = new Date(2026, 10, 20, 23, 5, 0);
         compare(T.atLabel({ deadline: d.getTime(), warned: [] }), "at 23:05");
         compare(T.atLabel(null), "");
+        // The 12-hour bar clock.
+        compare(T.atLabel({ deadline: d.getTime(), warned: [] }, false), "at 11:05 PM");
+        compare(T.atLabel({ deadline: new Date(2026, 10, 20, 0, 30, 0).getTime(), warned: [] }, false), "at 12:30 AM");
+        compare(T.atLabel({ deadline: new Date(2026, 10, 20, 12, 0, 0).getTime(), warned: [] }, false), "at 12:00 PM");
+        compare(T.atLabel({ deadline: d.getTime(), warned: [] }, true), "at 23:05");
     }
 
     function test_parse_custom() {
