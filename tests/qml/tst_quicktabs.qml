@@ -91,7 +91,8 @@ TestCase {
         // The strip follows a theme change.
         var old = Theme.accent;
         Theme.accent = "#ff0000";
-        compare(sel.color, Theme.accent);
+        // It fades to the new colour (Motion.fast).
+        tryCompare(sel, "color", Theme.accent);
         Theme.accent = old;
     }
 }

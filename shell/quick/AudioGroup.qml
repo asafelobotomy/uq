@@ -69,8 +69,9 @@ ColumnLayout {
 
         implicitWidth: 28
         implicitHeight: 28
-        radius: Theme.radius - 2
+        radius: Theme.radiusControl
         color: on ? Theme.accent : (bMouse.containsMouse ? Theme.overlay : Theme.surfaceAlt)
+        Behavior on color { ColorAnimation { duration: Motion.fast } }
         activeFocusOnTab: true
         border.color: Theme.accent
         border.width: activeFocus ? 1 : 0
@@ -141,8 +142,9 @@ ColumnLayout {
         visible: root.sinks.length > 0
         Layout.fillWidth: true
         implicitHeight: 28
-        radius: Theme.radius - 2
+        radius: Theme.radiusControl
         color: headerMouse.containsMouse ? Theme.overlay : "transparent"
+        Behavior on color { ColorAnimation { duration: Motion.fast } }
         activeFocusOnTab: true
         border.color: Theme.accent
         border.width: activeFocus ? 1 : 0
@@ -184,8 +186,9 @@ ColumnLayout {
             readonly property string label: U.nodeLabel(modelData)
             Layout.fillWidth: true
             implicitHeight: 26
-            radius: Theme.radius - 2
+            radius: Theme.radiusControl
             color: current ? Theme.overlay : (devMouse.containsMouse ? Theme.surfaceAlt : "transparent")
+            Behavior on color { ColorAnimation { duration: Motion.fast } }
             activeFocusOnTab: true
             border.color: Theme.accent
             border.width: activeFocus ? 1 : 0

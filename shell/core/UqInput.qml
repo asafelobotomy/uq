@@ -24,9 +24,11 @@ Item {
     Rectangle {
         visible: !root.flat
         anchors.fill: parent
-        radius: Theme.radius - 2
+        radius: Theme.radiusControl
         color: Theme.surfaceAlt
-        border.color: input.activeFocus ? Theme.text : Theme.border
+        // The accent marks keyboard focus everywhere in the shell (rows, sliders, fields).
+        border.color: input.activeFocus ? Theme.accent : Theme.border
+        Behavior on border.color { ColorAnimation { duration: Motion.fast } }
         border.width: Theme.borderWidth
     }
     TextInput {

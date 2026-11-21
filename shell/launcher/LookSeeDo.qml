@@ -897,9 +897,10 @@ PanelWindow {
                                             && root.selection.index === index
                                         width: results.width
                                         height: root.rowHeight
-                                        radius: Theme.radius - 2
+                                        radius: Theme.radiusControl
                                         color: selected ? Theme.overlay
                                             : (rowMouse.containsMouse ? Theme.surfaceAlt : "transparent")
+                                        Behavior on color { ColorAnimation { duration: Motion.fast } }
                                         Accessible.role: Accessible.ListItem
                                         Accessible.name: isApp ? String(modelData.name || "")
                                             : String(modelData.title || "")
@@ -992,6 +993,7 @@ PanelWindow {
                             implicitHeight: 22
                             radius: height / 2
                             color: editMouse.containsMouse ? Theme.surfaceAlt : "transparent"
+                            Behavior on color { ColorAnimation { duration: Motion.fast } }
                             Accessible.role: Accessible.Button
                             Accessible.name: root.editPins ? "Done editing pinned apps" : "Edit pinned apps"
                             UqText {
@@ -1024,8 +1026,9 @@ PanelWindow {
                                 objectName: "lookseedoSquare" + modelData.slot
                                 width: squareRow.side
                                 height: squareRow.side
-                                radius: Theme.radius
+                                radius: Theme.radiusControl
                                 color: sqMouse.containsMouse ? Theme.overlay : Theme.surfaceAlt
+                                Behavior on color { ColorAnimation { duration: Motion.fast } }
                                 border.color: root.editPins ? Theme.accent : Theme.border
                                 border.width: Theme.borderWidth - 1
                                 Accessible.role: Accessible.Button
@@ -1097,7 +1100,7 @@ PanelWindow {
                     Layout.preferredHeight: open ? root.termHeight : 0
                     visible: Layout.preferredHeight > 0
                     clip: true
-                    radius: Theme.radius - 2
+                    radius: Theme.radiusControl
                     color: Theme.bg
                     border.color: Theme.border
                     border.width: Theme.borderWidth - 1
@@ -1162,7 +1165,7 @@ PanelWindow {
                     Layout.fillWidth: true
                     Layout.preferredHeight: root.sentHeight
                     visible: root.dockStrip || (root.termState === "sent" && !root.docked)
-                    radius: Theme.radius - 2
+                    radius: Theme.radiusControl
                     color: Theme.surfaceAlt
                     UqText {
                         anchors.fill: parent

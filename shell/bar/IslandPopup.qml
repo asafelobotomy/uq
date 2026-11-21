@@ -76,15 +76,12 @@ PanelWindow {
         }
     }
 
-    Rectangle {
+    UqCard {
         id: box
         anchors.fill: parent
+        shown: pop.visible
         implicitWidth: Math.max(body.implicitWidth, inline.childrenRect.width) + Theme.gapOut * 2
         implicitHeight: Math.max(body.implicitHeight, inline.childrenRect.height) + Theme.gapOut * 2
-        color: Theme.surface
-        radius: Theme.radius
-        border.color: Theme.border
-        border.width: Theme.borderWidth
         focus: true
         Keys.onEscapePressed: pop.hide()
 

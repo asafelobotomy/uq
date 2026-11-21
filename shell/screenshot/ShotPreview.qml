@@ -148,9 +148,10 @@ PanelWindow {
 
         implicitHeight: 28
         implicitWidth: bText.implicitWidth + Theme.gapIn * 5
-        radius: Theme.radius - 3
+        radius: Theme.radiusControl
         color: primary ? (bMouse.containsMouse ? Qt.lighter(Theme.accent, 1.12) : Theme.accent)
                        : (bMouse.containsMouse ? Theme.surfaceAlt : "transparent")
+        Behavior on color { ColorAnimation { duration: Motion.fast } }
         border.color: primary ? Theme.accent : (activeFocus ? Theme.accent : Theme.border)
         border.width: primary ? 0 : 1
         activeFocusOnTab: true
@@ -228,7 +229,7 @@ PanelWindow {
                 // The capture's own shape at the card's width, between 60 and imageMax tall.
                 Layout.preferredHeight: Math.max(60, Math.min(root.imageMax,
                     img.implicitWidth > 0 ? width * img.implicitHeight / img.implicitWidth : 0))
-                radius: Theme.radius - 4
+                radius: Theme.radiusInner
                 color: Theme.bg
                 clip: true
                 opacity: root.discarded ? 0.35 : 1

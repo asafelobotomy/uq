@@ -86,13 +86,10 @@ PanelWindow {
         id: agent
     }
 
-    Rectangle {
+    UqCard {
         id: content
         anchors.fill: parent
-        radius: Theme.radius
-        color: Theme.bg
-        border.color: Theme.border
-        border.width: Theme.borderWidth
+        shown: root.shown
         Accessible.role: Accessible.Dialog
         Accessible.name: "Authentication required"
         Keys.onEscapePressed: root.cancel()
@@ -140,9 +137,10 @@ PanelWindow {
                             && root.flow.selectedIdentity === modelData
                         width: idText.implicitWidth + Theme.gapOut * 2
                         height: 26
-                        radius: Theme.radius - 2
+                        radius: Theme.radiusControl
                         color: selected ? Theme.accent
                             : (idMouse.containsMouse || activeFocus ? Theme.overlay : Theme.surfaceAlt)
+                        Behavior on color { ColorAnimation { duration: Motion.fast } }
                         border.color: Theme.accent
                         border.width: activeFocus ? 1 : 0
                         activeFocusOnTab: true
@@ -212,8 +210,9 @@ PanelWindow {
                     id: cancelButton
                     Layout.preferredWidth: cancelText.implicitWidth + Theme.gapOut * 2
                     Layout.preferredHeight: 32
-                    radius: Theme.radius - 2
+                    radius: Theme.radiusControl
                     color: cancelMouse.containsMouse || activeFocus ? Theme.overlay : Theme.surfaceAlt
+                    Behavior on color { ColorAnimation { duration: Motion.fast } }
                     border.color: Theme.accent
                     border.width: activeFocus ? 1 : 0
                     activeFocusOnTab: true
@@ -242,7 +241,7 @@ PanelWindow {
                     id: okButton
                     Layout.preferredWidth: okText.implicitWidth + Theme.gapOut * 2
                     Layout.preferredHeight: 32
-                    radius: Theme.radius - 2
+                    radius: Theme.radiusControl
                     color: Theme.accent
                     opacity: field.enabled ? 1 : 0.5
                     border.color: Theme.text

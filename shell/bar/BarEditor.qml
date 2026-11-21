@@ -215,6 +215,7 @@ PanelWindow {
                                 text: L.name(modelData.id)
                                 detail: chosen ? "✓" : win.zoneNames[modelData.zone]
                                 color: chosen ? Theme.surfaceAlt : (lit ? Theme.surfaceAlt : "transparent")
+                                Behavior on color { ColorAnimation { duration: Motion.fast } }
                                 Accessible.checkable: true
                                 Accessible.checked: chosen
                                 onActivated: win.choose(modelData.key)

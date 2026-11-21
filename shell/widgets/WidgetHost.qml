@@ -121,8 +121,9 @@ Item {
             visible: host.moreShown
             width: host.cell
             height: host.cell
-            radius: Theme.radius - 2
+            radius: Theme.radiusControl
             color: moreMouse.containsMouse ? Theme.overlay : "transparent"
+            Behavior on color { ColorAnimation { duration: Motion.fast } }
             Accessible.role: Accessible.Button
             Accessible.name: "More widgets"
             Accessible.onPressAction: host.overflowClicked(more)

@@ -100,12 +100,9 @@ PanelWindow {
         onCleared: ClipState.hide()
     }
 
-    Rectangle {
+    UqCard {
         anchors.fill: parent
-        radius: Theme.radius
-        color: Theme.bg
-        border.color: Theme.border
-        border.width: Theme.borderWidth
+        shown: root.shown
         Accessible.role: Accessible.Pane
         Accessible.name: "Clipboard history"
         focus: true
@@ -162,8 +159,9 @@ PanelWindow {
                     id: pauseButton
                     implicitWidth: pauseLabel.implicitWidth + Theme.gapIn * 3
                     implicitHeight: search.implicitHeight
-                    radius: Theme.radius - 2
+                    radius: Theme.radiusControl
                     color: pauseMouse.containsMouse ? Theme.surfaceAlt : "transparent"
+                    Behavior on color { ColorAnimation { duration: Motion.fast } }
                     border.color: ClipState.paused ? Theme.warning : Theme.border
                     border.width: Theme.borderWidth
                     Accessible.role: Accessible.Button
@@ -214,8 +212,9 @@ PanelWindow {
                     readonly property bool lit: row.index === root.current || rowMouse.containsMouse
                     width: ListView.view.width
                     height: modelData.kind === "image" ? root.imageHeight : root.rowHeight
-                    radius: Theme.radius - 2
+                    radius: Theme.radiusControl
                     color: row.index === root.current ? Theme.surfaceAlt : "transparent"
+                    Behavior on color { ColorAnimation { duration: Motion.fast } }
                     border.color: row.index === root.current ? Theme.accent : "transparent"
                     border.width: row.index === root.current ? 1 : 0
                     Accessible.role: Accessible.ListItem

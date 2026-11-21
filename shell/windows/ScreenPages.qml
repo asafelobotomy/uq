@@ -633,7 +633,7 @@ Scope {
                 y: h ? h.y - h.holdY : 0
                 width: h ? Math.max(h.width, Theme.fontSize * 9) : 0
                 height: h ? h.height : 0
-                radius: Theme.radius - 2
+                radius: Theme.radiusControl
                 color: Theme.surfaceAlt
                 border.width: 1
                 border.color: h && h.drop ? WindowLook.activeBorder : Theme.border

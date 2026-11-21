@@ -1107,7 +1107,16 @@ fn hostile_rules_run_as_one_call_each() {
     );
     let count = |name: &str| text.lines().filter(|l| *l == name).count();
     assert_eq!(count("hl.window_rule"), hostile.window.len(), "{text}");
-    assert_eq!(count("hl.layer_rule"), hostile.layer.len(), "{text}");
+    // base.lua has layer rules of its own (the shell's popups animate themselves).
+    let base_layer_rules = std::fs::read_to_string(repo().join("config/hypr/base.lua"))
+        .unwrap()
+        .matches("hl.layer_rule(")
+        .count();
+    assert_eq!(
+        count("hl.layer_rule"),
+        hostile.layer.len() + base_layer_rules,
+        "{text}"
+    );
     // base.lua's own hl.exec_cmd calls are expected; the payload is not.
     assert!(!text.contains("hl.exec_cmd:x"), "{text}");
     assert!(!text.contains("hl.exec_cmd:\"x"), "{text}");

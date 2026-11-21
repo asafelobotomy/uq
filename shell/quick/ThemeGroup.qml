@@ -132,8 +132,9 @@ ColumnLayout {
                 readonly property bool current: modelData.id === root.themeName
                 implicitWidth: Math.min(chipLabel.implicitWidth + Theme.gapIn * 4, 160)
                 implicitHeight: 28
-                radius: Theme.radius - 2
+                radius: Theme.radiusControl
                 color: current ? Theme.accent : (chipMouse.containsMouse ? Theme.overlay : Theme.surfaceAlt)
+                Behavior on color { ColorAnimation { duration: Motion.fast } }
                 activeFocusOnTab: true
                 border.color: Theme.accent
                 border.width: activeFocus && !current ? 1 : 0
@@ -215,8 +216,9 @@ ColumnLayout {
                 readonly property bool current: root.layout === modelData
                 Layout.fillWidth: true
                 implicitHeight: 28
-                radius: Theme.radius - 2
+                radius: Theme.radiusControl
                 color: current ? Theme.accent : (segMouse.containsMouse ? Theme.overlay : Theme.surfaceAlt)
+                Behavior on color { ColorAnimation { duration: Motion.fast } }
                 activeFocusOnTab: true
                 border.color: Theme.accent
                 border.width: activeFocus && !current ? 1 : 0

@@ -131,6 +131,17 @@ hl.config({
 
 -- Animation curves and leaves are rendered into generated.lua (look.animation_speed scales them).
 
+-- The shell's popups, menus, OSD and notifications come and go in QML (shell/core/UqCard.qml,
+-- the same speeds as the app menu and quick settings, which stay mapped). Hyprland's own layer
+-- fade would run on top of that at another speed, so it is off for them. The bar, wallpaper and
+-- the rest keep Hyprland's animation.
+hl.layer_rule({
+    name    = "uq-base:shell-popups",
+    enabled = true,
+    match   = { namespace = "^(uq-bar-popup|uq-desktop-menu|uq-clip|uq-osd|uq-notif|uq-notif-centre|uq-polkit)$" },
+    no_anim = true,
+})
+
 ---------------
 ---- INPUT ----
 ---------------

@@ -61,8 +61,9 @@ ColumnLayout {
 
             Layout.fillWidth: true
             implicitHeight: 28
-            radius: Theme.radius - 2
+            radius: Theme.radiusControl
             color: modelData.connected ? Theme.overlay : (devMouse.containsMouse ? Theme.surfaceAlt : "transparent")
+            Behavior on color { ColorAnimation { duration: Motion.fast } }
             activeFocusOnTab: true
             border.color: Theme.accent
             border.width: activeFocus ? 1 : 0

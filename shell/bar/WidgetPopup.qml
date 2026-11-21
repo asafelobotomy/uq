@@ -34,15 +34,12 @@ PopupWindow {
     implicitHeight: Math.max(20, box.implicitHeight)
     color: "transparent"
 
-    Rectangle {
+    UqCard {
         id: box
         anchors.fill: parent
+        shown: pop.visible
         implicitWidth: body.implicitWidth + Theme.gapOut * 2
         implicitHeight: body.implicitHeight + Theme.gapOut * 2
-        color: Theme.surface
-        radius: Theme.radius
-        border.color: Theme.border
-        border.width: Theme.borderWidth
         focus: true
         Keys.onEscapePressed: pop.hide()
 

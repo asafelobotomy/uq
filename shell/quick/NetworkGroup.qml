@@ -118,7 +118,7 @@ ColumnLayout {
             readonly property string status: U.wifiStatus(modelData)
             Layout.fillWidth: true
             implicitHeight: 28
-            radius: Theme.radius - 2
+            radius: Theme.radiusControl
             color: modelData.connected ? Theme.overlay
                 : (netMouse.containsMouse && action !== "setup" ? Theme.surfaceAlt : "transparent")
             activeFocusOnTab: true

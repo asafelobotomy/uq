@@ -17,3 +17,4 @@ BridgeIo 1.0 BridgeIo.qml
 singleton LauncherState 1.0 LauncherState.qml
 LauncherStateIo 1.0 LauncherStateIo.qml
 UqBackdrop 1.0 UqBackdrop.qml
+UqCard 1.0 UqCard.qml

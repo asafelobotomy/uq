@@ -21,8 +21,9 @@ Rectangle {
     readonly property bool lit: mouse.containsMouse || activeFocus
     implicitWidth: (icon !== "" ? glyph.implicitWidth : label.implicitWidth) + detailText.implicitWidth + Theme.gapIn * 4
     implicitHeight: Math.max(label.implicitHeight, detailText.implicitHeight) + Theme.gapIn * 2
-    radius: Math.max(0, Theme.radius - 2)
+    radius: Theme.radiusControl
     color: lit ? Theme.surfaceAlt : "transparent"
+    Behavior on color { ColorAnimation { duration: Motion.fast } }
     border.color: activeFocus ? Theme.accent : "transparent"
     border.width: activeFocus ? Theme.borderWidth : 0
     activeFocusOnTab: true

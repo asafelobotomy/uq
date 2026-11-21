@@ -126,13 +126,12 @@ PanelWindow {
         onCleared: Surfaces.close()
     }
 
-    Rectangle {
+    UqCard {
         id: content
         anchors.fill: parent
-        radius: Theme.radius
+        shown: root.shown
+        // Darker than the notification cards it holds.
         color: Theme.bg
-        border.color: Theme.border
-        border.width: Theme.borderWidth
         focus: true
         Accessible.role: Accessible.Pane
         Accessible.name: "Notifications"
@@ -164,8 +163,9 @@ PanelWindow {
                     }
                     implicitHeight: 24
                     implicitWidth: dndRow.implicitWidth + Theme.gapIn * 4
-                    radius: Theme.radius - 4
+                    radius: Theme.radiusControl
                     color: dnd.on ? Theme.accent : (dndMouse.containsMouse ? Theme.overlay : Theme.surfaceAlt)
+                    Behavior on color { ColorAnimation { duration: Motion.fast } }
                     activeFocusOnTab: true
                     border.color: Theme.accent
                     border.width: activeFocus && !dnd.on ? 1 : 0
@@ -204,8 +204,9 @@ PanelWindow {
                     id: clear
                     implicitHeight: 24
                     implicitWidth: clearText.implicitWidth + Theme.gapIn * 4
-                    radius: Theme.radius - 4
+                    radius: Theme.radiusControl
                     color: clearMouse.containsMouse ? Theme.overlay : Theme.surfaceAlt
+                    Behavior on color { ColorAnimation { duration: Motion.fast } }
                     activeFocusOnTab: true
                     enabled: Builtin.notifications.length > 0
                     opacity: enabled ? 1 : 0.5

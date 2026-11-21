@@ -167,17 +167,11 @@ PanelWindow {
         onTriggered: root.grabIncludesBar = root.shown
     }
 
-    Rectangle {
+    UqCard {
         id: content
         anchors.fill: parent
-        // Fades in and out here, since the compositor no longer maps and unmaps the window.
-        opacity: root.shown ? 1 : 0
-        visible: root.shown || opacity > 0
-        Behavior on opacity { NumberAnimation { duration: Motion.base; easing.type: Motion.easing } }
-        radius: Theme.radius
-        color: Theme.surface
-        border.color: Theme.border
-        border.width: Theme.borderWidth
+        // Comes and goes here, since the compositor no longer maps and unmaps the window.
+        shown: root.shown
         focus: true
         Accessible.role: Accessible.Pane
         Accessible.name: "Quick settings"

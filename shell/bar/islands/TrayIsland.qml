@@ -53,6 +53,7 @@ Island {
             Layout.preferredHeight: root.cell
             radius: Theme.radius
             color: moreMouse.containsMouse || morePopup.open ? Theme.surfaceAlt : "transparent"
+            Behavior on color { ColorAnimation { duration: Motion.fast } }
             Accessible.role: Accessible.Button
             Accessible.name: root.fit.more + " more tray icons"
             Accessible.onPressAction: root.showMore()

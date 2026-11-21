@@ -26,7 +26,8 @@ PanelWindow {
                                                  OsdRouter.muted)
     readonly property real fraction: Q.osdFraction(OsdRouter.value, OsdRouter.max)
 
-    visible: shown
+    // Stays mapped while the card fades out (it takes no input, see the mask).
+    visible: shown || card.visible
     screen: openedOn ? openedOn
         : (Outputs.primaryScreen(Quickshell.screens) || screenFor(Hyprland.focusedMonitor))
     color: "transparent"
@@ -85,12 +86,11 @@ PanelWindow {
         }
     }
 
-    Rectangle {
+    UqCard {
+        id: card
         anchors.fill: parent
-        radius: Theme.radius
-        color: Theme.surface
-        border.color: Theme.border
-        border.width: Theme.borderWidth
+        shown: root.shown
+        origin: Item.Bottom
 
         RowLayout {
             anchors.fill: parent
@@ -121,6 +121,9 @@ PanelWindow {
                     height: parent.height
                     radius: parent.radius
                     color: OsdRouter.muted ? Theme.textMuted : Theme.accent
+                    // Each key press glides to the new level instead of jumping.
+                    Behavior on width { NumberAnimation { duration: Motion.fast; easing.type: Motion.easing } }
+                    Behavior on color { ColorAnimation { duration: Motion.fast } }
                 }
             }
             UqText {

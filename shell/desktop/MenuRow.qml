@@ -23,8 +23,9 @@ Rectangle {
     implicitWidth: Theme.gapIn * 3 + (hasIcon ? glyph.implicitSize + Theme.gapIn * 2 : 0)
         + label.implicitWidth + Theme.gapIn * 4 + side.implicitWidth
     implicitHeight: Math.max(label.implicitHeight, glyph.implicitSize) + Theme.gapIn * 2
-    radius: Math.max(0, Theme.radius - 2)
+    radius: Theme.radiusControl
     color: lit && usable ? Theme.surfaceAlt : "transparent"
+    Behavior on color { ColorAnimation { duration: Motion.fast } }
     border.color: lit && usable ? Theme.accent : "transparent"
     border.width: lit && usable ? Theme.borderWidth : 0
 
