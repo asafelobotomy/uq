@@ -96,17 +96,21 @@ Island {
             if (a !== null)
                 seq[a] = openedSeq[a] !== undefined ? openedSeq[a] : nextSeq++;
             // A move Hyprland has announced, before Quickshell's lists show it (wsMoved).
-            var wsName = t.workspace ? t.workspace.name : "";
-            if (a !== null && wsMoved[a] !== undefined && wsMoved[a].name !== wsName)
-                wsName = wsMoved[a].name;
+            var wsName = t.workspace ? t.workspace.name : "", moved = a !== null ? wsMoved[a] : undefined;
+            if (moved !== undefined && moved.name !== wsName)
+                wsName = moved.name;
             var minimised = wsName === "special:minimized";
+            // Its tag says which workspace it came from; until the tag arrives, the one it was on.
+            var from = minimised ? Min.wsFromTags(o.tags) : null;
+            if (minimised && from === null && moved !== undefined)
+                from = moved.from;
             out.push({
                 address: t.address,
                 cls: o["class"] ? String(o["class"]) : "",
                 title: t.title || "",
                 wsId: t.workspace ? t.workspace.id : null,
                 minimised: minimised,
-                minimisedFrom: minimised ? Min.wsFromTags(o.tags) : null,
+                minimisedFrom: from,
                 monitor: t.monitor ? t.monitor.name : "",
                 pid: typeof o.pid === "number" ? o.pid : 0,
                 x: o.at ? Number(o.at[0]) || 0 : 0,
@@ -131,9 +135,11 @@ Island {
     }
     property string windowsKey: ""
     // Windows Hyprland said it moved (movewindowv2), by address: {name (the workspace name it
-    // gave), at}. The toplevels' workspaces only follow with the next refresh, ~200 ms later;
-    // until then the tabs go by this, so a minimised window's tab greys (and a restored one's
-    // comes back) at once. Dropped a second on, when the refreshes have long caught up.
+    // gave), at, from (the workspace it was on: a minimised window's tab needs it before its tag
+    // arrives)}. The toplevels' workspaces only follow with the next refresh, ~200 ms later; until
+    // then the tabs go by this, so a minimised window's tab greys at once (it used to drop out of
+    // the strip for that moment and come back greyed). Dropped a second on, once the refreshes
+    // have long caught up.
     property var wsMoved: ({})
     Component.onCompleted: {
         focusedAddr = activeAddr();
@@ -477,7 +483,9 @@ Island {
                     var moved = parts.length >= 3 ? Work.normAddr("0x" + parts[0]) : null;
                     if (moved !== null) {
                         var mv = Object.assign({}, root.wsMoved);
-                        mv[moved] = { name: parts.slice(2).join(","), at: Date.now() };
+                        var was = root.windows.find(function (w) { return Work.normAddr(w.address) === moved; });
+                        mv[moved] = { name: parts.slice(2).join(","), at: Date.now(),
+                                      from: was && typeof was.wsId === "number" && was.wsId > 0 ? was.wsId : null };
                         root.wsMoved = mv;
                         Qt.callLater(root.rebuild);
                     }

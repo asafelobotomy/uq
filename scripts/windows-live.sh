@@ -421,6 +421,10 @@ dispatch_now "[\"minimise\",{\"address\":\"$(addr_of "$victim")\",\"from_ws\":1}
 ms=$(wait_ms 4 '[ "$(tab_flag "$victim" m)" = true ]')
 latency "$ms" "minimise until its tab is greyed"
 shell_part "^movewindowv2>>" "any(.[]; .t == \"$victim\" and .m)" minimise
+# Its tab must stay in the strip all along (greyed), not drop out and come back.
+gone=$(grep 'UQPROBE ' "$tmp/qs.log" | sed 's/.*UQPROBE //' | awk -v t="$phase_t0" '$1 >= t' | cut -d' ' -f2- |
+    jq -c --arg v "$victim" 'select(all(.[]; .t != $v))' | wc -l)
+[ "$gone" = 0 ] || check "$victim's tab left the strip for a moment while it was minimised ($gone probe readings without it)"
 settle
 [ "$(win "$victim" workspace | jq -r .name)" = special:minimized ] || check "$victim should be on special:minimized"
 [ "$(active)" != "$victim" ] && [ -n "$(active)" ] || check "focus should move to another window after minimising (active '$(active)')"
