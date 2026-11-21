@@ -313,6 +313,7 @@ Scope {
     // (Hyprland un-maximizes it when it lifts it). Returns true when it did something.
     function applyPendingDrop() {
         var d = root.pendingDrop;
+        if (d !== null) console.log("UQDBG pending enabled=" + root.enabled);
         root.pendingDrop = null;
         if (d === null || !root.enabled)
             return false;
@@ -326,6 +327,7 @@ Scope {
         };
         var pre = root.listHolding(root.preDrag, addr), now = root.listHolding(root.tiled, addr);
         var at = d.x === null ? null : Hold.place(root.monitors, d.x, d.y);
+        console.log("UQDBG drop " + JSON.stringify(d) + " pre=" + (pre ? Pages.columnCount(pre) : "null") + " now=" + (now ? Pages.columnCount(now) : "null") + " at=" + JSON.stringify(at) + " plan=" + JSON.stringify(at && pre ? root.dropPlanFor(at.screen, addr, at.x, pre) : null));
         // Hyprland dropped it into another window's column (the columns closed up behind the
         // lifted window, so a window ended up under the pointer), while the screen showed it would
         // get a half of its own: give it its own column back, then look again with that.
