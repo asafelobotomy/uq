@@ -327,6 +327,7 @@ mod tests {
             ("cursor_size", json!(32)),
             ("icon_theme", json!("Papirus")),
             ("kvantum", json!(false)),
+            ("theme_apps", json!(false)),
         ] {
             writes.push((
                 field(name, value.clone()),
