@@ -95,7 +95,11 @@ Island {
             var a = Work.normAddr(t.address);
             if (a !== null)
                 seq[a] = openedSeq[a] !== undefined ? openedSeq[a] : nextSeq++;
-            var minimised = t.workspace ? t.workspace.name === "special:minimized" : false;
+            // A move Hyprland has announced, before Quickshell's lists show it (wsMoved).
+            var wsName = t.workspace ? t.workspace.name : "";
+            if (a !== null && wsMoved[a] !== undefined && wsMoved[a].name !== wsName)
+                wsName = wsMoved[a].name;
+            var minimised = wsName === "special:minimized";
             out.push({
                 address: t.address,
                 cls: o["class"] ? String(o["class"]) : "",
@@ -126,6 +130,11 @@ Island {
         }
     }
     property string windowsKey: ""
+    // Windows Hyprland said it moved (movewindowv2), by address: {name (the workspace name it
+    // gave), at}. The toplevels' workspaces only follow with the next refresh, ~200 ms later;
+    // until then the tabs go by this, so a minimised window's tab greys (and a restored one's
+    // comes back) at once. Dropped a second on, when the refreshes have long caught up.
+    property var wsMoved: ({})
     Component.onCompleted: {
         focusedAddr = activeAddr();
         noteSeen = Work.noteArrived(null, NotifBackend.latest, NotifBackend.count).seen;
@@ -462,11 +471,17 @@ Island {
                     || event.name === "openwindow" || event.name === "closewindow"
                     || event.name === "movewindowv2" || event.name === "workspacev2") {
                 root.refresh();
-                // Quickshell moves the toplevel to its new workspace from the event itself: a
-                // minimised window's tab greys (and a restored one's comes back) now, not after
-                // the refresh settles (~200 ms). The rest (tags, size) follows with the refresh.
-                if (event.name === "movewindowv2")
-                    Qt.callLater(root.rebuild);
+                if (event.name === "movewindowv2") {
+                    // "address,workspace id,workspace name"
+                    var parts = String(event.data).split(",");
+                    var moved = parts.length >= 3 ? Work.normAddr("0x" + parts[0]) : null;
+                    if (moved !== null) {
+                        var mv = Object.assign({}, root.wsMoved);
+                        mv[moved] = { name: parts.slice(2).join(","), at: Date.now() };
+                        root.wsMoved = mv;
+                        Qt.callLater(root.rebuild);
+                    }
+                }
             }
             // Quickshell sets the title itself from this event: no need to ask Hyprland again.
             // Throttled, not debounced: a title that never stops changing still shows.
@@ -491,6 +506,11 @@ Island {
             if (!root.asked)
                 return;
             root.asked = false;
+            var now = Date.now(), kept = ({});
+            for (var k in root.wsMoved)
+                if (now - root.wsMoved[k].at < 1000)
+                    kept[k] = root.wsMoved[k];
+            root.wsMoved = kept;
             root.rebuild();
         }
     }
