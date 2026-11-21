@@ -54,18 +54,7 @@ PanelWindow {
     color: "transparent"
     WlrLayershell.layer: WlrLayer.Top
     WlrLayershell.namespace: "uq-quick"
-    // The keyboard comes with the popup. Hyprland only hands an on-demand layer the keyboard when
-    // it maps (or on a click), and this one is already mapped, so it asks for it exclusively for
-    // a moment and then drops to on-demand, which keeps it: a window that takes the focus later
-    // (a dialog) still can, and closes the popup (LauncherRoutes).
-    property bool claimKeyboard: false
-    WlrLayershell.keyboardFocus: !shown ? WlrKeyboardFocus.None
-        : (claimKeyboard ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.OnDemand)
-    Timer {
-        id: keyboardClaim
-        interval: 150
-        onTriggered: root.claimKeyboard = false
-    }
+    WlrLayershell.keyboardFocus: shown ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
     exclusionMode: ExclusionMode.Ignore
     anchors.top: true
     anchors.left: true
@@ -116,9 +105,6 @@ PanelWindow {
     }
 
     onShownChanged: {
-        claimKeyboard = shown;
-        if (shown)
-            keyboardClaim.restart();
         openedOn = shown ? screenFor(Hyprland.focusedMonitor) : null;
         wipe();
         if (shown) {
