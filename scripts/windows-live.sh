@@ -15,6 +15,7 @@
 #   float     a floating window dragged half off the screen stays where it was put
 #   fullscreen real fullscreen hides the resize grips; leaving it brings them back
 #   workspace a window moved to workspace 2 and back, and to a special workspace and back
+#   dialog    an app's dialog shares the app's tab; choosing the tab gives the dialog focus
 #   close     windows closed: tabs and pages follow
 # and measures each step: how long until the result shows (latency), the shell's frames (Qt's
 # QSG_RENDER_TIMING: count, median, 95th percentile, worst) and the CPU the shell and Hyprland used.
@@ -296,7 +297,7 @@ wait_ms 10 '[ -n "$(addr_of w2)" ]' >/dev/null || fail "w2 never opened"
 settle
 [ "$(wwidth w2)" -ge 1200 ] || check "a window opened from a Full one should be Full (w2 is $(wwidth w2) wide)"
 on_screen w2 >/dev/null || check "the new window w2 should fill the screen"
-hc layers -j | grep -q uq-edge-strip && check "an edge strip is up though no window peeks in at the screen's edge"
+edge_ok w1 "after w2 opened"
 [ "$(active)" = w2 ] || check "the new window should have focus (active is '$(active)')"
 finish
 
@@ -533,6 +534,50 @@ dispatch "[\"move\",{\"address\":\"$(addr_of "$sw")\",\"workspace\":1}]"; settle
 for w in $(clients | jq -r '.[] | select(.workspace.id == 1 and .hidden == false) | .title'); do
     edge_ok "$w" "after the scratchpad"
 done
+finish
+
+# ---- dialog -----------------------------------------------------------------------------------
+# An app opens a dialog from its window (tests/live/fixtures/child-window.qml): the dialog shares
+# the app's tab, the tab shows as focused while the dialog has focus, and choosing the tab after
+# another one brings the dialog back to the front with focus (it is what the app waits on).
+begin dialog
+qml_bin=$(command -v qml6 || command -v qml || echo /usr/lib/qt6/bin/qml)
+env XDG_RUNTIME_DIR="$rt" WAYLAND_DISPLAY="$wl" QT_QPA_PLATFORM=wayland LIBGL_ALWAYS_SOFTWARE=1 \
+    "$qml_bin" "$root/tests/live/fixtures/child-window.qml" >"$tmp/child-window.log" 2>&1 &
+pids+=($!)
+wait_ms 15 '[ -n "$(addr_of "app main")" ]' >/dev/null || { cat "$tmp/child-window.log"; fail "the app's window never opened"; }
+ms=$(wait_ms 10 '[ -n "$(addr_of "app dialog")" ]') || { cat "$tmp/child-window.log"; fail "the app's dialog never opened"; }
+settle 2
+latency "-" "an app's window and its dialog"
+snap "  dialog-open"
+echo "tabs: $(tabs)"
+shot dialog
+[ "$(win "app dialog" floating)" = true ] || echo "note: Hyprland did not float the dialog"
+[ "$(win "app dialog" pid)" = "$(win "app main" pid)" ] || check "the dialog and its window should share a process"
+[ -n "$(tab_of "app main")" ] || check "the app's window should have a tab"
+[ -z "$(tab_of "app dialog")" ] || check "the dialog should share its window's tab, not have one of its own"
+[ "$(active)" = "app dialog" ] || check "the new dialog should have focus (active '$(active)')"
+[ "$(tab_flag "app main" f)" = true ] || check "the app's tab should show as focused while its dialog has focus"
+# Another tab, then the app's tab again.
+other=$(tabs | jq -r '[.[] | select(.t != "app main" and .m == false)] | .[0].t')
+read -r tx ty _ < <(tab_of "$other")
+send "move $tx $ty" "sleep 300" "button 272 down" "sleep 80" "button 272 up"; drain
+wait_ms 4 '[ "$(active)" = "$other" ]' >/dev/null || check "clicking $other's tab should focus it (active '$(active)')"
+settle
+[ "$(tab_flag "app main" f)" = false ] || check "the app's tab should not show as focused once $other has focus"
+read -r tx ty _ < <(tab_of "app main")
+send "move $tx $ty" "sleep 300" "button 272 down" "sleep 80" "button 272 up"; drain
+ms=$(wait_ms 5 '[ "$(active)" = "app dialog" ]')
+latency "$ms" "click on the app's tab until its dialog has focus"
+settle
+[ "$(active)" = "app dialog" ] || check "choosing the app's tab should give its dialog focus (active '$(active)')"
+[ "$(tab_flag "app main" f)" = true ] || check "the app's tab should show as focused again"
+on_screen "app dialog" >/dev/null || check "the dialog should be on screen"
+shot dialog-chosen
+hc dispatch "hl.dsp.window.close({ window = \"address:$(addr_of "app dialog")\" })" >/dev/null
+settle
+hc dispatch "hl.dsp.window.close({ window = \"address:$(addr_of "app main")\" })" >/dev/null
+settle 2
 finish
 
 # ---- close ------------------------------------------------------------------------------------

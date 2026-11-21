@@ -209,7 +209,12 @@ Island {
         target: DesktopEntries.applications
         function onValuesChanged() { root.appCache = {}; }
     }
+    // A dialog or other window an app opened from one of its windows shares that window's tab
+    // (Work.groupChildren): `children` on each.
     readonly property var here: Work.windowsHere(windows, monitorName, wsId, focusedAddr)
+    // The window that had focus when each window opened (address -> address): the likely parent
+    // of a dialog. Kept for the windows still open.
+    property var openedFrom: ({})
     readonly property var ordered: {
         var ctx = { opened: openedSeq, activity: {}, pinIndex: {}, usage: {}, name: {}, lastOrder: memo.order, lastMin: memo.min };
         var pins = Settings.values.pinned || [];
@@ -306,6 +311,17 @@ Island {
     }
     // Focus a window; a minimised one comes back to the workspace it left.
     function choose(w) {
+        var kids = w.children || [];
+        if (!w.minimised && kids.length > 0) {
+            // A window with a dialog open: its page comes into view, and the dialog (the last
+            // one opened) gets focus, as it is the one waiting for an answer.
+            var dialog = kids[kids.length - 1];
+            Bridge.call("Dispatch", ["focus_window", { address: w.address, keep_pointer: true }])
+                .then(function () {
+                    return Bridge.call("Dispatch", ["focus_window", { address: dialog, keep_pointer: true }]);
+                }).catch(function (e) { console.warn("uq: focus a window's dialog: " + e); });
+            return;
+        }
         if (w.minimised) {
             var t = toplevelFor(w.address);
             var ws = t && t.lastIpcObject ? Min.wsFromTags(t.lastIpcObject.tags) : null;
@@ -318,6 +334,10 @@ Island {
             if (last !== null)
                 args.after = last;
             Bridge.call("Dispatch", ["restore", args]);
+            // Its dialogs come back with it, after it.
+            kids.forEach(function (c) {
+                Bridge.call("Dispatch", ["restore", { address: c, to_ws: ws }]).catch(function () {});
+            });
         } else if (!w.focused) {
             // The pointer stays put; a window out of view (a scrolled-away column) is brought
             // into view by the focus itself.
@@ -328,6 +348,13 @@ Island {
         var d = Work.buildDispatch(name, { addr: w.address, ws: root.wsId }, args);
         if (d !== null)
             Bridge.call("Dispatch", d);
+        // Minimised or moved to another workspace, its dialogs go with it.
+        if (name === "minimise" || name === "move")
+            (w.children || []).forEach(function (c) {
+                var dc = Work.buildDispatch(name, { addr: c, ws: root.wsId }, args);
+                if (dc !== null)
+                    Bridge.call("Dispatch", dc);
+            });
     }
     // A tiled window in the scrolling layout, sized by its column (not real fullscreen, 2).
     function inColumn(w) {
@@ -477,6 +504,17 @@ Island {
                     || event.name === "openwindow" || event.name === "closewindow"
                     || event.name === "movewindowv2" || event.name === "workspacev2") {
                 root.refresh();
+                if (event.name === "openwindow") {
+                    var opened = Work.normAddr("0x" + String(event.data).split(",")[0]), was = root.activeAddr();
+                    if (opened !== null && was !== "" && was !== opened) {
+                        var of = {};
+                        for (var ka in root.openedFrom)
+                            if (root.openedSeq[ka] !== undefined)
+                                of[ka] = root.openedFrom[ka];
+                        of[opened] = was;
+                        root.openedFrom = of;
+                    }
+                }
                 if (event.name === "movewindowv2") {
                     // "address,workspace id,workspace name"
                     var parts = String(event.data).split(",");
