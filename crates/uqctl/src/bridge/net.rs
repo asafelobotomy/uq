@@ -960,7 +960,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn network_changed_gates_and_emits_country_only() {
+    async fn network_changed_gates_and_emits_public_ip() {
         let (base, seen) = fake(r#"{"ip":"203.0.113.9","city":"X","country":"NL"}"#).await;
         let (tx, mut rx) = mpsc::channel(16);
         let (stx, srx) = watch::channel(settings(None, false));
@@ -985,7 +985,10 @@ mod tests {
         assert!(rx.try_recv().is_err(), "waits for the settle");
         let (e, d) = event(&mut rx).await;
         assert_eq!(e, "PublicIp");
-        assert_eq!(d, json!({"country_code":"NL","country":"NL"}));
+        assert_eq!(
+            d,
+            json!({"country_code":"NL","country":"NL","ip":"203.0.113.9","city":"X"})
+        );
         net.network_changed(true).await;
         tokio::time::sleep(Duration::from_millis(250)).await;
         assert_eq!(seen.lock().unwrap().len(), 1);
