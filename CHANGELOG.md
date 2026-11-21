@@ -7,6 +7,10 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **The app menu's search box takes your typing as soon as the menu opens.** The app menu, quick settings and the power menu stay mapped between uses (0.3.13), so Hyprland never handed them the keyboard on open, and you had to move the pointer onto the menu before typing reached it. Each now claims the keyboard for a moment when it opens, then drops back to on-demand so a dialog that opens later can still take it. `scripts/dialog-focus-live.sh` types into each one straight after opening, from IPC and from a tap of Super, with the pointer resting on a window.
+
 ## [0.3.29] - 2026-11-21
 
 ### Added
