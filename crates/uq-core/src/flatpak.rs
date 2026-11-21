@@ -5,7 +5,7 @@
 //! override; uqd keeps uQ's entries in the user's global one (`~/.local/share/flatpak/overrides/
 //! global`, the file `flatpak override --user` writes). Only the read-only `filesystems` entries
 //! uQ needs are added: anything else in the file, and any access the user granted or denied
-//! themselves, is kept. Colour scheme (dark or light) reaches Flatpak and Electron apps through
+//! themselves, is kept; so is the Qt platform theme ([`ENV`]) unless the user set one. Colour scheme (dark or light) reaches Flatpak and Electron apps through
 //! the settings portal (xdg-desktop-portal-gtk reads the gsettings uqd sets).
 
 use crate::atomic::atomic_write;
@@ -103,6 +103,60 @@ pub fn with_entries(existing: &str, wanted: &[String]) -> Option<String> {
     Some(out)
 }
 
+/// The environment uQ gives every Flatpak app: Qt apps on the KDE runtimes use the `kde`
+/// platform theme (plasma-integration, which those runtimes ship), so they read uQ's colours,
+/// fonts and icons from the `kdeglobals` granted above, as Qt apps outside Flatpak do (base.lua).
+/// Without it they pick the portal's theme, which knows only dark or light.
+pub const ENV: [(&str, &str); 1] = [("QT_QPA_PLATFORMTHEME", "kde")];
+
+/// `existing` with each of `env` in `[Environment]`, or `None` when nothing changes. A variable
+/// the file already sets (to anything, even empty) is the user's choice and is kept.
+pub fn with_env(existing: &str, env: &[(&str, &str)]) -> Option<String> {
+    let mut lines: Vec<String> = existing.lines().map(str::to_string).collect();
+    let mut group = String::new();
+    let mut env_at = None;
+    let mut set: Vec<String> = Vec::new();
+    for (i, l) in lines.iter().enumerate() {
+        let t = l.trim();
+        if t.starts_with('[') && t.ends_with(']') {
+            group = t.to_string();
+            if group == "[Environment]" {
+                env_at = Some(i);
+            }
+        } else if group == "[Environment]"
+            && let Some((k, _)) = t.split_once('=')
+        {
+            set.push(k.trim().to_string());
+            env_at = Some(i);
+        }
+    }
+    let add: Vec<String> = env
+        .iter()
+        .filter(|(k, _)| !set.iter().any(|s| s == k))
+        .map(|(k, v)| format!("{k}={v}"))
+        .collect();
+    if add.is_empty() {
+        return None;
+    }
+    match env_at {
+        Some(i) => {
+            for (n, l) in add.into_iter().enumerate() {
+                lines.insert(i + 1 + n, l);
+            }
+        }
+        None => {
+            if lines.last().is_some_and(|l| !l.trim().is_empty()) {
+                lines.push(String::new());
+            }
+            lines.push("[Environment]".into());
+            lines.extend(add);
+        }
+    }
+    let mut out = lines.join("\n");
+    out.push('\n');
+    Some(out)
+}
+
 /// Whether `flatpak` is on PATH.
 fn flatpak_installed() -> bool {
     std::env::var_os("PATH")
@@ -128,7 +182,9 @@ fn sync_at(path: &Path, wanted: &[String]) -> std::io::Result<bool> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
         Err(e) => return Err(e),
     };
-    match with_entries(&existing, wanted) {
+    let entries = with_entries(&existing, wanted);
+    let text = entries.as_deref().unwrap_or(&existing);
+    match with_env(text, &ENV).or(entries) {
         Some(new) => {
             if let Some(dir) = path.parent() {
                 std::fs::create_dir_all(dir)?;
@@ -177,6 +233,22 @@ mod tests {
     fn keeps_what_the_user_chose_for_the_same_path() {
         let old = "[Context]\nfilesystems=!xdg-config/gtk-3.0;~/.local/state/uq/theme:rw;\n";
         assert_eq!(with_entries(old, &wanted()), None);
+    }
+
+    #[test]
+    fn env_adds_the_qt_platform_theme_once_and_keeps_the_users() {
+        let new = with_env("[Context]\nfilesystems=~/x;\n", &ENV).unwrap();
+        assert_eq!(
+            new,
+            "[Context]\nfilesystems=~/x;\n\n[Environment]\nQT_QPA_PLATFORMTHEME=kde\n"
+        );
+        assert_eq!(with_env(&new, &ENV), None, "second pass");
+        let theirs = "[Environment]\nFOO=1\nQT_QPA_PLATFORMTHEME=gtk3\n";
+        assert_eq!(with_env(theirs, &ENV), None, "their own value is kept");
+        assert_eq!(
+            with_env("[Environment]\nFOO=1\n\n[Context]\nx=1\n", &ENV).unwrap(),
+            "[Environment]\nFOO=1\nQT_QPA_PLATFORMTHEME=kde\n\n[Context]\nx=1\n"
+        );
     }
 
     #[test]

@@ -121,6 +121,13 @@ static APPEARANCE_SETTINGS: [SearchEntry; 13] = [
     ),
     entry("icon-theme", "Icon theme", &["icons", "symbols"]),
     entry(
+        "theme-apps",
+        "Theme other apps",
+        &[
+            "qt", "gtk", "kde", "qt6ct", "flatpak", "colours", "colors", "apps", "match",
+        ],
+    ),
+    entry(
         "kvantum",
         "Style Qt apps to match",
         &["kvantum", "qt", "widgets", "style"],

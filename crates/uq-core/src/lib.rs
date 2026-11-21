@@ -19,6 +19,7 @@ pub mod mimeapps;
 pub mod paths;
 pub mod profile;
 pub mod qt6ct;
+pub mod reclaim;
 pub mod render;
 pub mod rules;
 pub mod schedule;

@@ -23,6 +23,11 @@ pub struct Appearance {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub icon_theme: Option<String>,
     pub kvantum: bool,
+    /// uQ keeps other apps' look in step with the theme (qt6ct, kdeglobals, Kvantum, GTK css,
+    /// Flatpak): it writes its colours, fonts, icons and style into those files even when they
+    /// were changed elsewhere (qt6ct's or KDE's settings app), keeping a copy first. Off leaves
+    /// every app's own settings alone.
+    pub theme_apps: bool,
 }
 
 impl Default for Appearance {
@@ -35,6 +40,7 @@ impl Default for Appearance {
             cursor_size: None,
             icon_theme: None,
             kvantum: true,
+            theme_apps: true,
         }
     }
 }
@@ -86,7 +92,7 @@ pub(super) fn ranged(key: &str, v: Option<u8>, lo: u8, hi: u8) -> Result<(), Set
 
 impl Appearance {
     /// Every key the API accepts.
-    pub const FIELDS: [&str; 7] = [
+    pub const FIELDS: [&str; 8] = [
         "ui_font",
         "mono_font",
         "font_size",
@@ -94,6 +100,7 @@ impl Appearance {
         "cursor_size",
         "icon_theme",
         "kvantum",
+        "theme_apps",
     ];
 
     pub fn validate(&self) -> Result<(), SettingError> {
@@ -127,6 +134,7 @@ mod tests {
             (None, None, None, None, None, None)
         );
         assert!(a.kvantum);
+        assert!(a.theme_apps);
         let a: Appearance = serde_json::from_value(json!({})).unwrap();
         assert_eq!(a, Appearance::default());
     }
