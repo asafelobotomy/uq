@@ -7,6 +7,8 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.29] - 2026-11-21
+
 ### Added
 
 - **`native/uq-theme`, one theme-follow module for native apps** (uq-theme 1.0.0). Qt 6 C++ (`uqtheme.h`/`.cpp`) and Rust (`uq_theme.rs`) copies that read and check `tokens.json` and follow it with a file watch, including uqd's swap of the whole `theme/` folder, with a drift check for CI. Bindle, bindaru, uQview, appOFholding, reelo and XZram use it in place of their own copies, and stop checking the file once a second.
