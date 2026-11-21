@@ -1,3 +1,4 @@
 module session
 singleton Session 1.0 Session.qml
 WelcomeTrigger 1.0 WelcomeTrigger.qml
+singleton ShutdownTimer 1.0 ShutdownTimer.qml
