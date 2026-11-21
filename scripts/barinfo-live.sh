@@ -46,6 +46,13 @@ case "$*" in
 esac
 SH
 chmod +x "$tmp/bin/nmcli"
+# uqbit: torrents bound to the VPN (the dropdown's "Torrents" row).
+cat >"$tmp/bin/uqbit" <<'SH'
+#!/bin/sh
+[ "$*" = "status --json" ] || exit 2
+echo '{"engine":"running","vpn":{"required":true,"interface":"tun0","up":true,"bound":true},"protected":true}'
+SH
+chmod +x "$tmp/bin/uqbit"
 
 # The harness: the real Bar on the first screen, with settings `mode` chooses (uk: UK dates,
 # 24-hour clock, Celsius; us: US dates, 12-hour clock, Fahrenheit), set from a file the script

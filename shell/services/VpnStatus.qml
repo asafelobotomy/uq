@@ -27,6 +27,8 @@ Singleton {
     // it changes and when the dropdown opens), and Net.parseTailscale() of the last status.
     property var nmDetails: null
     property var tsDetails: null
+    // uQbit's torrent kill switch (`uqbit status --json`'s vpn), or null without uQbit.
+    property var torrentVpn: null
     readonly property bool vpnActive: Net.vpnActive(vpnConn, exitNode)
     readonly property string vpnLabel: vpnConn ? String(vpnConn) : (exitNode ? String(exitNode) : "")
 
@@ -60,6 +62,8 @@ Singleton {
 
     // Read the active NetworkManager VPN's details again (the dropdown calls this as it opens).
     function refreshDetails() {
+        if (!root.uqbit.running)
+            root.uqbit.running = true;
         if (!vpnConn) {
             nmDetails = null;
             return;
@@ -236,5 +240,22 @@ Singleton {
                 root.refreshDetails();
             }
         }
+    }
+
+    // uQbit binds its torrents to the VPN; the dropdown says so. A missing uqbit is no line.
+    property Process uqbit: Process {
+        id: uqbit
+        command: ["uqbit", "status", "--json"]
+        stdout: StdioCollector {
+            onStreamFinished: root.torrentVpn = Net.parseUqbit(text)
+        }
+        onRunningChanged: {
+            if (!running && !didStart)
+                root.torrentVpn = null;
+            if (!running)
+                didStart = false;
+        }
+        property bool didStart: false
+        onStarted: didStart = true
     }
 }

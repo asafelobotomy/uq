@@ -108,7 +108,7 @@ Island {
     readonly property string vpnIcon: Quickshell.iconPath("network-vpn-symbolic", true) !== ""
         ? "network-vpn-symbolic" : "changes-prevent-symbolic"
     readonly property var vpnRows: Net.vpnRows(vpnLabel, VpnStatus.vpnConn ? VpnStatus.nmDetails : null,
-        VpnStatus.tsDetails, ip, Bridge.sharing)
+        VpnStatus.tsDetails, ip, Bridge.sharing, VpnStatus.torrentVpn)
     readonly property bool ipLookupOn: !(Settings.values.privacy && Settings.values.privacy.public_ip_lookup === false)
     function toggleVpn() {
         if (vpnPopup.open && vpnPopup.anchorItem === vpnButton) {

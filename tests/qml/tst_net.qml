@@ -183,4 +183,19 @@ TestCase {
         compare(trows[2].value, "nl-ams · 100.80.0.9");
         compare(trows[4].value, "Amsterdam, Netherlands");
     }
+
+    function test_uqbit_torrent_row() {
+        compare(Net.parseUqbit("nope"), null);
+        compare(Net.parseUqbit('{"engine":"running"}'), null);
+        var t = Net.parseUqbit('{"vpn":{"required":true,"interface":"tun0","up":true,"bound":true},"protected":true}');
+        compare(t.interface, "tun0");
+        var nm = { kind: "WireGuard", device: "wg0" };
+        var rows = Net.vpnRows("x", nm, null, null, false, t);
+        compare(rows[rows.length - 1].label, "Torrents");
+        compare(rows[rows.length - 1].value, "only through tun0");
+        t.up = false;
+        compare(Net.vpnRows("x", nm, null, null, false, t).pop().value, "stopped, the VPN is down");
+        t.required = false;
+        compare(Net.vpnRows("x", nm, null, null, false, t).filter(function (r) { return r.label === "Torrents"; }).length, 0);
+    }
 }

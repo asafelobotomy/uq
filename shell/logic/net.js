@@ -186,11 +186,23 @@ function parseNmcliConnection(text) {
     return out;
 }
 
+// `uqbit status --json` -> {required, interface, up, bound} (its torrent kill switch), or null.
+function parseUqbit(text) {
+    var o;
+    try { o = JSON.parse(text); } catch (e) { return null; }
+    var v = o && typeof o === "object" ? o.vpn : null;
+    if (!v || typeof v !== "object")
+        return null;
+    return { required: v.required === true, interface: typeof v.interface === "string" ? v.interface : "",
+        up: v.up === true, bound: v.bound === true };
+}
+
 // The VPN dropdown's rows: [{label, value}] from VpnStatus's name, nmcli details, Tailscale
 // details and the bridge's PublicIp (null while the lookup is off, failed or not done). With
+// `torrent` is parseUqbit()'s result (a "Torrents" row while uQbit requires the VPN). With
 // `sharing` the server, public address and place are left out, as the bar leaves out the country.
 // Values are untrusted and only reach UqText.
-function vpnRows(name, nm, ts, ip, sharing) {
+function vpnRows(name, nm, ts, ip, sharing, torrent) {
     var rows = [];
     function add(label, value) {
         if (value !== undefined && value !== null && String(value) !== "")
@@ -207,6 +219,12 @@ function vpnRows(name, nm, ts, ip, sharing) {
         add("Type", "Tailscale exit node (WireGuard)");
         add("Exit node", ts.exitNode + (ts.exitIp ? " · " + ts.exitIp : ""));
         add("Tailnet address", ts.selfIp);
+    }
+    if (torrent && torrent.required) {
+        if (torrent.up && torrent.bound)
+            add("Torrents", "only through " + (torrent.interface || "the VPN"));
+        else
+            add("Torrents", "stopped, the VPN is down");
     }
     if (!sharing) {
         var place = [];
