@@ -135,7 +135,7 @@ SettingsPage {
                         font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.4
                     }
                     UqLabel {
-                        text: Qt.formatDate(page.now, "dddd d MMMM yyyy")
+                        text: Qt.formatDate(page.now, page.usDates ? "dddd, MMMM d, yyyy" : "dddd d MMMM yyyy")
                         font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.4
                         wrapMode: Text.Wrap
                         Layout.fillWidth: true
