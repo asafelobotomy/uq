@@ -4,13 +4,16 @@ Makes a native app (Qt 6 C++ or Rust) follow the uQ theme live. One copy of the 
 uQ's `tokens.json` and follows it with a file watch, instead of one per app. Web apps (Tauri,
 Electron) use [`web/uq-tokens`](../../web/uq-tokens) instead.
 
-Version: **1.0.0** (the first line of each file says `uq-theme 1.0.0`).
+Version: **1.1.0** (the first lines of each file say `uq-theme 1.1.0`). 1.1.0 added `motion`, the
+KDE colour-scheme follower (`uqkdetheme.*`) and the Python reader (`uq_theme.py`).
 
 | File | For | Needs |
 |---|---|---|
 | `uq_theme.rs` | Rust apps (cxx-qt and others) | `serde_json`, `libc` |
 | `uqtheme.h`, `uqtheme.cpp` | Qt 6 C++ apps | Qt Core |
-| `check-uq-theme.sh` | every app's CI | bash, sha256sum |
+| `uqkdetheme.h`, `uqkdetheme.cpp` | Qt 6 apps drawn with the desktop style (Kirigami, Widgets) | Qt Core, Qt Gui |
+| `uq_theme.py` | Python apps | the standard library |
+| `check-uq-theme.sh` | every app's CI (older; prefer `../check-uq-native.sh`) | bash, sha256sum |
 
 ## What you get
 
@@ -20,8 +23,13 @@ Both languages give the same object, the shape uQ native apps' QML `Theme` singl
 {present: true, name, variant: "dark"|"light",
  colors: {bg, surface, surface_alt, overlay, text, text_muted, accent, accent_text, border,
           success, warning, error},
- radius, gapIn, gapOut, borderWidth, fontUi, fontMono, fontSize, iconTheme}
+ radius, gapIn, gapOut, borderWidth, fontUi, fontMono, fontSize, iconTheme,
+ motion: {fast, base, slow, reduce}}
 ```
+
+`motion` is in milliseconds and all 0 when the user turned on **Reduce motion** in uQ (uQ 0.3.36
+writes it to `tokens.json`). With an older uQ it is uQ's defaults, 100, 140 and 220. uq-consts'
+`UqThemeBase.qml` reads it, so a QML app built on that base follows Reduce motion with no code.
 
 or `{present: false}` when uQ isn't running there, the file doesn't parse, or any colour is
 missing or not `#rrggbb` / `#rrggbbaa` (then follow the desktop's own theme). Numbers are clamped
@@ -67,20 +75,43 @@ QObject::connect(theme, &uqtheme::Watcher::tokensChanged, [&] { applyPalette(the
 
 `uqtheme::load(path)` and `uqtheme::parse(bytes)` are there for a one-off read.
 
-## Keeping copies in step
+## Apps drawn with the desktop's style (Kirigami, Qt Widgets)
 
-Don't edit the vendored files; to update, copy the new release over them and bump the pin. In CI:
+An app whose controls come from qqc2-desktop-style, Kirigami or Fusion doesn't want a palette of
+its own: it wants the desktop's colours to be uQ's. Copy `uqkdetheme.h` and `uqkdetheme.cpp` and
+call this once, after the application object exists:
 
-```sh
-scripts/check-uq-theme.sh 1.0.0 src/uq_theme.rs
+```cpp
+#include "uqkdetheme.h"
+uqtheme::followKdeTheme(QStringLiteral("myapp"));
 ```
 
-It checks each file's header and that its contents are exactly that release's (the checksums are
-in the script), and exits 1 otherwise.
+It sets the application palette, icon theme and font from uQ's rendered KDE colour scheme
+(`theme/kde/uq.colors`) and `tokens.json`, and follows them with a file watch. Kirigami caches a
+scheme by its path, so each change is handed to it as a fresh temporary copy (removed on quit).
+Without uQ nothing changes.
 
-Changing these files here: bump the version on the first line of all three, run `./gen-check.sh`
-(it writes `check-uq-theme.sh` with the new checksums and keeps the old ones in `SUMS`), and copy
-the new script into the apps along with the files. uQ's CI runs the tests in `test/` and fails when
+## Python
+
+Copy `uq_theme.py` into your package. `uq_theme.load(uq_theme.tokens_path("MYAPP_UQ_TOKENS"))`
+gives the same dict as the other languages. There is no watcher thread: watch
+`uq_theme.theme_dirs(path)` with `QFileSystemWatcher` (or inotify), wait about 150 ms after a change,
+and load again.
+
+## Keeping copies in step
+
+Don't edit the vendored files; to update, copy the new release over them and bump the pin. List
+them in your repo's `uq/native.toml` and run `scripts/check-uq-native.sh` in CI (see
+[`../README.md`](../README.md)); `check-uq-native.sh --sync <uQ checkout>` copies the current files
+and bumps the pin. The older per-kit script still works:
+
+```sh
+scripts/check-uq-theme.sh 1.1.0 src/uq_theme.rs
+```
+
+Changing these files here: bump the version on the first line of all six, run `./gen-check.sh` and
+`../gen-check.sh` (they write the check scripts with the new checksums and keep the old ones in
+`SUMS`), and copy the new script into the apps along with the files. uQ's CI runs the tests in `test/` and fails when
 `check-uq-theme.sh` is out of date.
 
 ## Who uses it

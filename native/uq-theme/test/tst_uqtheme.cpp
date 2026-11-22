@@ -46,6 +46,22 @@ private slots:
         QCOMPARE(t["fontUi"].toString(), QStringLiteral("Inter"));
         QCOMPARE(uqtheme::parse(tokens("#ffffff", 500))["radius"].toInt(), 32);
     }
+    void motionDefaultsFollowsAndReduces()
+    {
+        const QVariantMap old = uqtheme::parse(tokens("#ffffff"))["motion"].toMap();
+        QCOMPARE(old["fast"].toInt(), 100);
+        QCOMPARE(old["slow"].toInt(), 220);
+        QCOMPARE(old["reduce"].toBool(), false);
+        QJsonObject t = QJsonDocument::fromJson(tokens("#ffffff")).object();
+        t["motion"] = QJsonObject{{"fast", 90}, {"base", 120}, {"slow", 99999}, {"reduce", false}};
+        const QVariantMap m = uqtheme::parse(QJsonDocument(t).toJson())["motion"].toMap();
+        QCOMPARE(m["fast"].toInt(), 90);
+        QCOMPARE(m["slow"].toInt(), 1000);
+        t["motion"] = QJsonObject{{"fast", 100}, {"base", 140}, {"slow", 220}, {"reduce", true}};
+        const QVariantMap r = uqtheme::parse(QJsonDocument(t).toJson())["motion"].toMap();
+        QCOMPARE(r["base"].toInt(), 0);
+        QCOMPARE(r["reduce"].toBool(), true);
+    }
     void aPartialOrBrokenFileIsNoTheme()
     {
         QCOMPARE(uqtheme::parse("not json")["present"].toBool(), false);
