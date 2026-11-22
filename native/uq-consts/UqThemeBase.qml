@@ -20,7 +20,8 @@ QtObject {
     property var fallbackColors: ({})
     property int fallbackRadius: 10
     readonly property bool uq: !!tokens && tokens.present === true
-    readonly property bool dark: !uq || tokens.variant !== "light"
+    // On uQ the theme's variant; elsewhere whether the background is dark.
+    readonly property bool dark: uq ? tokens.variant !== "light" : bg.hslLightness < 0.5
 
     function pick(key, fallback) {
         if (uq && tokens.colors && tokens.colors[key])

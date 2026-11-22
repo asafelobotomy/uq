@@ -56,6 +56,7 @@ TestCase {
         compare(desk.surface, "#2b2b2e")
         compare(desk.radius, 6)
         compare(desk.radiusControl, 4)
+        compare(desk.dark, false)
         compare(deskOnUq.bg, "#000001")
     }
 
