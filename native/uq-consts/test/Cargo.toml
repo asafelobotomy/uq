@@ -1,0 +1,11 @@
+# Runs the Rust uq-consts tests: cargo test --manifest-path native/uq-consts/test/Cargo.toml
+[package]
+name = "uq-consts-test"
+version = "1.0.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[lib]
+path = "../uq_consts.rs"
