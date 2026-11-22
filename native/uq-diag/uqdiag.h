@@ -1,4 +1,4 @@
-// uq-diag 1.0.0
+// uq-diag 1.0.1
 //
 // uQ's log format and crash records for a Qt 6 C++ app. Vendor this file and uqdiag.cpp
 // unchanged (see uQ's native/uq-diag/README.md); they need only Qt Core.
@@ -22,7 +22,7 @@
 namespace uqdiag {
 
 /// The version of these files; check-uq-diag.sh compares it with the one a repo pins.
-inline constexpr const char *VERSION = "1.0.0";
+inline constexpr const char *VERSION = "1.0.1";
 
 /// Install the message handler and the crash handlers. Call once, before QGuiApplication.
 /// `program` and `version` are copied.

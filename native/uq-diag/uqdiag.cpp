@@ -1,4 +1,4 @@
-// uq-diag 1.0.0
+// uq-diag 1.0.1
 //
 // See uqdiag.h. The crash handler only uses async-signal-safe calls (open, write, mkdir,
 // rename, time, getpid) on buffers prepared by init(); backtrace() is called once in init() so

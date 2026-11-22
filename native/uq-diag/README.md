@@ -4,7 +4,8 @@ Makes a native app (Rust or Qt 6 C++) log and crash the way uQ does, so its prob
 `uqctl log`, `uqctl explain` and Settings › Problems beside uQ's own. One copy of the code instead
 of one per app. The whole scheme is in [`docs/diagnostics.md`](../../docs/diagnostics.md).
 
-Version: **1.0.0** (the first line of each file says `uq-diag 1.0.0`).
+Version: **1.0.1** (the first line of each file says `uq-diag 1.0.1`). 1.0.1 builds on Rust
+edition 2021 as well as 2024; nothing else changed.
 
 | File | For | Needs |
 |---|---|---|
@@ -93,7 +94,7 @@ int main(int argc, char **argv)
 Don't edit the vendored files; to update, copy the new release over them and bump the pin. In CI:
 
 ```sh
-scripts/check-uq-diag.sh 1.0.0 src/uq_diag.rs
+scripts/check-uq-diag.sh 1.0.1 src/uq_diag.rs
 ```
 
 Changing these files here: bump the version on the first line of all three, run `./gen-check.sh`

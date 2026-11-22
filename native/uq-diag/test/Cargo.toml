@@ -2,7 +2,7 @@
 [package]
 name = "uq-diag-test"
 version = "1.0.0"
-edition = "2024"
+edition = "2021"  # what uq_diag.rs must build on, as apps on 2021 vendor it
 publish = false
 
 [workspace]
