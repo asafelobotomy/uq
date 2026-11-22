@@ -137,7 +137,7 @@ PanelWindow {
                 Surfaces.close();
         }).catch(function (e) {
             launchClose.stop();
-            console.warn("uq: launching " + String(item.id || "") + " failed: " + e);
+            console.warn("uq[LAUNCH-001] launching " + String(item.id || "") + " failed: " + e);
             if (root.shown)
                 root.error = F.failureText("Couldn't open " + name, e);
         });
@@ -163,7 +163,7 @@ PanelWindow {
         case "fire":
             // The menu closes at once (the session is ending or sleeping); a refusal is logged.
             Bridge.call("Power", [action]).catch(function (e) {
-                console.warn("uq: Power " + action + " failed: " + e);
+                console.warn("uq[POWER-001] Power " + action + " failed: " + e);
             });
             Surfaces.close();
             break;

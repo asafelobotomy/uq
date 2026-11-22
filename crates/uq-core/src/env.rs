@@ -57,14 +57,14 @@ impl<'de> Deserialize<'de> for Env {
                     Ok(var) => Some(var),
                     Err(_) => {
                         tracing::warn!(
-                            "state: dropping env.vars[{i}]: it doesn't fit this version"
+                            "[STATE-002] state: dropping env.vars[{i}]: it doesn't fit this version"
                         );
                         None
                     }
                 })
                 .collect(),
             Some(_) => {
-                tracing::warn!("state: env.vars is not a list; ignoring it");
+                tracing::warn!("[STATE-002] state: env.vars is not a list; ignoring it");
                 Vec::new()
             }
         };
@@ -203,17 +203,21 @@ impl Env {
             let at = i;
             i += 1;
             if let Err(e) = check_var("env.vars", &v.name, &v.value) {
-                tracing::warn!("state: dropping env.vars[{at}]: {e}");
+                tracing::warn!("[STATE-002] state: dropping env.vars[{at}]: {e}");
                 false
             } else if !seen.insert(v.name.clone()) {
-                tracing::warn!("state: dropping env.vars[{at}]: its name is already set");
+                tracing::warn!(
+                    "[STATE-002] state: dropping env.vars[{at}]: its name is already set"
+                );
                 false
             } else {
                 true
             }
         });
         if self.vars.len() > MAX_VARS {
-            tracing::warn!("state: env has more than {MAX_VARS} variables; keeping the first");
+            tracing::warn!(
+                "[STATE-002] state: env has more than {MAX_VARS} variables; keeping the first"
+            );
             self.vars.truncate(MAX_VARS);
         }
         self

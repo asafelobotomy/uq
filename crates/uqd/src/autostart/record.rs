@@ -49,7 +49,7 @@ impl Record {
     pub fn save(&self, path: &Path) {
         let text = serde_json::to_string(self).expect("the record serialises");
         if let Err(e) = uq_core::atomic::atomic_write(path, &text) {
-            tracing::warn!("writing the autostart run record: {e}");
+            tracing::warn!("[START-004] writing the autostart run record: {e}");
         }
     }
 }

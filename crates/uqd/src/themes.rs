@@ -32,7 +32,11 @@ impl Desktop {
         let fingerprint = user::fingerprint(&root);
         let scan = user::scan(&root);
         for s in &scan.skipped {
-            tracing::warn!("user theme skipped: {:?}: {}", s.folder, s.problem);
+            tracing::warn!(
+                "[THEME-002] user theme skipped: {:?}: {}",
+                s.folder,
+                s.problem
+            );
         }
         self.skipped_themes = scan.skipped.clone();
         let active = self.state.theme.clone();
@@ -185,7 +189,7 @@ impl Desktop {
             PointKind::Auto(AutoReason::BeforeImport),
             Utc::now().timestamp(),
         ) {
-            tracing::warn!("saving before-import point: {e}");
+            tracing::warn!("[STATE-005] saving before-import point: {e}");
         }
         if let Err(e) = atomic_replace_dir(&folder, &uqtheme::install_files(&theme)) {
             // The new files may be in place even so (the old copy couldn't be removed).

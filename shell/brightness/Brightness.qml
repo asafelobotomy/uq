@@ -88,7 +88,7 @@ QtObject {
             root.available = false;
             if (!root.warned) {
                 root.warned = true;
-                console.log("uq: brightnessctl unavailable; brightness disabled");
+                console.info("uq[SHELL-002] brightnessctl unavailable; brightness disabled");
             }
         }
     }

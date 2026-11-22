@@ -90,7 +90,7 @@ impl Daemon {
         match self.store.expire(self.config.expire_hours * 3600, now()) {
             Ok(0) => {}
             Ok(_) => self.broadcast(),
-            Err(e) => tracing::warn!("couldn't expire old copies: {e}"),
+            Err(e) => tracing::warn!("[CLIP-001] couldn't expire old copies: {e}"),
         }
     }
 
@@ -114,7 +114,7 @@ impl Daemon {
         match self.store.add(kind, &c.mime, &c.data, app, now()) {
             Ok(Added::New(_) | Added::Bumped(_)) => self.broadcast(),
             Ok(_) => {}
-            Err(e) => tracing::warn!("couldn't record a copy: {e}"),
+            Err(e) => tracing::warn!("[CLIP-001] couldn't record a copy: {e}"),
         }
     }
 

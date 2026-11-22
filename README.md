@@ -707,6 +707,26 @@ The lock uses Hyprland's `hyprland-lock-notify-v1` protocol (see Credits).
 Your own Hyprland settings go in `~/.config/hypr/uq/user.lua`, which uQ loads last and never
 rewrites.
 
+## When something goes wrong
+
+Every warning and error uQ logs has a code, like `HYPR-003`, that says what happened and what to
+do about it. **Settings › Problems** lists what went wrong in the last hour, day or week, in plain
+words, and every crash of the shell, the lock screen, uQ's programs and apps built on uQ. A crash
+also shows a notification. Each crash has **Copy report**: a Markdown report with the versions,
+the screens, the problems logged before it and the crashed part's last lines, with window titles,
+names and addresses taken out, ready to paste into an issue.
+
+In a terminal:
+
+```bash
+uqctl log --summary            # what went wrong since this boot, one line per problem
+uqctl explain HYPR-003         # what a code means and what to do
+uqctl crashes                  # crashes, newest first
+uqctl report --crash latest    # save the newest crash's report and print where
+```
+
+Details, the list of areas and how apps join in: [docs/diagnostics.md](docs/diagnostics.md).
+
 ## Develop
 
 ```bash

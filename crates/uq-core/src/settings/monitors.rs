@@ -186,7 +186,7 @@ fn lenient_outputs<'de, D: serde::Deserializer<'de>>(
     d: D,
 ) -> Result<BTreeMap<String, OutputConfig>, D::Error> {
     let Value::Object(obj) = Value::deserialize(d)? else {
-        tracing::warn!("state: [monitors.outputs] is not a table; ignoring it");
+        tracing::warn!("[STATE-002] state: [monitors.outputs] is not a table; ignoring it");
         return Ok(BTreeMap::new());
     };
     Ok(obj
@@ -194,7 +194,7 @@ fn lenient_outputs<'de, D: serde::Deserializer<'de>>(
         .filter_map(|(name, v)| match lenient_entry(&name, &v) {
             Some(c) => Some((name, c)),
             None => {
-                tracing::warn!("state: dropping monitor entry {name:?} = {v}");
+                tracing::warn!("[STATE-002] state: dropping monitor entry {name:?} = {v}");
                 None
             }
         })

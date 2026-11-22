@@ -276,9 +276,11 @@ pub fn repair_rules(rules: BTreeMap<String, Layout>) -> BTreeMap<String, Layout>
     let mut out = BTreeMap::new();
     for (ws, layout) in rules {
         if out.contains_key(&workspace_selector(&ws)) {
-            tracing::warn!("state: dropping workspace rule {ws:?}: names a workspace twice");
+            tracing::warn!(
+                "[STATE-002] state: dropping workspace rule {ws:?}: names a workspace twice"
+            );
         } else if let Err(e) = set_rule(&mut out, &ws, layout) {
-            tracing::warn!("state: dropping workspace rule {ws:?}: {e}");
+            tracing::warn!("[STATE-002] state: dropping workspace rule {ws:?}: {e}");
         }
     }
     out

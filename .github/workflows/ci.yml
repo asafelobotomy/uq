@@ -92,6 +92,35 @@ jobs:
           git diff --exit-code -- native/uq-theme
           native/uq-theme/check-uq-theme.sh "$(head -n1 native/uq-theme/uq_theme.rs | grep -oE '[0-9.]+$')" native/uq-theme/uq_theme.rs native/uq-theme/uqtheme.h native/uq-theme/uqtheme.cpp
 
+  native-uq-diag:
+    # native/uq-diag: the log format and crash records the Qt and Rust apps vendor (uq-core and
+    # uqlip use the Rust file in place). Their tests (a real crash's record included), and
+    # check-uq-diag.sh's checksums matching the files.
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - name: Install Rust, Qt and CMake
+        run: pacman -Syu --noconfirm --needed rust qt6-base cmake gcc make git
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Rust module
+        run: |
+          cargo test --manifest-path native/uq-diag/test/Cargo.toml --locked
+          cargo clippy --manifest-path native/uq-diag/test/Cargo.toml --locked --all-targets -- -D warnings
+          rustfmt --check --edition 2024 native/uq-diag/uq_diag.rs
+      - name: C++ module
+        run: |
+          cmake -S native/uq-diag/test -B /tmp/uqdiag-build
+          cmake --build /tmp/uqdiag-build
+          QT_QPA_PLATFORM=offscreen ctest --test-dir /tmp/uqdiag-build --output-on-failure
+      - name: check-uq-diag.sh is up to date
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          native/uq-diag/gen-check.sh
+          git diff --exit-code -- native/uq-diag
+          native/uq-diag/check-uq-diag.sh "$(head -n1 native/uq-diag/uq_diag.rs | grep -oE '[0-9.]+$')" native/uq-diag/uq_diag.rs native/uq-diag/uqdiag.h native/uq-diag/uqdiag.cpp
+
   smoke:
     # The shell on a real Hyprland (scripts/smoke-shell.sh). Hyprland cannot start without a DRM
     # device, even with only headless outputs, and a job container is created before any step

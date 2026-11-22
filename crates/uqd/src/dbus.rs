@@ -241,7 +241,7 @@ impl DesktopIface {
     async fn restore(&self, id: &str) -> Result<(), UqError> {
         // `Restore` has no report to carry a notice, so it's logged.
         for notice in self.desktop.lock().await.restore(id).await? {
-            tracing::warn!("restore: {notice}");
+            tracing::warn!("[STATE-008] restore: {notice}");
         }
         Ok(())
     }

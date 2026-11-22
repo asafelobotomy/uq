@@ -141,6 +141,23 @@ fn problems_are_listed_and_fail() {
     );
     put(&uq.join("integrations/ws/rules.lua"), "hl.exec_cmd('x')");
     put(&uq.join("integrations/empty/README.md"), "");
+    let code = |id: &str| {
+        format!(
+            "[[code]]\nid = \"{id}\"\nseverity = \"warn\"\ntitle = \"t\"\nmeans = \"m\"\nfix = \"f\"\n"
+        )
+    };
+    put(
+        &uq.join("diag/good.toml"),
+        &format!(
+            "app = \"Good\"\nunits = [\"good.service\"]\n{}",
+            code("GOOD-001")
+        ),
+    );
+    put(
+        &uq.join("diag/mine.toml"),
+        &format!("app = \"Mine\"\n{}", code("HYPR-901")),
+    );
+    put(&uq.join("diag/notes.txt"), "");
 
     let (ok, out) = uqctl(&["integrations", "check", uq.to_str().unwrap()]);
     assert!(!ok, "{out}");
@@ -160,7 +177,9 @@ fn problems_are_listed_and_fail() {
         "ws/rules.toml: window_rule \"ws.x\": workspace must be",
         "rules.lua: only rules.toml belongs in integrations/<name>/",
         "empty: has no rules.toml",
-        "16 problem(s)",
+        "mine.toml: HYPR is one of uQ's own areas",
+        "diag/notes.txt: only <app>.toml files belong in diag/",
+        "18 problem(s)",
     ] {
         assert!(out.contains(needle), "{needle:?} missing from:\n{out}");
     }

@@ -5,6 +5,7 @@ pub mod client;
 pub mod compat;
 pub mod contrast;
 pub mod desktop_entry;
+pub mod diag;
 pub mod env;
 pub mod flatpak;
 pub mod fuzzy;

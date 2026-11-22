@@ -334,7 +334,7 @@ impl Desktop {
             .is_none()
         {
             tracing::warn!(
-                "theme {:?} not installed; using {}",
+                "[THEME-001] theme {:?} not installed; using {}",
                 desktop.state.theme,
                 State::default().theme
             );
@@ -546,7 +546,7 @@ impl Desktop {
             }
             Err(e) => {
                 // Stay dirty; tried again after LAUNCH_RETRY.
-                tracing::warn!("saving launch counts: {e}");
+                tracing::warn!("[STATE-007] saving launch counts: {e}");
                 self.launch_retry_at = Some(now + LAUNCH_RETRY);
             }
         }
@@ -584,7 +584,7 @@ impl Desktop {
             tracing::debug!("leaving the capture submap at start-up: {e}");
         }
         if let Err(e) = self.ensure_user_lua() {
-            tracing::warn!("{e}");
+            tracing::warn!("[START-004] {e}");
         }
         self.save_new_version_point();
         // A display change left unconfirmed by a crash: the stored config never changed, so
@@ -594,7 +594,7 @@ impl Desktop {
             .commit(self.state.clone(), Change::Theme, Origin::Schedule)
             .await
         {
-            tracing::warn!("startup render failed: {e}");
+            tracing::warn!("[THEME-004] startup render failed: {e}");
         }
         if crashed_mid_apply {
             let _ = self.events.send(Event::MonitorsChanged);
@@ -838,9 +838,11 @@ impl Desktop {
             if up && let Some(path) = row.hypr {
                 match self.comp.get_option(path).await {
                     Ok(v) => live = v,
-                    Err(CompositorError::Rejected(e)) => tracing::warn!("getoption {path}: {e}"),
+                    Err(CompositorError::Rejected(e)) => {
+                        tracing::warn!("[HYPR-003] getoption {path}: {e}")
+                    }
                     Err(e) => {
-                        tracing::warn!("getoption {path}: {e}");
+                        tracing::warn!("[HYPR-003] getoption {path}: {e}");
                         up = false;
                     }
                 }
@@ -1002,7 +1004,7 @@ impl Desktop {
             PointKind::Auto(AutoReason::BeforeRestore),
             Utc::now().timestamp(),
         ) {
-            tracing::warn!("saving before-restore point: {e}");
+            tracing::warn!("[STATE-005] saving before-restore point: {e}");
         }
         next.launch_counts = self.state.launch_counts.clone();
         // Whether Welcome ran is not part of a restore point's settings.
@@ -1084,7 +1086,7 @@ impl Desktop {
                 now,
             )
         {
-            tracing::warn!("saving daily restore point: {e}");
+            tracing::warn!("[STATE-005] saving daily restore point: {e}");
         }
         let origin = origin.as_str();
         let entries: Vec<Entry> = changes
@@ -1096,7 +1098,7 @@ impl Desktop {
                 self.last_entry_ids = entries.into_iter().map(|e| e.id).collect();
                 let _ = self.events.send(Event::HistoryChanged);
             }
-            Err(e) => tracing::warn!("writing history: {e}"),
+            Err(e) => tracing::warn!("[STATE-006] writing history: {e}"),
         }
         self.journal.prune(now);
         self.restore.prune();
@@ -1119,7 +1121,7 @@ impl Desktop {
             PointKind::Auto(AutoReason::NewVersion),
             Utc::now().timestamp(),
         ) {
-            tracing::warn!("saving new-version restore point: {e}");
+            tracing::warn!("[STATE-005] saving new-version restore point: {e}");
         }
     }
 
@@ -1218,7 +1220,9 @@ impl Desktop {
                 let _ = self.events.send(Event::ConfigError(msg.clone()));
                 return Err(DesktopError::ConfigInvalid(msg));
             }
-            Err(e) => tracing::warn!("could not validate config ({e}); applying unvalidated"),
+            Err(e) => {
+                tracing::warn!("[HYPR-004] could not validate config ({e}); applying unvalidated")
+            }
         }
         Ok(Candidate {
             files,
@@ -1294,7 +1298,7 @@ impl Desktop {
                 self.reapply_pending().await;
                 if live {
                     if let Err(e) = self.sys.apply(&theme) {
-                        tracing::warn!("system settings: {e}");
+                        tracing::warn!("[THEME-003] system settings: {e}");
                     }
                     // Every Qt and GTK app follows the theme without a manual step: create
                     // the per-app config files that are missing (never replacing one the user
@@ -1308,7 +1312,7 @@ impl Desktop {
                     }
                     // KDE apps' terminal (Dolphin's "Open Terminal Here"), unless one is named.
                     if let Err(e) = uq_core::kdeglobals::ensure_terminal(&self.paths) {
-                        tracing::warn!("kdeglobals terminal: {e}");
+                        tracing::warn!("[THEME-003] kdeglobals terminal: {e}");
                     }
                     let cursor = self
                         .comp
@@ -1316,7 +1320,7 @@ impl Desktop {
                         .await;
                     self.live(cursor);
                     if shell_env_changed && let Err(e) = self.sys.restart_shell() {
-                        tracing::warn!("restarting the shell for its new icons: {e}");
+                        tracing::warn!("[THEME-006] restarting the shell for its new icons: {e}");
                     }
                 }
                 sync_login_theme(&theme.id, theme.variant);
@@ -1337,7 +1341,7 @@ impl Desktop {
     /// colours, icons, fonts and style into them. Kvantum is used when installed and switched on.
     fn theme_apps(&self, theme: &uq_core::theme::Theme, kvantum: bool) {
         if let Err(e) = uq_core::stub::install_consumers(&self.paths, kvantum) {
-            tracing::warn!("app theme files: {e}");
+            tracing::warn!("[THEME-003] app theme files: {e}");
         }
         match uq_core::reclaim::reclaim(&self.paths, kvantum) {
             Ok(changed) => {
@@ -1345,11 +1349,11 @@ impl Desktop {
                     tracing::info!("{} had lost uQ's theme; put it back", f.display());
                 }
             }
-            Err(e) => tracing::warn!("app theme files: {e}"),
+            Err(e) => tracing::warn!("[THEME-003] app theme files: {e}"),
         }
         // Qt's icons, fonts and palette marker, in a qt6ct.conf uQ wrote.
         if let Err(e) = uq_core::qt6ct::sync(&self.paths, theme) {
-            tracing::warn!("qt6ct look: {e}");
+            tracing::warn!("[THEME-003] qt6ct look: {e}");
         }
         // KDE apps (Dolphin, Kirigami) read colours, icons, style and fonts from
         // kdeglobals through the `kde` platform theme.
@@ -1364,15 +1368,15 @@ impl Desktop {
             // Open KDE/Qt windows reload kdeglobals only when told to.
             Ok(true) => {
                 if let Err(e) = self.sys.notify_kde_apps() {
-                    tracing::warn!("telling KDE apps about the new look: {e}");
+                    tracing::warn!("[THEME-003] telling KDE apps about the new look: {e}");
                 }
             }
             Ok(false) => {}
-            Err(e) => tracing::warn!("kdeglobals look: {e}"),
+            Err(e) => tracing::warn!("[THEME-003] kdeglobals look: {e}"),
         }
         // Flatpak apps: read-only access to the theme files, so they follow too.
         if let Err(e) = uq_core::flatpak::sync(&self.paths) {
-            tracing::warn!("flatpak override: {e}");
+            tracing::warn!("[THEME-003] flatpak override: {e}");
         }
     }
 
@@ -1380,16 +1384,16 @@ impl Desktop {
         match res {
             Ok(()) => true,
             Err(CompositorError::NotRunning) => {
-                tracing::warn!("Hyprland not running; change saved for next start");
+                tracing::warn!("[HYPR-002] Hyprland not running; change saved for next start");
                 false
             }
             Err(CompositorError::Rejected(msg)) => {
-                tracing::warn!("Hyprland rejected live change: {msg}");
+                tracing::warn!("[HYPR-001] Hyprland rejected live change: {msg}");
                 let _ = self.events.send(Event::ConfigError(msg));
                 true
             }
             Err(e) => {
-                tracing::warn!("Hyprland: {e}");
+                tracing::warn!("[HYPR-003] Hyprland: {e}");
                 false
             }
         }

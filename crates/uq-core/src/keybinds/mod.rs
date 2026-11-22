@@ -136,14 +136,14 @@ fn lenient<T: DeserializeOwned>(v: &Value, list: &str) -> Vec<T> {
                 Ok(x) => Some(x),
                 Err(_) => {
                     tracing::warn!(
-                        "state: dropping keybinds.{list}[{i}]: it doesn't fit this version"
+                        "[STATE-002] state: dropping keybinds.{list}[{i}]: it doesn't fit this version"
                     );
                     None
                 }
             })
             .collect(),
         Some(_) => {
-            tracing::warn!("state: keybinds.{list} is not a list; ignoring it");
+            tracing::warn!("[STATE-002] state: keybinds.{list} is not a list; ignoring it");
             Vec::new()
         }
     }
@@ -290,7 +290,9 @@ impl Keybinds {
             match check::override_(i, &o) {
                 Ok(Some(n)) if seen.insert(n.id.clone()) => kept.push(n),
                 Ok(_) => {}
-                Err(e) => tracing::warn!("state: dropping keybinds.overrides[{i}]: {e}"),
+                Err(e) => {
+                    tracing::warn!("[STATE-002] state: dropping keybinds.overrides[{i}]: {e}")
+                }
             }
         }
         self.overrides = kept;
@@ -298,14 +300,16 @@ impl Keybinds {
         for (i, mut b) in std::mem::take(&mut self.custom).into_iter().enumerate() {
             match check::custom(i, &mut b) {
                 Ok(()) => custom.push(b),
-                Err(e) => tracing::warn!("state: dropping keybinds.custom[{i}]: {e}"),
+                Err(e) => tracing::warn!("[STATE-002] state: dropping keybinds.custom[{i}]: {e}"),
             }
         }
         custom.truncate(MAX_CUSTOM);
         let mut ids = BTreeSet::new();
         for b in &mut custom {
             if !b.id.is_empty() && !(valid_custom_id(&b.id) && ids.insert(b.id.clone())) {
-                tracing::warn!("state: a shortcut has a bad or repeated id; it gets a new one");
+                tracing::warn!(
+                    "[STATE-002] state: a shortcut has a bad or repeated id; it gets a new one"
+                );
                 b.id.clear();
             }
         }
@@ -319,7 +323,10 @@ impl Keybinds {
         // Drop the later of two shortcuts on the same keys until none are left. Dropping an
         // override puts a default back on its own keys, so go round again.
         while let Some(c) = conflict::conflicts(&self).into_iter().next() {
-            tracing::warn!("state: dropping a shortcut: {}", conflict::message(&c));
+            tracing::warn!(
+                "[STATE-002] state: dropping a shortcut: {}",
+                conflict::message(&c)
+            );
             if let Some(i) = self.custom.iter().position(|b| b.id == c.second) {
                 self.custom.remove(i);
             } else if let Some(i) = self.overrides.iter().position(|o| o.id == c.second) {

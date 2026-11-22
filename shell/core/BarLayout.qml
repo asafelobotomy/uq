@@ -78,7 +78,7 @@ QtObject {
             root.error = "";
         }).catch(function (e) {
             root.error = String(e);
-            console.warn("uq: bar layout refused: " + e);
+            console.warn("uq[BAR-001] bar layout refused: " + e);
         });
         return true;
     }

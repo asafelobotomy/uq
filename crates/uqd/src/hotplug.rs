@@ -94,7 +94,7 @@ impl Desktop {
             // The plan and the main display follow the new screens; nothing in the state changes.
             let state = self.state.clone();
             if let Err(e) = self.commit(state, Change::Reload, Origin::Hotplug).await {
-                tracing::warn!("planning workspaces for the new screens: {e}");
+                tracing::warn!("[DISPLAY-003] planning workspaces for the new screens: {e}");
             }
         }
         if added {
@@ -148,7 +148,10 @@ impl Desktop {
         let Some(reason) = refusal else {
             return true;
         };
-        tracing::warn!("display arrangement {:?} not used: {reason}", p.name);
+        tracing::warn!(
+            "[DISPLAY-002] display arrangement {:?} not used: {reason}",
+            p.name
+        );
         if self.hotplug.notified.insert(p.id.clone()) {
             let body = format!(
                 "“{}” couldn't be used with these screens: {}",
@@ -185,7 +188,7 @@ impl Desktop {
                 })
                 .collect(),
             Err(e) => {
-                tracing::warn!("reading workspaces: {e}");
+                tracing::warn!("[DISPLAY-003] reading workspaces: {e}");
                 return;
             }
         };
@@ -203,7 +206,9 @@ impl Desktop {
             match self.comp.eval(&line).await {
                 Ok(()) => {}
                 Err(CompositorError::NotRunning) => return,
-                Err(e) => tracing::warn!("moving workspace {} back: {e}", w.workspace),
+                Err(e) => {
+                    tracing::warn!("[DISPLAY-003] moving workspace {} back: {e}", w.workspace)
+                }
             }
         }
     }
@@ -221,7 +226,7 @@ impl Desktop {
         }
         self.hotplug.last_primary = Some(primary.clone());
         if let Err(e) = self.xrandr.set_primary(&primary).await {
-            tracing::warn!("setting the X11 main display to {primary}: {e}");
+            tracing::warn!("[DISPLAY-004] setting the X11 main display to {primary}: {e}");
         }
     }
 

@@ -1,5 +1,10 @@
 //! `uqlip`: follows the Wayland clipboard, keeps the history, answers `uqctl clip` and the shell.
 
+/// uQ's shared log format and crash records (native/uq-diag), vendored by path.
+#[path = "../../../native/uq-diag/uq_diag.rs"]
+#[allow(dead_code)]
+mod uq_diag;
+
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
 use std::os::unix::net::{UnixListener, UnixStream};
@@ -76,11 +81,12 @@ fn main() {
     // wayland-backend logs every connection error it returns to us, and we log those ourselves
     // with what they mean (a compositor exiting at logout is not an error). Keep it quiet unless
     // RUST_LOG asks for it by name.
-    let mut filter = tracing_subscriber::EnvFilter::from_default_env();
+    let mut filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
     if !std::env::var("RUST_LOG").is_ok_and(|v| v.contains("wayland_backend")) {
         filter = filter.add_directive("wayland_backend=off".parse().unwrap());
     }
-    tracing_subscriber::fmt().with_env_filter(filter).init();
+    uq_diag::init_with("uqlip", filter);
     let config = Config::load(&config_path());
     let dir = data_dir();
     let store = match Store::open(&dir, config.limits()) {
@@ -96,7 +102,7 @@ fn main() {
         if config.clear_on_login
             && let Err(e) = d.store.clear(true)
         {
-            tracing::warn!("couldn't clear the history at start: {e}");
+            tracing::warn!("[CLIP-001] couldn't clear the history at start: {e}");
         }
         d.expire_due();
     }
@@ -146,7 +152,7 @@ fn main() {
             d.set_setter(move |m, data| h.lock().unwrap().set_selection(m, data));
             tracing::info!("watching the clipboard through {}", d.protocol);
         }
-        Err(e) => tracing::error!("can't watch the clipboard: {e}"),
+        Err(e) => tracing::error!("[CLIP-002] can't watch the clipboard: {e}"),
     }
 
     let d2 = daemon.clone();

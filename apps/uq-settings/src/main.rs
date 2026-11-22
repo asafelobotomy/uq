@@ -34,6 +34,7 @@ mod plugin_host;
 mod plugins;
 mod power_model;
 mod printers_model;
+mod problems_model;
 mod profiles_model;
 mod region_model;
 mod registry;
@@ -91,6 +92,7 @@ fn parse_size(s: &str) -> Result<String, String> {
 }
 
 fn main() -> ExitCode {
+    uq_core::diag::log::init("uq-settings", "warn");
     let mut args = Args::parse();
     if args.welcome {
         args.page = app::WELCOME_PAGE.into();

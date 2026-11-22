@@ -49,9 +49,9 @@ impl ProfileStore {
             match read_file(&path).and_then(|t| Profile::parse(&t)) {
                 Ok(p) if p.id == stem => out.push(p),
                 Ok(p) => {
-                    tracing::warn!(?path, id = %p.id, "profile id isn't its file name; skipped")
+                    tracing::warn!(?path, id = %p.id, "[STATE-003] profile id isn't its file name; skipped")
                 }
-                Err(e) => tracing::warn!(?path, error = %e, "profile file skipped"),
+                Err(e) => tracing::warn!(?path, error = %e, "[STATE-003] profile file skipped"),
             }
         }
         out.sort_by(|a, b| (a.name.to_lowercase(), &a.id).cmp(&(b.name.to_lowercase(), &b.id)));

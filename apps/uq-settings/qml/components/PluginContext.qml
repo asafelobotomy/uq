@@ -59,7 +59,7 @@ QtObject {
         try {
             callback(result);
         } catch (e) {
-            console.warn("uq-settings: page " + context.pageId + ": its callback failed: " + e);
+            console.warn("uq-settings[SETTINGS-002] page " + context.pageId + ": its callback failed: " + e);
         }
     }
 

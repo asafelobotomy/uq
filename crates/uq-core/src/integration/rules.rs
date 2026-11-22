@@ -294,7 +294,7 @@ pub fn installed(root: &Path) -> Vec<AppRule> {
     let files = match scan_rules(root) {
         Ok(f) => f,
         Err(e) => {
-            tracing::warn!("integration rules: {e}");
+            tracing::warn!("[INTEG-001] integration rules: {e}");
             return Vec::new();
         }
     };
@@ -303,7 +303,7 @@ pub fn installed(root: &Path) -> Vec<AppRule> {
         .flat_map(|f| match f.rules {
             Ok(rules) => rules,
             Err(e) => {
-                tracing::warn!("{}: skipped: {e}", f.path.display());
+                tracing::warn!("[INTEG-001] {}: skipped: {e}", f.path.display());
                 Vec::new()
             }
         })
@@ -409,13 +409,13 @@ impl<'de> Deserialize<'de> for IntegrationRules {
                 .filter_map(|e| {
                     let s = e.as_str().map(str::to_string);
                     if s.is_none() {
-                        tracing::warn!("state: dropping {DOMAIN}.enabled entry {e}");
+                        tracing::warn!("[STATE-002] state: dropping {DOMAIN}.enabled entry {e}");
                     }
                     s
                 })
                 .collect(),
             Some(_) => {
-                tracing::warn!("state: {DOMAIN}.enabled is not a list; ignoring it");
+                tracing::warn!("[STATE-002] state: {DOMAIN}.enabled is not a list; ignoring it");
                 Vec::new()
             }
         };
@@ -472,7 +472,7 @@ impl IntegrationRules {
             .filter(|id| {
                 let keep = valid_rule_id(id) && seen.insert(id.clone());
                 if !keep {
-                    tracing::warn!("state: dropping {DOMAIN}.enabled entry {id:?}");
+                    tracing::warn!("[STATE-002] state: dropping {DOMAIN}.enabled entry {id:?}");
                 }
                 keep
             })

@@ -61,7 +61,7 @@ impl AutostartConfig {
             .map(PathBuf::from)
             .filter(|p| p.is_absolute());
         let Some(runtime) = runtime else {
-            tracing::warn!("XDG_RUNTIME_DIR isn't set; startup apps won't be started");
+            tracing::warn!("[START-001] XDG_RUNTIME_DIR isn't set; startup apps won't be started");
             return AutostartConfig {
                 dev,
                 session,
@@ -71,7 +71,7 @@ impl AutostartConfig {
         let spawner = SystemSpawner::new().map(|s| Arc::new(s) as Arc<dyn Spawner>);
         if spawner.is_none() {
             tracing::warn!(
-                "systemd-run or systemd-cat isn't on uqd's PATH; startup apps won't be started"
+                "[START-001] systemd-run or systemd-cat isn't on uqd's PATH; startup apps won't be started"
             );
         }
         AutostartConfig {
@@ -415,7 +415,7 @@ async fn launch_inner(ctx: Ctx, job: Job, attempt: u32) {
         r.spawns += 1;
         match spawned {
             Err(e) => {
-                tracing::warn!("starting the startup app {id}: {}", e.kind());
+                tracing::warn!("[START-002] starting the startup app {id}: {}", e.kind());
                 r.statuses.insert(id.clone(), Status::SpawnFailed);
                 None
             }

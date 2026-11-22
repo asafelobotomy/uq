@@ -144,7 +144,7 @@ impl Journal {
         for (d, p) in self.files() {
             if d < cutoff {
                 if let Err(e) = fs::remove_file(&p) {
-                    tracing::warn!("history: removing {}: {e}", p.display());
+                    tracing::warn!("[STATE-006] history: removing {}: {e}", p.display());
                 }
             } else {
                 kept.push(p);
@@ -159,7 +159,7 @@ impl Journal {
             if *n <= excess {
                 excess -= *n;
                 if let Err(e) = fs::remove_file(path) {
-                    tracing::warn!("history: removing {}: {e}", path.display());
+                    tracing::warn!("[STATE-006] history: removing {}: {e}", path.display());
                 }
             } else {
                 let rest: String = parse_lines(path)
@@ -169,7 +169,7 @@ impl Journal {
                     .map(|l| l + "\n")
                     .collect();
                 if let Err(e) = crate::atomic::atomic_write(path, &rest) {
-                    tracing::warn!("history: rewriting {}: {e}", path.display());
+                    tracing::warn!("[STATE-006] history: rewriting {}: {e}", path.display());
                 }
                 excess = 0;
             }

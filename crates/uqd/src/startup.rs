@@ -264,7 +264,7 @@ impl Desktop {
             .err()
             .map(|e| format!("uQ couldn't write the session variables file: {e}"));
         if let Some(m) = new_failure(&self.files.env_file, &now) {
-            tracing::warn!("{m}");
+            tracing::warn!("[START-004] {m}");
         }
         self.files.env_file = now;
     }
@@ -275,7 +275,7 @@ impl Desktop {
         let report = files::sync_flags(&self.paths.startup, &self.state.compat, &installed);
         for (name, f) in &report {
             if let BrowserFile::Error(m) = f {
-                tracing::warn!("{name} flags file: {m}");
+                tracing::warn!("[START-004] {name} flags file: {m}");
             }
         }
         self.files.browsers = report;
@@ -286,12 +286,12 @@ impl Desktop {
         for (id, e) in
             files::remove_overrides(paths, gone.iter().map(String::as_str), self.dev_session)
         {
-            tracing::warn!("removing the launcher file for {id}: {e}");
+            tracing::warn!("[START-004] removing the launcher file for {id}: {e}");
         }
         let report = files::sync_overrides(paths, &self.state.compat, self.dev_session);
         for (id, s) in &report {
             if let OverrideState::Error(m) = s {
-                tracing::warn!("launcher file for {id}: {m}");
+                tracing::warn!("[START-004] launcher file for {id}: {m}");
             }
         }
         self.files.overrides = report;
@@ -302,7 +302,7 @@ impl Desktop {
         let found = read_folders(&paths.user_autostart(), &paths.system_autostart());
         let now = files::sync_hidden_copies(paths, &found, &self.state.autostart);
         if let Some(m) = new_failure(&self.files.autostart, &now) {
-            tracing::warn!("{m}");
+            tracing::warn!("[START-004] {m}");
         }
         self.files.autostart = now;
     }

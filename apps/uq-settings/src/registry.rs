@@ -472,6 +472,21 @@ static HISTORY_SETTINGS: [SearchEntry; 2] = [
     ),
 ];
 
+static PROBLEMS_SETTINGS: [SearchEntry; 2] = [
+    entry(
+        "crashes",
+        "Crash reports",
+        &["crash", "crashed", "report", "bug", "copy report"],
+    ),
+    entry(
+        "problems",
+        "Warnings and errors",
+        &[
+            "error", "errors", "warning", "log", "journal", "debug", "code",
+        ],
+    ),
+];
+
 static KEYBINDS_SETTINGS: [SearchEntry; 5] = [
     entry(
         "shortcut-list",
@@ -1154,7 +1169,7 @@ static NETWORK_SETTINGS: [SearchEntry; 8] = [
     ),
 ];
 
-static CORE_PAGES: [PageInfo; 23] = [
+static CORE_PAGES: [PageInfo; 24] = [
     PageInfo {
         id: "appearance",
         name: "Appearance",
@@ -1351,6 +1366,15 @@ static CORE_PAGES: [PageInfo; 23] = [
         category: Category::System,
         qml: "pages/DefaultAppsPage.qml",
         settings: &DEFAULT_APPS_SETTINGS,
+        domains: &[],
+    },
+    PageInfo {
+        id: "problems",
+        name: "Problems",
+        icon: "dialog-warning",
+        category: Category::System,
+        qml: "pages/ProblemsPage.qml",
+        settings: &PROBLEMS_SETTINGS,
         domains: &[],
     },
     PageInfo {
@@ -1781,6 +1805,7 @@ mod tests {
                 "datetime",
                 "region",
                 "default-apps",
+                "problems",
                 "about"
             ]
         );

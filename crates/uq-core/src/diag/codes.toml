@@ -1,0 +1,440 @@
+# uQ's problem codes: every warning or error uQ logs carries one, written `[AREA-NNN]` at the start
+# of the message (see docs/diagnostics.md). `uqctl explain CODE`, `uqctl log` and the Settings
+# Problems page read this file. A code never changes meaning once released: retire it (keep the
+# entry, set `retired = true`) instead of reusing its number.
+#
+# severity: "error" (something the person asked for, or a part of uQ, isn't working),
+#           "warn" (uQ worked around it; it may need a look), "info" (worth knowing, not a fault).
+# area: who logs it, for filtering (`uqctl log --area HYPR`).
+
+# ---- STATE: saved settings, profiles, history and restore points --------------------------------
+[[code]]
+id = "STATE-001"
+severity = "error"
+title = "Settings file couldn't be read"
+means = "uQ couldn't read its saved settings (state.toml), so it started with the defaults. A damaged file is kept beside it with a .bad suffix."
+fix = "Your settings are not lost if the .bad copy exists: open Settings › History and bring back a restore point, or compare the .bad file with the new one."
+
+[[code]]
+id = "STATE-002"
+severity = "warn"
+title = "A saved setting was dropped"
+means = "One saved setting didn't fit this version of uQ (a wrong type, a repeated name, over a limit), so uQ left it out and used its default. Everything else loaded."
+fix = "Set it again in Settings. If it keeps happening after an update, report it with `uqctl report`."
+
+[[code]]
+id = "STATE-003"
+severity = "warn"
+title = "A profile file was skipped"
+means = "A settings profile on disk couldn't be read or doesn't match its file name, so it isn't listed."
+fix = "Look at the file named in the message under ~/.local/state/uq/profiles. Delete it or import it again."
+
+[[code]]
+id = "STATE-004"
+severity = "warn"
+title = "The active profile couldn't be saved"
+means = "uQ couldn't write or remove the file that remembers which profile is on. The profile works now but may not come back after a restart."
+fix = "Check that ~/.local/state/uq is writable and the disk isn't full."
+
+[[code]]
+id = "STATE-005"
+severity = "warn"
+title = "A restore point couldn't be saved"
+means = "uQ saves restore points before big changes (an import, a profile, a restore, an update, once a day). One of them couldn't be saved or tidied up. The change itself went ahead."
+fix = "Check that ~/.local/state/uq/restore is writable and the disk isn't full."
+
+[[code]]
+id = "STATE-006"
+severity = "warn"
+title = "Settings history couldn't be written"
+means = "A change was applied but couldn't be added to the settings history, so it can't be undone from History."
+fix = "Check that ~/.local/state/uq/history is writable and the disk isn't full."
+
+[[code]]
+id = "STATE-007"
+severity = "warn"
+title = "Launch counts couldn't be saved"
+means = "uQ couldn't save how often apps are opened (used to sort look=see>do_). It tries again in a while."
+fix = "Check that ~/.local/state/uq is writable and the disk isn't full."
+
+[[code]]
+id = "STATE-008"
+severity = "warn"
+title = "A restore point came back with gaps"
+means = "A restore point was brought back, but some of what it holds doesn't fit this version and was left as it is."
+fix = "Check the settings named in the message and set them again."
+
+# ---- THEME: themes and the look files uQ writes for apps ----------------------------------------
+[[code]]
+id = "THEME-001"
+severity = "warn"
+title = "The chosen theme isn't installed"
+means = "The theme in your settings wasn't found, so uQ used its default theme."
+fix = "Pick a theme in Settings › Appearance, or reinstall the package that provided it."
+
+[[code]]
+id = "THEME-002"
+severity = "warn"
+title = "A theme was skipped"
+means = "A theme folder couldn't be used (a broken file, or a system theme using the reserved user- name), so it isn't listed."
+fix = "Fix or remove the folder named in the message (your own themes are in ~/.local/share/uq/themes)."
+
+[[code]]
+id = "THEME-003"
+severity = "warn"
+title = "An app's look couldn't be updated"
+means = "uQ couldn't write one of the files that make other apps follow the theme (GTK, Qt, KDE, Flatpak, the terminal). Those apps keep their old look."
+fix = "The message names the file. Check it isn't read-only or owned by another user, then switch theme again."
+
+[[code]]
+id = "THEME-004"
+severity = "error"
+title = "The desktop couldn't be set up at start"
+means = "uqd couldn't write the desktop's config when it started, so the last good config is still in use."
+fix = "Run `uqctl reload` and `uqctl log --since 10m` to see what failed."
+
+[[code]]
+id = "THEME-005"
+severity = "warn"
+title = "The dark/light switch didn't happen"
+means = "The scheduled switch between dark and light failed. uQ tries again at the next change."
+fix = "Switch by hand in Quick settings; check `uqctl log` for the reason."
+
+[[code]]
+id = "THEME-006"
+severity = "warn"
+title = "The shell didn't restart for new icons"
+means = "A new icon theme needs the shell to restart, and that failed. Old icons show until the next login."
+fix = "Run `systemctl --user restart uq-shell`."
+
+# ---- HYPR: Hyprland's config and its socket -----------------------------------------------------
+[[code]]
+id = "HYPR-001"
+severity = "error"
+title = "Hyprland refused a change"
+means = "Hyprland rejected the config uQ wrote for a change, so the change didn't take effect live."
+fix = "Settings puts the old value back. If you edited ~/.config/hypr/uq/user.lua, check it for mistakes."
+
+[[code]]
+id = "HYPR-002"
+severity = "info"
+title = "Hyprland isn't running"
+means = "A change was saved but Hyprland isn't running to apply it. It takes effect at the next start."
+fix = "Nothing to do."
+
+[[code]]
+id = "HYPR-003"
+severity = "warn"
+title = "Talking to Hyprland failed"
+means = "A request on Hyprland's socket failed or timed out."
+fix = "Usually passes on its own. If Hyprland was restarted or updated, log out and in again."
+
+[[code]]
+id = "HYPR-004"
+severity = "warn"
+title = "A config change wasn't checked first"
+means = "uQ normally asks Hyprland to check a new config before using it; that check couldn't run, so the config was applied without it."
+fix = "Make sure the Hyprland package matches the version uQ supports (uq-hyprland-pin)."
+
+[[code]]
+id = "HYPR-005"
+severity = "warn"
+title = "Hyprland missed a config file"
+means = "Hyprland reloaded while one of uQ's config files was being replaced, and missed it. uQ reloads Hyprland again once the file is back."
+fix = "Nothing to do unless it repeats: then report it with `uqctl report`."
+
+[[code]]
+id = "HYPR-006"
+severity = "warn"
+title = "Shortcuts didn't come back after a capture"
+means = "uQ pauses shortcuts while it records a new one; turning them back on after the timeout failed."
+fix = "Press Escape, or run `hyprctl dispatch submap reset`."
+
+# ---- DISPLAY: screens and workspaces ------------------------------------------------------------
+[[code]]
+id = "DISPLAY-001"
+severity = "error"
+title = "A display change couldn't be applied or undone"
+means = "Applying, confirming or putting back a display layout failed."
+fix = "Open Settings › Displays and set the layout again. `hyprctl monitors` shows what Hyprland has now."
+
+[[code]]
+id = "DISPLAY-002"
+severity = "warn"
+title = "A saved screen arrangement wasn't used"
+means = "A saved arrangement for these screens couldn't be used (the message says why), so Hyprland's default is in use."
+fix = "Arrange the screens again in Settings › Displays."
+
+[[code]]
+id = "DISPLAY-003"
+severity = "warn"
+title = "Workspaces weren't moved for a screen change"
+means = "When screens were added or removed, uQ couldn't move workspaces to where they belong."
+fix = "Move them by hand; it is tried again at the next screen change."
+
+[[code]]
+id = "DISPLAY-004"
+severity = "warn"
+title = "The main display for X11 apps wasn't set"
+means = "uQ couldn't tell X11 apps (games, older apps) which screen is the main one."
+fix = "Check that xrandr is installed."
+
+# ---- START: startup apps, launcher files, environment -------------------------------------------
+[[code]]
+id = "START-001"
+severity = "error"
+title = "Startup apps can't be started"
+means = "uqd is missing what it needs to start apps at login (XDG_RUNTIME_DIR, systemd-run or systemd-cat)."
+fix = "Log in through uQ's session (uq-session) and check that systemd is installed."
+
+[[code]]
+id = "START-002"
+severity = "warn"
+title = "A startup app didn't start"
+means = "One app set to start at login couldn't be started."
+fix = "Settings › Startup shows which one. Check it is still installed."
+
+[[code]]
+id = "START-003"
+severity = "warn"
+title = "A startup app wasn't minimised"
+means = "An app set to start minimised couldn't be hidden, so its window is open."
+fix = "Nothing breaks; close or minimise the window."
+
+[[code]]
+id = "START-004"
+severity = "warn"
+title = "A startup file couldn't be written"
+means = "uQ couldn't write a file it keeps for startup (environment, app flags, launcher files, the startup record)."
+fix = "The message names the file. Check the folder is writable."
+
+# ---- INTEG: other apps' integrations -------------------------------------------------------------
+[[code]]
+id = "INTEG-001"
+severity = "warn"
+title = "An app's window rules were skipped"
+means = "Window rules shipped by an app (in /usr/share/uq/integrations) couldn't be read, so they aren't used."
+fix = "Update or reinstall the app named in the message."
+
+# ---- WATCH, DBUS, NOTIF: uqd's own plumbing -----------------------------------------------------
+[[code]]
+id = "WATCH-001"
+severity = "warn"
+title = "A file watch stopped"
+means = "uqd couldn't watch a folder or the clock for changes, so it checks every minute instead. Changes can take up to a minute to show."
+fix = "Usually too many watches are in use system-wide; raise fs.inotify.max_user_watches."
+
+[[code]]
+id = "DBUS-001"
+severity = "warn"
+title = "Desktop events were dropped"
+means = "uqd couldn't send some change signals in time, so an open Settings page or the shell may show stale values."
+fix = "Close and reopen the page. If it repeats, report it with `uqctl report`."
+
+[[code]]
+id = "NOTIF-001"
+severity = "warn"
+title = "A notification couldn't be shown"
+means = "uqd tried to show a notification and the notification service didn't answer."
+fix = "Check that the shell (or your notification daemon) is running."
+
+[[code]]
+id = "NOTIF-002"
+severity = "warn"
+title = "The notification server warned"
+means = "The shell's notification server reported a problem (another server holding the name, a bad notification)."
+fix = "Check that only one notification daemon runs (`busctl --user status org.freedesktop.Notifications`)."
+
+[[code]]
+id = "NOTIF-003"
+severity = "warn"
+title = "A notification's action failed"
+means = "A notification rule's command, or an app's callback for a notification button, failed."
+fix = "Check the rule in Settings › Notifications."
+
+# ---- CLIP: uqlip, the clipboard history ---------------------------------------------------------
+[[code]]
+id = "CLIP-001"
+severity = "warn"
+title = "Clipboard history couldn't be saved"
+means = "uqlip couldn't record, expire or clear a copy."
+fix = "Check that ~/.local/share/uqlip is writable and the disk isn't full."
+
+[[code]]
+id = "CLIP-002"
+severity = "error"
+title = "The clipboard can't be watched"
+means = "uqlip lost or couldn't open its connection to the compositor, so new copies aren't recorded."
+fix = "Run `systemctl --user restart uqlip`. Hyprland must support the data-control protocol."
+
+# ---- HELPER: the root helper behind Settings ----------------------------------------------------
+[[code]]
+id = "HELPER-001"
+severity = "error"
+title = "The settings helper stopped"
+means = "uq-settings-helper, which makes system-wide changes for Settings, failed and stopped."
+fix = "Run `journalctl -u uq-settings-helper` to see why."
+
+[[code]]
+id = "HELPER-002"
+severity = "warn"
+title = "A permission check failed"
+means = "polkit couldn't be asked whether a system change is allowed, so it was refused."
+fix = "Check that polkit is running (`systemctl status polkit`)."
+
+# ---- The shell: windows, bar, launcher, power, lock, widgets ------------------------------------
+[[code]]
+id = "SHELL-001"
+severity = "warn"
+title = "The shell couldn't read uQ's settings"
+means = "The shell asked uqd for something (default apps, a mode, a layout) and the request failed, so it used what it had."
+fix = "Check that uqd is running (`systemctl --user status uqd`)."
+
+[[code]]
+id = "SHELL-002"
+severity = "info"
+title = "Brightness control is off"
+means = "brightnessctl isn't installed, so the brightness slider and keys are hidden."
+fix = "Install brightnessctl if this computer has a built-in screen."
+
+[[code]]
+id = "WIN-001"
+severity = "warn"
+title = "A window action failed"
+means = "Moving, resizing, focusing or arranging a window or workspace failed, usually because the window closed at that moment."
+fix = "Try again. If it keeps failing, report it with `uqctl report`."
+
+[[code]]
+id = "BAR-001"
+severity = "warn"
+title = "The bar layout was refused"
+means = "A change to the bar's layout was refused (an unknown island, a repeated one), so the last layout stays."
+fix = "Set the layout again in Settings › Shell."
+
+[[code]]
+id = "BAR-002"
+severity = "warn"
+title = "An island's popup didn't load"
+means = "A bar island's popup failed to load, so clicking it shows nothing."
+fix = "Report it with `uqctl report`; the message names the island."
+
+[[code]]
+id = "BAR-003"
+severity = "warn"
+title = "A news link didn't open"
+means = "Opening a news item's link failed."
+fix = "Check your default web browser in Settings › Default apps."
+
+[[code]]
+id = "LAUNCH-001"
+severity = "error"
+title = "An app didn't launch"
+means = "Starting an app from the dock, the app menu, the desktop menu or look=see>do_ failed."
+fix = "Check that the app is still installed; `uqctl launch <id>` shows the full error."
+
+[[code]]
+id = "LAUNCH-002"
+severity = "warn"
+title = "A search failed"
+means = "look=see>do_'s search, or one search provider from another app, failed. Other results still show."
+fix = "If it names a provider, update or reinstall that app."
+
+[[code]]
+id = "LAUNCH-003"
+severity = "warn"
+title = "The docked terminal didn't respond"
+means = "Docking, tucking away, bringing back or opening a tab in look=see>do_'s terminal failed."
+fix = "Close the terminal window and open it again from look=see>do_."
+
+[[code]]
+id = "POWER-001"
+severity = "error"
+title = "A power action failed"
+means = "Shutting down, restarting, suspending, logging out, a scheduled shutdown or turning screens off failed."
+fix = "Try `systemctl poweroff` (or suspend) in a terminal to see the reason; another app may be blocking it."
+
+[[code]]
+id = "LOCK-001"
+severity = "error"
+title = "The screen didn't lock"
+means = "Locking the screen, or locking before sleep, failed."
+fix = "Run `systemctl --user status uq-lock` to see why. Lock by hand before leaving."
+
+[[code]]
+id = "QUICK-001"
+severity = "warn"
+title = "A quick setting failed"
+means = "A Quick settings toggle (theme, dark/light, wallpaper) couldn't be applied."
+fix = "Try it again in Settings; `uqctl log` shows uqd's side."
+
+[[code]]
+id = "WIDGET-001"
+severity = "warn"
+title = "A widget was turned off"
+means = "A desktop or bar widget from another app failed to load or broke, so uQ unloaded it."
+fix = "Update or reinstall the app that ships the widget."
+
+[[code]]
+id = "WIDGET-002"
+severity = "warn"
+title = "An app action failed"
+means = "A button another app added to the shell failed when pressed."
+fix = "Update or reinstall the app that ships the action."
+
+# ---- SETTINGS: the Settings app -----------------------------------------------------------------
+[[code]]
+id = "SETTINGS-001"
+severity = "error"
+title = "A Settings page didn't load"
+means = "One page of the Settings app failed to load, so it shows as empty."
+fix = "If it's another app's page, update that app. Otherwise report it with `uqctl report`."
+
+[[code]]
+id = "SETTINGS-002"
+severity = "warn"
+title = "A page's button failed"
+means = "A Settings page from another app ran an action and it failed."
+fix = "Update or reinstall the app that ships the page."
+
+[[code]]
+id = "SETTINGS-003"
+severity = "warn"
+title = "A page screenshot wasn't saved"
+means = "The page screenshot run (for docs and tests) couldn't save a picture."
+fix = "Check the output folder is writable."
+
+# ---- CRASH: crashes and crash reports -----------------------------------------------------------
+[[code]]
+id = "CRASH-001"
+severity = "error"
+title = "uQ's shell crashed"
+means = "The shell (bar, dock, launcher, notifications) crashed and was restarted. A crash report was saved."
+fix = "Open Settings › Problems and copy the report, or run `uqctl report --crash latest`."
+
+[[code]]
+id = "CRASH-002"
+severity = "error"
+title = "The lock screen crashed"
+means = "uQ's lock screen crashed. Hyprland keeps the screen locked; it restarts the lock screen."
+fix = "Open Settings › Problems and copy the report, or run `uqctl report --crash latest`."
+
+[[code]]
+id = "CRASH-003"
+severity = "error"
+title = "An app's shell part crashed"
+means = "Another app's Quickshell part (for example noti-fi's notification daemon) crashed. A crash report was saved."
+fix = "The report names the app; send it to that app's issue tracker."
+
+[[code]]
+id = "CRASH-004"
+severity = "error"
+title = "A program stopped on an internal error"
+means = "One of uQ's programs (uqd, uqlip, uqctl, the settings helper or Settings), or an app built on uQ, hit an internal error or crashed and stopped. systemd restarts the services."
+fix = "Open Settings › Problems and copy the report, or run `uqctl report --crash latest`."
+
+[[code]]
+id = "CRASH-005"
+severity = "warn"
+title = "A crash report couldn't be saved"
+means = "A crash happened but its report couldn't be written."
+fix = "Check that ~/.local/state/uq/crashes is writable and the disk isn't full."

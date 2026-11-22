@@ -19,7 +19,6 @@ tokio.workspace = true
 toml.workspace = true
 toml_edit = { version = "0.25", features = ["parse", "display"] }
 tracing.workspace = true
-tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 zbus = { version = "6", default-features = false, features = ["tokio", "proxy", "service"] }
 
 [dev-dependencies]

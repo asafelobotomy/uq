@@ -172,7 +172,7 @@ fn lenient_devices<'de, D: serde::Deserializer<'de>>(
             let key = format!("input.devices.{name}");
             let e = parse_lenient(&key, &v, &DeviceOverride::FIELDS);
             if e.is_none() {
-                tracing::warn!("state: dropping input device entry {name:?} = {v}");
+                tracing::warn!("[STATE-002] state: dropping input device entry {name:?} = {v}");
             }
             e.map(|e| (name, e))
         })
@@ -205,7 +205,7 @@ fn lenient_gestures<'de, D: serde::Deserializer<'de>>(
                             .map_err(|e| e.to_string())
                     });
                 if let Err(e) = &g {
-                    tracing::warn!("state: dropping gesture {v}: {e}");
+                    tracing::warn!("[STATE-002] state: dropping gesture {v}: {e}");
                 }
                 g.ok()
             })
@@ -410,7 +410,7 @@ fn repaired_gestures(list: Vec<Gesture>, errors: &mut Vec<SettingError>) -> Vec<
         kept.push(g);
         if let Some(c) = gestures::clashes_of(&kept).into_iter().next() {
             tracing::warn!(
-                "state: dropping a gesture: {}",
+                "[STATE-002] state: dropping a gesture: {}",
                 crate::keybinds::conflict::message(&c)
             );
             errors.push(invalid(

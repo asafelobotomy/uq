@@ -85,7 +85,7 @@ impl CaptureBroker {
                 }
             };
             if ours && let Err(e) = timer_comp.eval(RESET).await {
-                tracing::warn!("resuming shortcuts after the timeout: {e}");
+                tracing::warn!("[HYPR-006] resuming shortcuts after the timeout: {e}");
             }
         });
         // A replaced pause's timer must not reset the new one.

@@ -76,7 +76,7 @@ QtObject {
     function failed(id, reason) {
         var reg = failures;
         if (W.noteFailure(reg, id, now())) {
-            console.warn("uq: widget " + id + " unloaded: " + reason);
+            console.warn("uq[WIDGET-001] widget " + id + " unloaded: " + reason);
             var l = log.slice();
             l.push(id + ": " + reason);
             log = l;
@@ -95,7 +95,7 @@ QtObject {
         if (c === null || !bridge || Bridge.locked)
             return false;
         bridge.call(c.call, c.args).catch(function (e) {
-            console.warn("uq: app action " + action.id + ": " + e);
+            console.warn("uq[WIDGET-002] app action " + action.id + ": " + e);
         });
         return true;
     }

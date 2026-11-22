@@ -15,7 +15,7 @@ Item {
         if (popup === null) {
             var c = Qt.createComponent(Qt.resolvedUrl("IslandPopup.qml"));
             if (c.status !== Component.Ready) {
-                console.warn("uq: island popup: " + c.errorString());
+                console.warn("uq[BAR-002] island popup: " + c.errorString());
                 return;
             }
             popup = c.createObject(lazy);

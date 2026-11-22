@@ -111,7 +111,7 @@ impl Desktop {
         let files = match app_rules::scan_rules(&self.paths.integrations_dir) {
             Ok(f) => f,
             Err(e) => {
-                tracing::warn!("integration rules: {e}");
+                tracing::warn!("[INTEG-001] integration rules: {e}");
                 Vec::new()
             }
         };

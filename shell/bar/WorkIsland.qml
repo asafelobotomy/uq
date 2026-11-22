@@ -320,7 +320,7 @@ Island {
             Bridge.call("Dispatch", ["focus_window", { address: w.address, keep_pointer: true }])
                 .then(function () {
                     return Bridge.call("Dispatch", ["focus_window", { address: dialog, keep_pointer: true }]);
-                }).catch(function (e) { console.warn("uq: focus a window's dialog: " + e); });
+                }).catch(function (e) { console.warn("uq[WIN-001] focus a window's dialog: " + e); });
             return;
         }
         if (w.minimised) {
@@ -413,7 +413,7 @@ Island {
         if (steps === 0 || !w)
             return;
         Bridge.call("Dispatch", ["move_column", { address: w.address, steps: steps }])
-            .catch(function (e) { console.warn("uq: move column: " + e); });
+            .catch(function (e) { console.warn("uq[WIN-001] move column: " + e); });
         refresh();
     }
 
@@ -430,7 +430,7 @@ Island {
             return;
         if (root.inColumn(w))
             PageActions.setWidth(w.address, full)
-                .catch(function (e) { console.warn("uq: window width: " + e); });
+                .catch(function (e) { console.warn("uq[WIN-001] window width: " + e); });
         else if (full !== root.isFull(w))
             root.act(w, "fullscreen", { mode: "maximized" });
         // The scrolling layout resizes columns without an event.

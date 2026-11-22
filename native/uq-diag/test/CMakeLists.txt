@@ -1,0 +1,10 @@
+# Builds and runs the C++ uq-diag tests: cmake -S native/uq-diag/test -B build && ctest --test-dir build
+cmake_minimum_required(VERSION 3.21)
+project(uqdiag_tests LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_AUTOMOC ON)
+find_package(Qt6 REQUIRED COMPONENTS Core Test)
+enable_testing()
+add_executable(tst_uqdiag tst_uqdiag.cpp ../uqdiag.cpp ../uqdiag.h)
+target_link_libraries(tst_uqdiag PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME tst_uqdiag COMMAND tst_uqdiag)

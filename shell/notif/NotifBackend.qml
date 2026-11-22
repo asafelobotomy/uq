@@ -97,7 +97,7 @@ QtObject {
 
     onWarningChanged: {
         if (warning !== "")
-            console.warn("uq: notifications: " + warning);
+            console.warn("uq[NOTIF-002] notifications: " + warning);
     }
 
     // --- internals ---
