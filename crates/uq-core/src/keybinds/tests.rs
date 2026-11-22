@@ -445,7 +445,7 @@ fn effective_lists_defaults_then_custom() {
     )
     .unwrap();
     let eff = st.keybinds.effective();
-    assert_eq!(eff.len(), 68);
+    assert_eq!(eff.len(), 69);
     let by = |id: &str| eff.iter().find(|e| e.id == id).unwrap();
     assert_eq!(
         combo::canonical(by("uq.lookseedo").combo.unwrap()),

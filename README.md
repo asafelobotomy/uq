@@ -291,7 +291,7 @@ checks are in [docs/notes/settings-slice-b-live-check.md](docs/notes/settings-sl
 
 Every shortcut uQ sets up is listed here by what it does, with its keys, grouped as Apps and
 desktop, Windows, Workspaces, Sound and brightness, Media, and Profiles. The defaults:
-Open a terminal (Super + Return), Close the window (Super + Q), Float or tile the window
+Open a terminal (Super + Return), Show or hide the drop-down terminal (F12, kyko), Close the window (Super + Q), Float or tile the window
 (Super + V), Log out (Super + Shift + M), Open look=see>do_ (Super + Space), Open look=see>do_ for emoji (Super + period; it needs the shell's emoji shortcut, which comes with the emoji picker), Open the calculator (Calculator key), Open the clipboard history (Super + Shift + V), Open the app menu
 (tap Super), Open quick settings (Super + A), Open notifications (Super + N), Lock the screen
 (Super + L), Open the power menu (Super + Escape), the three layouts (Super + Alt + D, M and S),

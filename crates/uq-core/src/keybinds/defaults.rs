@@ -49,6 +49,11 @@ impl Group {
 /// unique while the scope lives. config/hypr/base.lua repeats it.
 pub const TERMINAL: &str = "systemd-run --user --scope --quiet --collect --slice=app.slice --unit=app-uq-terminal-$$ -- sh -c 'command -v kyko >/dev/null && exec kyko; exec kitty'";
 
+/// The drop-down terminal's key: `kyko toggle` asks the drop-down over D-Bus, and D-Bus starts
+/// it (kyko.service, in its own unit) the first time. kyko sees this bind and doesn't add its
+/// own (kyko-hotkey), so a press toggles once.
+pub const DROPDOWN: &str = "kyko toggle";
+
 /// A default's dispatcher, as `'static` text.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DefaultAction {
@@ -94,13 +99,24 @@ pub fn default_of(id: &str) -> Option<&'static Default> {
     DEFAULTS.iter().find(|d| d.id == id)
 }
 
-static DEFAULTS: [Default; 67] = [
+static DEFAULTS: [Default; 68] = [
     Default {
         id: "uq.terminal",
         label: "Open a terminal",
         group: Group::AppsAndDesktop,
         combo: Some("SUPER + Return"),
         action: DefaultAction::Exec(TERMINAL),
+        locked: false,
+        repeating: false,
+        release: false,
+        mouse: false,
+    },
+    Default {
+        id: "uq.terminal.dropdown",
+        label: "Show or hide the drop-down terminal",
+        group: Group::AppsAndDesktop,
+        combo: Some("F12"),
+        action: DefaultAction::Exec(DROPDOWN),
         locked: false,
         repeating: false,
         release: false,
@@ -870,8 +886,8 @@ mod tests {
 
     #[test]
     fn table_has_60_rows_58_bound() {
-        assert_eq!(defaults().len(), 67);
-        assert_eq!(defaults().iter().filter(|d| d.combo.is_some()).count(), 65);
+        assert_eq!(defaults().len(), 68);
+        assert_eq!(defaults().iter().filter(|d| d.combo.is_some()).count(), 66);
     }
 
     #[test]
@@ -915,7 +931,7 @@ mod tests {
             let c = parse(d.combo.unwrap()).unwrap_or_else(|e| panic!("{}: {e}", d.id));
             assert!(seen.insert(c), "{} repeats a combo", d.id);
         }
-        assert_eq!(seen.len(), 65);
+        assert_eq!(seen.len(), 66);
     }
 
     #[test]
