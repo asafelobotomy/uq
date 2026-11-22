@@ -61,7 +61,7 @@ backup=(etc/pam.d/uq-greetd etc/pam.d/uq-greeter etc/pam.d/uq-lock etc/pam.d/uq-
 # (so its checksum) can change. The release workflow uploads exactly this file and prints its sum.
 source=("$pkgname-$_tag.tar.gz::$url/releases/download/v$_tag/$pkgname-$_tag.tar.gz")
 # The release asset's sha256 for this tag; update it with pkgver at each release (docs/releasing.md).
-sha256sums=('696332d878232ffd0b8811cc9538e488d4428751378db51140658e4b6a3fffcc')
+sha256sums=('551c47d41ad44f9e0a07e760d05fd5309935c7e52e23359025b635e138ae74e6')
 
 prepare() {
   cd "$srcdir/$pkgname-$_tag"
