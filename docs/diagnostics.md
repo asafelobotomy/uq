@@ -50,7 +50,10 @@ level) sort like uqd's.
   on a code nothing uses.
 
 Apps use their own prefix (`BINDLE-003`, `REELO-010`) and install their list as
-`/usr/share/uq/diag/<app>.toml`; see [`native/uq-diag/README.md`](../native/uq-diag/README.md).
+`/usr/share/uq/diag/<app>.toml` (kept in the app's repo as `uq/diag/<app>.toml`, which
+`uqctl integrations check` checks); see [`native/uq-diag/README.md`](../native/uq-diag/README.md).
+An app that uQ started logs into uQ's unit (usually the shell's); its coded lines are put down
+to the app by name.
 
 ## Where logs go
 

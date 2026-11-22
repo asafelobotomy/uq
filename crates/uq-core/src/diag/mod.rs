@@ -192,16 +192,19 @@ impl Registry {
         Registry::with_apps(Path::new(EXTRA_DIR))
     }
 
+    /// Add one file's codes, all or none.
     fn add(&mut self, text: &str, fallback_owner: &str) -> Result<(), String> {
         let f: File = toml::from_str(text).map_err(|e| e.to_string())?;
         let owner = f.app.unwrap_or_else(|| fallback_owner.to_string());
-        for mut c in f.code {
+        for (i, c) in f.code.iter().enumerate() {
             if !is_code(&c.id) {
                 return Err(format!("{:?} is not AREA-NNN", c.id));
             }
-            if self.get(&c.id).is_some() {
+            if self.get(&c.id).is_some() || f.code[..i].iter().any(|o| o.id == c.id) {
                 return Err(format!("{} is defined twice", c.id));
             }
+        }
+        for mut c in f.code {
             c.owner = owner.clone();
             self.codes.push(c);
         }
@@ -211,6 +214,53 @@ impl Registry {
             }
         }
         Ok(())
+    }
+
+    /// Check an app's list (`/usr/share/uq/diag/<app>.toml`) the way `uqctl integrations check`
+    /// does: it parses, names the app, its codes share one prefix that isn't one of uQ's areas,
+    /// none is listed twice, each says what it means and what to do, and its units are units.
+    /// Returns how many codes it has.
+    pub fn check_app(text: &str) -> Result<usize, String> {
+        let f: File = toml::from_str(text).map_err(|e| e.to_string())?;
+        if f.app.as_deref().is_none_or(|a| a.trim().is_empty()) {
+            return Err("no `app` (the name people know it by)".into());
+        }
+        let Some(first) = f.code.first() else {
+            return Err("no [[code]] entries".into());
+        };
+        let prefix = first.id.split('-').next().unwrap_or_default().to_string();
+        let builtin = Registry::builtin();
+        if builtin.all().iter().any(|c| c.area() == prefix) {
+            return Err(format!(
+                "{prefix} is one of uQ's own areas: pick your app's own prefix"
+            ));
+        }
+        for c in &f.code {
+            if !is_code(&c.id) {
+                return Err(format!("{:?} is not PREFIX-NNN", c.id));
+            }
+            if !c.id.starts_with(&format!("{prefix}-")) {
+                return Err(format!(
+                    "{} doesn't start with {prefix}-: one prefix per app",
+                    c.id
+                ));
+            }
+            for (k, v) in [("title", &c.title), ("means", &c.means), ("fix", &c.fix)] {
+                if v.trim().is_empty() {
+                    return Err(format!("{} has no {k}", c.id));
+                }
+            }
+        }
+        let mut r = Registry::default();
+        r.add(text, "")?;
+        if let Some(u) = f
+            .units
+            .iter()
+            .find(|u| !(u.ends_with(".service") || u.ends_with(".timer")))
+        {
+            return Err(format!("units: {u:?} is not a .service or .timer"));
+        }
+        Ok(f.code.len())
     }
 
     pub fn get(&self, id: &str) -> Option<&Code> {

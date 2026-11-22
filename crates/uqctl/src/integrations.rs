@@ -474,6 +474,28 @@ impl Checker {
     }
 }
 
+impl Checker {
+    /// `diag/<app>.toml`: the app's problem codes (docs/diagnostics.md), installed to
+    /// `/usr/share/uq/diag/`.
+    fn diag(&mut self, dir: &Path) {
+        let list = match sorted_entries(dir) {
+            Ok(l) => l,
+            Err(e) => return self.problems.push(e),
+        };
+        for p in list {
+            let name = name_of(&p);
+            if !p.is_file() || !name.ends_with(".toml") || name == "uq.toml" {
+                self.problem(&p, "only <app>.toml files belong in diag/");
+                continue;
+            }
+            let text = std::fs::read_to_string(&p).unwrap_or_default();
+            if let Err(e) = uq_core::diag::Registry::check_app(&text) {
+                self.problem(&p, e);
+            }
+        }
+    }
+}
+
 /// Check a repo's `uq/` folder: its layout, every manifest, the QML text lint, that every
 /// command's program exists, provider bus names, service files for activatable providers, and
 /// `integrations/<name>/rules.toml` window rules. With `programs` false, whether the programs
@@ -497,11 +519,12 @@ pub fn check_dir(dir: &Path, programs: bool) -> (Vec<String>, String) {
                     ("launcher", true) => c.launcher(&p),
                     ("dbus", true) => c.dbus(&p),
                     ("integrations", true) => c.integrations(&p),
+                    ("diag", true) => c.diag(&p),
                     ("README.md", false) => {}
                     _ => c.problem(
                         &p,
                         "not part of a uq/ folder (widgets/, pages/, launcher/, dbus/, \
-                         integrations/, README.md)",
+                         integrations/, diag/, README.md)",
                     ),
                 }
             }

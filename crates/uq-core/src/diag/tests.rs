@@ -357,3 +357,32 @@ fn cpp_backtraces_say_where() {
     );
     assert!(crate::diag::crash::glibc_frames("", 3).is_empty());
 }
+
+#[test]
+fn app_lists_are_checked() {
+    let code = |id: &str| {
+        format!(
+            "[[code]]\nid = \"{id}\"\nseverity = \"warn\"\ntitle = \"t\"\nmeans = \"m\"\nfix = \"f\"\n"
+        )
+    };
+    let ok = format!(
+        "app = \"Reelo\"\n{}{}",
+        code("REELO-001"),
+        code("REELO-002")
+    );
+    assert_eq!(Registry::check_app(&ok), Ok(2));
+    let err = |t: &str| Registry::check_app(t).unwrap_err();
+    assert!(err(&code("REELO-001")).contains("no `app`"));
+    assert!(err(&format!("app = \"x\"\n{}", code("HYPR-001"))).contains("uQ's own areas"));
+    assert!(
+        err(&format!("app = \"x\"\n{}{}", code("A-001"), code("B-001"))).contains("one prefix")
+    );
+    assert!(err(&format!("app = \"x\"\n{}{}", code("A-001"), code("A-001"))).contains("twice"));
+    assert!(err(&format!("app = \"x\"\nunits = [\"x\"]\n{}", code("A-001"))).contains("units"));
+    assert!(err("app = \"x\"\n").contains("no [[code]]"));
+    let no_fix = format!(
+        "app = \"x\"\n{}",
+        code("A-001").replace("fix = \"f\"", "fix = \" \"")
+    );
+    assert!(err(&no_fix).contains("no fix"));
+}

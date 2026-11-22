@@ -50,6 +50,9 @@ fix = "Check the network connection, then press Refresh."
 ```
 
 `means` and `fix` are shown on Settings › Problems as they are, so write them in plain words.
+Keep the file in your repo as `uq/diag/<app>.toml`: `uqctl integrations check uq/` checks it
+(it parses, names the app, one prefix of your own, no code twice, each with a title, a meaning
+and a fix).
 Never reuse a number for something else: set `retired = true` on a code nothing logs any more.
 
 ## Rust
@@ -102,3 +105,8 @@ real crash included) and fails when `check-uq-diag.sh` is out of date.
 | App | Copy |
 |---|---|
 | uQ's uq-core and uqlip | Rust (this file, by path) |
+| Bindle (`BINDLE-`) | Rust, `crates/bindle-core/src/uq_diag.rs` |
+| noti-fi (`NOTIFI-`) | Rust, `crates/notify-diag` |
+| uQview (`UQVIEW-`) | Rust, `crates/uqview/src/uq_diag.rs` |
+| reelo (`REELO-`) | C++, `src/uqdiag.*` |
+| uQbit (`UQBIT-`) | C++, `src/uqdiag.*` |
