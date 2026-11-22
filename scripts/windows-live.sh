@@ -231,7 +231,7 @@ edge_ok() { # title context
             [ "$cover" -ge "$vis" ] && break
             sleep 0.05
         done
-        echo "sliver: $vis px of $1 at the $side edge $2; strip over it: ${cover} px"
+        echo "sliver: $vis px of $1 at the $side edge $2; strip over it: ${cover} px (at $(now_ms))"
         [ "$cover" -ge "$vis" ] || check "$vis px of $1 show at the $side edge $2 with no strip over them"
         return 0
     fi
@@ -606,6 +606,7 @@ errs=$(grep -E 'TypeError|ReferenceError|is not a type|Cannot assign|Unable to a
 [ -n "$errs" ] && { echo "--- shell warnings and errors"; echo "$errs"; }
 echo "$errs" | grep -qE 'TypeError|ReferenceError|is not a type|Cannot read property|is not a function' && check "QML errors in the shell log"
 echo "--- the shell's uq: messages"; grep 'uq: ' "$tmp/qs.log" | tail -n 20
+[ -n "$cap" ] && grep "uq: " "$tmp/qs.log" > "$cap/uq-messages.log"
 echo "slivers of a neighbouring page's window at the screen's edge (each needs a strip over it): $slivers"
 echo; echo "--- timings"; cat "$tmp/perf.md"
 [ -n "$cap" ] && cp "$tmp/perf.md" "$cap/windows-perf.md"
