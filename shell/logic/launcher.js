@@ -211,6 +211,15 @@ function iconRef(icon) {
     return { theme: DEFAULT_ICON };
 }
 
+// Whether an Image may load `url` with asynchronous: true. Only files and Quickshell's
+// image-data provider (qsimage) are safe off the GUI thread. image://icon runs QIcon on
+// the image reader thread, which races QIcon on the GUI thread and can crash the shell
+// (seen in noti-fi's notifd on Qt 6.12, Quickshell 0.3.2).
+function asyncImageOk(url) {
+    var s = String(url || "");
+    return s.indexOf("file://") === 0 || s.indexOf("image://qsimage/") === 0;
+}
+
 // The "No emoji provider installed" hint: a `:` query with text, the provider deadline has
 // passed, and no external provider answered for this generation.
 function showEmojiHint(query, gotExternal, deadlinePassed) {
