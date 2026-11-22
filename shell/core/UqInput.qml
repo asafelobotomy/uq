@@ -26,9 +26,10 @@ Item {
         anchors.fill: parent
         radius: Theme.radiusControl
         color: Theme.surfaceAlt
-        // The accent marks keyboard focus everywhere in the shell (rows, sliders, fields).
+        // The accent marks keyboard focus everywhere in the shell (rows, sliders, fields). It
+        // snaps rather than fades: focus moves between always-mapped windows whenever a popup
+        // opens, and a fade there renders frames in windows nobody is looking at.
         border.color: input.activeFocus ? Theme.accent : Theme.border
-        Behavior on border.color { ColorAnimation { duration: Motion.fast } }
         border.width: Theme.borderWidth
     }
     TextInput {
