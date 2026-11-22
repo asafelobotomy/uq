@@ -135,11 +135,11 @@ function bytes(n) {
     return (i === 0 ? n.toFixed(0) : n.toFixed(1)) + " " + units[i];
 }
 
-// "54°" from Celsius, "" without one.
-function temp(c) {
+// "54°" from Celsius ("129°" with unit "f", shell.temp_unit), "" without one.
+function temp(c, unit) {
     if (!_num(c))
         return "";
-    var r = Math.round(c);
+    var r = Math.round(unit === "f" ? c * 9 / 5 + 32 : c);
     return (r === 0 ? 0 : r) + "°";
 }
 

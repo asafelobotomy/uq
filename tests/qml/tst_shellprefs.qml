@@ -27,6 +27,27 @@ TestCase {
         compare(ShellPrefs.clockFormat({ clock_24h: false }), "h:mm AP");
     }
 
+    function test_date_format() {
+        compare(ShellPrefs.dateFormat(undefined), "uk");
+        compare(ShellPrefs.dateFormat({}), "uk");
+        compare(ShellPrefs.dateFormat({ date_format: "iso" }), "uk");
+        compare(ShellPrefs.dateFormat({ date_format: "us" }), "us");
+        compare(ShellPrefs.datePatterns({}).short, "ddd d MMM");
+        compare(ShellPrefs.datePatterns({ date_format: "us" }).short, "ddd, MMM d");
+        compare(ShellPrefs.datePatterns({ date_format: "us" }).locale, "en_US");
+        compare(Qt.locale(ShellPrefs.datePatterns({}).locale).firstDayOfWeek, Locale.Monday);
+        compare(Qt.locale(ShellPrefs.datePatterns({ date_format: "us" }).locale).firstDayOfWeek, Locale.Sunday);
+        var d = new Date(2026, 10, 21);
+        compare(Qt.formatDate(d, ShellPrefs.datePatterns({ date_format: "us" }).full), "Saturday, November 21, 2026");
+        compare(Qt.formatDate(d, ShellPrefs.datePatterns({}).full), "Saturday 21 November 2026");
+    }
+
+    function test_temp_unit() {
+        compare(ShellPrefs.tempUnit(undefined), "c");
+        compare(ShellPrefs.tempUnit({ temp_unit: "k" }), "c");
+        compare(ShellPrefs.tempUnit({ temp_unit: "f" }), "f");
+    }
+
     function test_provider_order() {
         compare(ShellPrefs.providerOrder(undefined), []);
         compare(ShellPrefs.providerOrder({}), []);

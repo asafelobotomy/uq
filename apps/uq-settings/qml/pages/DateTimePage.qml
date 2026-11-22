@@ -1,5 +1,5 @@
 // Date and time (spec §2.6): the time zone, setting the time from the network, the date and time
-// by hand, and the bar's clock format. Changes to the system clock ask for an administrator
+// by hand, and the bar's clock and date formats. Changes to the system clock ask for an administrator
 // password; a cancelled prompt leaves them as they were. The clock format is uQ's own setting,
 // so it needs uQ's settings service; everything else works without it.
 import QtQuick
@@ -29,6 +29,8 @@ SettingsPage {
     }
     readonly property bool clock24: snap.clock_24h !== false
     readonly property bool clockKnown: snap.clock_24h !== null && snap.clock_24h !== undefined
+    readonly property bool usDates: snap.date_format === "us"
+    readonly property bool datesKnown: snap.date_format !== null && snap.date_format !== undefined
     property date now: new Date()
     property int noticeSeen: 0
 
@@ -133,7 +135,7 @@ SettingsPage {
                         font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.4
                     }
                     UqLabel {
-                        text: Qt.formatDate(page.now, "dddd d MMMM yyyy")
+                        text: Qt.formatDate(page.now, page.usDates ? "dddd, MMMM d, yyyy" : "dddd d MMMM yyyy")
                         font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.4
                         wrapMode: Text.Wrap
                         Layout.fillWidth: true
@@ -216,7 +218,7 @@ SettingsPage {
             SettingRow {
                 objectName: "clock24"
                 settingId: "datetime-clock-24h"
-                label: "Format"
+                label: "Time"
                 highlight: App.highlight
                 enabled: !dm.busy && App.uqdUp && page.clockKnown
                 help: App.uqdUp ? "" : "Needs uQ's settings service, which isn't running."
@@ -246,6 +248,43 @@ SettingsPage {
                     QQC2.ToolTip.visible: hovered
                     QQC2.ToolTip.text: "12-hour"
                     onClicked: if (page.clock24) dm.setClock24h(false)
+                }
+            }
+            // UK or US dates, drawn with today's date. The calendar under the clock starts its
+            // weeks on Monday or Sunday to match.
+            SettingRow {
+                objectName: "dateFormat"
+                settingId: "datetime-date-format"
+                label: "Date"
+                help: App.uqdUp ? "" : "Needs uQ's settings service, which isn't running."
+                highlight: App.highlight
+                enabled: !dm.busy && App.uqdUp && page.datesKnown
+                Layout.fillWidth: true
+
+                QQC2.ButtonGroup {
+                    id: dateGroup
+                }
+                ChoiceButton {
+                    objectName: "dateUk"
+                    label: Qt.formatDate(page.now, "ddd d MMM")
+                    checkable: true
+                    checked: !page.usDates
+                    QQC2.ButtonGroup.group: dateGroup
+                    Accessible.name: "UK dates, day first"
+                    QQC2.ToolTip.visible: hovered
+                    QQC2.ToolTip.text: "UK: day first, weeks from Monday"
+                    onClicked: if (page.usDates) dm.setDateFormat("uk")
+                }
+                ChoiceButton {
+                    objectName: "dateUs"
+                    label: Qt.formatDate(page.now, "ddd, MMM d")
+                    checkable: true
+                    checked: page.usDates
+                    QQC2.ButtonGroup.group: dateGroup
+                    Accessible.name: "US dates, month first"
+                    QQC2.ToolTip.visible: hovered
+                    QQC2.ToolTip.text: "US: month first, weeks from Sunday"
+                    onClicked: if (!page.usDates) dm.setDateFormat("us")
                 }
             }
         }

@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Widgets
 import "../../core"
 import "../../logic/ticker.js" as T
+import "../../logic/shellprefs.js" as ShellPrefs
 import ".."
 
 // System monitor (`sysmon`). Icon: processor use. Small: a chip icon and processor use. Medium:
@@ -22,6 +23,8 @@ Island {
     readonly property bool showCpu: opts.cpu !== false
     readonly property bool showMem: opts.mem !== false
     readonly property bool showGpu: opts.gpu !== false
+    // shell.temp_unit: "c" or "f". Readings (and the 90 °C warning) stay Celsius.
+    readonly property string unit: ShellPrefs.tempUnit(Settings.values.shell)
     readonly property bool showTemp: opts.temp !== false
     // Room for a second reading: Medium and wider, or Small when the processor is left out.
     readonly property bool roomy: size === "medium" || size === "large" || size === "custom"
@@ -31,7 +34,7 @@ Island {
     Accessible.role: Accessible.Button
     Accessible.name: has ? "Processor " + T.percent(s.cpu) + ", memory " + T.percent(s.mem)
         + (gpu ? ", graphics " + T.percent(gpu.busy) : "")
-        + (s.temp_c !== null && s.temp_c !== undefined ? ", " + T.temp(s.temp_c) : "")
+        + (s.temp_c !== null && s.temp_c !== undefined ? ", " + T.temp(s.temp_c, root.unit) : "")
         : "System monitor"
 
     RowLayout {
@@ -67,8 +70,8 @@ Island {
             Layout.minimumWidth: implicitWidth
         }
         UqText {
-            visible: root.showTemp && (root.size === "large" || root.size === "custom") && root.has && T.temp(root.s.temp_c) !== ""
-            text: root.has ? T.temp(root.s.temp_c) : ""
+            visible: root.showTemp && (root.size === "large" || root.size === "custom") && root.has && T.temp(root.s.temp_c, root.unit) !== ""
+            text: root.has ? T.temp(root.s.temp_c, root.unit) : ""
             baseFamily: Theme.fontMono
             color: root.has && root.s.temp_c >= 90 ? Theme.warning : Theme.textMuted
             Layout.minimumWidth: implicitWidth
@@ -92,7 +95,7 @@ Island {
 
             UqText {
                 text: "Processor " + (root.has ? T.percent(root.s.cpu) : "–")
-                    + (root.has && T.temp(root.s.temp_c) !== "" ? " · " + T.temp(root.s.temp_c) : "")
+                    + (root.has && T.temp(root.s.temp_c, root.unit) !== "" ? " · " + T.temp(root.s.temp_c, root.unit) : "")
                 baseBold: true
             }
             GridLayout {
@@ -143,7 +146,7 @@ Island {
             UqText {
                 visible: root.gpu !== null
                 text: root.gpu ? "Graphics card " + T.percent(root.gpu.busy)
-                    + (T.temp(root.gpu.temp_c) !== "" ? " · " + T.temp(root.gpu.temp_c) : "") : ""
+                    + (T.temp(root.gpu.temp_c, root.unit) !== "" ? " · " + T.temp(root.gpu.temp_c, root.unit) : "") : ""
                 baseBold: true
             }
             UqText {

@@ -1,16 +1,20 @@
 //! The Region page (spec §2.6): the system language, the formats (dates, numbers, money,
 //! measurements, paper), and the keyboard layout of the text console, all through localed and
-//! its own polkit prompt. The lists come from `localectl`, or from the files it reads.
+//! its own polkit prompt. The lists come from `localectl`, or from the files it reads. The unit
+//! uQ shows temperatures in is uQ's own `shell.temp_unit` in uqd; without uqd that row is
+//! unavailable and the rest still works.
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex as StdMutex;
 
 use serde_json::{Value, json};
 use tokio::sync::Mutex;
+use uq_core::client::DesktopProxy;
+use uq_core::settings::TempUnit;
 
 use super::about::{Runner, run_command};
 use super::proxies::{LocaleProxy, fresh};
-use super::runner::PageLogic;
+use super::runner::{PageLogic, parse_json, patch_section};
 use super::sysbus::{self, LOCALE, SystemBus, failure, settle};
 
 /// The locale variables "Formats" sets together.
@@ -27,12 +31,23 @@ pub const LOCALE_NOTE: &str = "Saved. It applies after you log out and back in."
 #[derive(Debug, Clone)]
 pub enum Op {
     Refresh,
-    SetLanguage { locale: String },
-    SetFormats { locale: String },
-    SetKeymap { keymap: String },
+    SetLanguage {
+        locale: String,
+    },
+    SetFormats {
+        locale: String,
+    },
+    SetKeymap {
+        keymap: String,
+    },
+    /// uQ's temperature unit: "c" or "f".
+    SetTempUnit {
+        unit: String,
+    },
 }
 
 pub struct RegionState {
+    session: Option<zbus::Connection>,
     system: SystemBus,
     root: PathBuf,
     run: Runner,
@@ -104,18 +119,40 @@ fn lines(text: &str) -> Vec<String> {
 }
 
 impl RegionState {
-    pub fn new(_session: zbus::Connection) -> Self {
-        Self::with(SystemBus::system(), PathBuf::from("/"), run_command)
+    pub fn new(session: zbus::Connection) -> Self {
+        Self::with(SystemBus::system(), PathBuf::from("/"), run_command).on_session(Some(session))
     }
 
     pub fn with(system: SystemBus, root: PathBuf, run: Runner) -> Self {
         Self {
+            session: None,
             system,
             root,
             run,
             write: Mutex::new(()),
             notice: StdMutex::new((0, String::new())),
         }
+    }
+
+    /// The same page talking to uqd on `session` (None: uqd's rows are unavailable).
+    pub fn on_session(mut self, session: Option<zbus::Connection>) -> Self {
+        self.session = session;
+        self
+    }
+
+    async fn uqd(&self) -> zbus::Result<DesktopProxy<'static>> {
+        let conn = self
+            .session
+            .as_ref()
+            .ok_or_else(|| failure("uQ's settings service isn't running."))?;
+        DesktopProxy::new(conn).await
+    }
+
+    /// `shell.temp_unit` ("c" or "f"), or `None` when uqd can't be read.
+    async fn temp_unit(&self) -> Option<String> {
+        let proxy = self.uqd().await.ok()?;
+        let section = parse_json(&sysbus::within(proxy.get_section("shell")).await.ok()?).ok()?;
+        Some(section["temp_unit"].as_str().unwrap_or("c").to_string())
     }
 
     fn notice(&self, text: &str) {
@@ -233,6 +270,17 @@ impl PageLogic for RegionState {
                     &LOCALE,
                 )
             }
+            Op::SetTempUnit { unit } => {
+                if !TempUnit::NAMES.contains(&unit.as_str()) {
+                    return Err(failure("That isn't a temperature unit."));
+                }
+                let proxy = self.uqd().await?;
+                patch_section(&proxy, "shell", |o| {
+                    o.insert("temp_unit".into(), json!(unit));
+                    Ok(())
+                })
+                .await
+            }
         }
     }
 
@@ -258,6 +306,7 @@ impl PageLogic for RegionState {
             "localed": localed,
             "locales": locales,
             "keymaps": keymaps,
+            "temp_unit": self.temp_unit().await,
             "notice": {"seq": seq, "text": text},
         }))
     }

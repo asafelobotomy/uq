@@ -79,6 +79,8 @@ TestCase {
         compare(T.temp(54.6), "55°");
         compare(T.temp(-0.2), "0°");
         compare(T.temp(null), "");
+        compare(T.temp(54.6, "f"), "130°");
+        compare(T.temp(100, "f"), "212°");
     }
 
     function test_world_clock() {

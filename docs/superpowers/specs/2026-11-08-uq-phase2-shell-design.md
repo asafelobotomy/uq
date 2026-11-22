@@ -202,7 +202,7 @@ The bridge exchanges one JSON object per line over stdin/stdout.
 | `LaunchCountsChanged` | `{desktop_id: count}` |
 | `SearchResults` | `{generation, provider, provider_name, source_dir, items:[{id, title, subtitle, icon, score, actions}]}` |
 | `Weather` | `{temp_c, code, is_day, location_name}`; sent at start, when the location changes, then every 30 min |
-| `PublicIp` | `{country_code, country}` or `null` (§2.11) |
+| `PublicIp` | `{country_code, country, ip?, city?, region?, org?}` or `null` (§2.11) |
 | `NotifOwner` | `{owner: "<unique name or well-known owner>"\|null}`, the owner of `org.freedesktop.Notifications` (watched with `NameOwnerChanged`) |
 | `PrepareForSleep` | `{sleeping: bool}` |
 | `LockState` | `{locked: bool}` from lock-notify |
@@ -528,7 +528,10 @@ asserts the shell reloads.
 
 - Only when `privacy.public_ip_lookup` is on **and** a VPN or Tailscale exit node is active.
 - Runs 5 s after the network settles, at most once every 60 s.
-- Only `country` and `country_code` are kept; the IP, city, org and location are discarded.
+- Only `country`, `country_code`, and (since 0.3.32, for the status island's VPN details) the
+  public `ip`, `city`, `region` and `org` are kept; the coordinates, postcode, host name and
+  time zone are discarded. The details show only in the VPN dropdown, and not while the screen
+  is shared.
 - No lookup happens with no VPN, which also avoids revealing the real IP while a VPN is
   connecting.
 

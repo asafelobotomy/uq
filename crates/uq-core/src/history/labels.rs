@@ -43,6 +43,8 @@ pub fn label(domain: &str, key: &str) -> Option<String> {
         ("shell", "bar.options.security.notify") => "Security: notifications",
         ("shell", "providers") => "Launcher search providers",
         ("shell", "clock_24h") => "24-hour clock",
+        ("shell", "date_format") => "Date format",
+        ("shell", "temp_unit") => "Temperature unit",
         ("shell", "terminal") => "Terminal",
         ("shell", "edge_indicators") => "Screen-edge indicators",
         ("shell", "edge_titles") => "Window titles on screen-edge indicators",
@@ -263,6 +265,8 @@ mod tests {
         s.shell.edge_indicators = false;
         s.shell.edge_titles = true;
         s.shell.edge_style = crate::settings::EdgeStyle::Peek;
+        s.shell.date_format = crate::settings::DateFormat::Us;
+        s.shell.temp_unit = crate::settings::TempUnit::F;
         s.shell.fit_windows = false;
         s.mouse.sensitivity = 0.2;
         let kb = &mut s.input.keyboard;
