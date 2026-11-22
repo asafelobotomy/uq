@@ -34,6 +34,24 @@ Scope {
         root.asked = true;
         HyprRefresh.request(windowsOnly === true ? null : { monitors: true, workspaces: true });
     }
+    // After a change that moves windows, Hyprland goes on placing them for a while with no event
+    // of its own: a window made Full (fullscreen 1) is reported at once, but the columns beside
+    // it reach their new places only a few hundred ms later. The pages and the edge strips would
+    // keep the places from the first read, so they are read again twice more.
+    function refreshMoved(windowsOnly) {
+        root.refresh(windowsOnly);
+        root.lateReads = 2;
+        lateRead.restart();
+    }
+    property int lateReads: 0
+    property Timer lateRead: Timer {
+        interval: 350
+        onTriggered: {
+            root.refresh(true);
+            if (--root.lateReads > 0)
+                lateRead.restart();
+        }
+    }
 
     // From the last look: per workspace id, its tiled windows when it uses the scrolling layout
     // and no window on it is fullscreen; and per screen name, its monitor (lastIpcObject).
@@ -139,7 +157,7 @@ Scope {
                     root.followFocus();
                 // The scroll moved the windows without an event of its own: read them again, so
                 // the edge strips cover the sliver it left (they were worked out before it).
-                root.refresh(true);
+                root.refreshMoved(true);
             });
     }
 
@@ -726,7 +744,7 @@ Scope {
             case "fullscreen":
             case "workspacev2":
             case "monitoraddedv2":
-                root.refresh();
+                root.refreshMoved();
                 break;
             case "configreloaded":
                 // A reload starts Hyprland's Lua afresh: the hiding table and its handler (and
@@ -744,6 +762,6 @@ Scope {
     // Column widths changed elsewhere (ColumnPolicy), with no Hyprland event either.
     Connections {
         target: PageActions
-        function onWidthsChanged() { root.refresh(true); }
+        function onWidthsChanged() { root.refreshMoved(true); }
     }
 }

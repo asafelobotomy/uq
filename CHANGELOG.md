@@ -7,6 +7,10 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **The edge strip covers the sliver after a window is made Full.** When a new window opened Full beside another, the few pixels of the window it pushed off the screen could stay uncovered: Hyprland moves that window a few hundred ms after it reports the Full one, with no event for it. The screen pages now read the windows again twice in the 700 ms after such a change.
+
 ## [0.3.33] - 2026-11-22
 
 ### Changed
