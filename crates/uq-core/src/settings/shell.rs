@@ -203,7 +203,7 @@ pub struct ShellSettings {
     /// Celsius (the default) or Fahrenheit, wherever the shell shows a temperature.
     #[serde(deserialize_with = "lenient_temp_unit")]
     pub temp_unit: TempUnit,
-    /// A desktop id for `Terminal=true` launches; `None` means kitty.
+    /// A desktop id for `Terminal=true` launches; `None` means kyko, else kitty.
     #[serde(
         skip_serializing_if = "Option::is_none",
         deserialize_with = "lenient_terminal"

@@ -1,5 +1,5 @@
-// Loads a plugin's page file, only when this item is created (the page is shown). A QML error
-// in the plugin shows an ErrorCard instead of taking the app down. Free of the `App` singleton:
+// Loads a plugin's page file, only when this item is created (the page is first shown). A QML
+// error in the plugin shows an ErrorCard instead of taking the app down. Free of the `App` singleton:
 // everything comes in as properties. The page's root item gets `ctx` (PluginContext: theme,
 // command, dbus) and, as in Phase 3, `theme` and `highlight`, each if it declares them.
 import QtQuick
@@ -24,6 +24,17 @@ Item {
     readonly property alias context: context
     readonly property bool failed: loader.status === Loader.Error
     readonly property string errorText: failed ? describe() : ""
+    /// Whether Settings keeps the page alive, hidden, after another page is shown (PageCache).
+    /// Not a page that failed, so the next visit tries it again, nor one whose root item says
+    /// `keepAlive: false`.
+    readonly property bool keepAlive: !failed && !(loader.item && loader.item.keepAlive === false)
+
+    /// Settings shows the page again (from the kept pages, or the window came back to the
+    /// front): the page's own `refresh()`, if its root item has one, reads again.
+    function refresh() {
+        if (loader.item && typeof loader.item.refresh === "function")
+            loader.item.refresh();
+    }
 
     function describe() {
         const component = loader.sourceComponent;
