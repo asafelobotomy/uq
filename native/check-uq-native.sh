@@ -108,7 +108,9 @@ if [ -n "$sync" ]; then
         fi
     done
     me=$(dirname "$0")/check-uq-native.sh
-    if [ -r "$sync/native/check-uq-native.sh" ] && ! cmp -s "$sync/native/check-uq-native.sh" "$me"; then
+    # sha256sum, not cmp: a bare Arch container has coreutils but not diffutils
+    if [ -r "$sync/native/check-uq-native.sh" ] &&
+        [ "$(sha256sum < "$sync/native/check-uq-native.sh")" != "$(sha256sum < "$me")" ]; then
         cp "$sync/native/check-uq-native.sh" "$me"
         echo "check-uq-native: updated $me; run it again" >&2
         exit 1
