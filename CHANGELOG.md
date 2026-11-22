@@ -7,6 +7,8 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.32] - 2026-11-22
+
 ### Added
 
 - **UK or US dates in the bar.** Settings › Date and time › Clock in the bar has a Date row beside the 12/24-hour Time row: UK ("Sat 21 Nov", weeks from Monday) or US ("Sat, Nov 21", weeks from Sunday). The clock island, its accessible name and the calendar's heading and first weekday follow it (`shell.date_format`).
@@ -18,6 +20,7 @@ All notable changes to uQ are listed here. The format follows
 
 ### Changed
 
+- **kyko is uQ's terminal.** SUPER+Return, terminal apps launched from the menu, the desktop's "Open terminal" and the KDE terminal setting now use [kyko](https://github.com/asafelobotomy/kyko) (images, ligatures, the kitty keyboard protocol, splits and sessions that survive a restart). kitty is still used where kyko is not installed, and a terminal you chose in Settings is kept.
 - **The calendar under the clock frames today** in the accent colour, instead of only making it bold.
 - **Settings pages open at once when you go back to them.** The eight pages shown most recently stay open in the background, so switching back to one shows what it last read straight away and reads again behind it, replacing the values when the answers come, instead of an empty page that loads from scratch each time. Apps' pages (Apps in the sidebar) get the same: a page can declare `refresh()` to read again when it is shown, and `keepAlive: false` to be closed as before (`docs/settings-pages.md`). Bluetooth and Network still close when you leave them, since they answer pairing and password questions while open. A page whose app is uninstalled is closed.
 - **The corner size on the Look page is every app's corner size.** It used to round only Hyprland's windows; the shell, uQ's apps, Qt (Kvantum) and GTK apps now draw with the same radius.
@@ -82,13 +85,6 @@ All notable changes to uQ are listed here. The format follows
 
 - **A Printers page in Settings.** It shows every printer, which one is the default, what each is doing (ready, printing, paused, out of paper, can't be reached…) and the documents waiting, live. You can make a printer the default, pause and resume it, print a test page, cancel one document or all of them, change its name, location and printing defaults (paper size, two-sided, color, quality, paper type and tray, and the rest of its options), and remove it. **Add a printer** looks for printers on the network and USB ports and adds them without a driver when they can (most printers since about 2010), or with a matching installed driver; a network printer that isn't found can be added by its address. It talks to CUPS directly over its local socket, as you: no password prompt and no terminal, and changing printers is allowed to administrators, as CUPS decides. When printing is installed but switched off, **Turn on printing** starts it. This replaces system-config-printer, the last default settings window that didn't follow the uQ theme; the printing service's own web page is linked for the rare printer that needs more. The package gains an optional dependency on cups.
 - **reelo is uQ's media player.** The new [reelo](https://github.com/asafelobotomy/reelo) (libmpv in a Qt Quick window that follows the uQ theme, with MPRIS for the media widget and keys) is an optional dependency, and its **Media player** page under Settings › Apps is checked with the other companion pages. Bindle installs it and makes it the default player in place of VLC/mpv.
-
-### Changed
-
-- **kyko is uQ's terminal.** SUPER+Return, terminal apps launched from the menu, the desktop's
-  "Open terminal" and the KDE terminal setting now use [kyko](https://github.com/asafelobotomy/kyko)
-  (images, ligatures, the kitty keyboard protocol, splits and sessions that survive a restart).
-  kitty is still used where kyko is not installed, and a terminal you chose in Settings is kept.
 
 ## [0.3.24] - 2026-11-20
 

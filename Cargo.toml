@@ -6,7 +6,7 @@ exclude = ["templates/provider"]
 
 [workspace.package]
 edition = "2024"
-version = "0.3.31"
+version = "0.3.32"
 license = "MIT"
 repository = "https://github.com/asafelobotomy/uq"
 
