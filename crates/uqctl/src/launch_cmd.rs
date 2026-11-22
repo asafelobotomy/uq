@@ -3,8 +3,8 @@
 //! `uqctl launch --terminal` starts the terminal chosen on Default apps (else kyko, then kitty):
 //! what the Super+Return shortcut runs.
 
-use crate::bridge::desktop_entry::{Dirs, normalise_id};
 use crate::bridge::defaultapps::terminal_id;
+use crate::bridge::desktop_entry::{Dirs, normalise_id};
 use crate::bridge::launch::{FIX_WAIT, dispatch, fix_in, plan, random_suffix};
 use crate::bridge::run::RunState;
 use serde_json::{Value, json};
@@ -21,11 +21,7 @@ const RECORD_WAIT: Duration = Duration::from_secs(2);
 /// What uqd knows that a launch uses: its proxy, the `compat` section (each app's fix) and the
 /// chosen terminal. Anything missing (no bus, uqd down, or no answer within [`FIX_WAIT`] in
 /// all) is `None`; the launch goes ahead without it.
-async fn from_uqd() -> (
-    Option<DesktopProxy<'static>>,
-    Option<Value>,
-    Option<String>,
-) {
+async fn from_uqd() -> (Option<DesktopProxy<'static>>, Option<Value>, Option<String>) {
     let deadline = tokio::time::Instant::now() + FIX_WAIT;
     let proxy = async {
         let conn = zbus::Connection::session().await.ok()?;

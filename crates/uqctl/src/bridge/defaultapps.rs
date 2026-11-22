@@ -62,7 +62,9 @@ fn terminal_app(dirs: &Dirs, terminal: Option<&str>) -> Value {
 
 /// The desktop id of the terminal to open (see [`terminal_app`]), for `uqctl launch --terminal`.
 pub(crate) fn terminal_id(dirs: &Dirs, terminal: Option<&str>) -> Option<String> {
-    terminal_app(dirs, terminal)["id"].as_str().map(str::to_string)
+    terminal_app(dirs, terminal)["id"]
+        .as_str()
+        .map(str::to_string)
 }
 
 /// The reply for these app folders, configured terminal and `mimeapps.list` files.
@@ -213,15 +215,27 @@ mod tests {
     fn terminal_id_is_the_chosen_one_else_a_fallback() {
         let (_t, dirs, list) = setup(
             &[
-                ("foot.desktop", "[Desktop Entry]\nType=Application\nName=Foot\nExec=foot\n"),
-                ("kitty.desktop", "[Desktop Entry]\nType=Application\nName=Kitty\nExec=kitty\n"),
+                (
+                    "foot.desktop",
+                    "[Desktop Entry]\nType=Application\nName=Foot\nExec=foot\n",
+                ),
+                (
+                    "kitty.desktop",
+                    "[Desktop Entry]\nType=Application\nName=Kitty\nExec=kitty\n",
+                ),
             ],
             "",
         );
         let _ = list;
-        assert_eq!(terminal_id(&dirs, Some("foot.desktop")).as_deref(), Some("foot.desktop"));
+        assert_eq!(
+            terminal_id(&dirs, Some("foot.desktop")).as_deref(),
+            Some("foot.desktop")
+        );
         assert_eq!(terminal_id(&dirs, None).as_deref(), Some("kitty.desktop"));
-        assert_eq!(terminal_id(&dirs, Some("gone.desktop")).as_deref(), Some("kitty.desktop"));
+        assert_eq!(
+            terminal_id(&dirs, Some("gone.desktop")).as_deref(),
+            Some("kitty.desktop")
+        );
         let (_e, empty, _) = setup(&[], "");
         assert_eq!(terminal_id(&empty, None), None);
     }

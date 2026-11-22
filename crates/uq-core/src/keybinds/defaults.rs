@@ -858,7 +858,8 @@ mod tests {
         assert_eq!(t.action, DefaultAction::Exec(TERMINAL));
         // The chosen terminal first, through uqctl.
         assert!(
-            TERMINAL.starts_with("uqctl launch --terminal 2>/dev/null || systemd-run --user --scope "),
+            TERMINAL
+                .starts_with("uqctl launch --terminal 2>/dev/null || systemd-run --user --scope "),
             "{TERMINAL}"
         );
         assert!(TERMINAL.contains(" --slice=app.slice "), "{TERMINAL}");

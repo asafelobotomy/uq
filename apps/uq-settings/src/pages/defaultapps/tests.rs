@@ -145,7 +145,11 @@ async fn setting_a_default_keeps_every_other_line() {
         "{after}"
     );
     assert!(after.contains("application/pdf=zathura.desktop;"));
-    for m in ["x-scheme-handler/http", "x-scheme-handler/https", "text/html"] {
+    for m in [
+        "x-scheme-handler/http",
+        "x-scheme-handler/https",
+        "text/html",
+    ] {
         assert_eq!(
             mimeapps::default_for(&after, m).as_deref(),
             Some("firefox.desktop"),
