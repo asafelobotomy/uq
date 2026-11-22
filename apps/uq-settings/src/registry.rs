@@ -82,7 +82,7 @@ const fn entry(
     }
 }
 
-static APPEARANCE_SETTINGS: [SearchEntry; 13] = [
+static APPEARANCE_SETTINGS: [SearchEntry; 14] = [
     entry(
         "theme",
         "Theme",
@@ -120,6 +120,13 @@ static APPEARANCE_SETTINGS: [SearchEntry; 13] = [
         &["mouse", "pointer", "bigger cursor"],
     ),
     entry("icon-theme", "Icon theme", &["icons", "symbols"]),
+    entry(
+        "theme-apps",
+        "Theme other apps",
+        &[
+            "qt", "gtk", "kde", "qt6ct", "flatpak", "colours", "colors", "apps", "match",
+        ],
+    ),
     entry(
         "kvantum",
         "Style Qt apps to match",
@@ -1928,7 +1935,7 @@ mod tests {
     #[test]
     fn theme_entries_on_appearance_page() {
         let page = find("appearance").unwrap();
-        assert_eq!(page.settings.len(), 13);
+        assert_eq!(page.settings.len(), 14);
         for (id, label) in [
             ("theme-new", "New theme from this one"),
             ("theme-import", "Import a theme"),

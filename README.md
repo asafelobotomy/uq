@@ -45,6 +45,13 @@ only Hyprland, so they are opt-in. It never overwrites a file you already have; 
 to add instead. Then log in to Hyprland. uqd starts with the Hyprland session and stops when it
 ends.
 
+In a uQ session, **Settings › Appearance › Other apps › Theme other apps** (on by default) keeps
+Qt, KDE, GTK, libadwaita and Flatpak apps on uQ's colours, fonts, icons, widget style and corner
+radius. At every login and theme change uqd creates the missing files and puts its own keys back
+into `qt6ct.conf`, `kdeglobals`, Kvantum's config and GTK's `gtk.css` if another app rewrote them
+(the qt6ct app, KDE's colour settings), keeping a copy of the file as it was next to it
+(`.before-uq`, then `.before-uq.last`). Switch it off to leave those files alone.
+
 Installers (bindle offers uQ as its desktop) can run `uqctl setup` unattended, as the user who
 will log in (for example `runuser -l <user> -c 'uqctl setup --json'`). Running it again changes
 nothing. The result is in the exit code, and `--json` prints it as one object on stdout:

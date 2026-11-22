@@ -11,7 +11,7 @@ use crate::pages::runner::{ORIGIN, PageLogic, parse_json, patch_section, sources
 use crate::system_lists;
 
 /// The `appearance` section's fields that [`Op::SetField`] may change.
-const FIELDS: [&str; 7] = [
+const FIELDS: [&str; 8] = [
     "ui_font",
     "mono_font",
     "font_size",
@@ -19,6 +19,7 @@ const FIELDS: [&str; 7] = [
     "cursor_size",
     "icon_theme",
     "kvantum",
+    "theme_apps",
 ];
 
 /// What the page asks for.
@@ -326,6 +327,7 @@ mod tests {
             ("cursor_size", json!(32)),
             ("icon_theme", json!("Papirus")),
             ("kvantum", json!(false)),
+            ("theme_apps", json!(false)),
         ] {
             writes.push((
                 field(name, value.clone()),

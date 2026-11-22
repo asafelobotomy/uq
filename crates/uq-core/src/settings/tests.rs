@@ -255,7 +255,10 @@ fn section_round_trip() {
     )
     .unwrap();
     let a = s.section("appearance").unwrap();
-    assert_eq!(a, json!({"cursor_theme": "Adwaita", "kvantum": false}));
+    assert_eq!(
+        a,
+        json!({"cursor_theme": "Adwaita", "kvantum": false, "theme_apps": true})
+    );
     let w = s.section("wallpaper").unwrap();
     let mut t = Settings::default();
     t.set_section("appearance", a).unwrap();
