@@ -14,12 +14,13 @@ use crate::integration::manifest::{
 use crate::integration::rules::{RuleFile, scan_rules};
 use crate::launcher_providers::scan_defs;
 
-pub const WIDGETS_DIR: &str = "/usr/share/uq/shell/widgets";
-pub const PAGES_DIR: &str = "/usr/share/uq/settings/pages";
-pub const LAUNCHER_DIR: &str = "/usr/share/uq/launcher";
-pub const ACTIONS_DIR: &str = "/usr/share/uq/launcher/actions";
+// The folders come from uq-consts, which apps' packaging uses too.
+pub const WIDGETS_DIR: &str = crate::uq_consts::install::WIDGETS_DIR;
+pub const PAGES_DIR: &str = crate::uq_consts::install::PAGES_DIR;
+pub const LAUNCHER_DIR: &str = crate::uq_consts::install::LAUNCHER_DIR;
+pub const ACTIONS_DIR: &str = crate::uq_consts::install::ACTIONS_DIR;
 /// `<name>/rules.toml` window rules (§3.3).
-pub const INTEGRATIONS_DIR: &str = "/usr/share/uq/integrations";
+pub const INTEGRATIONS_DIR: &str = crate::uq_consts::install::INTEGRATIONS_DIR;
 
 /// Where to look. [`Roots::system`] is what uQ reads; tests and `uqctl integrations check`
 /// point it elsewhere.

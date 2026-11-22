@@ -115,6 +115,18 @@ jobs:
           ref: main
           path: companions/uqview
           persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: asafelobotomy/kyko
+          ref: main
+          path: companions/kyko
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: asafelobotomy/uqbit
+          ref: main
+          path: companions/uqbit
+          persist-credentials: false
       - name: Build uqctl
         run: cargo build -j 2 -p uqctl --locked
       - name: Check each companion's pages
@@ -124,4 +136,4 @@ jobs:
             companions/xzram/uq companions/scale_tail/uq companions/oysterav/uq \
             companions/appofholding/uq companions/hauler/uq companions/bindaru/uq \
             companions/romforge/uq companions/emobie/uq companions/bindle/uq \
-            companions/reelo/uq companions/uqview/uq
+            companions/reelo/uq companions/uqview/uq companions/kyko/uq companions/uqbit/uq

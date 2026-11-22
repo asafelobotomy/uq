@@ -28,7 +28,7 @@ use std::sync::LazyLock;
 pub const UQ_CODES: &str = include_str!("codes.toml");
 
 /// Where apps install their own code lists (`<app>.toml`, same layout as `codes.toml`).
-pub const EXTRA_DIR: &str = "/usr/share/uq/diag";
+pub const EXTRA_DIR: &str = crate::uq_consts::install::DIAG_DIR;
 
 /// How serious a problem is. Ordered: `Debug < Info < Warn < Error`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]

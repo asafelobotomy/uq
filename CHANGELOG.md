@@ -7,6 +7,18 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **`native/uq-consts` (1.0.0): one source for the values uQ shares with Bindle and its apps.** `consts.toml` holds uQ's paths, the folders packages install integrations into, uQ's D-Bus names, the `uq_api`, motion, corner and type-scale values and the Graphite fallback palette; `gen.py` writes it out for Rust, C++, QML, Python, JS and shell. uQ compiles the same Rust file, and a test holds the shell's `Motion.qml` and `Theme.qml`, the Graphite theme and uqd's paths to it.
+- **`UqThemeBase.qml`**, part of uq-consts: a whole QML `Theme` singleton for native apps (colours with fallbacks, `radiusControl`, `radiusInner`, one type scale, motion), so uQ's apps stop keeping their own copies.
+- **`native/check-uq-native.sh`**: one CI check for every kit an app vendors, listed in its `uq/native.toml`, with `--sync` to update them from a uQ checkout. It replaces the per-kit scripts and `check-diag-codes.sh`.
+- **uq-theme 1.1.0**: `tokens.json`'s new `motion`, `uqkdetheme.*` (the KDE colour-scheme follower noti-fi and hauler each had a copy of) and `uq_theme.py` for Python apps.
+
+### Changed
+
+- **`tokens.json` carries Reduce motion.** It gains `"motion": {"fast", "base", "slow", "reduce"}`, all 0 while **Reduce motion** is on, so uQ's native apps can follow it. Its keys are now written in alphabetical order.
+- The companion-pages check now covers kyko and uQbit too.
+
 ## [0.3.35] - 2026-11-22
 
 ### Added

@@ -46,8 +46,8 @@ const MAX_SUBTITLE_BYTES: usize = 300;
 const MAX_ACTIONS_BYTES: usize = 2048;
 const MAX_ACTION_BYTES: usize = 256;
 const DEFAULT_ICON: &str = "system-search";
-const PATH: &str = "/org/uq/Launcher1";
-const IFACE: &str = "org.uq.Launcher1.Provider";
+const PATH: &str = uq_core::uq_consts::dbus::LAUNCHER_PROVIDER_PATH;
+const IFACE: &str = uq_core::uq_consts::dbus::LAUNCHER_PROVIDER_INTERFACE;
 /// Keeps an external row below any exact or prefix app-name match (which score 1.0).
 const EXTERNAL_SCALE: f64 = 0.9;
 
