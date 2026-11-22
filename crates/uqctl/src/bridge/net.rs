@@ -1,4 +1,4 @@
-//! Network lookups (spec §2.11): Open-Meteo weather and geocoding, ipinfo.io country.
+//! Network lookups (spec §2.11): Open-Meteo weather and geocoding, ipinfo.io country (and the public address, city, region and provider for the VPN details).
 //! HTTPS only, 5 s timeout, nothing logged or persisted.
 
 use super::protocol::Outbound;
@@ -80,10 +80,27 @@ fn next_hours(
         .collect()
 }
 
+/// Where the internet sees this computer, for the status island's VPN details: the country, and
+/// the public address, city, region and provider when ipinfo gives them. `loc` (coordinates)
+/// and everything else ipinfo sends is dropped at parse time.
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct Country {
     pub country_code: String,
     pub country: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ip: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub city: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub region: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub org: Option<String>,
+}
+
+/// A short, printable name from ipinfo ("Amsterdam", "AS9009 M247 Europe SRL"), or None.
+fn clean_name(s: Option<String>) -> Option<String> {
+    let t = s?.trim().to_string();
+    (!t.is_empty() && t.chars().count() <= 80 && !t.chars().any(char::is_control)).then_some(t)
 }
 
 pub struct NetClient {
@@ -248,21 +265,37 @@ impl NetClient {
         })
     }
 
-    /// The caller's country. ipinfo's plain endpoint gives only the ISO code in `country`; every
-    /// other field (ip, city, loc, org...) is dropped at parse time.
+    /// The caller's country, and the public address, city, region and provider (see
+    /// [`Country`]). ipinfo's plain endpoint gives only the ISO code in `country`. A malformed
+    /// address or name is dropped, not an error.
     pub async fn public_country(&self) -> Result<Country, NetError> {
         #[derive(Deserialize)]
         struct Resp {
             country: String,
+            #[serde(default)]
+            ip: Option<String>,
+            #[serde(default)]
+            city: Option<String>,
+            #[serde(default)]
+            region: Option<String>,
+            #[serde(default)]
+            org: Option<String>,
         }
         let r: Resp = self.get(&self.ipinfo_base, &[]).await?;
         let code = r.country.trim().to_ascii_uppercase();
         if code.len() != 2 || !code.bytes().all(|b| b.is_ascii_uppercase()) {
             return Err(NetError::Request("decode"));
         }
+        let ip =
+            r.ip.and_then(|a| a.trim().parse::<std::net::IpAddr>().ok())
+                .map(|a| a.to_string());
         Ok(Country {
             country_code: code.clone(),
             country: code,
+            ip,
+            city: clean_name(r.city),
+            region: clean_name(r.region),
+            org: clean_name(r.org),
         })
     }
 }
@@ -678,9 +711,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn public_country_drops_other_fields() {
+    async fn public_country_keeps_only_what_the_vpn_details_show() {
         let (base, _) = fake(
-            r#"{"ip":"203.0.113.9","city":"Amsterdam","loc":"52.37,4.89","org":"AS1 Example","country":"NL","region":"NH"}"#,
+            r#"{"ip":"203.0.113.9","hostname":"x.example","city":"Amsterdam","loc":"52.37,4.89","org":"AS1 Example","postal":"1012","timezone":"Europe/Amsterdam","country":"NL","region":"North Holland"}"#,
         )
         .await;
         let c = NetClient::with_bases(&base, &base, &base);
@@ -690,11 +723,28 @@ mod tests {
         let v = serde_json::to_value(&got).unwrap();
         let mut keys: Vec<_> = v.as_object().unwrap().keys().cloned().collect();
         keys.sort();
-        assert_eq!(keys, ["country", "country_code"]);
+        assert_eq!(
+            keys,
+            ["city", "country", "country_code", "ip", "org", "region"]
+        );
+        assert_eq!(v["ip"], "203.0.113.9");
+        assert_eq!(v["city"], "Amsterdam");
         let s = v.to_string();
-        for leak in ["203.0.113.9", "Amsterdam", "52.37", "Example"] {
+        for leak in ["52.37", "x.example", "1012", "Europe/Amsterdam"] {
             assert!(!s.contains(leak), "{s}");
         }
+    }
+
+    #[tokio::test]
+    async fn public_country_drops_bad_details() {
+        let (base, _) =
+            fake(r#"{"ip":"not an ip","city":"bad\u0007name","org":"","country":"de"}"#).await;
+        let c = NetClient::with_bases(&base, &base, &base);
+        let got = c.public_country().await.unwrap();
+        assert_eq!(got.country_code, "DE");
+        assert_eq!((got.ip, got.city, got.org), (None, None, None));
+        let v = serde_json::to_value(c.public_country().await.unwrap()).unwrap();
+        assert_eq!(v, json!({"country_code": "DE", "country": "DE"}));
     }
 
     #[test]
@@ -910,7 +960,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn network_changed_gates_and_emits_country_only() {
+    async fn network_changed_gates_and_emits_public_ip() {
         let (base, seen) = fake(r#"{"ip":"203.0.113.9","city":"X","country":"NL"}"#).await;
         let (tx, mut rx) = mpsc::channel(16);
         let (stx, srx) = watch::channel(settings(None, false));
@@ -935,7 +985,10 @@ mod tests {
         assert!(rx.try_recv().is_err(), "waits for the settle");
         let (e, d) = event(&mut rx).await;
         assert_eq!(e, "PublicIp");
-        assert_eq!(d, json!({"country_code":"NL","country":"NL"}));
+        assert_eq!(
+            d,
+            json!({"country_code":"NL","country":"NL","ip":"203.0.113.9","city":"X"})
+        );
         net.network_changed(true).await;
         tokio::time::sleep(Duration::from_millis(250)).await;
         assert_eq!(seen.lock().unwrap().len(), 1);

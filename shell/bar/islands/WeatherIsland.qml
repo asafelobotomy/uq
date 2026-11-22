@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Widgets
 import "../../core"
 import "../../logic/weather.js" as Weather
+import "../../logic/shellprefs.js" as ShellPrefs
 import ".."
 
 // Weather (`weather`). Icon: the conditions. Small: and the temperature. Medium: and the city
@@ -16,13 +17,15 @@ Island {
     readonly property int iconSize: Theme.fontSize + 7
     readonly property var wx: Bridge.weather
     readonly property bool hasWeather: wx !== null && wx !== undefined
+    // shell.temp_unit: "c" or "f".
+    readonly property string unit: ShellPrefs.tempUnit(Settings.values.shell)
     readonly property bool hasLocation: !!Settings.values.weather_location
     readonly property bool sharing: Bridge.sharing
     readonly property bool showCity: !sharing && (size === "medium" || size === "large")
         && hasWeather && !!wx.location_name
 
     Accessible.role: Accessible.Button
-    Accessible.name: hasWeather ? "Weather: " + Weather.format(wx.temp_c)
+    Accessible.name: hasWeather ? "Weather: " + Weather.format(wx.temp_c, root.unit) + (root.unit === "f" ? " Fahrenheit" : " Celsius")
         + (wx.location_name && !sharing ? " in " + wx.location_name : "")
         : (hasLocation ? "Weather: loading" : "Weather: no city chosen")
 
@@ -41,7 +44,7 @@ Island {
         }
         UqText {
             visible: !root.isIcon && root.hasWeather
-            text: root.hasWeather ? Weather.format(root.wx.temp_c) : ""
+            text: root.hasWeather ? Weather.format(root.wx.temp_c, root.unit) : ""
             Layout.minimumWidth: implicitWidth
         }
         UqText {
@@ -53,7 +56,7 @@ Island {
         UqText {
             readonly property var today: root.hasWeather && root.wx.today ? root.wx.today : null
             visible: root.size === "large" && today !== null
-            text: today ? Weather.format(today.max_c) + "/" + Weather.format(today.min_c) : ""
+            text: today ? Weather.format(today.max_c, root.unit) + "/" + Weather.format(today.min_c, root.unit) : ""
             color: Theme.textMuted
             Layout.minimumWidth: implicitWidth
         }
@@ -93,7 +96,7 @@ Island {
                 ColumnLayout {
                     spacing: 0
                     UqText {
-                        text: root.hasWeather ? Weather.format(root.wx.temp_c)
+                        text: root.hasWeather ? Weather.format(root.wx.temp_c, root.unit)
                             + (root.wx.location_name && !root.sharing ? " · " + root.wx.location_name : "")
                             : ""
                         baseSize: Math.round(Theme.fontSize * 1.4)
@@ -102,7 +105,7 @@ Island {
                     UqText {
                         readonly property var today: root.hasWeather && root.wx.today ? root.wx.today : null
                         visible: today !== null
-                        text: today ? "High " + Weather.format(today.max_c) + "  Low " + Weather.format(today.min_c) : ""
+                        text: today ? "High " + Weather.format(today.max_c, root.unit) + "  Low " + Weather.format(today.min_c, root.unit) : ""
                         color: Theme.textMuted
                     }
                 }
@@ -132,7 +135,7 @@ Island {
                         }
                         UqText {
                             Layout.alignment: Qt.AlignHCenter
-                            text: Weather.format(modelData.temp_c)
+                            text: Weather.format(modelData.temp_c, root.unit)
                         }
                     }
                 }

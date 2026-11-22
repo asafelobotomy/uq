@@ -122,3 +122,43 @@ async fn works_without_uqd_and_names_a_missing_service() {
         Some("The date and time service isn't available. Install the systemd package.")
     );
 }
+
+#[tokio::test]
+async fn date_format_round_trips_and_checks() {
+    let (_rig, _td, uqd, page) = setup(true).await;
+    let out = run(&page, Op::Refresh).await;
+    assert_eq!(out.state["date_format"], "uk", "UK until chosen");
+    let out = run(
+        &page,
+        Op::SetDateFormat {
+            format: "us".into(),
+        },
+    )
+    .await;
+    assert_eq!(out.error, None);
+    assert_eq!(out.state["date_format"], "us");
+    assert_eq!(
+        uqd.as_ref()
+            .unwrap()
+            .state
+            .lock()
+            .unwrap()
+            .settings
+            .shell
+            .date_format,
+        uq_core::settings::DateFormat::Us
+    );
+    let out = run(
+        &page,
+        Op::SetDateFormat {
+            format: "iso".into(),
+        },
+    )
+    .await;
+    assert_eq!(out.error.as_deref(), Some("That isn't a date format."));
+    assert_eq!(out.state["date_format"], "us");
+
+    let (_rig, _td, _uqd, page) = setup(false).await;
+    let out = run(&page, Op::Refresh).await;
+    assert!(out.state["date_format"].is_null());
+}

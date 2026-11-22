@@ -1,12 +1,14 @@
 //! The Date and time page (spec §2.6): the time zone, network time and the manual date and
-//! time through timedated (its own polkit prompts), and the bar's 24-hour clock, which is uQ's
-//! `shell.clock_24h` in uqd. Without uqd the clock switch is unavailable; the rest still works.
+//! time through timedated (its own polkit prompts), and the bar's 24-hour clock and date format,
+//! which are uQ's `shell.clock_24h` and `shell.date_format` in uqd. Without uqd those rows are
+//! unavailable; the rest still works.
 
 use std::sync::Mutex as StdMutex;
 
 use serde_json::{Value, json};
 use tokio::sync::Mutex;
 use uq_core::client::DesktopProxy;
+use uq_core::settings::DateFormat;
 
 use super::proxies::{TimedateProxy, fresh};
 use super::runner::{PageLogic, parse_json, patch_section};
@@ -31,6 +33,10 @@ pub enum Op {
     },
     SetClock24h {
         on: bool,
+    },
+    /// "uk" or "us".
+    SetDateFormat {
+        format: String,
     },
 }
 
@@ -88,11 +94,19 @@ impl DateTimeState {
         }
     }
 
-    /// `shell.clock_24h`, or `None` when uqd can't be read.
-    async fn clock_24h(&self) -> Option<bool> {
-        let proxy = self.uqd().await.ok()?;
-        let section = parse_json(&sysbus::within(proxy.get_section("shell")).await.ok()?).ok()?;
-        Some(section["clock_24h"].as_bool().unwrap_or(true))
+    /// `shell.clock_24h` and `shell.date_format`, or `None`s when uqd can't be read.
+    async fn clock(&self) -> (Option<bool>, Option<String>) {
+        let read = async {
+            let proxy = self.uqd().await.ok()?;
+            parse_json(&sysbus::within(proxy.get_section("shell")).await.ok()?).ok()
+        };
+        match read.await {
+            Some(section) => (
+                Some(section["clock_24h"].as_bool().unwrap_or(true)),
+                Some(section["date_format"].as_str().unwrap_or("uk").to_string()),
+            ),
+            None => (None, None),
+        }
     }
 }
 
@@ -153,14 +167,27 @@ impl PageLogic for DateTimeState {
                 })
                 .await
             }
+            Op::SetDateFormat { format } => {
+                if !DateFormat::NAMES.contains(&format.as_str()) {
+                    return Err(failure("That isn't a date format."));
+                }
+                let proxy = self.uqd().await?;
+                patch_section(&proxy, "shell", |o| {
+                    o.insert("date_format".into(), json!(format));
+                    Ok(())
+                })
+                .await
+            }
         }
     }
 
     async fn snapshot(&self) -> zbus::Result<Value> {
         let (seq, text) = self.notice.lock().unwrap().clone();
+        let (clock_24h, date_format) = self.clock().await;
         Ok(json!({
             "timedate": self.read_timedate().await,
-            "clock_24h": self.clock_24h().await,
+            "clock_24h": clock_24h,
+            "date_format": date_format,
             "notice": {"seq": seq, "text": text},
         }))
     }

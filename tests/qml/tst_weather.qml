@@ -33,6 +33,10 @@ TestCase {
         compare(Weather.format(-0.4), "0°");
         compare(Weather.format(-3.6), "-4°");
         compare(Weather.format(null), "");
+        compare(Weather.format(20, "f"), "68°");
+        compare(Weather.format(-17.8, "f"), "0°");
+        compare(Weather.format(8.6, "c"), "9°");
+        compare(Weather.format(null, "f"), "");
     }
     function test_validQuery() {
         verify(!Weather.validQuery("a"));

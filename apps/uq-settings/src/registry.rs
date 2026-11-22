@@ -875,7 +875,7 @@ static LOGIN_SCREEN_SETTINGS: [SearchEntry; 7] = [
     ),
 ];
 
-static DATETIME_SETTINGS: [SearchEntry; 4] = [
+static DATETIME_SETTINGS: [SearchEntry; 5] = [
     entry(
         "timezone",
         "Time zone",
@@ -896,9 +896,22 @@ static DATETIME_SETTINGS: [SearchEntry; 4] = [
         "24-hour clock in the bar",
         &["24 hour", "12 hour", "am pm", "clock format"],
     ),
+    entry(
+        "datetime-date-format",
+        "Date format in the bar",
+        &[
+            "date format",
+            "uk",
+            "us",
+            "american",
+            "british",
+            "month first",
+            "day first",
+        ],
+    ),
 ];
 
-static REGION_SETTINGS: [SearchEntry; 3] = [
+static REGION_SETTINGS: [SearchEntry; 4] = [
     entry(
         "language",
         "System language",
@@ -914,6 +927,18 @@ static REGION_SETTINGS: [SearchEntry; 3] = [
             "units",
             "metric",
             "paper",
+        ],
+    ),
+    entry(
+        "temp-unit",
+        "Temperature unit",
+        &[
+            "celsius",
+            "fahrenheit",
+            "temperature",
+            "weather",
+            "units",
+            "degrees",
         ],
     ),
     entry(

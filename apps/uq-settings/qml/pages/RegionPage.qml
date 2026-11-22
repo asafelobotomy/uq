@@ -1,6 +1,7 @@
 // Region (spec §2.6): the system language, the formats (how dates, numbers, money, measurements
-// and paper look), and the keyboard layout of the text console. Each change asks for an
-// administrator password; a cancelled prompt leaves it as it was. Locale and layout names are
+// and paper look), the keyboard layout of the text console, and the unit uQ shows temperatures in.
+// Each system change asks for an administrator password; a cancelled prompt leaves it as it
+// was. The temperature unit is uQ's own setting and needs uQ's settings service. Locale and layout names are
 // shown through UqLabel (plain text) only.
 import QtQuick
 import QtQuick.Controls as QQC2
@@ -58,6 +59,8 @@ SettingsPage {
         return l.nativeLanguageName + (where !== "" ? " (" + where + ")" : "") + " · " + code;
     }
     readonly property var formatLocale: page.qtLocale(page.loc.formats)
+    // uQ's own temperature unit ("c" or "f"); null while uQ's settings service can't be read.
+    readonly property var tempUnit: snap.temp_unit === undefined ? null : snap.temp_unit
     property date now: new Date()
 
     RegionModel {
@@ -200,6 +203,49 @@ SettingsPage {
                             Layout.fillWidth: true
                         }
                     }
+                }
+            }
+        }
+
+        SettingsCard {
+            title: "Temperatures"
+            iconName: "temperature-normal"
+            help: "How uQ shows the weather and the system monitor's readings. Apps keep their own setting."
+
+            SettingRow {
+                objectName: "tempUnit"
+                settingId: "temp-unit"
+                iconName: "temperature-normal"
+                label: "Unit"
+                help: App.uqdUp ? "" : "Needs uQ's settings service, which isn't running."
+                highlight: App.highlight
+                enabled: !rm.busy && App.uqdUp && page.tempUnit !== null
+                Layout.fillWidth: true
+
+                QQC2.ButtonGroup {
+                    id: unitGroup
+                }
+                ChoiceButton {
+                    objectName: "tempC"
+                    label: "21 °C"
+                    checkable: true
+                    checked: page.tempUnit !== "f"
+                    QQC2.ButtonGroup.group: unitGroup
+                    Accessible.name: "Celsius"
+                    QQC2.ToolTip.visible: hovered
+                    QQC2.ToolTip.text: "Celsius"
+                    onClicked: if (page.tempUnit === "f") rm.setTempUnit("c")
+                }
+                ChoiceButton {
+                    objectName: "tempF"
+                    label: "70 °F"
+                    checkable: true
+                    checked: page.tempUnit === "f"
+                    QQC2.ButtonGroup.group: unitGroup
+                    Accessible.name: "Fahrenheit"
+                    QQC2.ToolTip.visible: hovered
+                    QQC2.ToolTip.text: "Fahrenheit"
+                    onClicked: if (page.tempUnit !== "f") rm.setTempUnit("f")
                 }
             }
         }

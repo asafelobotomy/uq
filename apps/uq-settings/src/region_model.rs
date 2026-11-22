@@ -19,7 +19,7 @@ pub mod qobject {
     unsafe extern "RustQt" {
         #[qobject]
         #[qml_element]
-        /// `{localed, locales, keymaps, notice}` (see `pages::region`).
+        /// `{localed, locales, keymaps, temp_unit, notice}` (see `pages::region`).
         #[qproperty(QString, state_json)]
         /// The message of the last refused request, "" when there is none.
         #[qproperty(QString, error)]
@@ -41,6 +41,10 @@ pub mod qobject {
         /// The text console's keyboard layout.
         #[qinvokable]
         fn set_keymap(self: Pin<&mut RegionModel>, keymap: &QString);
+
+        /// The unit uQ shows temperatures in: "c" or "f".
+        #[qinvokable]
+        fn set_temp_unit(self: Pin<&mut RegionModel>, unit: &QString);
     }
 
     impl cxx_qt::Threading for RegionModel {}
@@ -70,7 +74,8 @@ impl Default for RegionModelRust {
 impl PageModel for RegionModel {
     type Logic = RegionState;
     const FOLLOW: Follow = Follow {
-        sections: &[],
+        // The temperature unit is uQ's `shell` section.
+        sections: &["shell"],
         theme: false,
         settings: false,
         history: false,
@@ -131,6 +136,15 @@ impl RegionModel {
             self,
             Op::SetKeymap {
                 keymap: keymap.to_string(),
+            },
+        );
+    }
+
+    fn set_temp_unit(self: Pin<&mut Self>, unit: &QString) {
+        model_core::start(
+            self,
+            Op::SetTempUnit {
+                unit: unit.to_string(),
             },
         );
     }

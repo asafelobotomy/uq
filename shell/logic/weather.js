@@ -24,11 +24,11 @@ function icon(code, isDay) {
     return "weather-severe-alert";
 }
 
-// "9°"; never "-0°".
-function format(tempC) {
+// "9°" from Celsius, or "48°" with unit "f" (shell.temp_unit); never "-0°".
+function format(tempC, unit) {
     if (typeof tempC !== "number" || !isFinite(tempC))
         return "";
-    var r = Math.round(tempC);
+    var r = Math.round(unit === "f" ? tempC * 9 / 5 + 32 : tempC);
     if (r === 0)
         r = 0;   // folds -0
     return r + "°";

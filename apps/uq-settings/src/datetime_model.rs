@@ -19,7 +19,7 @@ pub mod qobject {
     unsafe extern "RustQt" {
         #[qobject]
         #[qml_element]
-        /// `{timedate, clock_24h, notice}` (see `pages::datetime`).
+        /// `{timedate, clock_24h, date_format, notice}` (see `pages::datetime`).
         #[qproperty(QString, state_json)]
         /// The message of the last refused request, "" when there is none.
         #[qproperty(QString, error)]
@@ -44,6 +44,10 @@ pub mod qobject {
         /// The bar's clock in 24-hour form, or 12-hour.
         #[qinvokable]
         fn set_clock_24h(self: Pin<&mut DateTimeModel>, on: bool);
+
+        /// The bar's dates the UK way ("uk") or the US way ("us").
+        #[qinvokable]
+        fn set_date_format(self: Pin<&mut DateTimeModel>, format: &QString);
     }
 
     impl cxx_qt::Threading for DateTimeModel {}
@@ -73,7 +77,7 @@ impl Default for DateTimeModelRust {
 impl PageModel for DateTimeModel {
     type Logic = DateTimeState;
     const FOLLOW: Follow = Follow {
-        // The 24-hour clock is uQ's `shell` section.
+        // The 24-hour clock and the date format are uQ's `shell` section.
         sections: &["shell"],
         theme: false,
         settings: false,
@@ -131,5 +135,14 @@ impl DateTimeModel {
 
     fn set_clock_24h(self: Pin<&mut Self>, on: bool) {
         model_core::start(self, Op::SetClock24h { on });
+    }
+
+    fn set_date_format(self: Pin<&mut Self>, format: &QString) {
+        model_core::start(
+            self,
+            Op::SetDateFormat {
+                format: format.to_string(),
+            },
+        );
     }
 }
