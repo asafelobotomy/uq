@@ -7,6 +7,8 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.32] - 2026-11-22
+
 ### Added
 
 - **UK or US dates in the bar.** Settings › Date and time › Clock in the bar has a Date row beside the 12/24-hour Time row: UK ("Sat 21 Nov", weeks from Monday) or US ("Sat, Nov 21", weeks from Sunday). The clock island, its accessible name and the calendar's heading and first weekday follow it (`shell.date_format`).
