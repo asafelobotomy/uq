@@ -7,6 +7,7 @@ fn main() {
         QmlFile::from("qml/Search.qml"),
         QmlFile::from("qml/PluginPage.qml"),
         QmlFile::from("qml/components/ErrorCard.qml"),
+        QmlFile::from("qml/components/PageCache.qml"),
         QmlFile::from("qml/components/PluginContext.qml"),
         QmlFile::from("qml/components/CommandConfirmDialog.qml"),
         QmlFile::from("qml/components/UqLabel.qml"),

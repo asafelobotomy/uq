@@ -13,6 +13,10 @@ import "../components"
 SettingsPage {
     id: page
 
+    // Closed when another page is shown, not kept alive hidden (PageCache): while open it
+    // answers pairing questions, and none should wait on a page nobody can see.
+    property bool keepAlive: false
+
     readonly property var snap: {
         try {
             return JSON.parse(bm.stateJson);

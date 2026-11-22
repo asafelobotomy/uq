@@ -110,4 +110,32 @@ TestCase {
         verify(page.failed);
         verify(page.errorText.length > 0);
     }
+    // Settings shows a kept page again: the page's own refresh() reads again.
+    function test_refresh_reaches_the_page() {
+        const page = createTemporaryObject(pageComp, tc, {
+            source: Qt.resolvedUrl("fixtures/kept/Page.qml")
+        });
+        verify(!page.failed, page.errorText);
+        const loaded = page.children[0].item;
+        page.refresh();
+        compare(loaded.refreshes, 1);
+        verify(page.keepAlive);
+        loaded.keepAlive = false;
+        verify(!page.keepAlive, "the page's own keepAlive: false is followed");
+        // A page without refresh() is fine too.
+        const good = createTemporaryObject(pageComp, tc, {
+            source: Qt.resolvedUrl("fixtures/good/Page.qml")
+        });
+        good.refresh();
+        verify(good.keepAlive);
+    }
+
+    function test_failed_page_is_not_kept() {
+        const page = createTemporaryObject(pageComp, tc, {
+            source: Qt.resolvedUrl("fixtures/broken/Page.qml")
+        });
+        verify(page.failed);
+        verify(!page.keepAlive);
+        page.refresh();
+    }
 }

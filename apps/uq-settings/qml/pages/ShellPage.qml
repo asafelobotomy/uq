@@ -13,6 +13,11 @@ import "../components"
 QQC2.ScrollView {
     id: page
 
+    // Shown again (back from another page, or the window came to the front): read again.
+    function refresh() {
+        sm.refresh();
+    }
+
     readonly property var snap: {
         try {
             return JSON.parse(sm.stateJson);

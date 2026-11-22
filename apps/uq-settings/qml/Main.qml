@@ -77,25 +77,29 @@ Kirigami.ApplicationWindow {
         if (!page)
             return;
         // A plugin page is loaded by PluginPage, which turns a QML error into a card.
-        if (page.plugin)
-            stack.replace(null, Qt.resolvedUrl("PluginPage.qml"), { source: page.qml, pageId: page.id, host: PluginHost, theme: Qt.binding(() => JSON.parse(App.themeJson || "{}")), highlight: Qt.binding(() => App.highlight) });
-        else {
-            // Compiled first: a page that doesn't (a QML error, or a type the installed Kirigami
-            // lacks) made StackView.replace fail half-way, leaving the previous page drawn under
-            // every page after it.
+        if (page.plugin) {
+            stack.show(page.id, page.qml, parent => {
+                const comp = Qt.createComponent(Qt.resolvedUrl("PluginPage.qml"));
+                return comp.createObject(parent, { source: page.qml, pageId: page.id, host: PluginHost, theme: Qt.binding(() => JSON.parse(App.themeJson || "{}")), highlight: Qt.binding(() => App.highlight) });
+            });
+            return;
+        }
+        // Compiled first: a page that doesn't (a QML error, or a type the installed Kirigami
+        // lacks) shows a card in its place instead of half a page.
+        stack.show(page.id, page.qml, parent => {
             const comp = Qt.createComponent(Qt.resolvedUrl(page.qml));
             if (comp.status === Component.Ready)
-                stack.replace(null, comp);
-            else
-                root.pageFailed(page, comp.errorString());
-        }
+                return comp.createObject(parent);
+            return root.pageFailed(page, comp.errorString(), parent);
+        });
     }
 
     /// A built-in page that didn't load: say so in its place. `--screenshots` exits non-zero.
-    function pageFailed(page, error) {
+    function pageFailed(page, error, parent) {
         console.warn("uq-settings: the " + page.id + " page didn't load: " + error);
         root.failedPages.push(page.id);
-        stack.replace(null, failedPage, { pageName: page.name || page.id, error: error });
+        // Not kept: the next visit tries the page again.
+        return failedPage.createObject(parent, { pageName: page.name || page.id, error: error, keepAlive: false });
     }
 
     Component {
@@ -103,6 +107,7 @@ Kirigami.ApplicationWindow {
         Item {
             property string pageName
             property string error
+            property bool keepAlive: false
             ErrorCard {
                 objectName: "pageFailed"
                 anchors.centerIn: parent
@@ -111,6 +116,13 @@ Kirigami.ApplicationWindow {
                 detail: "The other pages work. What went wrong: " + error.trim()
             }
         }
+    }
+
+    // A plugin page that went away (its app was uninstalled) or whose file changed is closed, so
+    // it isn't shown from the kept pages; the page on show is then shown again from the list.
+    onPagesChanged: {
+        if (stack.retain((key, tag) => root.pages.some(p => p.id === key && p.qml === tag)))
+            root.showCurrent();
     }
 
     // Coming back to the window re-reads the page: user.lua or the live session may have changed
@@ -321,18 +333,17 @@ Kirigami.ApplicationWindow {
             Kirigami.Separator {
                 Layout.fillHeight: true
             }
-            QQC2.StackView {
+            // The page on show, and the pages shown recently kept alive behind it (PageCache):
+            // going back to one shows what it last read at once while it reads again.
+            PageCache {
                 id: stack
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 activeFocusOnTab: true
                 Accessible.role: Accessible.Pane
                 Accessible.name: "Page"
-                // Pages switch at once. With the style's cross-fade, clicking through the list
-                // faster than the fade left several pages drawn over each other on a real
-                // desktop (the first install on an Intel laptop).
-                replaceEnter: Transition {}
-                replaceExit: Transition {}
+                // `--screenshots` shows each page once, as it loads from scratch.
+                keep: App.screenshotDir === "" ? 8 : 1
                 Component.onCompleted: {
                     // A page named on the command line or by ShowPage has set
                     // `App.pageRequested` by now, and wins over the remembered one.
