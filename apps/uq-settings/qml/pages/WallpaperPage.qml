@@ -11,6 +11,11 @@ import "../components"
 SettingsPage {
     id: page
 
+    // Shown again (back from another page, or the window came to the front): read again.
+    function refresh() {
+        wm.refresh();
+    }
+
     readonly property var snap: {
         try {
             return JSON.parse(wm.stateJson);

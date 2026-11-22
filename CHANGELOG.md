@@ -17,6 +17,11 @@ All notable changes to uQ are listed here. The format follows
 
 ### Changed
 
+- **kyko is uQ's terminal.** SUPER+Return, terminal apps launched from the menu, the desktop's
+  "Open terminal" and the KDE terminal setting now use [kyko](https://github.com/asafelobotomy/kyko)
+  (images, ligatures, the kitty keyboard protocol, splits and sessions that survive a restart).
+  kitty is still used where kyko is not installed, and a terminal you chose in Settings is kept.
+- **Settings pages open at once when you go back to them.** The eight pages shown most recently stay open in the background, so switching back to one shows what it last read straight away and reads again behind it, replacing the values when the answers come, instead of an empty page that loads from scratch each time. Apps' pages (Apps in the sidebar) get the same: a page can declare `refresh()` to read again when it is shown, and `keepAlive: false` to be closed as before (`docs/settings-pages.md`). Bluetooth and Network still close when you leave them, since they answer pairing and password questions while open. A page whose app is uninstalled is closed.
 - **The corner size on the Look page is every app's corner size.** It used to round only Hyprland's windows; the shell, uQ's apps, Qt (Kvantum) and GTK apps now draw with the same radius.
 - **Every shell popup comes and goes the same way.** Quick settings, the app menu, the power menu, the island popups, the desktop menu, the clipboard history, the notification centre, the polkit prompt, the volume and brightness OSD and new notifications now share one card (`shell/core/UqCard.qml`): it fades in and grows slightly from the side it opens from in 140 ms, and fades out in 100 ms. Before, three of them faded in 140 ms in QML while the rest appeared at once and got Hyprland's 300 ms layer fade on top, so popups opened at different speeds. Hyprland's layer animation is now off for those surfaces (`base.lua`), the bar and wallpaper keep it, and all of it is instant under Reduce motion.
 - **Hover colours fade instead of snapping** on every row, button, tab, chip and switch in the shell and the greeter (100 ms). A quick settings switch's knob now slides across, and the OSD's level bar glides to each new level.

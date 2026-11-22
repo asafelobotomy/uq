@@ -85,7 +85,10 @@ fn launch_terminal_app_wraps_env_before_terminal() {
     }];
     let c = cmd(&f, "t.desktop", Some(&fix), None);
     assert!(
-        c.ends_with("-- 'env' '--' 'FOO=bar' 'kitty' '-e' 'htop'"),
+        c.ends_with(&format!(
+            "-- 'env' '--' 'FOO=bar' '{}' '-e' 'htop'",
+            fallback_terminal()
+        )),
         "{c}"
     );
 }
