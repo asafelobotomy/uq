@@ -149,10 +149,23 @@ pub fn parse_line(line: &str, reg: &Registry) -> Option<Entry> {
         .map(|c| c.severity)
         .or(word)
         .unwrap_or_else(|| Severity::from_priority(priority));
+    // An app uQ started logs into uQ's unit (the shell's, usually) as `reelo: [REELO-001] …`:
+    // name it rather than the unit.
+    let app = code
+        .as_deref()
+        .and_then(|c| reg.get(c))
+        .filter(|c| c.owner != "uQ")
+        .and_then(|_| message.split_once(": "))
+        .map(|(p, _)| p)
+        .filter(|p| {
+            !p.is_empty()
+                && p.chars()
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_')
+        });
     Some(Entry {
         time_us,
         first_us: time_us,
-        source: source_of(&unit),
+        source: app.map_or_else(|| source_of(&unit), str::to_string),
         severity,
         code,
         message,

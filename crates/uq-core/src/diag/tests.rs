@@ -74,6 +74,17 @@ fix = "f"
     assert_eq!(r.get("HYPR-001").unwrap().owner, "uQ");
     assert!(r.units().contains(&"bindle-update.service".to_string()));
     assert!(r.units().contains(&"uqd.service".to_string()));
+
+    // An app's line in the shell's unit is put down to the app.
+    let line = r#"{"MESSAGE":"bindle-gui: [BINDLE-001] no window","PRIORITY":"3","_SYSTEMD_USER_UNIT":"uq-shell.service","__REALTIME_TIMESTAMP":"1"}"#;
+    let e = crate::diag::journal::parse_line(line, &r).unwrap();
+    assert_eq!(e.source, "bindle-gui");
+    assert_eq!(e.code.as_deref(), Some("BINDLE-001"));
+    let own = r#"{"MESSAGE":"uqd: [HYPR-001] x","PRIORITY":"3","_SYSTEMD_USER_UNIT":"uqd.service","__REALTIME_TIMESTAMP":"1"}"#;
+    assert_eq!(
+        crate::diag::journal::parse_line(own, &r).unwrap().source,
+        "uqd"
+    );
 }
 
 #[test]
@@ -326,4 +337,23 @@ fn a_report_has_every_section() {
     ] {
         assert!(md.contains(want), "missing {want:?} in\n{md}");
     }
+}
+
+#[test]
+fn cpp_backtraces_say_where() {
+    let t = "/usr/bin/reelo(+0xe731f) [0x560de46b231f]\n\
+/usr/lib/libc.so.6(+0x3e6f0) [0x7fc818fb36f0]\n\
+/usr/bin/reelo(+0x1234) [0x1]\n\
+/usr/lib/libc.so.6(ppoll+0x77) [0x7fc819086de7]\n\
+/usr/lib/libQt6Core.so.6(_ZN10QEventLoop4execE+0x1a4) [0x7f]\n\
+/usr/lib/libQt6Core.so.6(_ZN10QEventLoop4execE+0x1a4) [0x7f]\n";
+    assert_eq!(
+        crate::diag::crash::glibc_frames(t, 3),
+        [
+            "reelo+0x1234",
+            "ppoll (libc.so.6)",
+            "_ZN10QEventLoop4execE (libQt6Core.so.6)"
+        ]
+    );
+    assert!(crate::diag::crash::glibc_frames("", 3).is_empty());
 }

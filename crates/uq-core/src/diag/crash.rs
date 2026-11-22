@@ -140,6 +140,33 @@ pub fn classify(config_path: &str) -> Kind {
     }
 }
 
+/// Where a C++ crash happened, from uq-diag's `backtrace.txt` (glibc's `backtrace_symbols_fd`
+/// lines, `/usr/lib/libQt6Core.so.6(_ZN…+0x72) [0x7f…]`): the frames after the signal
+/// trampoline (the first libc frame with no name), as `name (lib)` or `lib+offset`.
+pub fn glibc_frames(text: &str, n: usize) -> Vec<String> {
+    let frames: Vec<(String, String)> = text
+        .lines()
+        .filter_map(|l| {
+            let (path, rest) = l.split_once('(')?;
+            let inner = rest.split_once(')')?.0;
+            let lib = path.rsplit('/').next().unwrap_or(path).to_string();
+            Some((lib, inner.to_string()))
+        })
+        .collect();
+    let start = frames
+        .iter()
+        .position(|(lib, inner)| lib.starts_with("libc.so") && inner.starts_with('+'))
+        .map_or(0, |i| i + 1);
+    frames[start.min(frames.len())..]
+        .iter()
+        .take(n)
+        .map(|(lib, inner)| match inner.split_once('+') {
+            Some((name, _)) if !name.is_empty() => format!("{name} ({lib})"),
+            _ => format!("{lib}{inner}"),
+        })
+        .collect()
+}
+
 /// The frames that say where it happened: libc's and the signal machinery's own are skipped,
 /// and an address-only frame is kept only if nothing better follows.
 pub fn telling_frames(frames: &[String], n: usize) -> Vec<String> {
@@ -297,7 +324,13 @@ pub fn scan(dirs: &Dirs) -> Vec<Crash> {
                 code: kind.code(),
                 kind,
                 reason: rec.message.clone(),
-                place: vec![rec.location.clone()],
+                place: if rec.location.is_empty() {
+                    std::fs::read_to_string(dir.join("backtrace.txt"))
+                        .map(|t| glibc_frames(&t, 3))
+                        .unwrap_or_default()
+                } else {
+                    vec![rec.location.clone()]
+                },
                 qs_dir: None,
                 reported: dir.join("report.md").exists(),
                 dismissed: dir.join("dismissed").exists(),
