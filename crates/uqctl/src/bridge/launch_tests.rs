@@ -91,7 +91,7 @@ fn htop_plan(d: &Dirs, terminal: Option<&str>) -> Plan {
 const HTOP: (&str, &str) = ("t.desktop", "[Desktop Entry]\nExec=htop\nTerminal=true\n");
 
 #[test]
-fn terminal_apps_get_kitty_by_default_and_bad_entries_refuse() {
+fn terminal_apps_get_the_fallback_terminal_by_default_and_bad_entries_refuse() {
     let (_t, d) = dirs_with(&[
         HTOP,
         ("h.desktop", "[Desktop Entry]\nExec=h\nHidden=true\n"),
@@ -103,7 +103,8 @@ fn terminal_apps_get_kitty_by_default_and_bad_entries_refuse() {
     ]);
     let p = htop_plan(&d, None);
     assert!(
-        p.command.ends_with("-- 'kitty' '-e' 'htop'"),
+        p.command
+            .ends_with(&format!("-- '{}' '-e' 'htop'", fallback_terminal())),
         "{}",
         p.command
     );
@@ -184,7 +185,8 @@ fn terminal_falls_back_to_kitty() {
     ] {
         let p = htop_plan(&d, Some(t));
         assert!(
-            p.command.ends_with("-- 'kitty' '-e' 'htop'"),
+            p.command
+                .ends_with(&format!("-- '{}' '-e' 'htop'", fallback_terminal())),
             "{t}: {}",
             p.command
         );
@@ -299,7 +301,10 @@ fn run_in_terminal_keeps_the_window_and_passes_the_command_as_an_argument() {
     let arg = json!({"run_id": "run-9", "terminal": true});
     let p = plan(Some(&arg), &d, 4, &runs, None, None).unwrap();
     assert!(
-        p.command.contains("-- 'kitty' '-e' 'sh' '-c' 'eval \"$1\""),
+        p.command.contains(&format!(
+            "-- '{}' '-e' 'sh' '-c' 'eval \"$1\"",
+            fallback_terminal()
+        )),
         "{}",
         p.command
     );

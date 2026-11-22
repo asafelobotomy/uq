@@ -7,6 +7,16 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Theme other apps (Settings › Appearance › Other apps, on by default).** Every Qt, KDE, GTK, libadwaita and Flatpak app now stays on uQ's colours, fonts, icons, widget style and corners, even after another app changed their settings. Until now uQ only created those settings files and left any file that already existed alone, so pressing OK once in the qt6ct app (Fusion, its own "darker" colours, DejaVu fonts) or in KDE's colour settings took Qt apps such as qBittorrent off uQ's look for good. At every login and theme change uqd now puts its own keys back into `qt6ct.conf`, `kdeglobals`, Kvantum's config and GTK's `gtk.css`, keeps everything else in them, and keeps a copy of each file as it was (`<file>.before-uq`, later ones in `.before-uq.last`). Switch it off to leave those files alone.
+- **GTK and libadwaita apps take the theme's corner radius.** Windows, popovers, cards and boxed lists use the theme's radius and buttons, entries and rows two pixels less, as uQ's own apps do; linked button groups stay square inside. The rules are generated from libadwaita's and adw-gtk3's own stylesheets (`scripts/gen-gtk-corners.py`).
+- **Flatpak Qt apps use the KDE platform theme**, so apps on the KDE runtimes read uQ's colours, fonts and icons from `kdeglobals` like Qt apps outside Flatpak (a `QT_QPA_PLATFORMTHEME` you set in the global override is kept).
+
+### Changed
+
+- **The corner size on the Look page is every app's corner size.** It used to round only Hyprland's windows; the shell, uQ's apps, Qt (Kvantum) and GTK apps now draw with the same radius.
+
 ## [0.3.31] - 2026-11-21
 
 ### Fixed
@@ -63,6 +73,13 @@ All notable changes to uQ are listed here. The format follows
 
 - **A Printers page in Settings.** It shows every printer, which one is the default, what each is doing (ready, printing, paused, out of paper, can't be reached…) and the documents waiting, live. You can make a printer the default, pause and resume it, print a test page, cancel one document or all of them, change its name, location and printing defaults (paper size, two-sided, color, quality, paper type and tray, and the rest of its options), and remove it. **Add a printer** looks for printers on the network and USB ports and adds them without a driver when they can (most printers since about 2010), or with a matching installed driver; a network printer that isn't found can be added by its address. It talks to CUPS directly over its local socket, as you: no password prompt and no terminal, and changing printers is allowed to administrators, as CUPS decides. When printing is installed but switched off, **Turn on printing** starts it. This replaces system-config-printer, the last default settings window that didn't follow the uQ theme; the printing service's own web page is linked for the rare printer that needs more. The package gains an optional dependency on cups.
 - **reelo is uQ's media player.** The new [reelo](https://github.com/asafelobotomy/reelo) (libmpv in a Qt Quick window that follows the uQ theme, with MPRIS for the media widget and keys) is an optional dependency, and its **Media player** page under Settings › Apps is checked with the other companion pages. Bindle installs it and makes it the default player in place of VLC/mpv.
+
+### Changed
+
+- **kyko is uQ's terminal.** SUPER+Return, terminal apps launched from the menu, the desktop's
+  "Open terminal" and the KDE terminal setting now use [kyko](https://github.com/asafelobotomy/kyko)
+  (images, ligatures, the kitty keyboard protocol, splits and sessions that survive a restart).
+  kitty is still used where kyko is not installed, and a terminal you chose in Settings is kept.
 
 ## [0.3.24] - 2026-11-20
 

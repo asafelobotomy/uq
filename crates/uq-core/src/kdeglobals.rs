@@ -1,5 +1,5 @@
 //! Name uQ's terminal in `~/.config/kdeglobals`, so Dolphin's "Open Terminal Here" (F4) and other
-//! KDE apps open kitty.
+//! KDE apps open kyko (or kitty, where kyko is not installed).
 //!
 //! KDE apps launch a terminal through KTerminalLauncherJob, which reads
 //! `[General] TerminalApplication` from `kdeglobals` and falls back to Konsole. Outside Plasma
@@ -11,9 +11,9 @@ use crate::atomic::atomic_write;
 use crate::paths::Paths;
 use std::path::{Path, PathBuf};
 
-/// The terminal KDE apps should open: the program uQ's terminal shortcut runs
-/// (`keybinds::defaults::TERMINAL`).
-pub const TERMINAL_APP: &str = "kitty";
+/// The terminals KDE apps should open, in the order uQ's terminal shortcut tries them
+/// (`keybinds::defaults::TERMINAL`): the first one installed is named.
+pub const TERMINAL_APPS: [&str; 2] = ["kyko", "kitty"];
 
 const KEY: &str = "TerminalApplication";
 
@@ -93,13 +93,13 @@ fn on_path(bin: &str) -> Option<PathBuf> {
     })
 }
 
-/// Add uQ's terminal to `kdeglobals` when it names none and kitty is installed. `Ok(true)` when
-/// the file changed; a missing file is created.
+/// Add uQ's terminal to `kdeglobals` when it names none and kyko or kitty is installed.
+/// `Ok(true)` when the file changed; a missing file is created.
 pub fn ensure_terminal(p: &Paths) -> std::io::Result<bool> {
-    if on_path(TERMINAL_APP).is_none() {
-        return Ok(false);
+    match TERMINAL_APPS.into_iter().find(|t| on_path(t).is_some()) {
+        Some(t) => ensure_terminal_at(&conf_path(p), t),
+        None => Ok(false),
     }
-    ensure_terminal_at(&conf_path(p), TERMINAL_APP)
 }
 
 fn ensure_terminal_at(path: &Path, terminal: &str) -> std::io::Result<bool> {
@@ -251,16 +251,32 @@ fn set_key_in(groups: &mut Vec<(String, Vec<String>)>, group: &str, key: &str, v
     }
 }
 
+/// Whether `existing` has colours of its own (another colour scheme than uQ's): writing uQ's
+/// look over it with `reclaim` replaces them, so [`sync_look`] keeps a copy first.
+pub fn has_foreign_colors(existing: &str) -> bool {
+    !is_uq_scheme(&groups(existing))
+}
+
 /// `existing` with uQ's colours (see [`with_colors`]) and `look`: `[Icons] Theme`, `[KDE]
 /// widgetStyle` and the fonts. `None` when nothing changes. Like the colours, the look is only
 /// written while the file is uQ's (it still says `ColorScheme=uQ`, or it has no colours): a
-/// file KDE's System Settings wrote is theirs.
-pub fn with_look(existing: &str, scheme: &str, look: &Look) -> Option<String> {
-    let base = with_colors(existing, scheme);
-    let text = base.as_deref().unwrap_or(existing);
+/// file KDE's System Settings wrote is theirs. With `reclaim` ("Theme other apps" on) it is
+/// uQ's regardless: another scheme's colours are dropped for uQ's, and the rest is kept.
+pub fn with_look(existing: &str, scheme: &str, look: &Look, reclaim: bool) -> Option<String> {
+    let stripped;
+    let start = if reclaim && has_foreign_colors(existing) {
+        let mut g = groups(existing);
+        g.retain(|(h, _)| !h.starts_with("[Colors:"));
+        stripped = render_groups(g);
+        stripped.as_str()
+    } else {
+        existing
+    };
+    let base = with_colors(start, scheme);
+    let text = base.as_deref().unwrap_or(start);
     let mut g = groups(text);
     if !is_uq_scheme(&g) {
-        return base;
+        return base.filter(|b| b != existing);
     }
     if crate::settings::valid_theme_name(look.icons) {
         set_key_in(&mut g, "[Icons]", "Theme", look.icons);
@@ -289,8 +305,9 @@ pub fn with_look(existing: &str, scheme: &str, look: &Look) -> Option<String> {
 }
 
 /// Write uQ's colours and look into `~/.config/kdeglobals` (see [`with_look`]). `Ok(true)` when
-/// the file changed; no rendered scheme yet is `Ok(false)`.
-pub fn sync_look(p: &Paths, look: &Look) -> std::io::Result<bool> {
+/// the file changed; no rendered scheme yet is `Ok(false)`. With `reclaim`, a file with another
+/// colour scheme is copied (`kdeglobals.before-uq`) before uQ's replaces it.
+pub fn sync_look(p: &Paths, look: &Look, reclaim: bool) -> std::io::Result<bool> {
     let scheme = match std::fs::read_to_string(p.theme_dir.join("kde/uq.colors")) {
         Ok(s) => s,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(false),
@@ -302,8 +319,13 @@ pub fn sync_look(p: &Paths, look: &Look) -> std::io::Result<bool> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
         Err(e) => return Err(e),
     };
-    match with_look(&existing, &scheme, look) {
-        Some(new) => atomic_write(&path, &new).map(|()| true),
+    match with_look(&existing, &scheme, look, reclaim) {
+        Some(new) => {
+            if reclaim && has_foreign_colors(&existing) {
+                crate::reclaim::backup(&path)?;
+            }
+            atomic_write(&path, &new).map(|()| true)
+        }
         None => Ok(false),
     }
 }
@@ -334,9 +356,12 @@ mod tests {
     use crate::keybinds::defaults::TERMINAL;
 
     #[test]
-    fn terminal_is_the_one_the_shortcut_runs() {
+    fn terminals_are_the_ones_the_shortcut_runs_in_its_order() {
+        let [first, second] = TERMINAL_APPS;
         assert!(
-            TERMINAL.ends_with(&format!(" -- {TERMINAL_APP}")),
+            TERMINAL.ends_with(&format!(
+                "'command -v {first} >/dev/null && exec {first}; exec {second}'"
+            )),
             "{TERMINAL}"
         );
     }
@@ -485,6 +510,7 @@ mod tests {
             "[General]\nTerminalApplication=kitty\n",
             SCHEME,
             &look("Papirus-Dark"),
+            false,
         )
         .unwrap();
         assert!(new.contains("TerminalApplication=kitty"), "{new}");
@@ -500,7 +526,7 @@ mod tests {
         );
         assert!(new.contains("[Colors:Window]"), "{new}");
         assert_eq!(
-            with_look(&new, SCHEME, &look("Papirus-Dark")),
+            with_look(&new, SCHEME, &look("Papirus-Dark"), false),
             None,
             "second pass is a no-op: {new:?}"
         );
@@ -508,8 +534,8 @@ mod tests {
 
     #[test]
     fn look_changes_with_the_theme() {
-        let a = with_look("", SCHEME, &look("Papirus-Dark")).unwrap();
-        let b = with_look(&a, SCHEME, &look("Papirus-Light")).unwrap();
+        let a = with_look("", SCHEME, &look("Papirus-Dark"), false).unwrap();
+        let b = with_look(&a, SCHEME, &look("Papirus-Light"), false).unwrap();
         assert!(
             b.contains("Theme=Papirus-Light") && !b.contains("Papirus-Dark"),
             "{b}"
@@ -520,6 +546,56 @@ mod tests {
     fn look_leaves_a_users_own_scheme_alone() {
         let theirs =
             "[General]\nColorScheme=BreezeDark\n\n[Colors:Window]\nBackgroundNormal=9,9,9\n";
-        assert_eq!(with_look(theirs, SCHEME, &look("Papirus-Dark")), None);
+        assert_eq!(
+            with_look(theirs, SCHEME, &look("Papirus-Dark"), false),
+            None
+        );
+    }
+
+    #[test]
+    fn reclaim_replaces_another_scheme_and_keeps_the_rest() {
+        let theirs = "[General]\nColorScheme=BreezeDark\nTerminalApplication=kitty\n\n[Colors:Window]\nBackgroundNormal=9,9,9\n\n[KDE]\nSingleClick=false\n";
+        let new = with_look(theirs, SCHEME, &look("Papirus-Dark"), true).unwrap();
+        assert!(
+            !new.contains("9,9,9") && !new.contains("BreezeDark"),
+            "{new}"
+        );
+        assert!(new.contains("ColorScheme=uQ"), "{new}");
+        assert!(new.contains("TerminalApplication=kitty"), "{new}");
+        assert!(new.contains("SingleClick=false"), "{new}");
+        assert!(new.contains("widgetStyle=kvantum"), "{new}");
+        assert_eq!(
+            with_look(&new, SCHEME, &look("Papirus-Dark"), true),
+            None,
+            "second pass"
+        );
+        assert!(has_foreign_colors(theirs) && !has_foreign_colors(&new));
+    }
+
+    #[test]
+    fn sync_look_copies_another_scheme_before_reclaiming_it() {
+        let d = tempfile::tempdir().unwrap();
+        let p = Paths::under(d.path());
+        std::fs::create_dir_all(p.theme_dir.join("kde")).unwrap();
+        std::fs::write(p.theme_dir.join("kde/uq.colors"), SCHEME).unwrap();
+        let path = conf_path(&p);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let theirs =
+            "[General]\nColorScheme=BreezeDark\n\n[Colors:Window]\nBackgroundNormal=9,9,9\n";
+        std::fs::write(&path, theirs).unwrap();
+        assert!(
+            !sync_look(&p, &look("Papirus-Dark"), false).unwrap(),
+            "off: kept"
+        );
+        assert!(sync_look(&p, &look("Papirus-Dark"), true).unwrap());
+        assert_eq!(
+            std::fs::read_to_string(path.with_file_name("kdeglobals.before-uq")).unwrap(),
+            theirs
+        );
+        assert!(
+            std::fs::read_to_string(&path)
+                .unwrap()
+                .contains("ColorScheme=uQ")
+        );
     }
 }

@@ -42,11 +42,12 @@ impl Group {
     }
 }
 
-/// The terminal shortcut's command: kitty in a scope of its own in `app.slice`, like the
-/// launcher's apps, so a scheduler sees it as an app rather than part of Hyprland. Hyprland runs
-/// it through `sh -c`, which hands its pid on to systemd-run and then kitty, so `$$` is kitty's
-/// own pid: unique while the scope lives. config/hypr/base.lua repeats it.
-pub const TERMINAL: &str = "systemd-run --user --scope --quiet --collect --slice=app.slice --unit=app-uq-kitty-$$ -- kitty";
+/// The terminal shortcut's command: kyko, or kitty when kyko is not installed, in a scope of its
+/// own in `app.slice`, like the launcher's apps, so a scheduler sees it as an app rather than
+/// part of Hyprland. Hyprland runs it through `sh -c`, which hands its pid on to systemd-run, a
+/// second `sh` and then the terminal (each `exec`s the next), so `$$` is the terminal's own pid:
+/// unique while the scope lives. config/hypr/base.lua repeats it.
+pub const TERMINAL: &str = "systemd-run --user --scope --quiet --collect --slice=app.slice --unit=app-uq-terminal-$$ -- sh -c 'command -v kyko >/dev/null && exec kyko; exec kitty'";
 
 /// A default's dispatcher, as `'static` text.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -858,7 +859,12 @@ mod tests {
             TERMINAL.starts_with("systemd-run --user --scope "),
             "{TERMINAL}"
         );
-        assert!(TERMINAL.contains(" --slice=app.slice ") && TERMINAL.ends_with(" -- kitty"));
+        assert!(TERMINAL.contains(" --slice=app.slice "), "{TERMINAL}");
+        // kyko, and kitty where kyko is not installed.
+        assert!(
+            TERMINAL.ends_with(" -- sh -c 'command -v kyko >/dev/null && exec kyko; exec kitty'"),
+            "{TERMINAL}"
+        );
         assert!(base_lua().contains(&format!("local terminal = \"{TERMINAL}\"")));
     }
 
