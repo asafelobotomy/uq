@@ -7,6 +7,8 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.35] - 2026-11-22
+
 ### Added
 
 - **Settings › Problems: what went wrong, in plain words.** A new page under System lists every crash of the shell, the lock screen, uQ's programs and apps built on uQ, each with **Copy report**, **Open** and **Dismiss**, and one card per warning or error logged in the last hour, day or week: what it means, what to do, which part logged it and how often. **Copy a report** makes one for a problem that isn't a crash.
@@ -20,7 +22,15 @@ All notable changes to uQ are listed here. The format follows
 
 - uQ's programs log one way: under systemd each line starts with its priority, so the journal files warnings as warnings (they were all "info" before), with no colour codes or second timestamp. uqlip now logs its warnings by default (it logged only errors).
 
+## [0.3.34] - 2026-11-22
+
 ### Fixed
+
+- **Theme icons no longer load off the GUI thread.** The app menu's icons and a notification's picture were decoded asynchronously, and when the source was a theme icon (`image://icon/...`) that ran Quickshell's icon provider, and so `QIcon`, on Qt's image reader thread, racing the GUI thread's own icon loads. That race is what crashed noti-fi's notifd (segfault or abort in `QIcon::pixmap`); uQ's shell had the same pattern. Files and notification image data still decode in the background; theme icons load on the GUI thread (`L.asyncImageOk`).
+
+### Security
+
+- `url` 2.5.9 (RUSTSEC-2026-0592, a stack overflow in `Url::origin()` on deeply nested `blob:` URLs; used by `uqctl` through reqwest).
 
 - **The edge strip covers the sliver after a window is made Full.** When a new window opened Full beside another, the few pixels of the window it pushed off the screen could stay uncovered: Hyprland moves that window a few hundred ms after it reports the Full one, with no event for it. The screen pages now read the windows again twice in the 700 ms after such a change.
 

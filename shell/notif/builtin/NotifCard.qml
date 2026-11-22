@@ -170,7 +170,7 @@ UqCard {
             Layout.preferredHeight: root.imageSize
             visible: root.imageSource !== ""
             source: root.imageSource
-            asynchronous: true
+            asynchronous: L.asyncImageOk(root.imageSource)    // never image://icon off the GUI thread
             fillMode: Image.PreserveAspectFit
             sourceSize.width: root.imageSize * root.dpr
             sourceSize.height: root.imageSize * root.dpr

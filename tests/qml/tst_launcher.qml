@@ -327,6 +327,16 @@ TestCase {
         compare(L.copyValue("42"), null);
     }
 
+    // image://icon must never load asynchronously: QIcon on the reader thread crashed notifd.
+    function test_async_image_ok() {
+        verify(L.asyncImageOk("file:///usr/share/pixmaps/a.png"));
+        verify(L.asyncImageOk("image://qsimage/12/0"));
+        verify(!L.asyncImageOk("image://icon/firefox"));
+        verify(!L.asyncImageOk("image://icon/firefox?fallback=application-x-executable"));
+        verify(!L.asyncImageOk(""));
+        verify(!L.asyncImageOk(undefined));
+    }
+
     function test_icon_ref() {
         compare(JSON.stringify(L.iconRef("firefox")), JSON.stringify({ theme: "firefox" }));
         compare(JSON.stringify(L.iconRef("org.gnome.Nautilus-symbolic")),
