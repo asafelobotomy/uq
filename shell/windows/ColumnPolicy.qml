@@ -69,7 +69,8 @@ Scope {
                     { address: x.address, width: x.full ? "full" : "half", keep_focus: true }]);
             });
         });
-        chain.catch(function (e) { console.warn("uq: screens: " + e); });
+        chain.catch(function (e) { console.warn("uq: screens: " + e); })
+            .then(function () { PageActions.widthsChanged(); });
     }
 
     function look() {

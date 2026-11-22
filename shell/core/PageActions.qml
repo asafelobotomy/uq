@@ -18,6 +18,9 @@ QtObject {
     property var widthHandler: null
     property var dropHandler: null
     property var dropHint: null
+    // Column widths were set without going through setWidth (ColumnPolicy); the pages read the
+    // windows again, since Hyprland sends no event for it.
+    signal widthsChanged()
 
     function setWidth(address, full) {
         if (typeof root.widthHandler === "function")
