@@ -7,6 +7,8 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.34] - 2026-11-22
+
 ### Fixed
 
 - **Theme icons no longer load off the GUI thread.** The app menu's icons and a notification's picture were decoded asynchronously, and when the source was a theme icon (`image://icon/...`) that ran Quickshell's icon provider, and so `QIcon`, on Qt's image reader thread, racing the GUI thread's own icon loads. That race is what crashed noti-fi's notifd (segfault or abort in `QIcon::pixmap`); uQ's shell had the same pattern. Files and notification image data still decode in the background; theme icons load on the GUI thread (`L.asyncImageOk`).
