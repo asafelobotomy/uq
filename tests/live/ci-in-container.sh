@@ -9,7 +9,7 @@
 set -eu
 card=${SMOKE_CARD:?SMOKE_CARD must name the DRM card passed to the container}
 [ -n "${SMOKE_NO_INSTALL:-}" ] ||
-    pacman -Syu --noconfirm --needed rust dbus hyprland jq foot ttf-dejavu seatd gtk3 >/dev/null
+    pacman -Syu --noconfirm --needed rust dbus hyprland jq foot ttf-dejavu seatd gtk3 plasma-integration kvantum >/dev/null
 id tester >/dev/null 2>&1 || useradd -m -u "${SMOKE_UID:-1000}" tester
 chmod 666 "$card"
 SEATD_VTBOUND=0 seatd -u tester -l error &

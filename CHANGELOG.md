@@ -7,8 +7,17 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.32] - 2026-11-22
+
+### Added
+
+- **Theme other apps (Settings › Appearance › Other apps, on by default).** Every Qt, KDE, GTK, libadwaita and Flatpak app now stays on uQ's colours, fonts, icons, widget style and corners, even after another app changed their settings. Until now uQ only created those settings files and left any file that already existed alone, so pressing OK once in the qt6ct app (Fusion, its own "darker" colours, DejaVu fonts) or in KDE's colour settings took Qt apps such as qBittorrent off uQ's look for good. At every login and theme change uqd now puts its own keys back into `qt6ct.conf`, `kdeglobals`, Kvantum's config and GTK's `gtk.css`, keeps everything else in them, and keeps a copy of each file as it was (`<file>.before-uq`, later ones in `.before-uq.last`). Switch it off to leave those files alone.
+- **GTK and libadwaita apps take the theme's corner radius.** Windows, popovers, cards and boxed lists use the theme's radius and buttons, entries and rows two pixels less, as uQ's own apps do; linked button groups stay square inside. The rules are generated from libadwaita's and adw-gtk3's own stylesheets (`scripts/gen-gtk-corners.py`).
+- **Flatpak Qt apps use the KDE platform theme**, so apps on the KDE runtimes read uQ's colours, fonts and icons from `kdeglobals` like Qt apps outside Flatpak (a `QT_QPA_PLATFORMTHEME` you set in the global override is kept).
+
 ### Changed
 
+- **The corner size on the Look page is every app's corner size.** It used to round only Hyprland's windows; the shell, uQ's apps, Qt (Kvantum) and GTK apps now draw with the same radius.
 - **Every shell popup comes and goes the same way.** Quick settings, the app menu, the power menu, the island popups, the desktop menu, the clipboard history, the notification centre, the polkit prompt, the volume and brightness OSD and new notifications now share one card (`shell/core/UqCard.qml`): it fades in and grows slightly from the side it opens from in 140 ms, and fades out in 100 ms. Before, three of them faded in 140 ms in QML while the rest appeared at once and got Hyprland's 300 ms layer fade on top, so popups opened at different speeds. Hyprland's layer animation is now off for those surfaces (`base.lua`), the bar and wallpaper keep it, and all of it is instant under Reduce motion.
 - **Hover and focus colours fade instead of snapping** on every row, button, tab, chip and switch in the shell and the greeter (100 ms). A quick settings switch's knob now slides across, and the OSD's level bar glides to each new level.
 - **One set of corners.** Rows, buttons and fields inside a card use the theme's radius minus 2 (`Theme.radiusControl`), chips inside them minus 4 (`Theme.radiusInner`), never below 0, so a square theme is square everywhere. Notification buttons and the notification centre's buttons were 2 px rounder than every other button.

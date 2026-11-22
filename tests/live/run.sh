@@ -12,6 +12,7 @@
 #   SF  checks/f-displays.sh    slice F: display arrangements, main display, workspace planner,
 #                               touchpad gestures
 #   SE  checks/e-companions.sh  slice E: pages from other apps (`uqctl integrations`)
+#   SH  checks/h-apps.sh        other apps follow the theme (Qt, KDE, Kvantum and GTK files)
 #
 #   tests/live/run.sh [--only REGEX] [--list] [--slow] [--yes]
 #

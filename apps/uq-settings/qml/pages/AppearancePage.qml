@@ -574,6 +574,24 @@ SettingsPage {
             iconName: "preferences-desktop-theme-applications"
 
             SettingRow {
+                settingId: "theme-apps"
+                iconName: "preferences-desktop-color"
+                label: "Theme other apps"
+                help: "Qt, KDE, GTK and Flatpak apps take the theme's colours, fonts, icons and corners, even after another app changed their settings. Off leaves those settings alone."
+                highlight: App.highlight
+                enabled: page.ready
+                Layout.fillWidth: true
+                QQC2.Switch {
+                    id: ta
+                    checked: page.appearance.theme_apps !== false
+                    Accessible.name: "Theme other apps"
+                    onToggled: {
+                        page.field("theme_apps", ta.checked);
+                        ta.checked = Qt.binding(() => page.appearance.theme_apps !== false);
+                    }
+                }
+            }
+            SettingRow {
                 settingId: "kvantum"
                 iconName: "preferences-desktop-theme-applications"
                 label: "Style Qt apps to match the theme"
