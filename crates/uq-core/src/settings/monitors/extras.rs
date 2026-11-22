@@ -43,7 +43,7 @@ where
             .filter_map(|v| match serde_json::from_value::<T>(v.clone()) {
                 Ok(t) => Some(t),
                 Err(e) => {
-                    tracing::warn!("state: dropping monitors entry {v}: {e}");
+                    tracing::warn!("[STATE-002] state: dropping monitors entry {v}: {e}");
                     None
                 }
             })

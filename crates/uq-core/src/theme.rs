@@ -282,7 +282,9 @@ impl ThemeRegistry {
             }
             let id = entry.file_name().to_string_lossy().into_owned();
             if id.starts_with(user::PREFIX) {
-                tracing::warn!("skipping system theme folder {id}: the user- prefix is reserved");
+                tracing::warn!(
+                    "[THEME-002] skipping system theme folder {id}: the user- prefix is reserved"
+                );
                 continue;
             }
             for variant in Variant::ALL {

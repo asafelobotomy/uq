@@ -150,7 +150,7 @@ Scope {
         root.scrolling = true;
         root.focusMoved = false;
         Bridge.call("Dispatch", ["scroll", to])
-            .catch(function (e) { console.warn("uq: screen pages: " + e); })
+            .catch(function (e) { console.warn("uq[WIN-001] screen pages: " + e); })
             .then(function () {
                 root.scrolling = false;
                 if (root.focusMoved)
@@ -220,7 +220,7 @@ Scope {
         }
         root.hidingSent = key;
         return Bridge.call("Dispatch", ["page_hiding", args])
-            .catch(function (e) { console.warn("uq: screen pages: " + e); });
+            .catch(function (e) { console.warn("uq[WIN-001] screen pages: " + e); });
     }
 
     // A column made Full or Half from a tab (PageActions). Made Half, it can leave the rest of
@@ -298,7 +298,7 @@ Scope {
             root.refresh();
             return;
         }
-        var warn = function (e) { console.warn("uq: drop a tab on the screen: " + e); };
+        var warn = function (e) { console.warn("uq[WIN-001] drop a tab on the screen: " + e); };
         var chain = moves !== 0
             ? Bridge.call("Dispatch", ["move_column", { address: address, steps: moves }])
             : Promise.resolve();
@@ -351,7 +351,7 @@ Scope {
             if (d.full === "")
                 return false;
             Bridge.call("Dispatch", ["column_width", { address: d.full, width: "full", keep_focus: false }])
-                .catch(function (e) { console.warn("uq: drag: " + e); });
+                .catch(function (e) { console.warn("uq[WIN-001] drag: " + e); });
             return true;
         };
         var pre = root.listHolding(root.preDrag, addr), now = root.listHolding(root.tiled, addr);
@@ -371,7 +371,7 @@ Scope {
                 && root.dropPlanFor(at.screen, addr, at.x, pre) !== null) {
             root.pendingDrop = Object.assign({}, d, { promoted: true });
             Bridge.call("Dispatch", ["own_column", { address: addr }])
-                .catch(function (e) { console.warn("uq: drag: " + e); })
+                .catch(function (e) { console.warn("uq[WIN-001] drag: " + e); })
                 .then(function () { root.refresh(); });
             return true;
         }
@@ -386,7 +386,7 @@ Scope {
         }
         // Nothing changes by the rule: it goes back where it was.
         if (back !== 0) {
-            var warn = function (e) { console.warn("uq: drag: " + e); };
+            var warn = function (e) { console.warn("uq[WIN-001] drag: " + e); };
             Bridge.call("Dispatch", ["move_column", { address: addr, steps: back }]).catch(warn).then(function () {
                 if (d.full !== "")
                     restoreFull();

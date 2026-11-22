@@ -240,7 +240,10 @@ impl<'de> Deserialize<'de> for Compat {
             match v.get(key.key()) {
                 None => {}
                 Some(Value::Bool(b)) => c.set_switch(key, *b),
-                Some(_) => tracing::warn!("state: compat.{} is not on or off; off", key.key()),
+                Some(_) => tracing::warn!(
+                    "[STATE-002] state: compat.{} is not on or off; off",
+                    key.key()
+                ),
             }
         }
         c.apps = match v.get("apps") {
@@ -251,13 +254,13 @@ impl<'de> Deserialize<'de> for Compat {
                 .filter_map(|(i, e)| match parse_fix(&format!("compat.apps[{i}]"), e) {
                     Ok(fix) => Some(fix),
                     Err(e) => {
-                        tracing::warn!("state: dropping compat.apps[{i}]: {e}");
+                        tracing::warn!("[STATE-002] state: dropping compat.apps[{i}]: {e}");
                         None
                     }
                 })
                 .collect(),
             Some(_) => {
-                tracing::warn!("state: compat.apps is not a list; ignoring it");
+                tracing::warn!("[STATE-002] state: compat.apps is not a list; ignoring it");
                 Vec::new()
             }
         };
@@ -321,17 +324,21 @@ impl Compat {
             i += 1;
             fix.id = normalise_id(&fix.id);
             if let Err(e) = check_fix("compat.apps", fix) {
-                tracing::warn!("state: dropping compat.apps[{at}]: {e}");
+                tracing::warn!("[STATE-002] state: dropping compat.apps[{at}]: {e}");
                 false
             } else if !seen.insert(fix.id.clone()) {
-                tracing::warn!("state: dropping compat.apps[{at}]: its app already has a fix");
+                tracing::warn!(
+                    "[STATE-002] state: dropping compat.apps[{at}]: its app already has a fix"
+                );
                 false
             } else {
                 true
             }
         });
         if self.apps.len() > MAX_APPS {
-            tracing::warn!("state: compat has more than {MAX_APPS} app fixes; keeping the first");
+            tracing::warn!(
+                "[STATE-002] state: compat has more than {MAX_APPS} app fixes; keeping the first"
+            );
             self.apps.truncate(MAX_APPS);
         }
         self

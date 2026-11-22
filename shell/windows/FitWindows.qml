@@ -54,7 +54,7 @@ Scope {
             var p = Fit.placement(w, Fit.monitorFor(w, mons), Theme.gapOut);
             if (p !== null)
                 Bridge.call("Dispatch", ["place", { address: w.address, x: p.x, y: p.y, w: p.w, h: p.h }])
-                    .catch(function (e) { console.warn("uq: keep on screen: " + e); });
+                    .catch(function (e) { console.warn("uq[WIN-001] keep on screen: " + e); });
         }
     }
 

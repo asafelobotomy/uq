@@ -69,13 +69,13 @@ QtObject {
             root.starting = false;
         }).catch(function (e) {
             root.starting = false;
-            console.log("uq: Lock failed: " + e);
+            console.warn("uq[LOCK-001] Lock failed: " + e);
         });
     }
 
     function sleepReady() {
         Bridge.call("SleepLockReady").catch(function (e) {
-            console.log("uq: SleepLockReady failed: " + e);
+            console.warn("uq[LOCK-001] SleepLockReady failed: " + e);
         });
     }
 

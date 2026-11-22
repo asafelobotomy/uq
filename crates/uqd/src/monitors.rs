@@ -77,7 +77,7 @@ impl Desktop {
             return false;
         }
         tracing::warn!(
-            "a display change was never confirmed before uqd stopped; keeping the old layout"
+            "[DISPLAY-001] a display change was never confirmed before uqd stopped; keeping the old layout"
         );
         let _ = std::fs::remove_file(path);
         true
@@ -222,7 +222,7 @@ impl Desktop {
         if !reloaded {
             let lines = live_lines(&p.rollback, p.touched.iter());
             if let Err(e) = self.comp.eval(&lines).await {
-                tracing::warn!("putting the old displays back: {e}");
+                tracing::warn!("[DISPLAY-001] putting the old displays back: {e}");
             }
         }
         let _ = std::fs::remove_file(self.marker_path());
@@ -239,7 +239,7 @@ impl Desktop {
                 p.touched.iter().chain(p.rollback.outputs.keys()),
             );
             if let Err(e) = self.comp.eval(&lines).await {
-                tracing::warn!("re-applying the pending display change: {e}");
+                tracing::warn!("[DISPLAY-001] re-applying the pending display change: {e}");
             }
         }
     }
@@ -257,7 +257,7 @@ impl Desktop {
         }
         self.commit_section("monitors", next, origin).await?;
         if let Err(e) = self.comp.reload().await {
-            tracing::warn!("applying the restored displays: {e}");
+            tracing::warn!("[DISPLAY-001] applying the restored displays: {e}");
         }
         self.sync_x11_primary_now().await;
         Ok(())

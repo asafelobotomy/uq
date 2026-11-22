@@ -62,7 +62,7 @@ fn lenient_rules<'de, D: serde::Deserializer<'de>>(
     d: D,
 ) -> Result<BTreeMap<String, Layout>, D::Error> {
     let serde_json::Value::Object(obj) = serde_json::Value::deserialize(d)? else {
-        tracing::warn!("state: [layouts] is not a table; ignoring it");
+        tracing::warn!("[STATE-002] state: [layouts] is not a table; ignoring it");
         return Ok(BTreeMap::new());
     };
     Ok(obj
@@ -71,7 +71,7 @@ fn lenient_rules<'de, D: serde::Deserializer<'de>>(
             |(ws, v)| match serde_json::from_value::<Layout>(v.clone()) {
                 Ok(l) => Some((ws, l)),
                 Err(_) => {
-                    tracing::warn!("state: dropping workspace rule {ws:?} = {v}");
+                    tracing::warn!("[STATE-002] state: dropping workspace rule {ws:?} = {v}");
                     None
                 }
             },
@@ -117,7 +117,7 @@ impl State {
             Ok(src) => src,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return State::default(),
             Err(e) => {
-                tracing::warn!("{}: {e}; using defaults", path.display());
+                tracing::warn!("[STATE-001] {}: {e}; using defaults", path.display());
                 return State::default();
             }
         };
@@ -131,12 +131,12 @@ impl State {
                 bad.push(format!(".bad-{secs}"));
                 match std::fs::rename(path, &bad) {
                     Ok(()) => tracing::warn!(
-                        "{}: unreadable state ({e}); kept as {:?}, using defaults",
+                        "[STATE-001] {}: unreadable state ({e}); kept as {:?}, using defaults",
                         path.display(),
                         bad
                     ),
                     Err(re) => tracing::warn!(
-                        "{}: unreadable state ({e}), could not move it aside ({re}); using defaults",
+                        "[STATE-001] {}: unreadable state ({e}), could not move it aside ({re}); using defaults",
                         path.display()
                     ),
                 }
@@ -152,7 +152,7 @@ impl State {
         let mut state = Self::parse(src)?;
         let (valid, repaired) = state.settings.validated();
         for e in repaired {
-            tracing::warn!("state: {e}; that setting uses its default");
+            tracing::warn!("[STATE-002] state: {e}; that setting uses its default");
         }
         state.settings = valid;
         state.layouts = crate::settings::repair_rules(std::mem::take(&mut state.layouts));

@@ -7,6 +7,19 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Settings › Problems: what went wrong, in plain words.** A new page under System lists every crash of the shell, the lock screen, uQ's programs and apps built on uQ, each with **Copy report**, **Open** and **Dismiss**, and one card per warning or error logged in the last hour, day or week: what it means, what to do, which part logged it and how often. **Copy a report** makes one for a problem that isn't a crash.
+- **Every warning and error has a code.** uQ's 179 warnings and errors (uqd, uqlip, the settings helper, the shell and Settings) now start with a code such as `[HYPR-003]`, from one list of 64 codes in 25 areas with a title, what it means and what to do (`crates/uq-core/src/diag/codes.toml`). A test fails on a warning without a known code. `uqctl explain HYPR-003` prints one; `uqctl explain` lists them.
+- **`uqctl log`** reads uQ's warnings and errors from the journal with their codes: `--since 2h`, `--min info`, `--only HYPR` (an area or one code), `--coded` (leave out Qt's lines), `--summary` (one line per problem with how often and what to do) and `--json`.
+- **Crash reports.** uqd watches Quickshell's crash folder and uQ's own. Each new crash gets a report (`~/.local/state/uq/crashes/<id>/report.md`), a `CRASH-00N` line in the journal and, when it is recent, a notification. The report has what crashed and where, the versions (uQ, Hyprland, Quickshell, Qt, Mesa or NVIDIA, Bindle, noti-fi, kyko, kernel), the screens, the theme and profile, the problems logged in the 15 minutes before, the last setting changes and the crashed part's last 150 log lines. Window titles, the home folder, user and computer names, and e-mail, IP and MAC addresses are taken out. `uqctl crashes` lists them; `uqctl report --crash latest` (or `uqctl report` for now) saves one and prints where.
+- **A panic in uqd, uqlip, uqctl, the settings helper or Settings** now leaves a crash record that shows on the Problems page, instead of only a line in the journal.
+- **`native/uq-diag`** (1.0.0): the same log format and crash records for other apps, in Rust (`uq_diag.rs`) and Qt 6 C++ (`uqdiag.h`, `uqdiag.cpp`, with a crash signal handler), with a drift check like uq-theme's. Apps list their own codes in `/usr/share/uq/diag/<app>.toml` and appear in `uqctl log`, `uqctl explain` and the Problems page. See `docs/diagnostics.md`.
+
+### Changed
+
+- uQ's programs log one way: under systemd each line starts with its priority, so the journal files warnings as warnings (they were all "info" before), with no colour codes or second timestamp. uqlip now logs its warnings by default (it logged only errors).
+
 ### Fixed
 
 - **The edge strip covers the sliver after a window is made Full.** When a new window opened Full beside another, the few pixels of the window it pushed off the screen could stay uncovered: Hyprland moves that window a few hundred ms after it reports the Full one, with no event for it. The screen pages now read the windows again twice in the 700 ms after such a change.

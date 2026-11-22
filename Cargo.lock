@@ -2004,6 +2004,7 @@ dependencies = [
  "tokio",
  "toml",
  "tracing",
+ "tracing-subscriber",
  "zbus",
 ]
 
@@ -2043,7 +2044,6 @@ dependencies = [
  "toml",
  "toml_edit",
  "tracing",
- "tracing-subscriber",
  "uq-core",
  "zbus",
 ]
@@ -2090,7 +2090,6 @@ dependencies = [
  "tokio",
  "toml",
  "tracing",
- "tracing-subscriber",
  "uq-core",
  "uqd",
  "zbus",

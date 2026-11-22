@@ -479,7 +479,7 @@ pub fn spawn(events: Sender<Event>, policy: Policy, max_bytes: u64) -> io::Resul
                     let _ = events.send(Event::Closed);
                 }
                 Err(e) => {
-                    tracing::error!("the Wayland connection ended: {e}");
+                    tracing::error!("[CLIP-002] the Wayland connection ended: {e}");
                     let _ = events.send(Event::Unsupported);
                 }
             }

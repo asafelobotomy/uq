@@ -207,7 +207,7 @@ PanelWindow {
         }).catch(function (e) {
             var text = F.failureText("Search isn't working", e);
             if (text !== root.searchError)
-                console.warn("uq: Search failed: " + e);
+                console.warn("uq[LAUNCH-002] Search failed: " + e);
             if (root.shown)
                 root.searchError = text;
         });
@@ -381,7 +381,7 @@ PanelWindow {
         // activateClose, if that takes long).
         var fail = function (e) {
             activateClose.stop();
-            console.warn("uq: " + a.call + " (" + sec.provider + ") failed: " + e);
+            console.warn("uq[LAUNCH-002] " + a.call + " (" + sec.provider + ") failed: " + e);
             if (root.shown)
                 root.error = F.failureText(what, e);
         };
@@ -423,7 +423,7 @@ PanelWindow {
                 Surfaces.close();
         }).catch(function (e) {
             activateClose.stop();
-            console.warn("uq: Launch (pinned " + sq.id + ") failed: " + e);
+            console.warn("uq[LAUNCH-001] Launch (pinned " + sq.id + ") failed: " + e);
             if (root.shown)
                 root.error = F.failureText("Couldn't open " + String(sq.entry.name || sq.id), e);
         });
@@ -441,7 +441,7 @@ PanelWindow {
             Bridge.call("Launch", [{ run_id: item.id, terminal: true, tab: dockTabs }]).then(function () {
                 root.termState = "sent";
             }).catch(function (e) {
-                console.warn("uq: a new tab in the docked terminal failed: " + e);
+                console.warn("uq[LAUNCH-003] a new tab in the docked terminal failed: " + e);
                 root.termState = "";
                 root.releaseDock();
                 root.openNew(item);
@@ -471,7 +471,7 @@ PanelWindow {
             root.termTries = 0;
             termWatch.restart();
         }).catch(function (e) {
-            console.warn("uq: Launch (run in a terminal) failed: " + e);
+            console.warn("uq[LAUNCH-001] Launch (run in a terminal) failed: " + e);
             root.termState = "";
             if (root.shown)
                 root.error = F.failureText("Couldn't open " + root.termName, e);
@@ -531,7 +531,7 @@ PanelWindow {
         dockHidden = true;
         Bridge.call("Dispatch", ["move", { address: dockAddress, workspace: "special:uq-lookseedo" }]).then(function () {
             return root.placeDock(0.87);
-        }).catch(function (e) { console.warn("uq: tuck the terminal away: " + e); });
+        }).catch(function (e) { console.warn("uq[LAUNCH-003] tuck the terminal away: " + e); });
     }
     // look=see>do_ opened again: the terminal comes back under the pill on the workspace shown.
     function showDock() {
@@ -540,14 +540,14 @@ PanelWindow {
         dockHidden = false;
         Bridge.call("Dispatch", ["move", { address: dockAddress, workspace: activeWsId() }]).then(function () {
             return root.placeDock(1);
-        }).catch(function (e) { console.warn("uq: bring the terminal back: " + e); });
+        }).catch(function (e) { console.warn("uq[LAUNCH-003] bring the terminal back: " + e); });
     }
     // A docked terminal that can't take a tab: minimised to the Open windows island, where it
     // can still be found, so a new one can dock.
     function releaseDock() {
         if (dockAlive())
             Bridge.call("Dispatch", ["minimise", { address: dockAddress, from_ws: activeWsId() }])
-                .catch(function (e) { console.warn("uq: minimise the terminal: " + e); });
+                .catch(function (e) { console.warn("uq[LAUNCH-003] minimise the terminal: " + e); });
         forgetDock();
     }
     function regrab() {
@@ -574,7 +574,7 @@ PanelWindow {
                     root.dockHidden = false;
                     root.termState = "sent";
                     if (root.shown)
-                        root.placeDock(1).catch(function (e) { console.warn("uq: dock the terminal: " + e); });
+                        root.placeDock(1).catch(function (e) { console.warn("uq[LAUNCH-003] dock the terminal: " + e); });
                     else
                         root.hideDock();
                     return;
@@ -635,7 +635,7 @@ PanelWindow {
         if (p && docked && p.x >= r.x && p.x < r.x + r.w && p.y >= r.y && p.y < r.y + r.h) {
             grabbed = false;
             Bridge.call("Dispatch", ["focus_window", { address: dockAddress, keep_pointer: true }])
-                .catch(function (e) { console.warn("uq: focus the terminal: " + e); });
+                .catch(function (e) { console.warn("uq[LAUNCH-003] focus the terminal: " + e); });
         } else {
             console.debug("uq: lookseedo dock: grab cleared at " + JSON.stringify(p) + ", terminal at "
                           + JSON.stringify(r) + (docked ? "" : " (not docked)") + ", closing");

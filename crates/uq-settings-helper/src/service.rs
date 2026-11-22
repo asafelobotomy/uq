@@ -95,7 +95,7 @@ impl Helper {
                 )))
             }
             Err(e) => {
-                tracing::warn!("{} for {sender}: {e}", action.id());
+                tracing::warn!("[HELPER-002] {} for {sender}: {e}", action.id());
                 Err(HelperError::NotAuthorized(format!(
                     "couldn't check authorisation for {}: {e}",
                     action.id()

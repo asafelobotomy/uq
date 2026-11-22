@@ -100,7 +100,7 @@ PanelWindow {
             Session.lock();
         else
             Bridge.call("Power", [action]).catch(function (e) {
-                console.log("uq: Power " + action + " failed: " + e);
+                console.warn("uq[POWER-001] Power " + action + " failed: " + e);
             });
     }
 

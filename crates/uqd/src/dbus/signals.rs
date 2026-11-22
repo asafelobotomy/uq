@@ -32,7 +32,7 @@ pub(super) async fn forward(
         let ev = match events.recv().await {
             Ok(ev) => ev,
             Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
-                tracing::warn!("dropped {n} desktop events");
+                tracing::warn!("[DBUS-001] dropped {n} desktop events");
                 continue;
             }
             Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
@@ -78,7 +78,7 @@ pub(super) async fn forward(
             }
         };
         if let Err(err) = res {
-            tracing::warn!("emitting {}: {err}", kind(&ev));
+            tracing::warn!("[DBUS-001] emitting {}: {err}", kind(&ev));
         }
     }
 }

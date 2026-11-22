@@ -96,7 +96,7 @@ Kirigami.ApplicationWindow {
 
     /// A built-in page that didn't load: say so in its place. `--screenshots` exits non-zero.
     function pageFailed(page, error, parent) {
-        console.warn("uq-settings: the " + page.id + " page didn't load: " + error);
+        console.warn("uq-settings[SETTINGS-001] the " + page.id + " page didn't load: " + error);
         root.failedPages.push(page.id);
         // Not kept: the next visit tries the page again.
         return failedPage.createObject(parent, { pageName: page.name || page.id, error: error, keepAlive: false });
@@ -390,10 +390,10 @@ Kirigami.ApplicationWindow {
         running: App.screenshotDir !== ""
         onTriggered: {
             if (step > 0 && !App.grabWindow(App.screenshotDir + "/" + ids[step - 1] + ".png"))
-                console.warn("uq-settings: couldn't save " + ids[step - 1] + ".png");
+                console.warn("uq-settings[SETTINGS-003] couldn't save " + ids[step - 1] + ".png");
             if (step === ids.length) {
                 if (root.failedPages.length > 0) {
-                    console.warn("uq-settings: pages that didn't load: " + root.failedPages.join(", "));
+                    console.warn("uq-settings[SETTINGS-001] pages that didn't load: " + root.failedPages.join(", "));
                     Qt.exit(1);
                 } else {
                     Qt.quit();

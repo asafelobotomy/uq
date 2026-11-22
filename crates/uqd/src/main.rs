@@ -4,7 +4,6 @@ use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 use tokio::signal::unix::{SignalKind, signal};
 use tokio::sync::{broadcast, mpsc};
-use tracing_subscriber::EnvFilter;
 use uq_core::integration::watch::{DEBOUNCE, watch_dirs, watch_dirs_flat};
 use uq_core::paths::Paths;
 use uqd::autostart::AutostartConfig;
@@ -32,7 +31,7 @@ async fn changed(rx: &mut Option<mpsc::Receiver<()>>) {
     match rx {
         Some(r) => {
             if r.recv().await.is_none() {
-                tracing::warn!("a folder watch ended; checking every minute");
+                tracing::warn!("[WATCH-001] a folder watch ended; checking every minute");
                 *rx = None;
             }
         }
@@ -62,11 +61,7 @@ async fn desktop_event(rx: &mut Option<broadcast::Receiver<Event>>) {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
-        )
-        .init();
+    uq_core::diag::log::init("uqd", "info");
 
     let dev = std::env::var_os("UQ_DEV_SESSION").is_some();
     let session = std::env::var("HYPRLAND_INSTANCE_SIGNATURE").ok();
@@ -98,6 +93,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     }
+    // Crash reports: the shell's, the lock screen's, apps' and uQ's own programs' (crashes.rs).
+    {
+        let notifier: Arc<dyn uqd::notify::Notifier> = if dev {
+            Arc::new(uqd::notify::NoNotifier)
+        } else {
+            Arc::new(SessionNotifier::new(conn.clone()))
+        };
+        tokio::spawn(uqd::crashes::run(notifier, Paths::from_env()));
+    }
     // Screens may have changed while uqd was stopped: match once, then follow the events.
     shared.lock().await.outputs_changed(false).await;
     if let Some(path) = HyprSocket::from_env().event_path() {
@@ -120,13 +124,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         flat.push("/etc".into());
     }
     let watch = |r: std::io::Result<mpsc::Receiver<()>>| {
-        r.map_err(|e| tracing::warn!("watching folders: {e}; checking every minute"))
+        r.map_err(|e| tracing::warn!("[WATCH-001] watching folders: {e}; checking every minute"))
             .ok()
     };
     let mut nested_rx = watch(watch_dirs(nested, DEBOUNCE));
     let mut flat_rx = watch(watch_dirs_flat(flat, DEBOUNCE));
     let mut wall = WallTimer::new()
-        .map_err(|e| tracing::warn!("wall-clock timer: {e}; checking every minute"))
+        .map_err(|e| tracing::warn!("[WATCH-001] wall-clock timer: {e}; checking every minute"))
         .ok();
     let mut events = Some(shared.lock().await.subscribe());
     let mut last_poll = Instant::now();
@@ -154,7 +158,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             () = tokio::time::sleep_until(wake_at.into()) => {}
             w = wait_wall(&mut wall, next_boundary.map(SystemTime::from)) => {
                 if let Err(e) = w {
-                    tracing::warn!("wall-clock timer: {e}; checking every minute");
+                    tracing::warn!("[WATCH-001] wall-clock timer: {e}; checking every minute");
                     wall = None;
                 }
                 schedule = true;
@@ -183,7 +187,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         if (files || schedule)
             && let Err(e) = d.tick_schedule_at(chrono::Local::now()).await
         {
-            tracing::warn!("scheduled theme change failed: {e}");
+            tracing::warn!("[THEME-005] scheduled theme change failed: {e}");
         }
     }
     shared

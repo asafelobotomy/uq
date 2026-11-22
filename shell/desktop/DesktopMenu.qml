@@ -78,7 +78,7 @@ PanelWindow {
         Bridge.call("DefaultApps", []).then(function (v) {
             win.apps = v && typeof v === "object" ? v : null;
         }).catch(function (e) {
-            console.warn("uq: DefaultApps failed: " + e);
+            console.warn("uq[SHELL-001] DefaultApps failed: " + e);
             win.apps = null;
         });
         Qt.callLater(function () { body.forceActiveFocus(); });
@@ -123,13 +123,13 @@ PanelWindow {
             var ids = Hyprland.workspaces.values.map(function (w) { return w.id; });
             Surfaces.close();
             Bridge.call("Dispatch", ["focus_workspace", { id: D.newWorkspaceId(ids) }]).catch(function (err) {
-                console.warn("uq: creating a workspace failed: " + err);
+                console.warn("uq[WIN-001] creating a workspace failed: " + err);
             });
             break;
         case "launch":
             Surfaces.close();
             Bridge.call("Launch", [{ desktop_id: e.appId }]).catch(function (err) {
-                console.warn("uq: launching " + e.appId + " failed: " + err);
+                console.warn("uq[LAUNCH-001] launching " + e.appId + " failed: " + err);
             });
             break;
         case "settings":
@@ -158,7 +158,7 @@ PanelWindow {
                 return;
             return Bridge.call("SetTheme", [t.name, want]);
         }).catch(function (err) {
-            console.warn("uq: switching to " + want + " mode failed: " + err);
+            console.warn("uq[SHELL-001] switching to " + want + " mode failed: " + err);
         });
     }
 
@@ -173,7 +173,7 @@ PanelWindow {
         case "fire":
             Surfaces.close();
             Bridge.call("Power", [action]).catch(function (err) {
-                console.warn("uq: Power " + action + " failed: " + err);
+                console.warn("uq[POWER-001] Power " + action + " failed: " + err);
             });
             break;
         case "powermenu":

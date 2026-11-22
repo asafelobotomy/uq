@@ -2,6 +2,7 @@
 
 mod bridge;
 mod clip_cmd;
+mod diag_cmd;
 mod greeter_cmd;
 mod integrations;
 mod keys_cmd;
@@ -119,6 +120,28 @@ enum Cmd {
     Wallpaper {
         #[command(subcommand)]
         cmd: wallpaper_cmd::WallpaperCmd,
+    },
+    /// uQ's warnings and errors from the journal, each with its code (`uqctl explain CODE`).
+    Log(diag_cmd::LogArgs),
+    /// What a problem code means and what to do about it (`uqctl explain HYPR-003`); every code
+    /// without one.
+    Explain { code: Option<String> },
+    /// Crashes of the shell, the lock screen, uQ's programs and apps: list them, or dismiss one.
+    Crashes {
+        #[command(subcommand)]
+        cmd: Option<diag_cmd::CrashesCmd>,
+    },
+    /// Make a report to paste into an issue, about a crash (`--crash latest`, or an id from
+    /// `uqctl crashes`) or about now. Prints where it was saved. Window titles, names and
+    /// addresses are taken out unless `--no-redact`.
+    Report {
+        #[arg(long)]
+        crash: Option<String>,
+        /// Print the report instead of saving it.
+        #[arg(long)]
+        stdout: bool,
+        #[arg(long)]
+        no_redact: bool,
     },
     /// Print recent setting changes: id, time, origin and summary, newest first.
     History {
@@ -427,6 +450,10 @@ async fn run(cmd: Cmd) -> Result<(), String> {
         | Cmd::Bridge { .. }
         | Cmd::Settings { .. }
         | Cmd::Welcome { .. }
+        | Cmd::Log(_)
+        | Cmd::Explain { .. }
+        | Cmd::Crashes { .. }
+        | Cmd::Report { .. }
         | Cmd::Clip { .. }
         | Cmd::Profile { .. }
         | Cmd::Keys { .. }
@@ -549,6 +576,8 @@ fn end_with_parent() {
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> ExitCode {
+    // uqctl's own messages are for the person at the terminal; only a crash is recorded.
+    uq_core::diag::log::install_panic_hook("uqctl");
     let cli = Cli::parse();
     if matches!(
         cli.cmd,
@@ -595,6 +624,17 @@ async fn main() -> ExitCode {
     }
     if let Cmd::Welcome { reset } = cli.cmd {
         return welcome_cmd::main(reset).await;
+    }
+    match cli.cmd {
+        Cmd::Log(a) => return diag_cmd::log(a),
+        Cmd::Explain { code } => return diag_cmd::explain(code),
+        Cmd::Crashes { cmd } => return diag_cmd::crashes(cmd),
+        Cmd::Report {
+            crash,
+            stdout,
+            no_redact,
+        } => return diag_cmd::report(crash, stdout, no_redact),
+        _ => {}
     }
     if let Cmd::Clip { cmd } = cli.cmd {
         // uqlip's own socket, not the desktop bus.

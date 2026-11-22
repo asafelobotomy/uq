@@ -205,7 +205,7 @@ impl RestoreStore {
             .filter(|p| matches!(p.kind, PointKind::Auto(_)));
         for p in autos.skip(MAX_AUTO) {
             if let Err(e) = self.delete(&p.id) {
-                tracing::warn!("restore point {}: prune failed: {e}", p.id);
+                tracing::warn!("[STATE-005] restore point {}: prune failed: {e}", p.id);
             }
         }
     }

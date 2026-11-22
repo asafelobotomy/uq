@@ -102,7 +102,7 @@ QtObject {
             try {
                 c.cb(code, c.out);
             } catch (e) {
-                console.warn("uq: notification command callback failed: " + e);
+                console.warn("uq[NOTIF-003] notification command callback failed: " + e);
             }
         }
         next();

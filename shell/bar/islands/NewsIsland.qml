@@ -32,7 +32,7 @@ Island {
 
     function open(link) {
         Bridge.call("OpenLink", [link]).catch(function (e) {
-            console.warn("uq: news link: " + e);
+            console.warn("uq[BAR-003] news link: " + e);
         });
         popup.hide();
     }

@@ -63,7 +63,7 @@ QtObject {
         if (T.due(s, now)) {
             cancel();
             Bridge.call("Power", ["poweroff"]).catch(function (e) {
-                console.log("uq: scheduled shutdown failed: " + e);
+                console.warn("uq[POWER-001] scheduled shutdown failed: " + e);
                 root.notify(["Couldn't shut down", "The scheduled shutdown didn't run."], false);
             });
             return;

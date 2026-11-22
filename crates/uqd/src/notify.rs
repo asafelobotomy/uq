@@ -56,8 +56,8 @@ impl Notifier for SessionNotifier {
         );
         match tokio::time::timeout(TIMEOUT, call).await {
             Ok(Ok(_)) => {}
-            Ok(Err(e)) => tracing::warn!("sending a notification: {e}"),
-            Err(_) => tracing::warn!("sending a notification: no answer"),
+            Ok(Err(e)) => tracing::warn!("[NOTIF-001] sending a notification: {e}"),
+            Err(_) => tracing::warn!("[NOTIF-001] sending a notification: no answer"),
         }
     }
 }

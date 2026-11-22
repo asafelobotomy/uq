@@ -93,7 +93,7 @@ ColumnLayout {
     // A catch handler for a switch: log the reason and show it under the group.
     function failed(what) {
         return function (e) {
-            console.warn("uq: " + what + ": " + e);
+            console.warn("uq[QUICK-001] " + what + ": " + e);
             root.report = F.failureText(what, e);
         };
     }

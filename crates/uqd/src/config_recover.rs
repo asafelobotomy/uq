@@ -109,9 +109,9 @@ impl Desktop {
                     break;
                 }
                 if worth_reloading(&errors, &dir) {
-                    tracing::warn!("a config file Hyprland missed is back; reloading");
+                    tracing::warn!("[HYPR-005] a config file Hyprland missed is back; reloading");
                     if let Err(e) = comp.reload().await {
-                        tracing::warn!("reloading Hyprland: {e}");
+                        tracing::warn!("[HYPR-003] reloading Hyprland: {e}");
                     }
                     break;
                 }
@@ -138,14 +138,16 @@ impl Desktop {
         }
         if self.recover.last.is_some_and(|t| t.elapsed() < RETRY_GAP) {
             tracing::warn!(
-                "Hyprland's config still misses a file that is there; not reloading again yet"
+                "[HYPR-005] Hyprland's config still misses a file that is there; not reloading again yet"
             );
             return;
         }
         self.recover.last = Some(Instant::now());
-        tracing::warn!("Hyprland's last reload missed a config file that is back now; reloading");
+        tracing::warn!(
+            "[HYPR-005] Hyprland's last reload missed a config file that is back now; reloading"
+        );
         if let Err(e) = self.comp.reload().await {
-            tracing::warn!("reloading Hyprland: {e}");
+            tracing::warn!("[HYPR-003] reloading Hyprland: {e}");
         }
     }
 }

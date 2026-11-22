@@ -166,12 +166,12 @@ impl<'de> Deserialize<'de> for Autostart {
         let o = v.as_object().unwrap_or(&empty);
         let each = |f: &str| {
             items(o, f).unwrap_or_else(|_| {
-                tracing::warn!("state: autostart.{f} is not a list; ignoring it");
+                tracing::warn!("[STATE-002] state: autostart.{f} is not a list; ignoring it");
                 &[]
             })
         };
         let keep = |f: &str, e: SettingError| {
-            tracing::warn!("state: dropping an entry of autostart.{f}: {e}");
+            tracing::warn!("[STATE-002] state: dropping an entry of autostart.{f}: {e}");
         };
         let files = each("files")
             .iter()
@@ -294,11 +294,11 @@ impl Autostart {
             c.id = normalise_id(&c.id);
             match check_choice("autostart.files", c) {
                 Err(e) => {
-                    tracing::warn!("state: dropping a startup choice: {e}");
+                    tracing::warn!("[STATE-002] state: dropping a startup choice: {e}");
                     false
                 }
                 Ok(()) if !seen.insert(c.id.clone()) => {
-                    tracing::warn!("state: dropping a repeated startup choice");
+                    tracing::warn!("[STATE-002] state: dropping a repeated startup choice");
                     false
                 }
                 Ok(()) => true,
@@ -307,7 +307,7 @@ impl Autostart {
         self.added
             .retain(|a| match check_added("autostart.added", a) {
                 Err(e) => {
-                    tracing::warn!("state: dropping an added startup entry: {e}");
+                    tracing::warn!("[STATE-002] state: dropping an added startup entry: {e}");
                     false
                 }
                 Ok(()) => true,
@@ -316,12 +316,16 @@ impl Autostart {
         for a in &mut self.added {
             let id = a.id_mut();
             if !id.is_empty() && !(valid_added_id(id) && ids.insert(id.clone())) {
-                tracing::warn!("state: an added startup entry has a bad or repeated id");
+                tracing::warn!(
+                    "[STATE-002] state: an added startup entry has a bad or repeated id"
+                );
                 id.clear();
             }
         }
         if self.files.len() > MAX_FILES || self.added.len() > MAX_ADDED {
-            tracing::warn!("state: autostart is over its limits; keeping the first entries");
+            tracing::warn!(
+                "[STATE-002] state: autostart is over its limits; keeping the first entries"
+            );
         }
         self.files.truncate(MAX_FILES);
         self.added.truncate(MAX_ADDED);

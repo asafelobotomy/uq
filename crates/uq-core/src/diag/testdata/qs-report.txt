@@ -1,0 +1,112 @@
+===== Version Information =====
+Quickshell: 0.3.2 (revision , distributed by Arch Linux)
+Qt: 6.12.0 (built against 6.12.0)
+
+===== Build Information =====
+Build Type: RelWithDebInfo
+Compiler: GNU (16.2.1)
+Compile Flags: -march=x86-64 -mtune=generic -O2 -pipe -fno-plt -fexceptions         -Wp,-D_FORTIFY_SOURCE=3 -Wformat -Werror=format-security         -fstack-clash-protection -fcf-protection         -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer -Wp,-D_GLIBCXX_ASSERTIONS -g -ffile-prefix-map=/build/quickshell/src=/usr/src/debug/quickshell -flto=auto
+Configuration:
+  Distributor: Arch Linux
+  Disable precompild headers (dev): OFF
+  Build tests (dev): OFF
+  ASAN (dev): OFF
+  Keep Frame Pointers (dev): OFF
+  Use jemalloc: ON
+  Crash Handling: ON
+  Unix Sockets: ON
+  Wayland: ON
+    Wlroots Layer-Shell: ON
+    Session Lock: ON
+    Foreign Toplevel Management: ON
+    Hyprland: ON
+      Hyprland IPC: ON
+      Hyprland Global Shortcuts: ON
+      Hyprland Focus Grabbing: ON
+      Hyprland Surface Extensions: ON
+    Screencopy: ON
+      Image Copy Capture: ON
+      Wlroots Screencopy: ON
+      Hyprland Toplevel Export: ON
+  X11: ON
+  I3/Sway: ON
+    I3/Sway IPC: ON
+  System Tray: ON
+  PipeWire: ON
+  Mpris: ON
+  Pam: ON
+  Polkit: ON
+  Greetd: ON
+  UPower: ON
+  Notifications: ON
+  Bluetooth: ON
+  Network: ON
+
+===== System Information =====
+GPU /dev/dri/renderD129
+  Driver: nvidia-drm 0.0.0 (NVIDIA DRM driver)
+  Model: 10de:1c20
+  Address: PCI 01:00.0
+GPU /dev/dri/renderD128
+  Driver: i915 1.6.0 (Intel Graphics)
+  Model: 8086:3e9b
+  Address: PCI 00:02.0
+
+/etc/os-release:
+NAME="Arch Linux"
+PRETTY_NAME="Arch Linux"
+ID=arch
+BUILD_ID=rolling
+ANSI_COLOR="38;2;23;147;209"
+HOME_URL="https://archlinux.org/"
+DOCUMENTATION_URL="https://wiki.archlinux.org/"
+SUPPORT_URL="https://bbs.archlinux.org/"
+BUG_REPORT_URL="https://gitlab.archlinux.org/groups/archlinux/-/issues"
+PRIVACY_POLICY_URL="https://terms.archlinux.org/docs/privacy-policy/"
+LOGO=archlinux-logo
+
+/etc/lsb-release:FAILED TO OPEN
+
+===== Environment (trimmed) =====
+QT_QPA_PLATFORM=wayland;xcb
+QT_QPA_PLATFORMTHEME=qt6ct
+XDG_CURRENT_DESKTOP=Hyprland
+QT_QUICK_CONTROLS_STYLE=Fusion
+
+===== Instance Information =====
+Signal: Segmentation fault (11)
+Crashed process ID: 601705
+Run ID: x21fgjuot
+Shell ID: 592c6343723e9671657e6a8bd2593a85
+Config Path: /home/alice/.local/share/notifd/shell.qml
+
+===== Stacktrace =====
+#0  0x00007feec163e6ef at /usr/bin/../lib/libc.so.6
+#1  0x00007feec1f2b965 in QFile::QFile(QString const&) at /usr/bin/../lib/libQt6Core.so.6
+#2  0x00007feec2f91c69 in QPlatformPixmap::fromFile(QString const&, char const*, QFlags<Qt::ImageConversionFlag>) at /usr/bin/../lib/libQt6Gui.so.6
+#3  0x00007feec2f890cb in QPixmap::load(QString const&, char const*, QFlags<Qt::ImageConversionFlag>) at /usr/bin/../lib/libQt6Gui.so.6
+#4  0x00007feec2f2d123 at /usr/bin/../lib/libQt6Gui.so.6
+#5  0x00007feec2f2bf81 at /usr/bin/../lib/libQt6Gui.so.6
+#6  0x00007feec2f22928 at /usr/bin/../lib/libQt6Gui.so.6
+#7  0x00007feec2f2043e in QIcon::pixmap(QSize const&, double, QIcon::Mode, QIcon::State) const at /usr/bin/../lib/libQt6Gui.so.6
+#8  0x00007feec2f20532 in QIcon::pixmap(QSize const&, QIcon::Mode, QIcon::State) const at /usr/bin/../lib/libQt6Gui.so.6
+#9  0x000055c31ee15259 at /usr/bin/quickshell
+#10 0x00007feec3be04f2 in QQuickPixmap::load(QQmlEngine*, QUrl const&, QRect const&, QSize const&, QFlags<QQuickPixmap::Option>, QQuickImageProviderOptions const&, int, int, double) at /usr/bin/../lib/libQt6Quick.so.6
+#11 0x00007feec397a060 in QQuickImageBase::loadPixmap(QUrl const&, QFlags<QQuickImageBase::LoadPixmapOption>) at /usr/bin/../lib/libQt6Quick.so.6
+#12 0x00007feec2b5c593 in QQmlObjectCreator::finalize(QQmlInstantiationInterrupt&) at /usr/bin/../lib/libQt6Qml.so.6
+#13 0x00007feec2b1165b in QQmlIncubatorPrivate::incubate(QQmlInstantiationInterrupt&) at /usr/bin/../lib/libQt6Qml.so.6
+#14 0x00007feec2b122a1 in QQmlEnginePrivate::incubate(QQmlIncubator&, QQmlRefPointer<QQmlContextData> const&) at /usr/bin/../lib/libQt6Qml.so.6
+#15 0x00007feec1360f83 at /usr/bin/../lib/libQt6QmlModels.so.6
+#16 0x00007feec3d756cf in QQuickRepeater::modelUpdated(QQmlChangeSet const&, bool) at /usr/bin/../lib/libQt6Quick.so.6
+#17 0x00007feec1ff6da7 at /usr/bin/../lib/libQt6Core.so.6
+#18 0x00007feec136d1f8 at /usr/bin/../lib/libQt6QmlModels.so.6
+#19 0x00007feec13670a9 in QQmlDelegateModel::_q_itemsInserted(int, int) at /usr/bin/../lib/libQt6QmlModels.so.6
+#20 0x00007feec1ff6da7 at /usr/bin/../lib/libQt6Core.so.6
+#21 0x00007feec223515d in QAbstractItemModel::endInsertRows() at /usr/bin/../lib/libQt6Core.so.6
+#22 0x00007feec1341fba in QQmlListModel::insert(QQmlV4Function*) at /usr/bin/../lib/libQt6QmlModels.so.6
+#23 0x00007feec134a0ee in QQmlListModel::qt_metacall(QMetaObject::Call, int, void**) at /usr/bin/../lib/libQt6QmlModels.so.6
+#24 0x00007feec2b64d02 at /usr/bin/../lib/libQt6Qml.so.6
+#25 0x00007feec2a05693 in QV4::QObjectMethod::callInternal(QV4::Value const*, QV4::Value const*, int) const at /usr/bin/../lib/libQt6Qml.so.6
+#26 0x00007feec2a20975 in QV4::Runtime::CallPropertyLookup::call(QV4::ExecutionEngine*, QV4::Value const&, unsigned int, QV4::Value*, int) at /usr/bin/../lib/libQt6Qml.so.6
+#27 0x00007feeb566a0d0 
+#28 0x00007feec2a65a37 at /usr/bin/../lib/libQt6Qml.so.6

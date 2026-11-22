@@ -207,14 +207,14 @@ fn lenient<T: DeserializeOwned>(v: &Value, list: &str) -> Vec<T> {
                 Ok(rule) => Some(rule),
                 Err(_) => {
                     tracing::warn!(
-                        "state: dropping rules.{list}[{i}]: it doesn't fit this version"
+                        "[STATE-002] state: dropping rules.{list}[{i}]: it doesn't fit this version"
                     );
                     None
                 }
             })
             .collect(),
         Some(_) => {
-            tracing::warn!("state: rules.{list} is not a list; ignoring it");
+            tracing::warn!("[STATE-002] state: rules.{list} is not a list; ignoring it");
             Vec::new()
         }
     }
@@ -351,7 +351,7 @@ impl Rules {
         for (list, i, id) in self.id_slots() {
             if !id.is_empty() && !(valid_id(id) && seen.insert(id.clone())) {
                 tracing::warn!(
-                    "state: rules.{list}[{i}] has a bad or repeated id; it gets a new one"
+                    "[STATE-002] state: rules.{list}[{i}] has a bad or repeated id; it gets a new one"
                 );
                 id.clear();
             }
@@ -379,7 +379,7 @@ fn keep<T>(
         .filter_map(|(i, mut r)| match check(i, &mut r) {
             Ok(()) => Some(r),
             Err(e) => {
-                tracing::warn!("state: dropping rules.{name}[{i}]: {e}");
+                tracing::warn!("[STATE-002] state: dropping rules.{name}[{i}]: {e}");
                 None
             }
         })

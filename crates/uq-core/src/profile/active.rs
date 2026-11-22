@@ -11,14 +11,14 @@ pub fn load_active(path: &Path) -> Option<ActiveProfile> {
         Ok(t) => t,
         Err(e) if e.kind() == io::ErrorKind::NotFound => return None,
         Err(e) => {
-            tracing::warn!("can't read {}: {e}", path.display());
+            tracing::warn!("[STATE-003] can't read {}: {e}", path.display());
             return None;
         }
     };
     match serde_json::from_str(&text) {
         Ok(a) => Some(a),
         Err(e) => {
-            tracing::warn!("ignoring damaged {}: {e}", path.display());
+            tracing::warn!("[STATE-003] ignoring damaged {}: {e}", path.display());
             None
         }
     }

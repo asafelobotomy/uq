@@ -1,0 +1,16 @@
+# Runs the Rust uq-diag tests: cargo test --manifest-path native/uq-diag/test/Cargo.toml
+[package]
+name = "uq-diag-test"
+version = "1.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[lib]
+path = "../uq_diag.rs"
+
+[dependencies]
+serde_json = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }

@@ -53,7 +53,7 @@ impl Welcome {
 pub(crate) fn lenient<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Welcome, D::Error> {
     let v = serde_json::Value::deserialize(d)?;
     let Some(obj) = v.as_object() else {
-        tracing::warn!("state: [welcome] is not a table; ignoring it");
+        tracing::warn!("[STATE-002] state: [welcome] is not a table; ignoring it");
         return Ok(Welcome::default());
     };
     Ok(Welcome {

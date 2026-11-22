@@ -189,7 +189,7 @@ impl Desktop {
         ) {
             Ok(point) => Some(point.id),
             Err(e) => {
-                tracing::warn!("saving before-profile point: {e}");
+                tracing::warn!("[STATE-005] saving before-profile point: {e}");
                 None
             }
         };
@@ -207,7 +207,7 @@ impl Desktop {
                 None => clear_active(&active_file),
             };
             if let Err(err) = put_back {
-                tracing::warn!("putting the active profile file back: {err}");
+                tracing::warn!("[STATE-004] putting the active profile file back: {err}");
             }
             self.drop_point(point);
             return Err(e);
@@ -218,7 +218,7 @@ impl Desktop {
             .switch_power(p.power(), old_power.as_ref(), &mut kept, &mut notices)
             .await;
         if let Err(e) = save_active(&active_file, &memo) {
-            tracing::warn!("saving the active profile: {e}");
+            tracing::warn!("[STATE-004] saving the active profile: {e}");
         }
         self.active = Some(memo);
         self.send_profile_changed();
@@ -292,7 +292,7 @@ impl Desktop {
     /// caller's to clear.
     pub(crate) fn forget_active(&self) {
         if let Err(e) = clear_active(&self.paths.profile_active) {
-            tracing::warn!("removing the active profile file: {e}");
+            tracing::warn!("[STATE-004] removing the active profile file: {e}");
         }
         let _ = self.events.send(Event::ProfileChanged(String::new()));
     }
@@ -315,7 +315,7 @@ impl Desktop {
         if let Some(id) = point
             && let Err(e) = self.restore.delete(&id)
         {
-            tracing::warn!("removing before-profile point: {e}");
+            tracing::warn!("[STATE-005] removing before-profile point: {e}");
         }
     }
 

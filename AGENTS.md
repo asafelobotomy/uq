@@ -45,6 +45,7 @@ Read `docs/developing.md`. In short:
 - Settings controls show data through `UqLabel` content items: `text:` may only be a string literal, and a `ComboBox` needs `contentItem:` and `delegate:`.
 - Text people read in Settings uses plain words. `scripts/settings-jargon.txt` lists the banned ones; end a line with `// jargon-ok: <reason>` for a real exception.
 - Every `.qml` and `.js` under `apps/uq-settings/qml` must be listed in `apps/uq-settings/build.rs` (`QmlFile::from("...")`). A missing file passes `qmltestrunner` and fails in the real app with "X is not a type".
+- Every `tracing::warn!`/`error!` starts with a code, `"[AREA-NNN] …"`, and every QML `console.warn`/`console.error` has `uq[AREA-NNN]` (Settings: `uq-settings[AREA-NNN]`), from `crates/uq-core/src/diag/codes.toml`. A new kind of problem gets a new code there; never reuse a number (retire it). `cargo test -p uq-core --test diag_codes` checks both ways. See `docs/diagnostics.md`.
 - Golden files: `UQ_BLESS=1 cargo test -p uq-core` rewrites them (`render_golden`, `uqtheme_corpus`). Read the diff before committing it.
 
 ## Release

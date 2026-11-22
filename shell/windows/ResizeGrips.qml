@@ -238,7 +238,7 @@ Scope {
                                 return;
                             sent = key;
                             Bridge.call("Dispatch", want)
-                                .catch(function (e) { console.warn("uq: resize: " + e); });
+                                .catch(function (e) { console.warn("uq[WIN-001] resize: " + e); });
                         }
                         Timer {
                             id: sendTimer

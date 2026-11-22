@@ -5,23 +5,17 @@ use std::process::ExitCode;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::signal::unix::{SignalKind, signal};
-use tracing_subscriber::EnvFilter;
 use uq_settings_helper::idle::IDLE_EXIT;
 use uq_settings_helper::passwd::SystemPasswd;
 use uq_settings_helper::{Config, Helper, NAME, Polkit, serve};
 
 #[tokio::main]
 async fn main() -> ExitCode {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
-        )
-        .without_time()
-        .init();
+    uq_core::diag::log::init("uq-settings-helper", "info");
     match run().await {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
-            tracing::error!("{e}");
+            tracing::error!("[HELPER-001] {e}");
             ExitCode::FAILURE
         }
     }

@@ -19,6 +19,7 @@ pub mod look;
 pub mod network;
 pub mod power;
 pub mod printers;
+pub mod problems;
 pub mod profiles;
 pub mod prompt;
 pub mod proxies;

@@ -39,14 +39,14 @@ Scope {
             break;
         case "dpms-off":
             Bridge.call("Dispatch", ["dpms", { on: false }]).catch(function (e) {
-                console.log("uq: dpms off failed: " + e);
+                console.warn("uq[POWER-001] dpms off failed: " + e);
             });
             break;
         case "suspend":
             if (!I.suspendAllowed(ctx))
                 break;
             Bridge.call("Power", ["suspend"]).catch(function (e) {
-                console.log("uq: suspend failed: " + e);
+                console.warn("uq[POWER-001] suspend failed: " + e);
             });
             break;
         }

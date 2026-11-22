@@ -292,7 +292,7 @@ impl Hider for SystemHider {
             let fresh = match self.fresh(unit, &seen).await {
                 Ok(f) => f,
                 Err(e) => {
-                    tracing::warn!("start minimised: reading the windows: {e}");
+                    tracing::warn!("[START-003] start minimised: reading the windows: {e}");
                     return None;
                 }
             };
@@ -304,7 +304,7 @@ impl Hider for SystemHider {
                     Ok(h) if result != Hidden::Tray => result = h,
                     Ok(_) => {}
                     Err(e) => {
-                        tracing::warn!("start minimised: hiding a window: {e}");
+                        tracing::warn!("[START-003] start minimised: hiding a window: {e}");
                         return None;
                     }
                 }
