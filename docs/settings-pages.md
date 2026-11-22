@@ -282,13 +282,39 @@ grouped, before the person confirms. If the preview fails, nothing runs and the 
 - Give each app's destructive command a `--dry-run --json` that prints this document, so the
   window and the command line say the same thing.
 
+### Going back to a page: `refresh()` and `keepAlive`
+
+Settings keeps the pages shown most recently (eight, the one on show included) alive while
+another page is shown, so going back to one shows what it last read at once instead of an empty
+page that reads from scratch. Two optional members on the page's root item go with this:
+
+```qml
+Item {
+    property var ctx
+    function refresh() { /* run your reads again */ }   // optional
+    property bool keepAlive: false                      // optional; default true
+}
+```
+
+- `refresh()` is called each time Settings shows the page again: back from another page, or
+  when the window comes back to the front. Run your reads again there and replace what is shown
+  when the answers come, without clearing it first, so the page shows the last values while it
+  reads (stale while it revalidates). Pages before this had no `refresh()` and read only when
+  they were made; they still work, and show what they read the first time.
+- Reads that something else changes (your app's own state file, say) are best followed with a
+  `watch` (below): watches keep running while the page is kept hidden, so the page is already
+  up to date when it is shown.
+- `keepAlive: false` closes the page as soon as another is shown, as before: for a page that
+  must not keep running while nobody sees it. A page that failed to load is never kept.
+- A page whose app is uninstalled, or whose `page.toml` changes, is closed and loaded afresh.
+
 ### Following changes: `watch` and `ctx.command.watch(id, callback)`
 
 Instead of polling a read on a timer, give its `[[command]]` a `watch` table and call
 `ctx.command.watch(id, callback)`: the command runs now, and again after each change to a
 watched file or each watched D-Bus signal. `callback` gets each result, as for `run`.
 `watch` returns a handle for `ctx.command.unwatch(handle)`; closing the page stops all its
-watches.
+watches (a page Settings keeps alive while another is shown is not closed; see above).
 
 ```toml
 [[command]]
