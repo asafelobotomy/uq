@@ -7,6 +7,10 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **look=see>do_'s docked terminal takes tabs in kyko too.** With kyko as the terminal, the next `>` command opens a new tab in the docked window (through `kyko @ --to unix:… launch --type tab`), as it already did with kitty, instead of a new docked window. This needs kyko 1.0.0, which added `--listen-on`.
+
 ## [0.3.35] - 2026-11-22
 
 ### Added
