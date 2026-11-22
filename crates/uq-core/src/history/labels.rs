@@ -18,6 +18,7 @@ pub fn label(domain: &str, key: &str) -> Option<String> {
         ("schedule", "lat") => "Sunrise and sunset place (latitude)",
         ("schedule", "lon") => "Sunrise and sunset place (longitude)",
         ("appearance", "kvantum") => "Style Qt apps to match",
+        ("appearance", "theme_apps") => "Theme other apps",
         ("shell", "islands.system") => "Bar island: System",
         ("shell", "islands.work") => "Bar island: Workspaces",
         ("shell", "islands.time") => "Bar island: Clock",

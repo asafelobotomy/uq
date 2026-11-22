@@ -22,7 +22,7 @@ pub fn conf_path(p: &Paths) -> PathBuf {
 }
 
 /// The marker line that says `existing` is uQ's own qt6ct.conf (it loads uQ's colour scheme).
-fn is_ours(existing: &str, theme_dir: &Path) -> bool {
+pub(crate) fn is_ours(existing: &str, theme_dir: &Path) -> bool {
     let marker = format!(
         "color_scheme_path={}",
         theme_dir.join("qt6ct/colors/uq.conf").display()
@@ -32,7 +32,7 @@ fn is_ours(existing: &str, theme_dir: &Path) -> bool {
 
 /// `existing` with `key=value` first in `[section]` (the section is added at the end when it is
 /// missing), and any earlier line for that key in the section dropped.
-fn set_key(existing: &str, section: &str, key: &str, value: &str) -> String {
+pub(crate) fn set_key(existing: &str, section: &str, key: &str, value: &str) -> String {
     let header = format!("[{section}]");
     let wanted = format!("{key}={value}");
     let mut out: Vec<String> = Vec::new();
