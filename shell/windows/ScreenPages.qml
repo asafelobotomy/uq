@@ -70,6 +70,7 @@ Scope {
         for (var k = 0; k < mvals.length; k++)
             if (mvals[k].lastIpcObject && mvals[k].name)
                 mons[mvals[k].name] = mvals[k].lastIpcObject;
+        console.log("uq: DBGREAD " + Date.now() + " " + JSON.stringify(byWs));
         root.tiled = byWs;
         root.loose = loose;
         root.monitors = mons;
@@ -456,6 +457,7 @@ Scope {
         readonly property var mon: root.monitors[modelData.name] || null
         readonly property var box: {
             var m = strip.mon;
+            console.log("uq: DBGBOX " + Date.now() + " " + (strip.rightSide ? "R" : "L") + " en=" + root.enabled + " known=" + WindowLook.known + " mon=" + !!m + " ws=" + (m && m.activeWorkspace ? m.activeWorkspace.id : "-") + " sp=" + (m && m.specialWorkspace ? m.specialWorkspace.name : "-") + " tiled=" + (m && m.activeWorkspace ? !!root.tiled[m.activeWorkspace.id] : "-"));
             if (!root.enabled || !WindowLook.known || !m || !m.activeWorkspace)
                 return null;
             if (m.specialWorkspace && m.specialWorkspace.name)
@@ -468,6 +470,7 @@ Scope {
             var res = m.reserved && m.reserved.length >= 4 ? m.reserved : [0, 0, 0, 0];
             var bands = { left: res[0] + WindowLook.edgeLeft, right: res[2] + WindowLook.edgeRight };
             var want = Pages.edgeStrips(wins, root.loose[m.activeWorkspace.id] || [], m.x, sw, bands, WindowLook.border);
+            console.log("uq: DBGSTRIP " + (strip.rightSide ? "R" : "L") + " " + JSON.stringify(wins.map(function (w) { return [w.title, w.x, w.w, w.fullscreen]; })) + " loose=" + JSON.stringify(root.loose[m.activeWorkspace.id] || []) + " bands=" + JSON.stringify(bands) + " want=" + JSON.stringify(want));
             if (!(strip.rightSide ? want.right : want.left))
                 return null;
             var w = strip.rightSide ? bands.right : bands.left;
