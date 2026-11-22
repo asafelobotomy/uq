@@ -18,6 +18,9 @@ QtObject {
     property var widthHandler: null
     property var dropHandler: null
     property var dropHint: null
+    // Emitted once ColumnPolicy has changed column widths. Hyprland sends no event for a
+    // column resize, so the screen pages (and their edge strips) look again on this.
+    signal widthsSet()
 
     function setWidth(address, full) {
         if (typeof root.widthHandler === "function")

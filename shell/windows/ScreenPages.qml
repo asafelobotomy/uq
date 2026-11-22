@@ -738,4 +738,10 @@ Scope {
         target: Bridge
         function onLayoutChanged(ws, layout) { root.refresh(); }
     }
+    // ColumnPolicy resized columns: Hyprland says nothing, so without this the pages and edge
+    // strips would keep the widths from before (a new window's neighbour left uncovered).
+    Connections {
+        target: PageActions
+        function onWidthsSet() { root.refresh(); }
+    }
 }

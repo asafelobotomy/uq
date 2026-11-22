@@ -62,6 +62,8 @@ Scope {
 
     // Set each window's width ([{address, full}]), one after another.
     function setWidths(list) {
+        if (list.length === 0)
+            return;
         var chain = Promise.resolve();
         list.forEach(function (x) {
             chain = chain.then(function () {
@@ -69,7 +71,8 @@ Scope {
                     { address: x.address, width: x.full ? "full" : "half", keep_focus: true }]);
             });
         });
-        chain.catch(function (e) { console.warn("uq: screens: " + e); });
+        chain.then(function () { PageActions.widthsSet(); },
+                   function (e) { console.warn("uq: screens: " + e); PageActions.widthsSet(); });
     }
 
     function look() {
