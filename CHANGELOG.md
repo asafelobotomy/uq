@@ -7,6 +7,8 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.32] - 2026-11-22
+
 ### Added
 
 - **Theme other apps (Settings › Appearance › Other apps, on by default).** Every Qt, KDE, GTK, libadwaita and Flatpak app now stays on uQ's colours, fonts, icons, widget style and corners, even after another app changed their settings. Until now uQ only created those settings files and left any file that already existed alone, so pressing OK once in the qt6ct app (Fusion, its own "darker" colours, DejaVu fonts) or in KDE's colour settings took Qt apps such as qBittorrent off uQ's look for good. At every login and theme change uqd now puts its own keys back into `qt6ct.conf`, `kdeglobals`, Kvantum's config and GTK's `gtk.css`, keeps everything else in them, and keeps a copy of each file as it was (`<file>.before-uq`, later ones in `.before-uq.last`). Switch it off to leave those files alone.
