@@ -7,6 +7,8 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.36] - 2026-11-22
+
 ### Added
 
 - **`native/uq-consts` (1.0.0): one source for the values uQ shares with Bindle and its apps.** `consts.toml` holds uQ's paths, the folders packages install integrations into, uQ's D-Bus names, the `uq_api`, motion, corner and type-scale values and the Graphite fallback palette; `gen.py` writes it out for Rust, C++, QML, Python, JS and shell. uQ compiles the same Rust file, and a test holds the shell's `Motion.qml` and `Theme.qml`, the Graphite theme and uqd's paths to it.
