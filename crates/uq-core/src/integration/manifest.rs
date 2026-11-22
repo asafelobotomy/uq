@@ -23,13 +23,13 @@ use zbus::wire::ObjectPath;
 /// streamed command output (`output = "ndjson"`, `ctx.command.stream`) and a previewed
 /// confirmation (`preview = "<command id>"`) for settings pages. For widgets and rules both
 /// mean the same as 1.
-pub const UQ_API: u32 = 3;
+pub const UQ_API: u32 = crate::uq_consts::api::UQ_API;
 
 /// The first `uq_api` in which a page may use `output = "ndjson"` and `preview`.
 pub const STREAM_API: u32 = 3;
 
 /// The `uq_api` a page that leaves the key out is read as: pages predate it.
-pub const PAGE_DEFAULT_API: u32 = 1;
+pub const PAGE_DEFAULT_API: u32 = crate::uq_consts::api::PAGE_DEFAULT_API;
 
 /// A manifest file over this size is refused unread.
 pub const MAX_MANIFEST_BYTES: u64 = 64 * 1024;

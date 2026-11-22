@@ -20,7 +20,7 @@ use uq_core::lua::{
 };
 use uq_core::paths::Paths;
 use uq_core::profile::{ActiveProfile, ProfileStore, holds, load_active};
-use uq_core::render::{RenderedFiles, kvantum_base, render};
+use uq_core::render::{Motion, RenderedFiles, kvantum_base, render_with};
 use uq_core::schedule::{Schedule, last_event, next_event, variant_at};
 use uq_core::settings::{
     SECTION_DOMAINS, Settings, Strategy, plan, provenance, renders_config, renders_section,
@@ -1156,7 +1156,9 @@ impl Desktop {
         } else {
             None
         };
-        let files = render(&theme, &self.paths.templates_dir, base)
+        // tokens.json carries Reduce motion, so uQ's native apps follow it too.
+        let motion = Motion::new(next.settings.ui.reduce_motion);
+        let files = render_with(&theme, &self.paths.templates_dir, base, motion)
             .map_err(|e| DesktopError::Io(e.to_string()))?;
         // One read of the screens serves the main scale, the plan and the default monitor,
         // and only when one of them is in use (no read otherwise, as before).
