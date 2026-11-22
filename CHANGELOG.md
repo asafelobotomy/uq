@@ -7,6 +7,14 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **Super+Return opens the terminal chosen in Settings › Default apps.** The shortcut always opened kyko (or kitty), whatever was chosen there; the desktop menu and look=see>do_ already followed the choice. It now runs `uqctl launch --terminal`, which starts the chosen terminal the way the launcher starts apps, and falls back to kyko, then kitty, when uqctl can't.
+- **Flatpak apps, and apps under `/usr/local`, can be chosen in Settings.** Default apps, Startup's **Add an app**, Apps and scaling, Keyboard shortcuts, Profiles and the Shell page read only `~/.local/share/applications` and `/usr/share/applications`, so a Flatpak browser could not be made the default web browser. They now read every `$XDG_DATA_DIRS` folder, as uqd and the launcher do.
+- **Default apps gives an app only the file types it opens.** Choosing a picture viewer made it the default for GIF, WebP, TIFF and SVG too even when it can't open them, so those files opened in an app that failed; the types it doesn't list keep the app they had.
+- **Settings' sidebar no longer shows a category heading twice** when it opens straight on a page further down the list (`uqctl settings --page default-apps`, a search result, a notification).
+- **Startup: Run now** no longer says "Started 90 s after login" for an app started by hand, and is greyed out while an app still waits for its delay (it starts by itself; pressing it gave an error).
+
 ## [0.3.35] - 2026-11-22
 
 ### Added

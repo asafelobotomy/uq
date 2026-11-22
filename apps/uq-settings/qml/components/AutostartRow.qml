@@ -122,7 +122,8 @@ ColumnLayout {
             text: "Run or stop now"
             icon.name: running ? "media-playback-stop" : "media-playback-start"
             display: QQC2.AbstractButton.IconOnly
-            enabled: row.idle && (running || (row.app.enabled === true && row.app.can_toggle === true))
+            // An app still waiting for its delay will start by itself; uqd refuses a second start.
+            enabled: row.idle && (running || (row.app.enabled === true && row.app.can_toggle === true && row.app.status !== "waiting"))
             Accessible.name: running ? "Stop now" : "Run now"
             Accessible.description: row.name
             QQC2.ToolTip.visible: hovered

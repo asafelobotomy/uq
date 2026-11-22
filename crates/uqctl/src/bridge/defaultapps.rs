@@ -45,9 +45,10 @@ pub(crate) fn app(dirs: &Dirs, id: &str) -> Value {
     json!({ "id": id, "name": name, "icon": e.icon.unwrap_or_default() })
 }
 
-/// The reply for these app folders, configured terminal and `mimeapps.list` files.
-pub fn resolve(dirs: &Dirs, terminal: Option<&str>, user: &Path, system: &[PathBuf]) -> Value {
-    let term = terminal
+/// The terminal to open: the configured one when it can be launched, else the first of the
+/// fallbacks that can, as `{id, name, icon}`; null when none can.
+fn terminal_app(dirs: &Dirs, terminal: Option<&str>) -> Value {
+    terminal
         .map(|t| app(dirs, t))
         .filter(|v| !v.is_null())
         .or_else(|| {
@@ -56,7 +57,17 @@ pub fn resolve(dirs: &Dirs, terminal: Option<&str>, user: &Path, system: &[PathB
                 .map(|t| app(dirs, t))
                 .find(|v| !v.is_null())
         })
-        .unwrap_or(Value::Null);
+        .unwrap_or(Value::Null)
+}
+
+/// The desktop id of the terminal to open (see [`terminal_app`]), for `uqctl launch --terminal`.
+pub(crate) fn terminal_id(dirs: &Dirs, terminal: Option<&str>) -> Option<String> {
+    terminal_app(dirs, terminal)["id"].as_str().map(str::to_string)
+}
+
+/// The reply for these app folders, configured terminal and `mimeapps.list` files.
+pub fn resolve(dirs: &Dirs, terminal: Option<&str>, user: &Path, system: &[PathBuf]) -> Value {
+    let term = terminal_app(dirs, terminal);
     let by_mime = |mime| {
         mimeapps::lookup(user, system, mime)
             .map(|id| app(dirs, &id))
@@ -196,5 +207,22 @@ mod tests {
             resolve(&dirs, None, &list, &[])["terminal"]["id"],
             "org.kyko.Kyko.desktop"
         );
+    }
+
+    #[test]
+    fn terminal_id_is_the_chosen_one_else_a_fallback() {
+        let (_t, dirs, list) = setup(
+            &[
+                ("foot.desktop", "[Desktop Entry]\nType=Application\nName=Foot\nExec=foot\n"),
+                ("kitty.desktop", "[Desktop Entry]\nType=Application\nName=Kitty\nExec=kitty\n"),
+            ],
+            "",
+        );
+        let _ = list;
+        assert_eq!(terminal_id(&dirs, Some("foot.desktop")).as_deref(), Some("foot.desktop"));
+        assert_eq!(terminal_id(&dirs, None).as_deref(), Some("kitty.desktop"));
+        assert_eq!(terminal_id(&dirs, Some("gone.desktop")).as_deref(), Some("kitty.desktop"));
+        let (_e, empty, _) = setup(&[], "");
+        assert_eq!(terminal_id(&empty, None), None);
     }
 }

@@ -7,9 +7,10 @@
 --
 -- Adapted from Hyprland's example config (BSD-3-Clause, Copyright (c) 2022-2026, vaxerski).
 
--- In a scope of its own in app.slice, as the launcher's apps run (keybinds/defaults.rs TERMINAL).
--- kyko, or kitty where kyko is not installed.
-local terminal = "systemd-run --user --scope --quiet --collect --slice=app.slice --unit=app-uq-terminal-$$ -- sh -c 'command -v kyko >/dev/null && exec kyko; exec kitty'"
+-- The terminal chosen in Settings › Default apps, started as the launcher starts apps
+-- (keybinds/defaults.rs TERMINAL); should uqctl fail, kyko, or kitty where kyko is not installed,
+-- in a scope of its own in app.slice.
+local terminal = "uqctl launch --terminal 2>/dev/null || systemd-run --user --scope --quiet --collect --slice=app.slice --unit=app-uq-terminal-$$ -- sh -c 'command -v kyko >/dev/null && exec kyko; exec kitty'"
 local mainMod  = "SUPER"
 
 ------------------

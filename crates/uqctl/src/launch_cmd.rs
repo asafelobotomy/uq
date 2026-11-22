@@ -1,7 +1,10 @@
 //! `uqctl launch <desktop-id>`: start an app the way the shell does (R21). The app gets its fix
 //! from Apps and scaling, runs in its own scope as Hyprland's child, and the launch is counted.
+//! `uqctl launch --terminal` starts the terminal chosen on Default apps (else kyko, then kitty):
+//! what the Super+Return shortcut runs.
 
 use crate::bridge::desktop_entry::{Dirs, normalise_id};
+use crate::bridge::defaultapps::terminal_id;
 use crate::bridge::launch::{FIX_WAIT, dispatch, fix_in, plan, random_suffix};
 use crate::bridge::run::RunState;
 use serde_json::{Value, json};
@@ -15,14 +18,12 @@ use uqd::hypr::HyprSocket;
 /// Counting is best effort, so it gets a short bound of its own.
 const RECORD_WAIT: Duration = Duration::from_secs(2);
 
-/// What uqd knows that a launch uses: the app's fix and the chosen terminal. Anything missing
-/// (no bus, uqd down, or no answer within [`FIX_WAIT`] in all) is `None`; the launch goes ahead
-/// without it.
-async fn from_uqd(
-    id: &str,
-) -> (
+/// What uqd knows that a launch uses: its proxy, the `compat` section (each app's fix) and the
+/// chosen terminal. Anything missing (no bus, uqd down, or no answer within [`FIX_WAIT`] in
+/// all) is `None`; the launch goes ahead without it.
+async fn from_uqd() -> (
     Option<DesktopProxy<'static>>,
-    Option<AppFix>,
+    Option<Value>,
     Option<String>,
 ) {
     let deadline = tokio::time::Instant::now() + FIX_WAIT;
@@ -41,22 +42,34 @@ async fn from_uqd(
     let Ok((compat, settings)) = tokio::time::timeout_at(deadline, ask).await else {
         return (Some(proxy), None, None);
     };
-    let fix = compat
+    let compat = compat
         .ok()
-        .and_then(|s| serde_json::from_str::<Value>(&s).ok())
-        .and_then(|v| fix_in(v, id));
+        .and_then(|s| serde_json::from_str::<Value>(&s).ok());
     let terminal = settings
         .ok()
         .and_then(|s| serde_json::from_str::<Settings>(&s).ok())
         .and_then(|s| s.shell.terminal);
-    (Some(proxy), fix, terminal)
+    (Some(proxy), compat, terminal)
 }
 
-async fn launch(id: &str) -> Result<(), String> {
-    let (proxy, fix, terminal) = from_uqd(id).await;
+/// What to launch: a desktop id, or the chosen terminal.
+pub enum Target {
+    App(String),
+    Terminal,
+}
+
+async fn launch(target: &Target) -> Result<(), String> {
+    let (proxy, compat, terminal) = from_uqd().await;
+    let dirs = Dirs::from_env();
+    let id = match target {
+        Target::App(id) => id.clone(),
+        Target::Terminal => terminal_id(&dirs, terminal.as_deref())
+            .ok_or("no terminal is installed (choose one in Settings › Default apps)")?,
+    };
+    let fix: Option<AppFix> = compat.and_then(|c| fix_in(c, &id));
     let plan = plan(
         Some(&json!({ "desktop_id": id })),
-        &Dirs::from_env(),
+        &dirs,
         random_suffix(),
         &RunState::default(),
         terminal.as_deref(),
@@ -73,8 +86,8 @@ async fn launch(id: &str) -> Result<(), String> {
     Ok(())
 }
 
-pub async fn run(id: &str) -> ExitCode {
-    match launch(id).await {
+pub async fn run(target: &Target) -> ExitCode {
+    match launch(target).await {
         Ok(()) => ExitCode::SUCCESS,
         Err(msg) => {
             eprintln!("uqctl: {msg}");

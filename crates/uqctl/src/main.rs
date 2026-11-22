@@ -163,8 +163,15 @@ enum Cmd {
     /// Re-render every config file from uqd's state.
     Reload,
     /// Start an app by its desktop id (e.g. `org.mozilla.firefox`), as the shell does: with its
-    /// fix from Apps and scaling, in its own scope.
-    Launch { id: String },
+    /// fix from Apps and scaling, in its own scope. `--terminal` starts the terminal chosen in
+    /// Settings › Default apps instead (what Super+Return runs).
+    Launch {
+        #[arg(required_unless_present = "terminal")]
+        id: Option<String>,
+        /// Start the chosen terminal (else kyko, then kitty).
+        #[arg(long, conflicts_with = "id")]
+        terminal: bool,
+    },
     /// Run the shell's JSON-lines bridge on stdin/stdout (started by the shell, not by hand).
     Bridge {
         /// Read widgets, app actions and providers from this directory instead of /usr/share/uq
@@ -640,9 +647,13 @@ async fn main() -> ExitCode {
         // uqlip's own socket, not the desktop bus.
         return clip_cmd::main(cmd);
     }
-    if let Cmd::Launch { id } = &cli.cmd {
+    if let Cmd::Launch { id, terminal } = &cli.cmd {
         // Bounded inside: uqd gets 500 ms, Hyprland its own request timeout.
-        return launch_cmd::run(id).await;
+        let target = match id {
+            Some(id) if !terminal => launch_cmd::Target::App(id.clone()),
+            _ => launch_cmd::Target::Terminal,
+        };
+        return launch_cmd::run(&target).await;
     }
     if let Cmd::Bridge { root } = &cli.cmd {
         let roots = root

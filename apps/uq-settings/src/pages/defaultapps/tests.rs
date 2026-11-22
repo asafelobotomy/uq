@@ -145,13 +145,15 @@ async fn setting_a_default_keeps_every_other_line() {
         "{after}"
     );
     assert!(after.contains("application/pdf=zathura.desktop;"));
-    for m in KINDS[0].mimes {
+    for m in ["x-scheme-handler/http", "x-scheme-handler/https", "text/html"] {
         assert_eq!(
             mimeapps::default_for(&after, m).as_deref(),
             Some("firefox.desktop"),
             "{m}"
         );
     }
+    // Firefox here doesn't say it opens XHTML, so that type isn't given to it.
+    assert_eq!(mimeapps::default_for(&after, "application/xhtml+xml"), None);
     assert_eq!(kind(&out.state, "browser")["current"], "firefox.desktop");
     assert_eq!(kind(&out.state, "browser")["source"], "you");
     assert_eq!(kind(&out.state, "pdf")["current"], "zathura.desktop");
@@ -247,4 +249,32 @@ async fn terminal_through_uqd_and_without_it() {
         out.error.as_deref(),
         Some("uQ's settings service isn't running.")
     );
+}
+
+#[tokio::test]
+async fn only_the_types_the_app_opens_are_given_to_it() {
+    let t = setup(true).await;
+    let file = t.dir.path().join("config/mimeapps.list");
+    std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+    std::fs::write(
+        &file,
+        "[Default Applications]\nimage/gif=gifview.desktop;\nimage/png=old.desktop;\n",
+    )
+    .unwrap();
+    let out = run(&t.page, set("images", "feh.desktop")).await;
+    assert_eq!(out.error, None);
+    let after = std::fs::read_to_string(&file).unwrap();
+    for m in ["image/png", "image/jpeg"] {
+        assert_eq!(
+            mimeapps::default_for(&after, m).as_deref(),
+            Some("feh.desktop"),
+            "{m}"
+        );
+    }
+    assert_eq!(
+        mimeapps::default_for(&after, "image/gif").as_deref(),
+        Some("gifview.desktop"),
+        "a type feh doesn't open keeps its app"
+    );
+    assert_eq!(mimeapps::default_for(&after, "image/svg+xml"), None);
 }
