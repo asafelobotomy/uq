@@ -41,6 +41,7 @@ and install the list as `/usr/share/uq/diag/<app>.toml`:
 ```toml
 app = "Bindle"                       # the name people know
 units = ["bindle-update.service"]    # systemd user units whose journal `uqctl log` reads
+identifiers = ["bindle"]             # and lines logged under these names anywhere (uQ 0.3.36+)
 
 [[code]]
 id = "BINDLE-003"

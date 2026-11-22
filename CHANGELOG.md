@@ -7,6 +7,16 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.36] - 2026-11-22
+
+### Added
+
+- **Problems from apps run outside their services.** An app's diag list
+  (`/usr/share/uq/diag/<app>.toml`) can name syslog `identifiers`. `uqctl log`, crash reports
+  and Settings › Problems then also read lines logged under those names, wherever they came
+  from (a terminal, the app's window), not only from the app's listed units. Bindle uses it so a
+  bindleUP stage that fails shows up on the Problems page (`BINDLE-004`).
+
 ## [0.3.35] - 2026-11-22
 
 ### Added
