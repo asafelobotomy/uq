@@ -254,17 +254,11 @@ PanelWindow {
         onTriggered: root.grabIncludesBar = root.shown
     }
 
-    Rectangle {
+    UqCard {
         id: content
         anchors.fill: parent
-        // Fades in and out here, since the compositor no longer maps and unmaps the window.
-        opacity: root.shown ? 1 : 0
-        visible: root.shown || opacity > 0
-        Behavior on opacity { NumberAnimation { duration: Motion.base; easing.type: Motion.easing } }
-        radius: Theme.radius
-        color: Theme.surface
-        border.color: Theme.border
-        border.width: Theme.borderWidth
+        // Comes and goes here, since the compositor no longer maps and unmaps the window.
+        shown: root.shown
 
         ColumnLayout {
             anchors.fill: parent
@@ -358,9 +352,10 @@ PanelWindow {
                             && root.currentCategory === modelData.key
                         width: cats.width
                         height: 28
-                        radius: Theme.radius - 2
+                        radius: Theme.radiusControl
                         color: current ? Theme.overlay
                             : (catMouse.containsMouse ? Theme.surfaceAlt : "transparent")
+                        Behavior on color { ColorAnimation { duration: Motion.fast } }
                         Accessible.role: Accessible.Button
                         Accessible.name: modelData.key
 
@@ -412,9 +407,10 @@ PanelWindow {
                             readonly property bool selected: grid.currentIndex === index
                             width: grid.cellWidth - 2
                             height: grid.cellHeight - 2
-                            radius: Theme.radius - 2
+                            radius: Theme.radiusControl
                             color: selected ? Theme.overlay
                                 : (cellMouse.containsMouse ? Theme.surfaceAlt : "transparent")
+                            Behavior on color { ColorAnimation { duration: Motion.fast } }
                             Accessible.role: Accessible.Button
                             Accessible.name: String(modelData.name || "")
 
@@ -506,8 +502,9 @@ PanelWindow {
                         required property var modelData
                         Layout.preferredWidth: 30
                         Layout.preferredHeight: 30
-                        radius: Theme.radius - 2
+                        radius: Theme.radiusControl
                         color: pMouse.containsMouse ? Theme.surfaceAlt : "transparent"
+                        Behavior on color { ColorAnimation { duration: Motion.fast } }
                         Accessible.role: Accessible.Button
                         Accessible.name: modelData.name
 

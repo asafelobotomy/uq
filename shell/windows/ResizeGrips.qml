@@ -173,6 +173,7 @@ Scope {
                         height: grip.col ? Math.min(40, parent.height - 8) : Math.max(2, Math.min(4, parent.height - 4))
                         radius: Math.min(width, height) / 2
                         color: area.pressed ? Theme.accent : Theme.textMuted
+                        Behavior on color { ColorAnimation { duration: Motion.fast } }
                         opacity: area.containsMouse || area.pressed ? 1 : 0
                         Behavior on opacity {
                             enabled: !Settings.reduceMotion

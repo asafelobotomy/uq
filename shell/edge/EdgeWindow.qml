@@ -198,6 +198,7 @@ PanelWindow {
                     : (win.revealed ? parent.width - win.sliverWidth : parent.width)
         radius: WindowLook.frameRadius
         color: hovered ? Theme.overlay : Theme.surface
+        Behavior on color { ColorAnimation { duration: Motion.fast } }
         border.color: hovered || tab.hovered ? WindowLook.activeBorder : WindowLook.inactiveBorder
         border.width: WindowLook.border
         Behavior on x {
@@ -327,6 +328,7 @@ PanelWindow {
         radius: Theme.radius
         x: win.left ? (win.revealed ? -radius : -width) : (win.revealed ? parent.width - width + radius : parent.width)
         color: hovered ? Theme.accent : Theme.surface
+        Behavior on color { ColorAnimation { duration: Motion.fast } }
         border.color: hovered ? Theme.accent : Theme.border
         border.width: Theme.borderWidth
         Accessible.role: Accessible.Button

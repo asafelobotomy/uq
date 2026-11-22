@@ -45,6 +45,10 @@ PanelWindow {
     implicitHeight: Math.max(1, column.implicitHeight)
     mask: Region { item: column }
 
+    // Notification ids whose card has already come in; emptied when the last popup goes.
+    property var seen: ({})
+    onShownChanged: if (!shown) seen = ({})
+
     Column {
         id: column
         width: root.panelWidth
@@ -57,6 +61,14 @@ PanelWindow {
                 required property var modelData
                 notification: modelData
                 width: column.width
+                // Grows in from the corner it sits in when it arrives. The model is a plain list,
+                // so every change rebuilds all the cards: only one not seen before animates.
+                origin: Item.TopRight
+                shown: root.seen[String(modelData.id)] === true
+                Component.onCompleted: {
+                    root.seen[String(modelData.id)] = true;
+                    shown = true;
+                }
                 dpr: root.screen ? root.screen.devicePixelRatio : 1
             }
         }

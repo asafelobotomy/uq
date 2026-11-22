@@ -84,8 +84,9 @@ ColumnLayout {
                 readonly property string label: Q.profileLabel(modelData)
                 Layout.fillWidth: true
                 implicitHeight: 28
-                radius: Theme.radius - 2
+                radius: Theme.radiusControl
                 color: current ? Theme.accent : (segMouse.containsMouse ? Theme.overlay : Theme.surfaceAlt)
+                Behavior on color { ColorAnimation { duration: Motion.fast } }
                 activeFocusOnTab: true
                 border.color: Theme.accent
                 border.width: activeFocus && !current ? 1 : 0

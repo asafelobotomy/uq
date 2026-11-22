@@ -15,8 +15,9 @@ Rectangle {
 
     Layout.fillWidth: true
     implicitHeight: 32
-    radius: Theme.radius - 2
+    radius: Theme.radiusControl
     color: mouse.containsMouse ? Theme.overlay : Theme.surfaceAlt
+    Behavior on color { ColorAnimation { duration: Motion.fast } }
     activeFocusOnTab: true
     border.color: Theme.accent
     border.width: activeFocus ? 1 : 0

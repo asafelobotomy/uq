@@ -13,8 +13,9 @@ Rectangle {
 
     Layout.fillWidth: true
     implicitHeight: 32
-    radius: Theme.radius - 2
+    radius: Theme.radiusControl
     color: tMouse.containsMouse ? Theme.overlay : Theme.surfaceAlt
+    Behavior on color { ColorAnimation { duration: Motion.fast } }
     activeFocusOnTab: true
     border.color: Theme.accent
     border.width: activeFocus ? 1 : 0
@@ -47,13 +48,16 @@ Rectangle {
             Layout.preferredHeight: 16
             radius: 8
             color: t.on ? Theme.accent : Theme.overlay
+            Behavior on color { ColorAnimation { duration: Motion.fast } }
             Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
                 x: t.on ? parent.width - width - 2 : 2
+                Behavior on x { NumberAnimation { duration: Motion.base; easing.type: Motion.easing } }
                 width: 12
                 height: 12
                 radius: 6
                 color: t.on ? Theme.accentText : Theme.textMuted
+                Behavior on color { ColorAnimation { duration: Motion.fast } }
             }
         }
     }

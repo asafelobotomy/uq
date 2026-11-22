@@ -13,7 +13,7 @@ import "../../logic/sanitize.js" as S
 // icon show (and that follows NotifBackend.sharing live). Text is UqText; the body goes only
 // through NotifBody. Clicking the card runs the notification's "default" action if it has one;
 // the close button dismisses it.
-Rectangle {
+UqCard {
     id: root
 
     required property var notification          // Quickshell Notification
@@ -45,10 +45,6 @@ Rectangle {
     }
 
     implicitHeight: layout.implicitHeight + Theme.gapOut * 2
-    radius: Theme.radius
-    color: Theme.surface
-    border.color: Theme.border
-    border.width: Theme.borderWidth
     Accessible.role: root.hasDefault ? Accessible.Button : Accessible.Pane
     Accessible.name: [root.view.appName, root.view.summary, S.plainBody(root.view.body)]
         .filter(function (s) { return s !== ""; }).join(", ")
@@ -63,8 +59,9 @@ Rectangle {
 
         implicitHeight: 24
         implicitWidth: Math.min(160, bText.implicitWidth + Theme.gapIn * 4)
-        radius: Theme.radius - 4
+        radius: Theme.radiusControl
         color: bMouse.containsMouse ? Theme.overlay : Theme.surfaceAlt
+        Behavior on color { ColorAnimation { duration: Motion.fast } }
         activeFocusOnTab: true
         border.color: Theme.accent
         border.width: activeFocus ? 1 : 0

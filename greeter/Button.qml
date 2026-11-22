@@ -11,8 +11,9 @@ Rectangle {
 
     implicitWidth: caption.implicitWidth + Theme.gapOut * 2
     implicitHeight: 32
-    radius: Theme.radius - 2
+    radius: Theme.radiusControl
     color: emphasis ? Theme.accent : (mouse.containsMouse || activeFocus ? Theme.overlay : Theme.surfaceAlt)
+    Behavior on color { ColorAnimation { duration: Motion.fast } }
     border.color: emphasis ? Theme.text : Theme.accent
     border.width: activeFocus ? 1 : 0
     activeFocusOnTab: true

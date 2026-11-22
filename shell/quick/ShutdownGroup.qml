@@ -52,7 +52,7 @@ ColumnLayout {
         visible: ShutdownTimer.active
         Layout.fillWidth: true
         implicitHeight: 40
-        radius: Theme.radius - 2
+        radius: Theme.radiusControl
         color: Theme.surfaceAlt
         border.color: Theme.accent
         border.width: 1
@@ -167,9 +167,10 @@ ColumnLayout {
 
         implicitWidth: chipLabel.implicitWidth + Theme.gapIn * 4
         implicitHeight: 28
-        radius: Theme.radius - 2
+        radius: Theme.radiusControl
         color: current ? Theme.accent
             : (chipMouse.containsMouse || raised ? Theme.overlay : Theme.surfaceAlt)
+        Behavior on color { ColorAnimation { duration: Motion.fast } }
         activeFocusOnTab: true
         border.color: Theme.accent
         border.width: activeFocus && !current ? 1 : 0

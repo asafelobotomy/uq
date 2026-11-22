@@ -28,6 +28,11 @@ QtObject {
     property int fontSize: 11
     property string variant: "dark"
 
+    // Corners inside a card: a row, button or field gets `radiusControl`, a chip or thumbnail
+    // inside a row `radiusInner`, so nested corners stay concentric. Never below 0 (square themes).
+    readonly property int radiusControl: Math.max(0, radius - 2)
+    readonly property int radiusInner: Math.max(0, radius - 4)
+
     // Test-only: replaces $XDG_STATE_HOME (default ~/.local/state).
     property string statePathOverride: ""
     // function(path) -> string | null; injected by ThemeIo (or a test).

@@ -74,6 +74,7 @@ Rectangle {
                 implicitHeight: label.implicitHeight + Theme.gapIn * 2
                 radius: Math.max(0, Theme.radius - Theme.gapIn)
                 color: selected ? Theme.accent : (mouse.containsMouse ? Theme.overlay : "transparent")
+                Behavior on color { ColorAnimation { duration: Motion.fast } }
                 border.color: selected ? Theme.accentText : Theme.accent
                 border.width: activeFocus ? Theme.borderWidth : 0
                 activeFocusOnTab: selected

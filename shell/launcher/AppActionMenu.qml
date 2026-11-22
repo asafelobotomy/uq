@@ -62,7 +62,7 @@ Item {
         id: box
         width: 220
         height: col.implicitHeight + Theme.gapIn * 2
-        radius: Theme.radius - 2
+        radius: Theme.radiusControl
         color: Theme.surface
         border.color: Theme.border
         border.width: Theme.borderWidth
@@ -83,8 +83,9 @@ Item {
                     required property var modelData
                     width: col.width
                     height: 28
-                    radius: Theme.radius - 2
+                    radius: Theme.radiusControl
                     color: entryMouse.containsMouse ? Theme.overlay : "transparent"
+                    Behavior on color { ColorAnimation { duration: Motion.fast } }
                     Accessible.role: Accessible.MenuItem
                     Accessible.name: String(modelData.name)
                     Accessible.onPressAction: menu.choose(entry.modelData)

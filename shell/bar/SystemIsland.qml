@@ -231,8 +231,9 @@ Island {
             readonly property bool open: Surfaces.open === "appmenu" && Surfaces.anchor === menuButton
             Layout.preferredWidth: root.menuW
             Layout.preferredHeight: root.cell
-            radius: Theme.radius - 2
+            radius: Theme.radiusControl
             color: open ? Theme.accent : (menuMouse.containsMouse ? Theme.overlay : Theme.surfaceAlt)
+            Behavior on color { ColorAnimation { duration: Motion.fast } }
             Accessible.role: Accessible.Button
             Accessible.name: "App menu"
             UqText {
@@ -254,8 +255,9 @@ Island {
                 required property var modelData
                 Layout.preferredWidth: root.wsW
                 Layout.preferredHeight: root.cell
-                radius: Theme.radius - 2
+                radius: Theme.radiusControl
                 color: modelData.focused ? Theme.accent : (wsMouse.containsMouse ? Theme.surfaceAlt : "transparent")
+                Behavior on color { ColorAnimation { duration: Motion.fast } }
                 Row {
                     id: wsRow
                     anchors.centerIn: parent
@@ -296,8 +298,9 @@ Island {
 
                 Rectangle {
                     anchors.fill: parent
-                    radius: Theme.radius - 2
+                    radius: Theme.radiusControl
                     color: dockMouse.containsMouse ? Theme.surfaceAlt : "transparent"
+                    Behavior on color { ColorAnimation { duration: Motion.fast } }
                 }
                 IconImage {
                     anchors.centerIn: parent

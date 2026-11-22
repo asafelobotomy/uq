@@ -264,6 +264,7 @@ PanelWindow {
 
         MenuBox {
             id: mainBox
+            shown: win.shown
             entries: win.top
             selected: win.mainIndex
             accessibleName: "Desktop menu"
@@ -283,7 +284,7 @@ PanelWindow {
 
         MenuBox {
             id: subBox
-            visible: win.sub !== ""
+            shown: win.sub !== ""
             entries: win.subList
             selected: win.subIndex
             accessibleName: win.subFrom >= 0 ? win.top[win.subFrom].label : ""
@@ -300,7 +301,7 @@ PanelWindow {
         }
     }
 
-    component MenuBox: Rectangle {
+    component MenuBox: UqCard {
         id: box
 
         property var entries: []
@@ -317,10 +318,7 @@ PanelWindow {
 
         width: Math.max(Theme.fontSize * 16, col.implicitWidth) + Theme.gapIn * 2
         height: col.implicitHeight + Theme.gapIn * 2
-        radius: Theme.radius
-        color: Theme.surface
-        border.color: Theme.border
-        border.width: Theme.borderWidth
+        origin: Item.TopLeft
         Accessible.role: Accessible.PopupMenu
         Accessible.name: accessibleName
 
