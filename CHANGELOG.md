@@ -9,6 +9,8 @@ All notable changes to uQ are listed here. The format follows
 
 ### Fixed
 
+- **Theme icons no longer load off the GUI thread.** The app menu's icons and a notification's picture were decoded asynchronously, and when the source was a theme icon (`image://icon/...`) that ran Quickshell's icon provider, and so `QIcon`, on Qt's image reader thread, racing the GUI thread's own icon loads. That race is what crashed noti-fi's notifd (segfault or abort in `QIcon::pixmap`); uQ's shell had the same pattern. Files and notification image data still decode in the background; theme icons load on the GUI thread (`L.asyncImageOk`).
+
 - **The edge strip covers the sliver after a window is made Full.** When a new window opened Full beside another, the few pixels of the window it pushed off the screen could stay uncovered: Hyprland moves that window a few hundred ms after it reports the Full one, with no event for it. The screen pages now read the windows again twice in the 700 ms after such a change.
 
 ## [0.3.33] - 2026-11-22

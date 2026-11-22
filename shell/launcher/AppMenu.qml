@@ -426,9 +426,10 @@ PanelWindow {
                                     implicitSize: root.iconSize
                                     backer.sourceSize.width: root.iconSize * root.dpr
                                     backer.sourceSize.height: root.iconSize * root.dpr
-                                    // Decoded off the GUI thread, so the menu's first frame doesn't wait on every icon.
-                                    backer.asynchronous: true
+                                    // Icon files decode off the GUI thread, so the menu's first frame doesn't wait on them.
+                                    // Theme icons (image://icon) load on the GUI thread: QIcon is not thread-safe.
                                     source: root.iconSource(cell.modelData.icon)
+                                    backer.asynchronous: L.asyncImageOk(source)
                                 }
                                 UqText {
                                     Layout.fillWidth: true
