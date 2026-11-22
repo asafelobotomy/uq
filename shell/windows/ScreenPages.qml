@@ -137,6 +137,9 @@ Scope {
                 root.scrolling = false;
                 if (root.focusMoved)
                     root.followFocus();
+                // The scroll moved the windows without an event of its own: read them again, so
+                // the edge strips cover the sliver it left (they were worked out before it).
+                root.refresh(true);
             });
     }
 
@@ -737,5 +740,10 @@ Scope {
     Connections {
         target: Bridge
         function onLayoutChanged(ws, layout) { root.refresh(); }
+    }
+    // Column widths changed elsewhere (ColumnPolicy), with no Hyprland event either.
+    Connections {
+        target: PageActions
+        function onWidthsChanged() { root.refresh(true); }
     }
 }

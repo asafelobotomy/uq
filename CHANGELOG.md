@@ -18,6 +18,10 @@ All notable changes to uQ are listed here. The format follows
 - **Settings pages open at once when you go back to them.** The eight pages shown most recently stay open in the background, so switching back to one shows what it last read straight away and reads again behind it, replacing the values when the answers come, instead of an empty page that loads from scratch each time. Apps' pages (Apps in the sidebar) get the same: a page can declare `refresh()` to read again when it is shown, and `keepAlive: false` to be closed as before (`docs/settings-pages.md`). Bluetooth and Network still close when you leave them, since they answer pairing and password questions while open. A page whose app is uninstalled is closed.
 - **The corner size on the Look page is every app's corner size.** It used to round only Hyprland's windows; the shell, uQ's apps, Qt (Kvantum) and GTK apps now draw with the same radius.
 
+### Fixed
+
+- **The strip over a sliver of the next page's window shows at once.** After a window opened, scrolled the screen or changed a column's width, the few pixels of the window beside it at the screen's edge could stay uncovered until the next window event, since uQ worked the strips out before the move. The pages are read again when such a move finishes.
+
 ## [0.3.31] - 2026-11-21
 
 ### Fixed
