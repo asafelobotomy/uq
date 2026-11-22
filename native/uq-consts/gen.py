@@ -295,6 +295,7 @@ def shell(c):
 def qml(c):
     v = c["version"]
     m, s, t, d = c["motion"], c["shape"], c["type"], c["palette"]["dark"]
+    s_radius = s["fallback_radius"]
     o = [f"// uq-consts {v}",
          "// The base of a uQ native app's QML Theme singleton. Generated from uQ's",
          "// native/uq-consts/consts.toml by gen.py: vendor it unchanged next to your Theme.qml and",
@@ -310,10 +311,17 @@ def qml(c):
          "QtObject {",
          "    // uq-theme's tokens (load() / Watcher.tokens); {present: false} off uQ.",
          "    property var tokens: ({ present: false })",
+         "    // Off uQ: colours to use instead of Graphite's, for an app that follows the desktop's own",
+         "    // palette there (for example Kirigami.Theme), as {bg: ..., accent: ...}. Missing keys",
+         "    // stay Graphite. Don't derive them from this object's own colours (a binding loop).",
+         "    property var fallbackColors: ({})",
+         f"    property int fallbackRadius: {s_radius}",
          "    readonly property bool uq: !!tokens && tokens.present === true",
          '    readonly property bool dark: !uq || tokens.variant !== "light"', "",
          "    function pick(key, fallback) {",
-         "        return uq && tokens.colors && tokens.colors[key] ? tokens.colors[key] : fallback;",
+         "        if (uq && tokens.colors && tokens.colors[key])",
+         "            return tokens.colors[key];",
+         "        return fallbackColors && fallbackColors[key] ? fallbackColors[key] : fallback;",
          "    }",
          "    function num(key, fallback) {",
          '        return uq && typeof tokens[key] === "number" ? tokens[key] : fallback;',
@@ -323,7 +331,7 @@ def qml(c):
     o += ["",
           "    // Corners: containers use radius, a row, button or field inside one radiusControl, a chip",
           "    // or thumbnail inside a row radiusInner, so nested corners stay concentric.",
-          f"    readonly property int radius: num(\"radius\", {s['fallback_radius']})",
+          "    readonly property int radius: num(\"radius\", fallbackRadius)",
           f"    readonly property int radiusControl: Math.max(0, radius - {s['control_inset']})",
           f"    readonly property int radiusInner: Math.max(0, radius - {s['inner_inset']})",
           '    readonly property int gapIn: num("gapIn", 5)',

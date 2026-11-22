@@ -16,6 +16,12 @@ TestCase {
         id: reduced
         tokens: ({ present: true, colors: {}, motion: { fast: 0, base: 0, slow: 0, reduce: true } })
     }
+    UqThemeBase { id: desk; fallbackColors: ({ bg: "#eff0f1" }); fallbackRadius: 6 }
+    UqThemeBase {
+        id: deskOnUq
+        fallbackColors: ({ bg: "#eff0f1" })
+        tokens: ({ present: true, colors: { bg: "#000001" } })
+    }
     UqThemeBase { id: oldUq; tokens: ({ present: true, colors: {}, radius: 1 }) }
 
     function test_fallbacks() {
@@ -43,6 +49,14 @@ TestCase {
         compare(on.headingSize, 21)
         compare(on.motionFast, 90)
         compare(on.popScale, 0.96)
+    }
+
+    function test_an_app_s_own_fallbacks_apply_only_off_uq() {
+        compare(desk.bg, "#eff0f1")
+        compare(desk.surface, "#2b2b2e")
+        compare(desk.radius, 6)
+        compare(desk.radiusControl, 4)
+        compare(deskOnUq.bg, "#000001")
     }
 
     function test_reduce_motion() {

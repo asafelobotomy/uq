@@ -14,11 +14,18 @@ import QtQuick
 QtObject {
     // uq-theme's tokens (load() / Watcher.tokens); {present: false} off uQ.
     property var tokens: ({ present: false })
+    // Off uQ: colours to use instead of Graphite's, for an app that follows the desktop's own
+    // palette there (for example Kirigami.Theme), as {bg: ..., accent: ...}. Missing keys
+    // stay Graphite. Don't derive them from this object's own colours (a binding loop).
+    property var fallbackColors: ({})
+    property int fallbackRadius: 10
     readonly property bool uq: !!tokens && tokens.present === true
     readonly property bool dark: !uq || tokens.variant !== "light"
 
     function pick(key, fallback) {
-        return uq && tokens.colors && tokens.colors[key] ? tokens.colors[key] : fallback;
+        if (uq && tokens.colors && tokens.colors[key])
+            return tokens.colors[key];
+        return fallbackColors && fallbackColors[key] ? fallbackColors[key] : fallback;
     }
     function num(key, fallback) {
         return uq && typeof tokens[key] === "number" ? tokens[key] : fallback;
@@ -39,7 +46,7 @@ QtObject {
 
     // Corners: containers use radius, a row, button or field inside one radiusControl, a chip
     // or thumbnail inside a row radiusInner, so nested corners stay concentric.
-    readonly property int radius: num("radius", 10)
+    readonly property int radius: num("radius", fallbackRadius)
     readonly property int radiusControl: Math.max(0, radius - 2)
     readonly property int radiusInner: Math.max(0, radius - 4)
     readonly property int gapIn: num("gapIn", 5)
