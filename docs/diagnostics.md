@@ -53,7 +53,10 @@ Apps use their own prefix (`BINDLE-003`, `REELO-010`) and install their list as
 `/usr/share/uq/diag/<app>.toml` (kept in the app's repo as `uq/diag/<app>.toml`, which
 `uqctl integrations check` checks); see [`native/uq-diag/README.md`](../native/uq-diag/README.md).
 An app that uQ started logs into uQ's unit (usually the shell's); its coded lines are put down
-to the app by name.
+to the app by name. An app run from a terminal or its own window logs outside any unit it lists:
+its file's `identifiers` (syslog identifiers, as `systemd-cat -t bindle` or `logger -t bindle`
+write) are read too, in a second query, so those problems reach `uqctl log` and Settings ›
+Problems as well.
 
 ## Where logs go
 

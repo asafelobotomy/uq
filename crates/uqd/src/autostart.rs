@@ -234,6 +234,8 @@ struct Job {
     delay: u32,
     minimize: bool,
     retry: bool,
+    /// Part of this login's run, so its start counts as "N s after login". Run now's isn't.
+    at_login: bool,
 }
 
 /// Run the plan once per login (R7). The caller built `plan` and `env` under the desktop lock
@@ -302,6 +304,7 @@ pub async fn start_once(
                     delay,
                     minimize,
                     retry,
+                    at_login: true,
                 }),
                 _ => None,
             })
@@ -428,9 +431,17 @@ async fn launch_inner(ctx: Ctx, job: Job, attempt: u32) {
                 r.statuses.insert(id.clone(), Status::Running);
                 r.stopped.remove(&id);
                 r.hidden.remove(&id);
-                if let Some(t0) = r.t0 {
-                    let secs = t0.elapsed().as_secs().min(u64::from(u32::MAX)) as u32;
-                    r.offsets.insert(id.clone(), secs);
+                match r.t0 {
+                    Some(t0) if job.at_login => {
+                        let secs = t0.elapsed().as_secs().min(u64::from(u32::MAX)) as u32;
+                        r.offsets.insert(id.clone(), secs);
+                    }
+                    // Started by hand: no "after login" time, and no "again after it failed"
+                    // left over from the login's run.
+                    _ => {
+                        r.offsets.remove(&id);
+                        r.retried.remove(&id);
+                    }
                 }
                 if attempt > 0 {
                     r.retried.insert(id.clone());
@@ -531,6 +542,7 @@ pub async fn run_now(
         delay: 0,
         minimize,
         retry,
+        at_login: false,
     };
     launch(ctx, job, 0).await;
     true

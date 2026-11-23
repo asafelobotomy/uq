@@ -12,11 +12,21 @@ All notable changes to uQ are listed here. The format follows
 ### Fixed
 
 - **`uqctl integrations check` accepts `uq/native.toml`.** The file that pins the uQ kits an app vendors (`native/check-uq-native.sh`) sits in the app's `uq/` folder, and the check reported it as not belonging there, failing the app's CI.
+- **Super+Return opens the terminal chosen in Settings › Default apps.** The shortcut always opened kyko (or kitty), whatever was chosen there; the desktop menu and look=see>do_ already followed the choice. It now runs `uqctl launch --terminal`, which starts the chosen terminal the way the launcher starts apps, and falls back to kyko, then kitty, when uqctl can't.
+- **Flatpak apps, and apps under `/usr/local`, can be chosen in Settings.** Default apps, Startup's **Add an app**, Apps and scaling, Keyboard shortcuts, Profiles and the Shell page read only `~/.local/share/applications` and `/usr/share/applications`, so a Flatpak browser could not be made the default web browser. They now read every `$XDG_DATA_DIRS` folder, as uqd and the launcher do.
+- **Default apps gives an app only the file types it opens.** Choosing a picture viewer made it the default for GIF, WebP, TIFF and SVG too even when it can't open them, so those files opened in an app that failed; the types it doesn't list keep the app they had.
+- **Settings' sidebar no longer shows a category heading twice** when it opens straight on a page further down the list (`uqctl settings --page default-apps`, a search result, a notification).
+- **Startup: Run now** no longer says "Started 90 s after login" for an app started by hand, and is greyed out while an app still waits for its delay (it starts by itself; pressing it gave an error).
 
 ## [0.3.36] - 2026-11-22
 
 ### Added
 
+- **Problems from apps run outside their services.** An app's diag list
+  (`/usr/share/uq/diag/<app>.toml`) can name syslog `identifiers`. `uqctl log`, crash reports
+  and Settings › Problems then also read lines logged under those names, wherever they came
+  from (a terminal, the app's window), not only from the app's listed units. Bindle uses it so a
+  bindleUP stage that fails shows up on the Problems page (`BINDLE-004`).
 - **`native/uq-consts` (1.0.0): one source for the values uQ shares with Bindle and its apps.** `consts.toml` holds uQ's paths, the folders packages install integrations into, uQ's D-Bus names, the `uq_api`, motion, corner and type-scale values and the Graphite fallback palette; `gen.py` writes it out for Rust, C++, QML, Python, JS and shell. uQ compiles the same Rust file, and a test holds the shell's `Motion.qml` and `Theme.qml`, the Graphite theme and uqd's paths to it.
 - **`UqThemeBase.qml`**, part of uq-consts: a whole QML `Theme` singleton for native apps (colours with fallbacks, `radiusControl`, `radiusInner`, one type scale, motion), so uQ's apps stop keeping their own copies.
 - **`native/check-uq-native.sh`**: one CI check for every kit an app vendors, listed in its `uq/native.toml`, with `--sync` to update them from a uQ checkout. It replaces the per-kit scripts and `check-diag-codes.sh`.

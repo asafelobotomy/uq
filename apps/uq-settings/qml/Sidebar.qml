@@ -63,74 +63,88 @@ QQC2.ScrollView {
         Keys.onEnterPressed: sidebar.openCurrent()
         Keys.onSpacePressed: sidebar.openCurrent()
 
-        section.property: "categoryName"
-        section.delegate: Item {
-            id: heading
-            required property string section
-            width: ListView.view.width
-            implicitHeight: sidebar.compact ? Kirigami.Units.largeSpacing * 2 : headingText.implicitHeight
-            Accessible.role: Accessible.Heading
-            Accessible.name: heading.section
-
-            UqLabel {
-                id: headingText
-                visible: !sidebar.compact
-                width: parent.width
-                topPadding: Kirigami.Units.largeSpacing
-                bottomPadding: Kirigami.Units.smallSpacing
-                leftPadding: Kirigami.Units.largeSpacing
-                text: heading.section
-                font.bold: true
-                opacity: 0.7
-                elide: Text.ElideRight
-                Accessible.ignored: true
-            }
-            Kirigami.Separator {
-                visible: sidebar.compact
-                anchors.centerIn: parent
-                width: parent.width - Kirigami.Units.largeSpacing * 2
-            }
-        }
-
-        delegate: QQC2.ItemDelegate {
-            id: item
+        // Each category's heading is drawn by its first page's row, not with ListView's
+        // sections: a section heading is worked out as the rows are made, and opening the window
+        // on a page further down (`--page`) made a second heading above that page.
+        delegate: Column {
+            id: row
             required property int index
             required property string pageId
             required property string name
             required property string iconName
+            required property string categoryName
+            readonly property bool firstOfCategory: index === 0
+                || sidebar.pageModel.get(index - 1).categoryName !== categoryName
 
             width: ListView.view.width
-            highlighted: ListView.isCurrentItem
-            focusPolicy: Qt.NoFocus
-            Accessible.role: Accessible.ListItem
-            Accessible.name: name
-            Accessible.selected: pageId === sidebar.current
-            onClicked: {
-                list.currentIndex = index;
-                sidebar.chosen(pageId);
-            }
-            QQC2.ToolTip.visible: sidebar.compact && item.hovered
-            QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
-            QQC2.ToolTip.text: item.name
 
-            contentItem: RowLayout {
-                spacing: Kirigami.Units.smallSpacing
-                Kirigami.Icon {
-                    source: item.iconName
-                    implicitWidth: Kirigami.Units.iconSizes.smallMedium
-                    implicitHeight: Kirigami.Units.iconSizes.smallMedium
-                    Layout.alignment: sidebar.compact ? Qt.AlignHCenter : Qt.AlignLeft
-                    Layout.preferredWidth: implicitWidth
-                    Layout.preferredHeight: implicitHeight
+            Item {
+                id: heading
+                visible: row.firstOfCategory
+                width: parent.width
+                height: visible ? (sidebar.compact ? Kirigami.Units.largeSpacing * 2 : headingText.implicitHeight) : 0
+                Accessible.role: Accessible.Heading
+                Accessible.name: row.categoryName
+
+                UqLabel {
+                    id: headingText
+                    objectName: "categoryHeading"
+                    visible: !sidebar.compact
+                    width: parent.width
+                    topPadding: Kirigami.Units.largeSpacing
+                    bottomPadding: Kirigami.Units.smallSpacing
+                    leftPadding: Kirigami.Units.largeSpacing
+                    text: row.categoryName
+                    font.bold: true
+                    opacity: 0.7
+                    elide: Text.ElideRight
                     Accessible.ignored: true
                 }
-                UqLabel {
-                    visible: !sidebar.compact
-                    text: item.name
-                    elide: Text.ElideRight
-                    highlighted: item.highlighted || item.down
-                    Layout.fillWidth: true
-                    Accessible.ignored: true
+                Kirigami.Separator {
+                    visible: sidebar.compact
+                    anchors.centerIn: parent
+                    width: parent.width - Kirigami.Units.largeSpacing * 2
+                }
+            }
+
+            QQC2.ItemDelegate {
+                id: item
+                readonly property string pageId: row.pageId
+                readonly property string name: row.name
+                readonly property string iconName: row.iconName
+
+                width: parent.width
+                highlighted: row.ListView.isCurrentItem
+                focusPolicy: Qt.NoFocus
+                Accessible.role: Accessible.ListItem
+                Accessible.name: name
+                Accessible.selected: pageId === sidebar.current
+                onClicked: {
+                    list.currentIndex = row.index;
+                    sidebar.chosen(pageId);
+                }
+                QQC2.ToolTip.visible: sidebar.compact && item.hovered
+                QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+                QQC2.ToolTip.text: item.name
+                contentItem: RowLayout {
+                    spacing: Kirigami.Units.smallSpacing
+                    Kirigami.Icon {
+                        source: item.iconName
+                        implicitWidth: Kirigami.Units.iconSizes.smallMedium
+                        implicitHeight: Kirigami.Units.iconSizes.smallMedium
+                        Layout.alignment: sidebar.compact ? Qt.AlignHCenter : Qt.AlignLeft
+                        Layout.preferredWidth: implicitWidth
+                        Layout.preferredHeight: implicitHeight
+                        Accessible.ignored: true
+                    }
+                    UqLabel {
+                        visible: !sidebar.compact
+                        text: item.name
+                        elide: Text.ElideRight
+                        highlighted: item.highlighted || item.down
+                        Layout.fillWidth: true
+                        Accessible.ignored: true
+                    }
                 }
             }
         }

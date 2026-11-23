@@ -298,7 +298,7 @@ pub fn gather(crash: Option<&Crash>, reg: &Registry, paths: &Paths, redact: &Red
         .lines()
         .map(str::to_string)
         .collect();
-    let journal_text = journal::read_text(&since, until.as_deref(), reg.units(), 400);
+    let journal_text = journal::read_text_all(&since, until.as_deref(), reg, 400);
     Input {
         made,
         crash: crash.cloned(),

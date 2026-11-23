@@ -42,12 +42,13 @@ impl Group {
     }
 }
 
-/// The terminal shortcut's command: kyko, or kitty when kyko is not installed, in a scope of its
-/// own in `app.slice`, like the launcher's apps, so a scheduler sees it as an app rather than
-/// part of Hyprland. Hyprland runs it through `sh -c`, which hands its pid on to systemd-run, a
-/// second `sh` and then the terminal (each `exec`s the next), so `$$` is the terminal's own pid:
-/// unique while the scope lives. config/hypr/base.lua repeats it.
-pub const TERMINAL: &str = "systemd-run --user --scope --quiet --collect --slice=app.slice --unit=app-uq-terminal-$$ -- sh -c 'command -v kyko >/dev/null && exec kyko; exec kitty'";
+/// The terminal shortcut's command: the terminal chosen in Settings › Default apps, started by
+/// `uqctl launch --terminal` the way the launcher starts apps (its own scope in `app.slice`, its
+/// fix from Apps and scaling). Should that fail (no uqctl, no Hyprland socket), kyko, or kitty
+/// when kyko is not installed, in a scope of its own in `app.slice`, so a scheduler sees it as an
+/// app rather than part of Hyprland; `$$` is the shell Hyprland runs it in, unique while the
+/// scope lives. config/hypr/base.lua repeats it.
+pub const TERMINAL: &str = "uqctl launch --terminal 2>/dev/null || systemd-run --user --scope --quiet --collect --slice=app.slice --unit=app-uq-terminal-$$ -- sh -c 'command -v kyko >/dev/null && exec kyko; exec kitty'";
 
 /// A default's dispatcher, as `'static` text.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -855,8 +856,10 @@ mod tests {
     fn the_terminal_runs_in_its_own_app_scope() {
         let t = defaults().iter().find(|d| d.id == "uq.terminal").unwrap();
         assert_eq!(t.action, DefaultAction::Exec(TERMINAL));
+        // The chosen terminal first, through uqctl.
         assert!(
-            TERMINAL.starts_with("systemd-run --user --scope "),
+            TERMINAL
+                .starts_with("uqctl launch --terminal 2>/dev/null || systemd-run --user --scope "),
             "{TERMINAL}"
         );
         assert!(TERMINAL.contains(" --slice=app.slice "), "{TERMINAL}");
