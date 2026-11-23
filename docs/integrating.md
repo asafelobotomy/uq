@@ -96,9 +96,16 @@ watch on the file is lost after the first change.
 - **Web apps** (Tauri, Electron): vendor `web/uq-tokens/` from this repository. It maps the
   tokens to CSS custom properties, validates every value, and falls back to your own theme when
   uQ isn't there. Its README has the Tauri and Electron recipes.
-- **Native apps with their own palette** (Qt 6 C++ or Rust, for example a QML `Theme`
+- **Native apps with their own palette** (Qt 6 C++, Rust or Python, for example a QML `Theme`
   singleton): vendor `native/uq-theme/`. It reads and checks the tokens and follows them with a
-  file watch, no polling; its README has the Rust and C++ recipes and a CI drift check.
+  file watch, no polling; its README has the recipes. Build the QML `Theme` singleton on
+  `native/uq-consts/UqThemeBase.qml`, which gives every app the same fallbacks, corners, type
+  scale and motion, and follows **Reduce motion** (`tokens.json`'s `motion`, uQ 0.3.36+).
+- **Qt apps drawn with the desktop's style** (Kirigami, qqc2-desktop-style, Widgets): vendor
+  `native/uq-theme/uqkdetheme.*` and call `uqtheme::followKdeTheme("myapp")`.
+- **Paths, install folders and bus names**: take them from `native/uq-consts/` rather than
+  writing them out. [`native/README.md`](../native/README.md) covers vendoring and the one CI check
+  (`check-uq-native.sh`) for every kit.
 - **Qt and GTK apps** that use the desktop's own theme need nothing: `uqctl setup --apps` points GTK, qt6ct and Kvantum at uQ's
   theme.
 - **QML in a settings page or widget** gets the tokens as `ctx.theme` / `ctx.Theme`.

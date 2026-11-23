@@ -32,3 +32,9 @@ pub mod stub;
 pub mod test_bus;
 pub mod theme;
 pub mod welcome;
+
+/// uq-consts, the values uQ shares with Bindle and its apps (`native/uq-consts`). uQ compiles the
+/// same generated file the apps vendor, so its constants can't drift from theirs.
+#[path = "../../../native/uq-consts/uq_consts.rs"]
+#[rustfmt::skip]
+pub mod uq_consts;

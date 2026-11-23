@@ -121,6 +121,41 @@ jobs:
           git diff --exit-code -- native/uq-diag
           native/uq-diag/check-uq-diag.sh "$(head -n1 native/uq-diag/uq_diag.rs | grep -oE '[0-9.]+$')" native/uq-diag/uq_diag.rs native/uq-diag/uqdiag.h native/uq-diag/uqdiag.cpp
 
+  native-uq-consts:
+    # native/uq-consts: the shared values the apps vendor, generated from consts.toml for Rust, C++,
+    # QML, Python, JS and shell. The outputs are up to date, each language's tests pass, and
+    # check-uq-native.sh (every kit's checksums) is current and works. uq-core's
+    # tests/native_consts.rs holds uQ's own code to the same file.
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - name: Install Rust, Qt, Python, Node and CMake
+        run: pacman -Syu --noconfirm --needed rust qt6-base qt6-declarative cmake gcc make git python nodejs
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Generated files are up to date
+        run: python3 native/uq-consts/gen.py --check
+      - name: Rust
+        run: |
+          cargo test --manifest-path native/uq-consts/test/Cargo.toml --locked
+          cargo clippy --manifest-path native/uq-consts/test/Cargo.toml --locked --all-targets -- -D warnings
+      - name: Python, JS and shell
+        run: |
+          python3 -m unittest discover -s native/uq-consts/test -v
+          python3 -m unittest discover -s native/uq-theme/test -v
+      - name: C++ and QML
+        run: |
+          cmake -S native/uq-consts/test -B /tmp/uqconsts-build
+          cmake --build /tmp/uqconsts-build
+          QT_QPA_PLATFORM=offscreen ctest --test-dir /tmp/uqconsts-build --output-on-failure
+      - name: check-uq-native.sh is up to date and works
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          native/gen-check.sh
+          git diff --exit-code -- native web/uq-tokens
+          native/test/check-uq-native.test.sh
+
   smoke:
     # The shell on a real Hyprland (scripts/smoke-shell.sh). Hyprland cannot start without a DRM
     # device, even with only headless outputs, and a job container is created before any step

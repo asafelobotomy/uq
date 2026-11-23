@@ -1,0 +1,102 @@
+# uq-consts: the values uQ, Bindle and uQ's native apps share, in one place.
+#
+# This file is the source. gen.py writes it out for each language (uq_consts.rs, uqconsts.h,
+# uq_consts.py, uq-consts.js, uq-consts.sh, UqThemeBase.qml); apps vendor those files unchanged.
+# uQ's own code is checked against this file by uq-core's tests/native_consts.rs, so uQ can't
+# drift from what it hands the apps.
+#
+# Versioning: adding a value is a minor bump, changing or removing one is a major bump. Bump
+# `version`, run gen.py and gen-check.sh, and commit the outputs with it.
+
+version = "1.0.0"
+
+# Per-user paths, relative to a base directory. `state` paths sit under $XDG_STATE_HOME when it
+# is an absolute path, else ~/.local/state (a relative XDG_STATE_HOME is ignored, as the XDG spec
+# says). `cache` paths sit under $XDG_CACHE_HOME (absolute) else ~/.cache.
+[paths.state]
+uq_dir = "uq"
+theme_dir = "uq/theme"
+tokens = "uq/theme/tokens.json"
+crashes_dir = "uq/crashes"
+
+[paths.cache]
+quickshell_crashes_dir = "quickshell/crashes"
+
+# Where packages install their uQ integrations (docs/integrating.md). uQ reads them only here.
+[install]
+data_dir = "/usr/share/uq"
+pages_dir = "/usr/share/uq/settings/pages"
+widgets_dir = "/usr/share/uq/shell/widgets"
+launcher_dir = "/usr/share/uq/launcher"
+actions_dir = "/usr/share/uq/launcher/actions"
+integrations_dir = "/usr/share/uq/integrations"
+diag_dir = "/usr/share/uq/diag"
+themes_dir = "/usr/share/uq/themes"
+rendered_themes_dir = "/usr/share/uq/themes/rendered"
+
+# uQ's D-Bus API on the session bus.
+[dbus]
+desktop_name = "org.uq.Desktop1"
+desktop_path = "/org/uq/Desktop1"
+desktop_interface = "org.uq.Desktop1"
+launcher_provider_path = "/org/uq/Launcher1"
+launcher_provider_interface = "org.uq.Launcher1.Provider"
+
+# The newest `uq_api` a manifest may declare, and what a page means without one.
+[api]
+uq_api = 3
+page_default_api = 1
+
+# Motion, the same as uQ's shell (shell/core/Motion.qml). Durations in ms. When the user turns on
+# Reduce motion, tokens.json's `motion` block says so and every duration is 0.
+[motion]
+fast = 100
+base = 140
+slow = 220
+pop_scale = 0.96
+easing = "OutCubic"
+easing_exit = "InCubic"
+
+# Corners and spacing derived from the theme's radius (shell/core/Theme.qml): a row, button or
+# field inside a card uses radius - control_inset, a chip inside a row radius - inner_inset.
+[shape]
+fallback_radius = 10
+control_inset = 2
+inner_inset = 4
+gap = 8
+
+# Text sizes, in points, derived from the theme's font size (or the app font's off uQ).
+[type]
+fallback_size = 11
+small_offset = 1
+small_min = 8
+heading_scale = 1.5
+
+# uQ's Graphite theme: the palette apps fall back to where uQ isn't running.
+[palette.dark]
+bg = "#1f1f22"
+surface = "#2b2b2e"
+surface_alt = "#353538"
+overlay = "#464649"
+text = "#e4e4e7"
+text_muted = "#a9a9ac"
+accent = "#8ab4f8"
+accent_text = "#1f1f22"
+border = "#5a5a5d"
+success = "#81c995"
+warning = "#fdd663"
+error = "#f28b82"
+
+[palette.light]
+bg = "#f4f4f5"
+surface = "#e7e7e8"
+surface_alt = "#dcdcdd"
+overlay = "#c8c8c9"
+text = "#18181b"
+text_muted = "#5a5a5c"
+accent = "#2b5bb8"
+accent_text = "#f4f4f5"
+border = "#b2b2b4"
+success = "#1e7a3a"
+warning = "#8a6100"
+error = "#b3261e"
