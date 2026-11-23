@@ -28,6 +28,7 @@ pub mod settings;
 pub mod startup_explain;
 pub mod state;
 pub mod stub;
+pub mod terminal_pref;
 #[cfg(feature = "test-bus")]
 pub mod test_bus;
 pub mod theme;

@@ -198,6 +198,10 @@ impl Desktop {
         if autostart {
             self.sync_autostart_copies();
         }
+        // A new terminal on Default apps holds in KDE and GTK apps too, at once.
+        if old.settings.shell.terminal != self.state.settings.shell.terminal {
+            self.sync_terminal(old.settings.shell.terminal.as_deref());
+        }
     }
 
     /// Every part of the sync, at startup. Overrides of uQ's whose fix went away while uqd
