@@ -520,11 +520,13 @@ pub fn check_dir(dir: &Path, programs: bool) -> (Vec<String>, String) {
                     ("dbus", true) => c.dbus(&p),
                     ("integrations", true) => c.integrations(&p),
                     ("diag", true) => c.diag(&p),
-                    ("README.md", false) => {}
+                    // README.md is for people; native.toml pins the uQ kits the repo vendors
+                    // (native/check-uq-native.sh), and nothing is installed from either.
+                    ("README.md" | "native.toml", false) => {}
                     _ => c.problem(
                         &p,
                         "not part of a uq/ folder (widgets/, pages/, launcher/, dbus/, \
-                         integrations/, diag/, README.md)",
+                         integrations/, diag/, README.md, native.toml)",
                     ),
                 }
             }
