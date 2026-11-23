@@ -9,6 +9,14 @@ All notable changes to uQ are listed here. The format follows
 
 ## [0.3.37] - 2026-11-23
 
+### Added
+
+- **Problems from apps run outside their services.** An app's diag list
+  (`/usr/share/uq/diag/<app>.toml`) can name syslog `identifiers`. `uqctl log`, crash reports
+  and Settings › Problems then also read lines logged under those names, wherever they came
+  from (a terminal, the app's window), not only from the app's listed units. Bindle uses it so a
+  bindleUP stage that fails shows up on the Problems page (`BINDLE-004`). It merged after the 0.3.36 tag, so it ships here.
+
 ### Fixed
 
 - **`uqctl integrations check` accepts `uq/native.toml`.** The file that pins the uQ kits an app vendors (`native/check-uq-native.sh`) sits in the app's `uq/` folder, and the check reported it as not belonging there, failing the app's CI.
@@ -22,11 +30,6 @@ All notable changes to uQ are listed here. The format follows
 
 ### Added
 
-- **Problems from apps run outside their services.** An app's diag list
-  (`/usr/share/uq/diag/<app>.toml`) can name syslog `identifiers`. `uqctl log`, crash reports
-  and Settings › Problems then also read lines logged under those names, wherever they came
-  from (a terminal, the app's window), not only from the app's listed units. Bindle uses it so a
-  bindleUP stage that fails shows up on the Problems page (`BINDLE-004`).
 - **`native/uq-consts` (1.0.0): one source for the values uQ shares with Bindle and its apps.** `consts.toml` holds uQ's paths, the folders packages install integrations into, uQ's D-Bus names, the `uq_api`, motion, corner and type-scale values and the Graphite fallback palette; `gen.py` writes it out for Rust, C++, QML, Python, JS and shell. uQ compiles the same Rust file, and a test holds the shell's `Motion.qml` and `Theme.qml`, the Graphite theme and uqd's paths to it.
 - **`UqThemeBase.qml`**, part of uq-consts: a whole QML `Theme` singleton for native apps (colours with fallbacks, `radiusControl`, `radiusInner`, one type scale, motion), so uQ's apps stop keeping their own copies.
 - **`native/check-uq-native.sh`**: one CI check for every kit an app vendors, listed in its `uq/native.toml`, with `--sync` to update them from a uQ checkout. It replaces the per-kit scripts and `check-diag-codes.sh`.
