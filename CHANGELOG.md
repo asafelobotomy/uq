@@ -7,6 +7,16 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.38] - 2026-11-23
+
+### Added
+
+- **F12 shows and hides kyko's drop-down terminal.** A new default shortcut, *Show or hide the drop-down terminal*, in Settings › Shortcuts › Apps and desktop, runs `kyko toggle` (kyko 1.1 and later leave the key to uQ instead of binding it again). Where it comes from, its size and how much the screen behind dims are on kyko's own page, Settings › Apps › kyko.
+
+### Changed
+
+- **kyko's drop-down moves once.** Hyprland's own layer fade is off for kyko's surface (the `uq-base:shell-popups` rule), since kyko slides and dims at uQ's motion speeds itself.
+
 ## [0.3.37] - 2026-11-23
 
 ### Added

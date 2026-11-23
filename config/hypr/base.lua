@@ -134,13 +134,14 @@ hl.config({
 -- Animation curves and leaves are rendered into generated.lua (look.animation_speed scales them).
 
 -- The shell's popups, menus, OSD and notifications come and go in QML (shell/core/UqCard.qml,
--- the same speeds as the app menu and quick settings, which stay mapped). Hyprland's own layer
+-- the same speeds as the app menu and quick settings, which stay mapped), and so does kyko's
+-- drop-down (it slides and dims at uQ's motion speeds itself). Hyprland's own layer
 -- fade would run on top of that at another speed, so it is off for them. The bar, wallpaper and
 -- the rest keep Hyprland's animation.
 hl.layer_rule({
     name    = "uq-base:shell-popups",
     enabled = true,
-    match   = { namespace = "^(uq-bar-popup|uq-desktop-menu|uq-clip|uq-osd|uq-notif|uq-notif-centre|uq-polkit)$" },
+    match   = { namespace = "^(uq-bar-popup|uq-desktop-menu|uq-clip|uq-osd|uq-notif|uq-notif-centre|uq-polkit|kyko)$" },
     no_anim = true,
 })
 
@@ -177,6 +178,8 @@ hl.config({
 -- generated.lua still leaves a working desktop. Keep them equal to
 -- crates/uq-core/src/keybinds/defaults.rs (test base_lua_binds_equal_the_default_table).
 hl.bind(mainMod .. " + Return", hl.dsp.exec_cmd(terminal))
+-- kyko's drop-down terminal (Settings › kyko picks where it comes from).
+hl.bind("F12",                  hl.dsp.exec_cmd("kyko toggle"))
 hl.bind(mainMod .. " + Q",      hl.dsp.window.close())
 hl.bind(mainMod .. " + V",      hl.dsp.window.float({ action = "toggle" }))
 hl.bind(mainMod .. " + SHIFT + M", hl.dsp.exec_cmd("command -v hyprshutdown >/dev/null 2>&1 && hyprshutdown || hyprctl dispatch 'hl.dsp.exit()'"))

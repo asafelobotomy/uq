@@ -147,7 +147,7 @@ mod tests {
         assert_eq!(v["binds.uq.lookseedo"]["stored"], "SUPER + Space");
         assert_eq!(v["binds.uq.lookseedo"]["live"], Value::Null);
         assert_eq!(v["binds.uq.profile.next"]["stored"], Value::Null);
-        assert_eq!(v.as_object().unwrap().len(), 67);
+        assert_eq!(v.as_object().unwrap().len(), 68);
     }
 
     #[test]
@@ -213,7 +213,7 @@ mod tests {
     fn rejected_marks_every_row_and_the_section() {
         let k = Keybinds::default();
         let v = explain(&k, Some(&live_of(&k)), None, Some("bad"), "/u");
-        assert_eq!(v.as_object().unwrap().len(), 68);
+        assert_eq!(v.as_object().unwrap().len(), 69);
         for (key, row) in v.as_object().unwrap() {
             assert_eq!(row["source"], "error", "{key}");
             assert_eq!(row["detail"], json!({"message": "bad"}), "{key}");
