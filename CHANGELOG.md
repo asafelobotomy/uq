@@ -18,6 +18,7 @@ All notable changes to uQ are listed here. The format follows
 
 ### Changed
 
+- **look=see>do_'s docked terminal takes tabs in kyko too.** With kyko as the terminal, the next `>` command opens a new tab in the docked window (through `kyko @ --to unix:… launch --type tab`), as it already did with kitty, instead of a new docked window. This needs kyko 1.0.0, which added `--listen-on`.
 - **`tokens.json` carries Reduce motion.** It gains `"motion": {"fast", "base", "slow", "reduce"}`, all 0 while **Reduce motion** is on, so uQ's native apps can follow it. Its keys are now written in alphabetical order.
 - The companion-pages check now covers kyko and uQbit too.
 

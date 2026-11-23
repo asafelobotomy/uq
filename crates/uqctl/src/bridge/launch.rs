@@ -113,19 +113,32 @@ pub struct Plan {
     pub tabs: Option<String>,
 }
 
-/// Whether `argv0` is kitty, the terminal that can be asked for a new tab from outside (over a
-/// remote-control socket that only the docked window listens on).
-fn is_kitty(argv0: &str) -> bool {
-    Path::new(argv0).file_name().is_some_and(|n| n == "kitty")
+/// The terminals that can be asked for a new tab from outside, over a remote-control socket
+/// that only the docked window listens on.
+const TAB_TERMINALS: [&str; 2] = ["kyko", "kitty"];
+
+/// Which of `TAB_TERMINALS` `argv0` is, if any.
+fn tab_terminal(argv0: &str) -> Option<&'static str> {
+    let name = Path::new(argv0).file_name()?;
+    TAB_TERMINALS.into_iter().find(|t| name == *t)
 }
 
-/// A docked terminal's handle: `kitty-` and 8 lowercase hex digits. It names the socket, so
-/// nothing else can be slipped into the path.
+/// A docked terminal's handle: the terminal's name (`kyko-` or `kitty-`) and 8 lowercase hex
+/// digits. It names the socket, so nothing else can be slipped into the path.
 pub fn valid_tabs_handle(h: &str) -> bool {
-    h.strip_prefix("kitty-").is_some_and(|x| {
-        x.len() == 8
-            && x.bytes()
-                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    tabs_handle_terminal(h).is_some()
+}
+
+/// The terminal a valid handle belongs to.
+fn tabs_handle_terminal(h: &str) -> Option<&'static str> {
+    TAB_TERMINALS.into_iter().find(|t| {
+        h.strip_prefix(t)
+            .and_then(|x| x.strip_prefix('-'))
+            .is_some_and(|x| {
+                x.len() == 8
+                    && x.bytes()
+                        .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+            })
     })
 }
 
@@ -259,28 +272,34 @@ pub fn plan(
             v
         };
         if let Some(h) = tab {
-            // A new tab in the docked terminal: kitty's own client asks the window over its
-            // socket, and the command runs as that window's child.
+            // A new tab in the docked terminal: the terminal's own client (`kitty @` or
+            // `kyko @`) asks the window over its socket, and the command runs as that window's
+            // child.
             let sock = dirs
                 .runtime
                 .as_deref()
                 .map(|r| tabs_socket(r, h))
                 .filter(|p| p.exists())
                 .ok_or("the docked terminal is closed")?;
+            let kind = tabs_handle_terminal(h).ok_or("tab must be a docked terminal's handle")?;
             let prefix = terminal_prefix(dirs, terminal);
-            let kitty = if is_kitty(&prefix[0]) {
+            let client = if tab_terminal(&prefix[0]) == Some(kind) {
                 prefix[0].clone()
             } else {
-                "kitty".to_string()
+                kind.to_string()
             };
             let mut argv = vec![
-                kitty,
+                client,
                 "@".into(),
                 "--to".into(),
                 format!("unix:{}", sock.display()),
                 "launch".into(),
-                "--type=tab".into(),
             ];
+            // kyko takes `--type tab`; kitty takes either form.
+            argv.extend(match kind {
+                "kitty" => vec!["--type=tab".to_string()],
+                _ => vec!["--type".to_string(), "tab".into()],
+            });
             argv.extend(run_args());
             let quoted: Vec<String> = argv.iter().map(|a| shell_quote(a)).collect();
             return Ok(Plan {
@@ -294,20 +313,19 @@ pub fn plan(
         let argv: Vec<String> = if in_terminal {
             let mut v = terminal_prefix(dirs, terminal);
             if dock
-                && is_kitty(&v[0])
+                && let Some(kind) = tab_terminal(&v[0])
                 && let Some(runtime) = dirs.runtime.as_deref()
             {
-                let h = format!("kitty-{rand:08x}");
+                let h = format!("{kind}-{rand:08x}");
                 let listen = format!("unix:{}", tabs_socket(runtime, &h).display());
-                v.splice(
-                    1..1,
-                    [
-                        "-o".to_string(),
-                        "allow_remote_control=socket-only".into(),
-                        "--listen-on".into(),
-                        listen,
-                    ],
-                );
+                // kitty needs remote control turned on for the socket; kyko's `--listen-on`
+                // socket only ever answers its own user (0600 in the runtime folder).
+                let mut extra = Vec::new();
+                if kind == "kitty" {
+                    extra.extend(["-o".to_string(), "allow_remote_control=socket-only".into()]);
+                }
+                extra.extend(["--listen-on".to_string(), listen]);
+                v.splice(1..1, extra);
                 tabs = Some(h);
             }
             v.extend(run_args());
