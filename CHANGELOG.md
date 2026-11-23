@@ -7,6 +7,12 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.37] - 2026-11-23
+
+### Fixed
+
+- **`uqctl integrations check` accepts `uq/native.toml`.** The file that pins the uQ kits an app vendors (`native/check-uq-native.sh`) sits in the app's `uq/` folder, and the check reported it as not belonging there, failing the app's CI.
+
 ## [0.3.36] - 2026-11-22
 
 ### Added

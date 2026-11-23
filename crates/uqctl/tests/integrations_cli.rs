@@ -158,6 +158,7 @@ fn problems_are_listed_and_fail() {
         &format!("app = \"Mine\"\n{}", code("HYPR-901")),
     );
     put(&uq.join("diag/notes.txt"), "");
+    put(&uq.join("native.toml"), "[uq-diag]\nversion = \"1.0.1\"\n");
 
     let (ok, out) = uqctl(&["integrations", "check", uq.to_str().unwrap()]);
     assert!(!ok, "{out}");
@@ -183,6 +184,8 @@ fn problems_are_listed_and_fail() {
     ] {
         assert!(out.contains(needle), "{needle:?} missing from:\n{out}");
     }
+    // uq/native.toml (the kit pins) belongs in a uq/ folder.
+    assert!(!out.contains("native.toml: not part"), "{out}");
 }
 
 #[test]
