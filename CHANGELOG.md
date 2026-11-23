@@ -7,6 +7,8 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.39] - 2026-11-23
+
 ### Changed
 
 - **The terminal chosen in Settings › Default apps is everyone's terminal.** It is now written to `~/.config/kdeglobals` (`TerminalService` and `TerminalApplication`, which Dolphin's **Open Terminal Here** and other KDE apps read) and put first in `~/.config/xdg-terminals.list` (which xdg-terminal-exec reads; GLib, and so GTK apps, start terminals through it), replacing the terminal named there. Before, those apps only got kyko or kitty, and only when nothing was named. Going back to uQ's default takes the old choice out again and leaves a terminal set elsewhere alone.
