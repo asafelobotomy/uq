@@ -6,6 +6,7 @@
 //! nothing writes that key, so on a uQ system without Konsole "Open Terminal Here" did nothing.
 //! uqd adds the key whenever it applies a theme, but only when it is missing: a terminal the user
 //! chose themselves (in KDE's System Settings, or by hand) is kept, and so is the rest of the file.
+//! A terminal chosen on uQ's Default apps page replaces it (`terminal_pref`).
 
 use crate::atomic::atomic_write;
 use crate::paths::Paths;
@@ -82,6 +83,90 @@ pub fn with_terminal(existing: &str, terminal: &str) -> Option<String> {
     };
     new.push('\n');
     Some(new)
+}
+
+const SERVICE_KEY: &str = "TerminalService";
+
+/// The value of `key` in the first `[General]` group that sets it to something non-empty.
+fn general_value(existing: &str, key: &str) -> Option<String> {
+    let mut group = "";
+    for line in existing.lines() {
+        let t = line.trim();
+        if t.starts_with('[') && t.ends_with(']') {
+            group = t;
+        } else if group == "[General]"
+            && key_of(t) == Some(key)
+            && let Some((_, v)) = t.split_once('=')
+            && !v.trim().is_empty()
+        {
+            return Some(v.trim().to_string());
+        }
+    }
+    None
+}
+
+/// `existing` with `keys` taken out of every `[General]` group and `adds` put right after the
+/// first `[General]` header (a group is added first when there is none). Other lines are kept.
+fn edit_general(existing: &str, keys: &[&str], adds: &[String]) -> String {
+    let mut out: Vec<String> = Vec::new();
+    let mut group = "";
+    let mut placed = false;
+    for line in existing.lines() {
+        let t = line.trim();
+        if t.starts_with('[') && t.ends_with(']') {
+            group = t;
+            out.push(line.to_string());
+            if group == "[General]" && !placed {
+                out.extend(adds.iter().cloned());
+                placed = true;
+            }
+            continue;
+        }
+        if group == "[General]" && key_of(t).is_some_and(|k| keys.contains(&k)) {
+            continue;
+        }
+        out.push(line.to_string());
+    }
+    let body = out.join("\n");
+    let mut new = if placed || adds.is_empty() {
+        body.trim_end().to_string()
+    } else {
+        let rest = body.trim_matches('\n');
+        if rest.is_empty() {
+            format!("[General]\n{}", adds.join("\n"))
+        } else {
+            format!("[General]\n{}\n\n{rest}", adds.join("\n"))
+        }
+    };
+    if !new.is_empty() {
+        new.push('\n');
+    }
+    new
+}
+
+/// `existing` naming the terminal chosen in uQ's Settings: `TerminalService=<id>` (what KF6
+/// reads first) and `TerminalApplication=<command>` (older KDE apps), replacing whatever terminal
+/// was named. `None` when both already say so.
+pub fn with_chosen_terminal(existing: &str, command: &str, id: &str) -> Option<String> {
+    if general_value(existing, SERVICE_KEY).as_deref() == Some(id)
+        && general_value(existing, KEY).as_deref() == Some(command)
+    {
+        return None;
+    }
+    Some(edit_general(
+        existing,
+        &[KEY, SERVICE_KEY],
+        &[format!("{SERVICE_KEY}={id}"), format!("{KEY}={command}")],
+    ))
+}
+
+/// `existing` without the terminal uQ named for the choice `id` (both keys go when
+/// `TerminalService` is `id`), or `None` when it names another terminal, set elsewhere.
+pub fn without_chosen_terminal(existing: &str, id: &str) -> Option<String> {
+    if general_value(existing, SERVICE_KEY).as_deref() != Some(id) {
+        return None;
+    }
+    Some(edit_general(existing, &[KEY, SERVICE_KEY], &[]))
 }
 
 /// Where `bin` is on PATH.

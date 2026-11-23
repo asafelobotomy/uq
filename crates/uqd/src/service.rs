@@ -1235,6 +1235,17 @@ impl Desktop {
         })
     }
 
+    /// Pass `shell.terminal` on to KDE apps and xdg-terminal-exec (`uq_core::terminal_pref`).
+    /// `previous` is the choice before this change; `None` re-applies the current one.
+    pub(crate) fn sync_terminal(&self, previous: Option<&str>) {
+        let chosen = self.state.settings.shell.terminal.as_deref();
+        let previous = previous.or(chosen);
+        let dirs = self.paths.startup.app_dirs();
+        if let Err(e) = uq_core::terminal_pref::apply(&self.paths, &dirs, chosen, previous) {
+            tracing::warn!("[THEME-003] terminal for other apps: {e}");
+        }
+    }
+
     /// Write a verified candidate (theme dir, `generated.lua`, state), then apply `change` live.
     pub(crate) async fn install(
         &mut self,
@@ -1312,10 +1323,9 @@ impl Desktop {
                     if theme_apps {
                         self.theme_apps(&theme, kvantum);
                     }
-                    // KDE apps' terminal (Dolphin's "Open Terminal Here"), unless one is named.
-                    if let Err(e) = uq_core::kdeglobals::ensure_terminal(&self.paths) {
-                        tracing::warn!("[THEME-003] kdeglobals terminal: {e}");
-                    }
+                    // KDE's and xdg-terminal-exec's terminal (Dolphin's "Open Terminal Here",
+                    // GTK apps): the one chosen in Settings, else uQ's unless one is named.
+                    self.sync_terminal(None);
                     let cursor = self
                         .comp
                         .set_cursor(&theme.icons.cursor_theme, theme.icons.cursor_size)
@@ -1640,6 +1650,44 @@ mod tests {
         let mut off = rig_with(false, |_| {});
         off.desktop.startup().await;
         assert!(!uq_core::kdeglobals::conf_path(off.desktop.paths()).exists());
+    }
+
+    #[tokio::test]
+    async fn the_terminal_chosen_in_settings_reaches_kde_and_gtk_apps() {
+        let mut r = rig();
+        r.desktop.startup().await;
+        let p = r.desktop.paths().clone();
+        let apps = p.startup.app_dirs()[0].clone();
+        fs::create_dir_all(&apps).unwrap();
+        fs::write(
+            apps.join("foot.desktop"),
+            "[Desktop Entry]\nType=Application\nName=Foot\nExec=foot\n",
+        )
+        .unwrap();
+        let kde = uq_core::kdeglobals::conf_path(&p);
+        let list = uq_core::terminal_pref::list_path(&p);
+        r.desktop
+            .set_section("shell", r#"{"terminal":"foot.desktop"}"#, Origin::Settings)
+            .await
+            .unwrap();
+        let body = fs::read_to_string(&kde).unwrap();
+        assert!(
+            body.contains("TerminalService=foot.desktop\nTerminalApplication=foot\n"),
+            "{body}"
+        );
+        assert_eq!(fs::read_to_string(&list).unwrap(), "foot.desktop\n");
+
+        // Back to uQ's default: foot goes from both.
+        r.desktop
+            .set_section("shell", r#"{"terminal":null}"#, Origin::Settings)
+            .await
+            .unwrap();
+        assert!(!fs::read_to_string(&kde).unwrap().contains("foot"));
+        assert!(
+            !fs::read_to_string(&list)
+                .unwrap_or_default()
+                .contains("foot")
+        );
     }
 
     #[tokio::test]

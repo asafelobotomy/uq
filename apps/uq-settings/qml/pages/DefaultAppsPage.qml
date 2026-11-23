@@ -139,7 +139,7 @@ SettingsPage {
                 settingId: "default-terminal"
                 iconName: "utilities-terminal"
                 label: "Terminal"
-                help: page.terminal.available === true ? "Used for apps that run in a terminal." : "The terminal can be chosen when uQ's settings service is running."
+                help: page.terminal.available === true ? "Opens with Super+Return, for apps that run in a terminal, and for Open Terminal in Dolphin and other apps." : "The terminal can be chosen when uQ's settings service is running."
                 highlight: App.highlight
                 enabled: page.terminal.available === true
                 Layout.fillWidth: true
