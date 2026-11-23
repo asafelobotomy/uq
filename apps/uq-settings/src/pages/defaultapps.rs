@@ -17,8 +17,8 @@ use super::runner::{PageLogic, parse_json, patch_section};
 use super::sysbus::{self, failure};
 use crate::desktop_entries;
 
-/// One kind of file or link: its id, its label, and the types it covers (the first decides
-/// which apps are offered).
+/// One kind of file or link: its id, its label, and the types it covers. The first decides
+/// which apps are offered; choosing an app sets it for each of the types it declares.
 pub struct Kind {
     pub id: &'static str,
     pub label: &'static str,
@@ -274,14 +274,22 @@ impl PageLogic for DefaultAppsState {
                     .find(|k| k.id == kind)
                     .ok_or_else(|| failure("That kind of file isn't on this page."))?;
                 let handlers = self.handlers().await;
-                if !handlers
+                let Some(handler) = handlers
                     .iter()
-                    .any(|h| h.id == app && h.mimes.iter().any(|m| m == kind.mimes[0]))
-                {
+                    .find(|h| h.id == app && h.mimes.iter().any(|m| m == kind.mimes[0]))
+                else {
                     return Err(failure(
                         "That app can't open these, or isn't installed any more.",
                     ));
-                }
+                };
+                // Only the types the app says it opens: a picture viewer without GIF or SVG
+                // support never becomes their default, and they keep the app they had.
+                let mimes: Vec<&str> = kind
+                    .mimes
+                    .iter()
+                    .copied()
+                    .filter(|m| handler.mimes.iter().any(|h| h == m))
+                    .collect();
                 // Never replace a file this page can't read whole.
                 if std::fs::metadata(&self.file)
                     .is_ok_and(|m| !m.is_file() || m.len() > uq_core::mimeapps::MAX_FILE)
@@ -292,7 +300,7 @@ impl PageLogic for DefaultAppsState {
                 }
                 // Read just before writing, so a change made elsewhere meanwhile is kept.
                 let text = read_capped(&self.file);
-                self.save(&mimeapps::set_defaults(&text, kind.mimes, &app))
+                self.save(&mimeapps::set_defaults(&text, &mimes, &app))
             }
             Op::SetTerminal { app } => {
                 let proxy = self.uqd().await?;

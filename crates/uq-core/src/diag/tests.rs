@@ -52,6 +52,7 @@ fn apps_add_their_own_codes() {
         dir.path().join("bindle.toml"),
         r#"app = "Bindle"
 units = ["bindle-update.service"]
+identifiers = ["bindle"]
 [[code]]
 id = "BINDLE-001"
 severity = "error"
@@ -74,6 +75,17 @@ fix = "f"
     assert_eq!(r.get("HYPR-001").unwrap().owner, "uQ");
     assert!(r.units().contains(&"bindle-update.service".to_string()));
     assert!(r.units().contains(&"uqd.service".to_string()));
+    assert_eq!(r.identifiers(), ["bindle".to_string()]);
+    // Lines it logs from a terminal (`systemd-cat -t bindle`) are read too, by a second query.
+    let q = crate::diag::journal::Query::default();
+    let a = crate::diag::journal::identifier_args(&q, r.identifiers());
+    assert!(a.windows(2).any(|w| w == ["-t", "bindle"]), "{a:?}");
+    assert!(!a.contains(&"-u".to_string()));
+    let term = r#"{"MESSAGE":"bindle: [BINDLE-001] x","PRIORITY":"4","_SYSTEMD_USER_UNIT":"app-kitty-1.scope","SYSLOG_IDENTIFIER":"bindle","__REALTIME_TIMESTAMP":"2"}"#;
+    assert_eq!(
+        crate::diag::journal::parse_line(term, &r).unwrap().source,
+        "bindle"
+    );
 
     // An app's line in the shell's unit is put down to the app.
     let line = r#"{"MESSAGE":"bindle-gui: [BINDLE-001] no window","PRIORITY":"3","_SYSTEMD_USER_UNIT":"uq-shell.service","__REALTIME_TIMESTAMP":"1"}"#;
@@ -379,6 +391,20 @@ fn app_lists_are_checked() {
     );
     assert!(err(&format!("app = \"x\"\n{}{}", code("A-001"), code("A-001"))).contains("twice"));
     assert!(err(&format!("app = \"x\"\nunits = [\"x\"]\n{}", code("A-001"))).contains("units"));
+    assert!(
+        err(&format!(
+            "app = \"x\"\nidentifiers = [\"Bad Name\"]\n{}",
+            code("A-001")
+        ))
+        .contains("identifiers")
+    );
+    assert_eq!(
+        Registry::check_app(&format!(
+            "app = \"x\"\nidentifiers = [\"bindle\"]\n{}",
+            code("A-001")
+        )),
+        Ok(1)
+    );
     assert!(err("app = \"x\"\n").contains("no [[code]]"));
     let no_fix = format!(
         "app = \"x\"\n{}",

@@ -22,7 +22,7 @@ import "../logic/lookhome.js" as H
 // squares the person fills; both go away as soon as there is text. A `>` command drops the
 // default terminal down from the search pill; Enter opens that terminal docked beneath the pill,
 // the drop-down's size, with the command running in it. The terminal belongs to look=see>do_:
-// clicking it keeps look=see>do_ open, the next `>` command opens a new tab in it (kitty; other
+// clicking it keeps look=see>do_ open, the next `>` command opens a new tab in it (kyko or kitty; other
 // terminals get a new docked window), it is tucked away when look=see>do_ closes and comes back,
 // growing in like a new window, when it opens again. Logic lives in launcher.js and rank.js; everything shown from apps or providers goes
 // through UqText, and Enter only ever makes bridge calls (Launch / Activate / Dispatch).

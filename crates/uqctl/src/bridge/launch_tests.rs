@@ -425,3 +425,65 @@ fn a_docked_terminal_that_is_not_kitty_has_no_tabs() {
     assert!(p.tabs.is_none(), "{}", p.command);
     assert!(p.command.contains("-- 'foot' '-e' 'sh'"), "{}", p.command);
 }
+
+#[test]
+fn docked_kyko_listens_for_tabs_and_a_tab_goes_through_kyko() {
+    let rt = tempfile::tempdir().unwrap();
+    let apps = tempfile::tempdir().unwrap();
+    std::fs::write(
+        apps.path().join("org.kyko.Kyko.desktop"),
+        "[Desktop Entry]\nType=Application\nName=kyko\nExec=kyko\n",
+    )
+    .unwrap();
+    let d = Dirs::new(Some(apps.path().into()), vec![]).with_runtime(Some(rt.path().into()));
+    let mut runs = RunState::default();
+    run_item("> make", 6, &mut runs).unwrap();
+    let term = Some("org.kyko.Kyko.desktop");
+    // Docked: kyko listens with its own --listen-on and no kitty -o option.
+    let dock = json!({"run_id": "run-6", "terminal": true, "dock": true});
+    let p = plan(Some(&dock), &d, 0xcd, &runs, term, None).unwrap();
+    assert_eq!(p.tabs.as_deref(), Some("kyko-000000cd"));
+    let sock = rt.path().join("uq-lookseedo-kyko-000000cd.sock");
+    assert!(
+        p.command.contains(&format!(
+            "-- 'kyko' '--listen-on' 'unix:{}' '-e' 'sh' '-c'",
+            sock.display()
+        )),
+        "{}",
+        p.command
+    );
+    assert!(!p.command.contains("allow_remote_control"), "{}", p.command);
+
+    // A tab goes through `kyko @`, with `--type tab` (kyko has no `--type=tab` form).
+    let tab = json!({"run_id": "run-6", "terminal": true, "tab": "kyko-000000cd"});
+    assert_eq!(
+        plan(Some(&tab), &d, 1, &runs, term, None).unwrap_err(),
+        "the docked terminal is closed"
+    );
+    std::fs::write(&sock, "").unwrap();
+    let p = plan(Some(&tab), &d, 1, &runs, term, None).unwrap();
+    assert!(
+        p.command.starts_with(&format!(
+            "'kyko' '@' '--to' 'unix:{}' 'launch' '--type' 'tab' 'sh' '-c' 'eval \"$1\"",
+            sock.display()
+        )),
+        "{}",
+        p.command
+    );
+    assert!(p.command.ends_with("'sh' 'make'"), "{}", p.command);
+
+    // The handle, not today's terminal setting, picks the client: a kyko dock opened earlier
+    // still gets `kyko @` after the setting moved to another terminal.
+    let p = plan(Some(&tab), &d, 1, &runs, None, None).unwrap();
+    assert!(p.command.starts_with("'kyko' '@'"), "{}", p.command);
+
+    for bad in [
+        "kyko-000000CD",
+        "kyko000000cd",
+        "kykox-000000cd",
+        "kyko-00000cd",
+    ] {
+        let j = json!({"run_id": "run-6", "terminal": true, "tab": bad});
+        assert!(plan(Some(&j), &d, 1, &runs, term, None).is_err(), "{bad}");
+    }
+}

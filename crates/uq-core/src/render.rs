@@ -107,10 +107,52 @@ pub fn kvantum_base(dir: &Path) -> Option<&'static str> {
         .find(|n| dir.join(n).join(format!("{n}.kvconfig")).is_file())
 }
 
+/// `tokens.json`'s `motion` block: uQ's shell speeds (uq-consts' `[motion]`), all 0 when the user
+/// turned on Reduce motion. Native apps read it through uq-theme 1.1.0.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+pub struct Motion {
+    pub fast: u32,
+    pub base: u32,
+    pub slow: u32,
+    pub reduce: bool,
+}
+
+impl Motion {
+    pub fn new(reduce: bool) -> Motion {
+        use crate::uq_consts::motion::{BASE, FAST, SLOW};
+        let ms = |v: u32| if reduce { 0 } else { v };
+        Motion {
+            fast: ms(FAST),
+            base: ms(BASE),
+            slow: ms(SLOW),
+            reduce,
+        }
+    }
+}
+
+/// What `tokens.json` holds: the theme, then `motion`.
+#[derive(serde::Serialize)]
+struct Tokens<'a> {
+    #[serde(flatten)]
+    theme: &'a Theme,
+    motion: Motion,
+}
+
+/// [`render_with`] with motion on (the default settings).
 pub fn render(
     theme: &Theme,
     templates_dir: &Path,
     kvantum_base: Option<&'static str>,
+) -> Result<RenderedFiles, RenderError> {
+    render_with(theme, templates_dir, kvantum_base, Motion::new(false))
+}
+
+/// Render every target for `theme`, with `motion` in `tokens.json`.
+pub fn render_with(
+    theme: &Theme,
+    templates_dir: &Path,
+    kvantum_base: Option<&'static str>,
+    motion: Motion,
 ) -> Result<RenderedFiles, RenderError> {
     if let Some(b) = kvantum_base
         && !KVANTUM_BASES.contains(&b)
@@ -128,7 +170,8 @@ pub fn render(
     env.add_filter("bare", bare);
     env.add_filter("argb", argb);
     env.add_filter("rgb", rgb);
-    let ctx = context! { theme => minijinja::Value::from(minijinja::value::Serde(theme)), variant => theme.variant.as_str(), is_dark => theme.variant == crate::theme::Variant::Dark, base => kvantum_base };
+    let tokens = Tokens { theme, motion };
+    let ctx = context! { theme => minijinja::Value::from(minijinja::value::Serde(theme)), tokens => minijinja::Value::from(minijinja::value::Serde(&tokens)), variant => theme.variant.as_str(), is_dark => theme.variant == crate::theme::Variant::Dark, base => kvantum_base };
     let mut out = BTreeMap::new();
     let extra = kvantum_base.into_iter().flat_map(|_| KVANTUM_TARGETS);
     for (name, rel) in TARGETS.into_iter().chain(extra) {

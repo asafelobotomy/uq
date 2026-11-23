@@ -250,6 +250,26 @@ pub fn group(entries: Vec<Entry>) -> Vec<Entry> {
 
 /// The `journalctl` arguments for `q` over `units`.
 pub fn args(q: &Query, units: &[String]) -> Vec<String> {
+    let mut a = base_args(q);
+    for u in units {
+        a.push("-u".into());
+        a.push(u.clone());
+    }
+    a
+}
+
+/// The `journalctl` arguments for `q` over syslog `identifiers` (a second read: journalctl
+/// would AND `-t` with `-u`).
+pub fn identifier_args(q: &Query, identifiers: &[String]) -> Vec<String> {
+    let mut a = base_args(q);
+    for i in identifiers {
+        a.push("-t".into());
+        a.push(i.clone());
+    }
+    a
+}
+
+fn base_args(q: &Query) -> Vec<String> {
     let mut a: Vec<String> = vec![
         "--user".into(),
         "--no-pager".into(),
@@ -269,10 +289,6 @@ pub fn args(q: &Query, units: &[String]) -> Vec<String> {
         a.push("--until".into());
         a.push(u.clone());
     }
-    for u in units {
-        a.push("-u".into());
-        a.push(u.clone());
-    }
     a
 }
 
@@ -284,11 +300,27 @@ pub fn read(q: &Query, reg: &Registry) -> std::io::Result<Vec<Entry>> {
             "journalctl isn't installed",
         ));
     }
-    let a = args(q, reg.units());
-    let a: Vec<&str> = a.iter().map(String::as_str).collect();
     // journalctl exits 1 when no entry matches; that is no lines, not a failure.
-    let out = super::report::run_for("journalctl", &a, READ_TIMEOUT, true).unwrap_or_default();
-    Ok(parse(&out, reg, q))
+    let run = |a: Vec<String>| {
+        let a: Vec<&str> = a.iter().map(String::as_str).collect();
+        super::report::run_for("journalctl", &a, READ_TIMEOUT, true).unwrap_or_default()
+    };
+    let mut out = run(args(q, reg.units()));
+    if !reg.identifiers().is_empty() {
+        out.push('\n');
+        out.push_str(&run(identifier_args(q, reg.identifiers())));
+    }
+    Ok(merge_reads(parse(&out, reg, q), q.limit))
+}
+
+/// The two reads as one, oldest first like [`parse`]: a line both matched (an app's unit and
+/// its identifier) once, and the newest `limit`.
+fn merge_reads(mut entries: Vec<Entry>, limit: usize) -> Vec<Entry> {
+    entries.sort_by_key(|e| e.time_us);
+    entries.dedup_by(|a, b| a.time_us == b.time_us && a.message == b.message);
+    let extra = entries.len().saturating_sub(limit);
+    entries.drain(..extra);
+    entries
 }
 
 /// How long reading the journal may take.
@@ -302,8 +334,31 @@ fn which(program: &str) -> Option<std::path::PathBuf> {
         .find(|p| p.is_file())
 }
 
+/// Raw lines (for a report's attachment): `journalctl --user -o short-iso` over uQ's units,
+/// then the apps' syslog identifiers.
+pub fn read_text_all(since: &str, until: Option<&str>, reg: &Registry, limit: usize) -> String {
+    let mut out = read_text(since, until, reg.units(), limit);
+    if !reg.identifiers().is_empty() {
+        let ids: Vec<String> = reg
+            .identifiers()
+            .iter()
+            .flat_map(|i| ["-t".to_string(), i.clone()])
+            .collect();
+        out.push_str(&read_text_with(since, until, &ids, limit));
+    }
+    out
+}
+
 /// Raw lines (for a report's attachment): `journalctl --user -o short-iso` over uQ's units.
 pub fn read_text(since: &str, until: Option<&str>, units: &[String], limit: usize) -> String {
+    let matches: Vec<String> = units
+        .iter()
+        .flat_map(|u| ["-u".to_string(), u.clone()])
+        .collect();
+    read_text_with(since, until, &matches, limit)
+}
+
+fn read_text_with(since: &str, until: Option<&str>, matches: &[String], limit: usize) -> String {
     let mut a: Vec<String> = vec![
         "--user".into(),
         "--no-pager".into(),
@@ -318,12 +373,33 @@ pub fn read_text(since: &str, until: Option<&str>, units: &[String], limit: usiz
         a.push("--until".into());
         a.push(u.into());
     }
-    for u in units {
-        a.push("-u".into());
-        a.push(u.clone());
-    }
+    a.extend(matches.iter().cloned());
     let a: Vec<&str> = a.iter().map(String::as_str).collect();
     super::report::run_for("journalctl", &a, READ_TIMEOUT, true)
         .map(|o| strip_ansi(&o))
         .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod merge_tests {
+    use super::*;
+
+    fn e(t: i64, m: &str) -> Entry {
+        Entry {
+            time_us: t,
+            first_us: t,
+            source: "bindle".into(),
+            severity: Severity::Warn,
+            code: None,
+            message: m.into(),
+            count: 1,
+        }
+    }
+
+    #[test]
+    fn the_two_reads_merge_oldest_first_once_each() {
+        let got = merge_reads(vec![e(3, "c"), e(1, "a"), e(3, "c"), e(2, "b")], 2);
+        let msgs: Vec<&str> = got.iter().map(|x| x.message.as_str()).collect();
+        assert_eq!(msgs, ["b", "c"]);
+    }
 }

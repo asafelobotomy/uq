@@ -605,3 +605,23 @@ async fn rows_say_how_long_after_login_an_app_started() {
     assert_eq!(out[0]["start_in"], 7);
     assert_eq!(out[0]["started_after"], 7);
 }
+
+#[tokio::test(start_paused = true)]
+async fn run_now_after_login_has_no_after_login_time() {
+    let r = rig();
+    let plan = vec![entry("a.desktop", &["app"], 0)];
+    start(&r.runner, plan.clone()).await;
+    settle().await;
+    assert!(stop_now(&r.runner, "a.desktop", || {}).await);
+    settle().await;
+    tokio::time::sleep(std::time::Duration::from_secs(90)).await;
+    assert!(run_now(&r.runner, &plan[0], Vec::new(), || {}).await);
+    settle().await;
+    let out = rows(&r.runner, &plan).await;
+    assert_eq!(out[0]["status"], "running");
+    assert!(
+        out[0].get("started_after").is_none_or(Value::is_null),
+        "Run now isn't a start after login: {}",
+        out[0]
+    );
+}

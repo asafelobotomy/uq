@@ -127,7 +127,7 @@ mod tests {
         );
         assert_eq!(
             l[3],
-            "hl.bind(\"SUPER + Return\", hl.dsp.exec_cmd(\"systemd-run --user --scope --quiet --collect --slice=app.slice --unit=app-uq-terminal-$$ -- sh -c 'command -v kyko >/dev/null && exec kyko; exec kitty'\"), { description = \"uq:uq.terminal\" })"
+            "hl.bind(\"SUPER + Return\", hl.dsp.exec_cmd(\"uqctl launch --terminal 2>/dev/null || systemd-run --user --scope --quiet --collect --slice=app.slice --unit=app-uq-terminal-$$ -- sh -c 'command -v kyko >/dev/null && exec kyko; exec kitty'\"), { description = \"uq:uq.terminal\" })"
         );
         assert_eq!(out.matches("hl.bind(").count(), 69);
         assert!(!out.contains("uq.profile.next"));

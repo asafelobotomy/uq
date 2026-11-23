@@ -257,7 +257,7 @@ impl Dirs {
             .filter(|p| p.is_absolute())
             .unwrap_or_else(|| home.join(".cache"));
         Dirs {
-            quickshell: cache.join("quickshell/crashes"),
+            quickshell: cache.join(crate::uq_consts::paths::QUICKSHELL_CRASHES_DIR),
             uq: crash_dir_from(get),
         }
     }

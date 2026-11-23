@@ -136,7 +136,7 @@ pub trait SettingsApp {
 }
 
 /// uqd's bus name (the default service of [`DesktopProxy`]).
-pub const DESKTOP_NAME: &str = "org.uq.Desktop1";
+pub const DESKTOP_NAME: &str = crate::uq_consts::dbus::DESKTOP_NAME;
 /// The Settings app's single-instance bus name (the default service of [`SettingsAppProxy`]).
 pub const SETTINGS_NAME: &str = "org.uq.Settings1";
 /// The object path the Settings app serves `org.uq.Settings1` at.

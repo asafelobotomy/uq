@@ -28,7 +28,7 @@ use std::sync::LazyLock;
 pub const UQ_CODES: &str = include_str!("codes.toml");
 
 /// Where apps install their own code lists (`<app>.toml`, same layout as `codes.toml`).
-pub const EXTRA_DIR: &str = "/usr/share/uq/diag";
+pub const EXTRA_DIR: &str = crate::uq_consts::install::DIAG_DIR;
 
 /// How serious a problem is. Ordered: `Debug < Info < Warn < Error`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -118,6 +118,10 @@ struct File {
     /// The systemd user units whose journal `uqctl log` reads for this app.
     #[serde(default)]
     units: Vec<String>,
+    /// Syslog identifiers whose lines `uqctl log` reads too, wherever they ran: an app run from a
+    /// terminal or a window logs outside its units (`systemd-cat -t bindle`, `logger -t bindle`).
+    #[serde(default)]
+    identifiers: Vec<String>,
     #[serde(default)]
     code: Vec<Code>,
 }
@@ -128,6 +132,8 @@ pub struct Registry {
     codes: Vec<Code>,
     /// The user units to read logs from (uQ's own and each app's).
     units: Vec<String>,
+    /// Apps' syslog identifiers, read wherever their lines came from.
+    identifiers: Vec<String>,
 }
 
 /// uQ's own user units: where its lines are in the journal.
@@ -213,6 +219,11 @@ impl Registry {
                 self.units.push(u);
             }
         }
+        for i in f.identifiers {
+            if !self.identifiers.contains(&i) {
+                self.identifiers.push(i);
+            }
+        }
         Ok(())
     }
 
@@ -260,6 +271,11 @@ impl Registry {
         {
             return Err(format!("units: {u:?} is not a .service or .timer"));
         }
+        if let Some(i) = f.identifiers.iter().find(|i| !valid_identifier(i)) {
+            return Err(format!(
+                "identifiers: {i:?} is not a syslog identifier (lower-case letters, digits, - and _)"
+            ));
+        }
         Ok(f.code.len())
     }
 
@@ -274,6 +290,18 @@ impl Registry {
     pub fn units(&self) -> &[String] {
         &self.units
     }
+
+    pub fn identifiers(&self) -> &[String] {
+        &self.identifiers
+    }
+}
+
+/// A program name as `-t` takes it: what an app logs under.
+fn valid_identifier(i: &str) -> bool {
+    !i.is_empty()
+        && i.len() <= 64
+        && i.chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_')
 }
 
 #[cfg(test)]
