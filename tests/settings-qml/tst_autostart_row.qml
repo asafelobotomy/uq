@@ -121,6 +121,7 @@ TestCase {
         run.clicked();
         compare(runs, 1);
         verify(!child(make({ status: "off", enabled: false }), "appRun").enabled, "an app that is off can't run");
+        verify(!child(make({ status: "waiting" }), "appRun").enabled, "an app waiting for its delay starts by itself");
         compare(child(make({ timing_text: "Started 8 s after login" }), "appTiming").text, "Started 8 s after login");
         verify(!child(make(), "appTiming").visible);
     }

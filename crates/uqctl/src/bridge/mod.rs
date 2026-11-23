@@ -6,7 +6,7 @@
 mod appactions;
 mod calc;
 mod contents;
-mod defaultapps;
+pub(crate) mod defaultapps;
 pub(crate) mod desktop_entry;
 mod dispatch;
 mod feeds;

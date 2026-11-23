@@ -25,18 +25,11 @@ pub struct AppEntry {
     pub exec_name: Option<String>,
 }
 
-/// `$XDG_DATA_HOME/applications`, then `/usr/share/applications`.
+/// `$XDG_DATA_HOME/applications`, then each `$XDG_DATA_DIRS` entry's (default
+/// `/usr/local/share:/usr/share`): where uqd and the launcher find apps too, so Flatpak apps
+/// (`…/flatpak/exports/share`) and apps under `/usr/local` are offered as well.
 pub fn default_dirs() -> Vec<PathBuf> {
-    let data = match std::env::var_os("XDG_DATA_HOME") {
-        Some(d) if !d.is_empty() => PathBuf::from(d),
-        _ => std::env::var_os("HOME")
-            .map(|h| PathBuf::from(h).join(".local/share"))
-            .unwrap_or_default(),
-    };
-    vec![
-        data.join("applications"),
-        PathBuf::from("/usr/share/applications"),
-    ]
+    uq_core::paths::StartupPaths::from_vars(|k| std::env::var(k).ok()).app_dirs()
 }
 
 fn clean_name(raw: &str) -> String {
