@@ -122,14 +122,64 @@ TestCase {
         compare(d.half, ["0xa", "0xd"], "both Half");
         compare(d.starts, { "0xa": true, "0xd": false });
         compare(d.area, { from: 940, width: 940 });
+        var l = P.dropPlan(wins, room, extra, {}, "0xa", "0xd", "left");
+        compare(l.steps, -2, "past B and A, to right before A");
+        compare(l.half, ["0xa", "0xd"], "both Half");
+        compare(l.starts, { "0xa": false, "0xd": true }, "D begins the page, A slides right");
+        compare(l.area, { from: 0, width: 940 });
     }
 
     function test_drop_beside_a_lone_half() {
         var wins = [win("0xd", 16, 1856), win("0xa", 1896, 916), win("0xb", 2836, 1856)];
         var d = P.dropPlan(wins, room, extra, {}, "0xa", "0xd", "left");
-        compare(d.steps, 1, "from before A to right after it");
+        compare(d.steps, 0, "already right before A");
         compare(d.half, ["0xd"], "the Half stays as it is");
-        compare(d.area, { from: 940, width: 940 }, "the empty half, whichever side");
+        compare(d.starts, { "0xa": false, "0xd": true }, "D takes the left half, A slides right");
+        compare(d.area, { from: 0, width: 940 });
+        var r = P.dropPlan(wins, room, extra, {}, "0xa", "0xd", "right");
+        compare(r.steps, 1, "from before A to right after it");
+        compare(r.starts, { "0xa": true, "0xd": false });
+        compare(r.area, { from: 940, width: 940 });
+    }
+
+    function test_drop_beside_a_lone_column_of_another_width() {
+        // A alone at 60% (a resize grip left it so): it is made Half as well, either side.
+        var wins = [win("0xa", 16, 1104), win("0xb", 1144, 1856), win("0xd", 3024, 1856)];
+        var r = P.dropPlan(wins, room, extra, {}, "0xa", "0xd", "right");
+        compare(r.half, ["0xa", "0xd"]);
+        compare(r.steps, -1);
+        compare(r.area, { from: 940, width: 940 });
+        var l = P.dropPlan(wins, room, extra, {}, "0xa", "0xd", "left");
+        compare(l.half, ["0xa", "0xd"]);
+        compare(l.starts, { "0xa": false, "0xd": true });
+        compare(l.area, { from: 0, width: 940 });
+    }
+
+    function test_drop_on_an_unequal_pair() {
+        // L 60%, R 40%: either side can be dropped on, and both end up Half.
+        var wins = [win("0xl", 16, 1104), win("0xr", 1144, 728), win("0xd", 1896, 1856)];
+        var right = P.dropPlan(wins, room, extra, {}, "0xl", "0xd", "right");
+        compare(right.half, ["0xd", "0xl"]);
+        compare(right.starts, { "0xl": true, "0xd": false, "0xr": true }, "R pushed out to the right");
+        compare(right.area, { from: 940, width: 940 });
+        var left = P.dropPlan(wins, room, extra, {}, "0xl", "0xd", "left");
+        compare(left.half, ["0xd", "0xr"]);
+        compare(left.starts, { "0xl": true, "0xd": true, "0xr": false }, "L pushed out to the left");
+        compare(P.dropPlan(wins, room, extra, {}, "0xl", "0xl", "right", {}).steps, 1, "and the pair swaps");
+    }
+
+    function test_drop_side_follows_the_gap() {
+        var unequal = [win("0xl", 16, 1104), win("0xr", 1144, 728), win("0xd", 1896, 1856)];
+        // L's slot ends at 1128 (from where the columns begin), past the screen's middle (940).
+        compare(P.sideAt(unequal, room, extra, {}, "0xl", {}, 1000), "left", "over L, right of the middle");
+        compare(P.sideAt(unequal, room, extra, {}, "0xl", {}, 1200), "right", "over R");
+        var narrow = [win("0xl", 16, 728), win("0xr", 768, 1104), win("0xd", 1896, 1856)];
+        compare(P.sideAt(narrow, room, extra, {}, "0xr", {}, 900), "right", "over R, left of the middle");
+        compare(P.sideAt(narrow, room, extra, {}, "0xr", {}, 700), "left");
+        // One column: the screen's middle.
+        var lone = [win("0xa", 16, 1104), win("0xb", 1144, 1856)];
+        compare(P.sideAt(lone, room, extra, {}, "0xa", {}, 1000), "right");
+        compare(P.sideAt(lone, room, extra, {}, "0xa", {}, 900), "left");
     }
 
     function test_drop_on_a_pair() {
@@ -192,14 +242,20 @@ TestCase {
     }
 
     function test_drop_beside_a_half_on_the_right() {
-        // D (elsewhere) onto B, a Half alone on the right: D fills the left half, before B.
+        // D (elsewhere) onto B, a Half alone on the right, dropped on the left half: D fills it, before B.
         var wins = [win("0xa", 16, 1856), win("0xb", 1896, 916), win("0xc", 2836, 1856), win("0xd", 4716, 1856)];
-        var d = P.dropPlan(wins, room, extra, {}, "0xb", "0xd", "right", { "0xb": true });
+        var d = P.dropPlan(wins, room, extra, {}, "0xb", "0xd", "left", { "0xb": true });
         compare(d.steps, -2, "past C and B");
         compare(d.half, ["0xd"]);
         compare(d.starts, { "0xb": false, "0xd": true });
         compare(d.right, { "0xb": false });
         compare(d.area, { from: 0, width: 940 });
+        // Dropped on the right: D after B, B slides to the left half.
+        var r = P.dropPlan(wins, room, extra, {}, "0xb", "0xd", "right", { "0xb": true });
+        compare(r.steps, -1, "past C");
+        compare(r.starts, { "0xb": true, "0xd": false });
+        compare(r.right, { "0xb": false });
+        compare(r.area, { from: 940, width: 940 });
     }
 
     function test_shared_pages_are_framed() {

@@ -260,8 +260,9 @@ Scope {
         var wins = listed || root.tiled[m.activeWorkspace.id], g = Pages.geometry(m, WindowLook);
         if (!wins || g === null)
             return null;
-        var scale = m.scale > 0 ? m.scale : 1;
-        var side = x < m.width / scale / 2 ? "left" : "right";
+        var res = m.reserved && m.reserved.length >= 4 ? m.reserved : [0, 0, 0, 0];
+        var side = Pages.sideAt(wins, g.room, g.extra, root.starts, root.anchorOf(wins), root.right,
+                                x - res[0] - WindowLook.gapLeft);
         var plan = Pages.dropPlan(wins, g.room, g.extra, root.starts, root.anchorOf(wins), address, side, root.right);
         return plan === null ? null : { plan: plan, m: m, g: g };
     }

@@ -155,11 +155,11 @@ function rightOf(wins, room, extra, starts, right) {
 // afterwards: address -> true or false), right (page-first windows put on the right or back:
 // address -> true or false), area: {from, width} (the part of the page, from its left edge, it
 // will take)}. From another page:
-//   - a page with one Full column: that column becomes Half and the window takes the other half;
-//   - a page with a Half alone: the window fills the empty half (before it when it is on the
-//     right);
-//   - a page of two: the window takes the half it was dropped on, and the column there is pushed
-//     out to that side onto a page of its own (on the left: before it; on the right: after it).
+//   - a page with one column (Full, or alone at any width): the window takes the half it was
+//     dropped on and the column there slides to the other half; both end up Half;
+//   - a page of two (equal or not): the window takes the side it was dropped on, and the column
+//     there is pushed out to that side onto a page of its own (on the left: before it; on the
+//     right: after it); the column that stays is made Half.
 // On its own page:
 //   - a Half alone moves to the half it was dropped on, the other left empty, with no column
 //     moving (not on the first page, which Hyprland keeps at the screen's left edge);
@@ -202,15 +202,13 @@ function dropPlan(wins, room, extra, starts, shown, dragged, side, right) {
     area = { from: room / 2, width: room / 2 };
     var before = false;
     if (p.cols.length === 1) {
-        if (!unfilled(p, room)) {
+        before = side === "left";
+        if (Math.abs(slot(a) - room / 2) > TOLERANCE)
             half.unshift(first(a));
-        } else if (isRight) {
-            before = true;
-            area = { from: 0, width: room - p.used };
+        if (isRight)
             r[first(a)] = false;
-        } else {
-            area = { from: p.used, width: room - p.used };
-        }
+        if (before)
+            area = { from: 0, width: room / 2 };
         s[first(a)] = !before;
         s[dragged] = before;
     } else {
@@ -229,6 +227,19 @@ function dropPlan(wins, room, extra, starts, shown, dragged, side, right) {
     else
         steps = id > ia ? -(id - ia - 1) : ia - id;
     return { steps: steps, half: half, starts: s, right: r, area: area };
+}
+
+// Which side of the page shown (the one holding `shown`) a drop at `x` lands on, `x` measured from
+// where the screen's columns begin: on a page of two columns, the side of the gap between them,
+// wherever a resize grip left it (the window under the pointer is the one replaced); otherwise
+// the side of the screen's middle. "left" or "right".
+function sideAt(wins, room, extra, starts, shown, right, x) {
+    var list = pages(wins, room, extra, starts), p = pageOf(list, shown);
+    if (p !== null && p.cols.length === 2) {
+        var off = onRight(list, p, room, right) ? room - p.used : 0;
+        return x < off + p.cols[0].w + (extra || 0) ? "left" : "right";
+    }
+    return x < room / 2 ? "left" : "right";
 }
 
 // The page shown with window `address`, when it holds more than one column (windows that share a
