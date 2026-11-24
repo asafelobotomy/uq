@@ -7,6 +7,12 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.40] - 2026-11-24
+
+### Fixed
+
+- **An update of uq no longer leaves Hyprland in emergency mode.** When Hyprland reloaded while the package was rewriting `/usr/share/uq/hypr/base.lua`, it could read the file half-written, fail its `require`, and keep only its three emergency shortcuts until the next reload. uqd already reloaded again when such a file was *missing*; it now does the same for a file that failed to load (Hyprland's `require("…"): …` errors), and waits until the files have stopped changing and no pacman transaction is running. Each version of a file gets one such reload at most, so a file that really is broken can't make a reload loop (HYPR-005).
+
 ## [0.3.39] - 2026-11-23
 
 ### Changed

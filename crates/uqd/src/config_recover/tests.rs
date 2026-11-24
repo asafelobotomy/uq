@@ -50,20 +50,25 @@ fn module_paths_are_absolute_or_under_the_config_dir() {
 }
 
 #[test]
-fn worth_reloading_only_when_every_missing_file_is_back() {
-    let d = tempfile::tempdir().unwrap();
-    let here = d.path().join("base.lua");
-    let errs = |name: &str| vec![format!("x:1: module '{name}' not found:")];
-    let name = here.to_str().unwrap();
-    assert!(!worth_reloading(&errs(name), d.path()), "still missing");
-    std::fs::write(&here, "").unwrap();
-    assert!(worth_reloading(&errs(name), d.path()));
-    let both = vec![format!(
-        "module '{name}' not found; module 'gone.lua' not found"
-    )];
-    assert!(!worth_reloading(&both, d.path()), "one is still missing");
-    assert!(!worth_reloading(&[], d.path()));
-    assert!(!worth_reloading(&["syntax error".into()], d.path()));
+fn failed_modules_include_files_that_did_not_load() {
+    // Hyprland 0.57's report for a file that is there but didn't load (cut short).
+    let half = vec![
+        "require(\"/usr/share/uq/hypr/base.lua\"): error loading module '/usr/share/uq/hypr/base.lua' from file '/usr/share/uq/hypr/base.lua':".to_string(),
+        "\t/usr/share/uq/hypr/base.lua:812: 'end' expected (to close 'function' at line 790) near <eof>".to_string(),
+    ];
+    assert_eq!(failed_modules(&half), vec!["/usr/share/uq/hypr/base.lua"]);
+    let mixed = vec![
+        "hyprland.lua:2: module './uq/generated.lua' not found:".to_string(),
+        "require(\"./uq/user.lua\"): user.lua:3: attempt to call a nil value".to_string(),
+        "require(\"./uq/generated.lua\"): again".to_string(),
+    ];
+    assert_eq!(
+        failed_modules(&mixed),
+        vec!["./uq/generated.lua", "./uq/user.lua"]
+    );
+    assert!(failed_modules(&["user.lua:2: unexpected symbol near 'x'".into()]).is_empty());
+    let hypr = Path::new("/h");
+    assert!(failed_files(&["require(\"socket\"): nope".into()], hypr).is_empty());
 }
 
 fn desktop() -> (tempfile::TempDir, Desktop, Arc<FakeCompositor>) {
@@ -73,7 +78,8 @@ fn desktop() -> (tempfile::TempDir, Desktop, Arc<FakeCompositor>) {
     paths.themes_dir = repo.join("themes");
     paths.templates_dir = repo.join("templates");
     let comp = Arc::new(FakeCompositor::running());
-    let d = Desktop::new(paths, comp.clone(), Arc::new(FakeSystem::default())).unwrap();
+    let mut d = Desktop::new(paths, comp.clone(), Arc::new(FakeSystem::default())).unwrap();
+    d.recover.busy = dir.path().join("db.lck");
     (dir, d, comp)
 }
 
@@ -81,52 +87,106 @@ fn reloads(comp: &FakeCompositor) -> usize {
     comp.calls().iter().filter(|c| *c == "reload").count()
 }
 
-#[tokio::test]
+fn set_errors(comp: &FakeCompositor, errors: Vec<String>) {
+    *comp.config_errors.lock().unwrap() = errors;
+}
+
+fn missing(p: &Path) -> Vec<String> {
+    vec![format!(
+        "hyprland.lua:1: module '{}' not found:",
+        p.display()
+    )]
+}
+
+fn did_not_load(p: &Path) -> Vec<String> {
+    let p = p.display();
+    vec![format!(
+        "require(\"{p}\"): error loading module '{p}' from file '{p}':"
+    )]
+}
+
+/// Long enough for the files to be seen twice unchanged.
+const SETTLE: Duration = Duration::from_secs(3);
+
+#[tokio::test(start_paused = true)]
 async fn a_file_back_after_a_failed_reload_gets_one_more_reload() {
     let (dir, mut d, comp) = desktop();
     let base = dir.path().join("base.lua");
     std::fs::write(&base, "").unwrap();
-    *comp.config_errors.lock().unwrap() = vec![format!(
-        "hyprland.lua:1: module '{}' not found:",
-        base.display()
-    )];
+    set_errors(&comp, missing(&base));
     d.config_reloaded().await;
+    tokio::time::sleep(SETTLE).await;
     assert_eq!(reloads(&comp), 1);
-    // The reload failed the same way: not again within RETRY_GAP, so no reload loop.
+    // The reload failed the same way with the same file: no reload loop.
     d.config_reloaded().await;
+    tokio::time::sleep(WATCH_FOR).await;
     assert_eq!(reloads(&comp), 1);
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
+async fn a_half_written_file_gets_a_reload_once_per_version() {
+    let (dir, mut d, comp) = desktop();
+    let base = dir.path().join("base.lua");
+    std::fs::write(&base, "hl.bind(").unwrap();
+    set_errors(&comp, did_not_load(&base));
+    d.config_reloaded().await;
+    tokio::time::sleep(SETTLE).await;
+    assert_eq!(reloads(&comp), 1, "reloaded once the file settled");
+    d.config_reloaded().await;
+    tokio::time::sleep(WATCH_FOR).await;
+    assert_eq!(reloads(&comp), 1, "the same file again: left alone");
+    std::fs::write(&base, "-- a different version\n").unwrap();
+    d.config_reloaded().await;
+    tokio::time::sleep(SETTLE).await;
+    assert_eq!(reloads(&comp), 2, "a new version gets its own reload");
+}
+
+#[tokio::test(start_paused = true)]
+async fn no_reload_while_a_package_transaction_runs() {
+    let (dir, mut d, comp) = desktop();
+    let base = dir.path().join("base.lua");
+    std::fs::write(&base, "").unwrap();
+    std::fs::write(&d.recover.busy, "").unwrap();
+    set_errors(&comp, did_not_load(&base));
+    d.config_reloaded().await;
+    tokio::time::sleep(SETTLE * 3).await;
+    assert_eq!(reloads(&comp), 0, "pacman is still running");
+    std::fs::remove_file(&d.recover.busy).unwrap();
+    tokio::time::sleep(SETTLE).await;
+    assert_eq!(reloads(&comp), 1, "done: reloaded");
+}
+
+#[tokio::test(start_paused = true)]
 async fn a_clean_reload_or_a_real_error_is_left_alone() {
     let (dir, mut d, comp) = desktop();
     d.config_reloaded().await;
+    tokio::time::sleep(SETTLE).await;
     assert_eq!(reloads(&comp), 0, "no errors");
-    *comp.config_errors.lock().unwrap() = vec![format!(
-        "hyprland.lua:3: module '{}' not found:",
-        dir.path().join("never-there.lua").display()
-    )];
+    set_errors(&comp, missing(&dir.path().join("never-there.lua")));
     d.config_reloaded().await;
+    tokio::time::sleep(WATCH_FOR + SETTLE).await;
     assert_eq!(reloads(&comp), 0, "the file really is missing");
-    *comp.config_errors.lock().unwrap() = vec!["user.lua:2: unexpected symbol near 'x'".into()];
+    set_errors(&comp, vec!["user.lua:2: unexpected symbol near 'x'".into()]);
     d.config_reloaded().await;
-    assert_eq!(reloads(&comp), 0, "a syntax error is the user's to fix");
+    tokio::time::sleep(SETTLE).await;
+    assert_eq!(
+        reloads(&comp),
+        0,
+        "a syntax error outside a require is the user's to fix"
+    );
 }
 
 #[tokio::test(start_paused = true)]
 async fn a_file_that_is_missing_for_seconds_still_gets_its_reload() {
     let (dir, mut d, comp) = desktop();
     let base = dir.path().join("base.lua");
-    *comp.config_errors.lock().unwrap() = vec![format!(
-        "hyprland.lua:1: module '{}' not found:",
-        base.display()
-    )];
+    set_errors(&comp, missing(&base));
     d.config_reloaded().await;
     assert_eq!(reloads(&comp), 0, "the file is not back yet");
     tokio::time::sleep(WATCH_EVERY * 3).await;
     assert_eq!(reloads(&comp), 0, "still missing");
     std::fs::write(&base, "").unwrap();
-    tokio::time::sleep(WATCH_EVERY * 2).await;
+    tokio::time::sleep(SETTLE).await;
     assert_eq!(reloads(&comp), 1, "back: reloaded once");
     tokio::time::sleep(WATCH_FOR).await;
     assert_eq!(reloads(&comp), 1, "and not again");
@@ -135,10 +195,7 @@ async fn a_file_that_is_missing_for_seconds_still_gets_its_reload() {
 #[tokio::test(start_paused = true)]
 async fn waiting_for_a_file_gives_up_and_a_second_wait_does_not_double_up() {
     let (dir, mut d, comp) = desktop();
-    *comp.config_errors.lock().unwrap() = vec![format!(
-        "hyprland.lua:1: module '{}' not found:",
-        dir.path().join("never.lua").display()
-    )];
+    set_errors(&comp, missing(&dir.path().join("never.lua")));
     d.config_reloaded().await;
     d.config_reloaded().await;
     assert!(d.recover.watching.load(std::sync::atomic::Ordering::SeqCst));
