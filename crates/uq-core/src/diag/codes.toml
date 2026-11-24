@@ -140,7 +140,7 @@ fix = "Make sure the Hyprland package matches the version uQ supports (uq-hyprla
 id = "HYPR-005"
 severity = "warn"
 title = "Hyprland missed a config file"
-means = "Hyprland reloaded while one of uQ's config files was being replaced, and missed it. uQ reloads Hyprland again once the file is back."
+means = "Hyprland reloaded while one of uQ's config files was being replaced, and found it missing or half-written. uQ reloads Hyprland again once the file is back and the update has finished."
 fix = "Nothing to do unless it repeats: then report it with `uqctl report`."
 
 [[code]]

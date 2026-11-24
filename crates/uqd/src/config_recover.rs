@@ -1,25 +1,25 @@
 //! Hyprland reloads its config whenever a file it read changes. A package update replaces
-//! `/usr/share/uq/hypr/base.lua` by removing and rewriting it, and a reload that lands in between
-//! fails its `require`: Hyprland drops into emergency mode with none of uQ's binds ("a lua config
-//! resulted in no binds"; seen on `uq-dev promote uq`). After each reload uqd reads the config
-//! errors, and a `require` that failed for a file that is there again gets one more reload, at
-//! most once every [`RETRY_GAP`] so a file that keeps vanishing can't make a reload loop.
+//! `/usr/share/uq/hypr/base.lua`, and a reload that lands while it does fails its `require`:
+//! Hyprland drops into emergency mode with none of uQ's binds ("a lua config resulted in no
+//! binds"; seen on `uq-dev promote uq` and on a `bindleup` that updated uq). The reload either
+//! finds no file ("module '<name>' not found") or a half-written one (Hyprland's
+//! `require("<name>"): error loading module …`, or whatever error a cut-off file raises).
 //!
-//! Hyprland reloads when the file goes, not when it comes back, and a package update can leave
-//! the file missing for longer than one check (a big package takes seconds to unpack): when the
-//! file is still missing at the check, uqd keeps looking for it for [`WATCH_FOR`] and reloads
-//! once it is back.
+//! After each reload uqd reads the config errors and collects the `.lua` files a `require`
+//! failed on. It then looks at them every [`WATCH_EVERY`] for up to [`WATCH_FOR`] and reloads
+//! once they are all there, have stopped changing, and no pacman transaction is running
+//! (Hyprland reloads when a file goes, not when it comes back, and a big package takes seconds
+//! to unpack). Each version of a file (its modification time and size) gets one recovery
+//! reload at most, so a file that is really broken can't make a reload loop.
 
 use crate::service::Desktop;
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::{Duration, Instant};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, SystemTime};
 
-/// The shortest time between two recovery reloads.
-pub(crate) const RETRY_GAP: Duration = Duration::from_secs(10);
-
-/// How often to look for a file that is still missing.
+/// How often to look at the files.
 pub(crate) const WATCH_EVERY: Duration = Duration::from_secs(1);
 
 /// How long to keep looking before giving up (the file really is gone, or it is the user's).
@@ -28,30 +28,66 @@ pub(crate) const WATCH_FOR: Duration = Duration::from_secs(120);
 /// Module names worth looking at; anything longer is not one of uQ's paths.
 const MAX_NAME: usize = 1024;
 
+/// pacman's lock: there while a transaction runs.
+const PACMAN_LOCK: &str = "/var/lib/pacman/db.lck";
+
+/// One version of a file: where it is, when it was last written and how big it is.
+type Stamp = (PathBuf, SystemTime, u64);
+
 /// What uqd remembers between reloads.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub(crate) struct RecoverState {
-    /// When uqd last reloaded to recover.
-    pub last: Option<Instant>,
-    /// Whether a task is already waiting for a missing file to come back.
+    /// Whether a task is already waiting for the files to settle.
     pub watching: Arc<AtomicBool>,
+    /// File versions that already had their recovery reload.
+    pub tried: Arc<Mutex<HashSet<Stamp>>>,
+    /// While this file exists, a package transaction is running: wait.
+    pub busy: PathBuf,
+}
+
+impl Default for RecoverState {
+    fn default() -> Self {
+        RecoverState {
+            watching: Arc::default(),
+            tried: Arc::default(),
+            busy: PathBuf::from(PACMAN_LOCK),
+        }
+    }
+}
+
+/// The names in `<open><name><close>`, in order.
+fn quoted(errors: &[String], open: &str, close: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    for e in errors {
+        let mut rest = e.as_str();
+        while let Some(i) = rest.find(open) {
+            rest = &rest[i + open.len()..];
+            let Some(j) = rest.find(close) else { break };
+            let name = &rest[..j];
+            if !name.is_empty() && name.len() <= MAX_NAME && !name.contains(['\'', '"']) {
+                out.push(name.to_string());
+            }
+            rest = &rest[j + close.len()..];
+        }
+    }
+    out
 }
 
 /// The names in Lua's "module '<name>' not found" messages, in order.
 pub(crate) fn missing_modules(errors: &[String]) -> Vec<String> {
-    const OPEN: &str = "module '";
-    const CLOSE: &str = "' not found";
-    let mut out = Vec::new();
-    for e in errors {
-        let mut rest = e.as_str();
-        while let Some(i) = rest.find(OPEN) {
-            rest = &rest[i + OPEN.len()..];
-            let Some(j) = rest.find(CLOSE) else { break };
-            let name = &rest[..j];
-            if !name.is_empty() && name.len() <= MAX_NAME && !name.contains('\'') {
-                out.push(name.to_string());
-            }
-            rest = &rest[j + CLOSE.len()..];
+    quoted(errors, "module '", "' not found")
+}
+
+/// Every module a `require` failed on: missing ones, and the ones Hyprland reports as
+/// `require("<name>"): <error>` (a file that is there but didn't load), without repeats.
+pub(crate) fn failed_modules(errors: &[String]) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for n in missing_modules(errors)
+        .into_iter()
+        .chain(quoted(errors, "require(\"", "\"):"))
+    {
+        if !out.contains(&n) {
+            out.push(n);
         }
     }
     out
@@ -71,57 +107,73 @@ pub(crate) fn module_path(name: &str, hypr_dir: &Path) -> Option<PathBuf> {
     })
 }
 
-/// Whether a reload would now find every module the last one missed (and it missed some).
-pub(crate) fn worth_reloading(errors: &[String], hypr_dir: &Path) -> bool {
-    let names = missing_modules(errors);
-    !names.is_empty()
-        && names
-            .iter()
-            .all(|n| module_path(n, hypr_dir).is_some_and(|p| p.is_file()))
+/// The files of the failed `require`s worth watching (uQ-style `.lua` paths).
+pub(crate) fn failed_files(errors: &[String], hypr_dir: &Path) -> Vec<PathBuf> {
+    failed_modules(errors)
+        .iter()
+        .filter_map(|n| module_path(n, hypr_dir))
+        .collect()
 }
 
-/// Whether the last reload failed only for uQ-style `.lua` files that are not there right now.
-pub(crate) fn waiting_for_files(errors: &[String], hypr_dir: &Path) -> bool {
-    let names = missing_modules(errors);
-    !names.is_empty()
-        && names.iter().all(|n| module_path(n, hypr_dir).is_some())
-        && !worth_reloading(errors, hypr_dir)
+/// Each file's version, or `None` while any of them is missing.
+fn stamps(files: &[PathBuf]) -> Option<Vec<Stamp>> {
+    files
+        .iter()
+        .map(|f| {
+            let m = std::fs::metadata(f).ok().filter(|m| m.is_file())?;
+            Some((f.clone(), m.modified().ok()?, m.len()))
+        })
+        .collect()
 }
 
 impl Desktop {
-    /// Look for the missing files every [`WATCH_EVERY`] and reload once they are all back; stops
-    /// when the errors change (someone fixed it), after the reload, or after [`WATCH_FOR`].
-    fn watch_for_files(&self) {
+    /// Watch `files` until they are all there and unchanged for one look, with no package
+    /// transaction running, then reload once; give up after [`WATCH_FOR`].
+    fn watch_files(&self, files: Vec<PathBuf>) {
         if self.recover.watching.swap(true, Ordering::SeqCst) {
             return;
         }
         let comp = self.comp.clone();
-        let dir = self.paths.hypr_dir.clone();
         let flag = self.recover.watching.clone();
+        let tried = self.recover.tried.clone();
+        let busy = self.recover.busy.clone();
         tokio::spawn(async move {
-            let tries = WATCH_FOR.as_secs() / WATCH_EVERY.as_secs().max(1);
-            for _ in 0..tries {
+            let looks = WATCH_FOR.as_secs() / WATCH_EVERY.as_secs().max(1);
+            let mut last: Option<Vec<Stamp>> = None;
+            for _ in 0..looks {
                 tokio::time::sleep(WATCH_EVERY).await;
-                let Ok(errors) = comp.config_errors().await else {
-                    break;
-                };
-                if !waiting_for_files(&errors, &dir) && !worth_reloading(&errors, &dir) {
-                    break;
+                if busy.exists() {
+                    last = None;
+                    continue;
                 }
-                if worth_reloading(&errors, &dir) {
-                    tracing::warn!("[HYPR-005] a config file Hyprland missed is back; reloading");
+                let now = stamps(&files);
+                if now.is_none() || now != last {
+                    last = now;
+                    continue;
+                }
+                let now = now.unwrap_or_default();
+                let fresh = {
+                    let mut t = tried.lock().unwrap_or_else(|e| e.into_inner());
+                    let fresh = now.iter().any(|s| !t.contains(s));
+                    t.extend(now);
+                    fresh
+                };
+                if fresh {
+                    tracing::warn!(
+                        "[HYPR-005] the config files Hyprland failed to load are in place; reloading"
+                    );
                     if let Err(e) = comp.reload().await {
                         tracing::warn!("[HYPR-003] reloading Hyprland: {e}");
                     }
-                    break;
                 }
+                break;
             }
             flag.store(false, Ordering::SeqCst);
         });
     }
 
-    /// Hyprland reloaded its config: if it failed only because a file was missing for a moment,
-    /// reload again.
+    /// Hyprland reloaded its config: if a `require` of a `.lua` file failed (a file missing or
+    /// half-written while a package replaced it), reload again once the files settle.
     pub async fn config_reloaded(&mut self) {
         let errors = match self.comp.config_errors().await {
             Ok(e) => e,
@@ -130,25 +182,20 @@ impl Desktop {
                 return;
             }
         };
-        if !worth_reloading(&errors, &self.paths.hypr_dir) {
-            if waiting_for_files(&errors, &self.paths.hypr_dir) {
-                self.watch_for_files();
+        let files = failed_files(&errors, &self.paths.hypr_dir);
+        if files.is_empty() {
+            return;
+        }
+        if let Some(now) = stamps(&files) {
+            let t = self.recover.tried.lock().unwrap_or_else(|e| e.into_inner());
+            if now.iter().all(|s| t.contains(s)) {
+                tracing::warn!(
+                    "[HYPR-005] Hyprland's config still fails on files already reloaded for; leaving it"
+                );
+                return;
             }
-            return;
         }
-        if self.recover.last.is_some_and(|t| t.elapsed() < RETRY_GAP) {
-            tracing::warn!(
-                "[HYPR-005] Hyprland's config still misses a file that is there; not reloading again yet"
-            );
-            return;
-        }
-        self.recover.last = Some(Instant::now());
-        tracing::warn!(
-            "[HYPR-005] Hyprland's last reload missed a config file that is back now; reloading"
-        );
-        if let Err(e) = self.comp.reload().await {
-            tracing::warn!("[HYPR-003] reloading Hyprland: {e}");
-        }
+        self.watch_files(files);
     }
 }
 
