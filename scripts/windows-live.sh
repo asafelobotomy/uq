@@ -11,6 +11,9 @@
 #   tabdrop   a tab dragged down onto the screen: its window fills the empty half, focused
 #   grip      the gap between that pair dragged with the pointer: only the gap moves
 #   superdrag Super+drag the left window to the right half: they swap, nothing gets stacked
+#   tableft   a tab dropped on the left half beside a lone Half: it takes the left, that one slides right
+#   unequal   a pair made unequal with the grip, a tab dropped on the side under the pointer: it takes it
+#   unequalsuper the same pair made unequal, Super+drag of its wider side onto the narrower: they swap
 #   minimise  minimised to its tab, then restored by clicking the tab: back at the end, focused
 #   float     a floating window dragged half off the screen stays where it was put
 #   fullscreen real fullscreen hides the resize grips; leaving it brings them back
@@ -246,6 +249,20 @@ open_window() {
 }
 shot() { [ -n "$cap" ] && command -v grim >/dev/null 2>&1 && env XDG_RUNTIME_DIR="$rt" WAYLAND_DISPLAY="$wl" grim "$cap/windows-$1.png" 2>/dev/null; return 0; }
 settle() { sleep "${1:-1.5}"; }
+# A GIF of a step (UQ_CAPTURE_DIR only): screenshots about 8 a second until rec_stop.
+rec_pid=""
+rec_start() {
+    [ -n "$cap" ] && command -v grim >/dev/null 2>&1 && command -v ffmpeg >/dev/null 2>&1 || return 0
+    rec_name=$1; rm -rf "$tmp/rec"; mkdir -p "$tmp/rec"
+    ( n=0; while :; do n=$((n + 1)); env XDG_RUNTIME_DIR="$rt" WAYLAND_DISPLAY="$wl" grim -s 0.5 "$tmp/rec/$(printf %04d $n).png" 2>/dev/null; sleep 0.1; done ) &
+    rec_pid=$!; pids+=($rec_pid)
+}
+rec_stop() {
+    [ -n "$rec_pid" ] || return 0
+    kill "$rec_pid" 2>/dev/null; wait "$rec_pid" 2>/dev/null; rec_pid=""
+    ffmpeg -loglevel error -y -framerate 8 -i "$tmp/rec/%04d.png" \
+        -vf "split[a][b];[a]palettegen[p];[b][p]paletteuse" "$cap/windows-$rec_name.gif" || echo "note: no GIF for $rec_name"
+}
 
 # ---- measuring --------------------------------------------------------------------------------
 ticks() { awk '{print $14 + $15}' "/proc/$1/stat" 2>/dev/null || echo 0; }
@@ -428,6 +445,131 @@ cols_after=$(clients | jq '[.[] | select(.workspace.id == 1 and .floating == fal
 on_screen "$left" >/dev/null || check "$left should be fully on screen after the drag"
 [ "$(win "$left" size | jq -r '.[1]')" -ge 600 ] || check "$left should be a full-height column, not stacked"
 [ "$(active)" = "$left" ] || check "the dragged window should keep focus (active is '$(active)')"
+finish
+
+# ---- tableft ----------------------------------------------------------------------------------
+# A Half alone on its page (not the first) is shown, and another window's tab is dropped on the
+# screen's left half: the dropped window takes the left half and the one there slides to the right.
+read -r ca cb cl <<<"$(col_order | tr -d '|')"
+echo "order before tableft: $ca | $cb | $cl"
+[ "$(wwidth "$cl")" -lt 700 ] || { dispatch "[\"column_width\",{\"address\":\"$(addr_of "$cl")\",\"width\":\"half\"}]"; settle; }
+dispatch "[\"focus_window\",{\"address\":\"$(addr_of "$cl")\"}]"
+settle 2
+begin tableft
+snap "  before"
+on_screen "$cl" >/dev/null && [ "$(wwidth "$cl")" -lt 700 ] || check "$cl should show Half before the drop"
+rec_start tableft
+read -r tx ty _ < <(tab_of "$ca")
+[ -n "${tx:-}" ] || fail "no tab for $ca ($(tabs))"
+send "move $tx $ty" "sleep 300" "button 272 down" "sleep 100"
+for i in $(seq 1 12); do send "move $((tx + (300 - tx) * i / 12)) $((ty + (400 - ty) * i / 12))" "sleep 40"; done
+send "sleep 600"; drain
+shot tableft-held
+send "button 272 up"; drain
+ms=$(wait_ms 5 '[ "$(active)" = "$ca" ] && on_screen "$ca" && [ "$(wx "$ca")" -lt "$(wx "$cl")" ]')
+latency "$ms" "drop on the left until the window is there, focused"
+settle 2
+rec_stop
+snap "  after"
+echo "after: $(col_order)"
+on_screen "$ca" >/dev/null || check "$ca should be on screen after its tab was dropped on the left half"
+on_screen "$cl" >/dev/null || check "$cl should stay on screen, slid to the right half"
+[ "$(wx "$ca")" -lt "$(wx "$cl")" ] || check "$ca should take the left half and $cl slide right ($ca x=$(wx "$ca"), $cl x=$(wx "$cl"))"
+[ "$(wwidth "$ca")" -lt 700 ] && [ "$(wwidth "$cl")" -lt 700 ] || check "both should be Half ($ca $(wwidth "$ca"), $cl $(wwidth "$cl"))"
+[ "$(active)" = "$ca" ] || check "the dropped window should have focus (active is '$(active)')"
+finish
+
+# The two tiled windows fully on screen, left then right.
+pair_on_screen() {
+    clients | jq -r '[.[] | select(.workspace.id == 1 and .floating == false and .at[0] >= 0 and .at[0] + .size[0] <= 1280)] | sort_by(.at[0]) | map(.title) | join(" ")'
+}
+# Drag the gap between the pair shown 150 px right, so its two sides are no longer equal.
+widen_left() { # left right
+    local x1 w1 x2 gx gy=360
+    x1=$(wx "$1"); w1=$(wwidth "$1"); x2=$(wx "$2")
+    gx=$(( (x1 + w1 + x2) / 2 ))
+    send "move $((gx - 40)) $gy" "sleep 150" "move $gx $gy" "sleep 400" "button 272 down" "sleep 100"
+    for i in $(seq 1 15); do send "move $((gx + i * 10)) $gy" "sleep 30"; done
+    send "sleep 200" "button 272 up"; drain
+    wait_ms 4 "[ \"\$(wwidth \"$1\")\" -ge $((w1 + 120)) ]" >/dev/null || check "the grip drag didn't widen $1 ($(wwidth "$1"))"
+    settle 2
+}
+
+# ---- unequal ----------------------------------------------------------------------------------
+# The pair's sides made unequal with the grip, then a tab dropped on the wider left window, right
+# of the screen's middle: the dropped window takes the side under the pointer (the left), the
+# window there is pushed out, and both sides end up Half.
+begin unequal
+read -r ca cl <<<"$(pair_on_screen)"
+cb=$(clients | jq -r --arg a "$ca" --arg b "$cl" '[.[] | select(.workspace.id == 1 and .floating == false and .title != $a and .title != $b)] | .[0].title')
+echo "pair: $ca | $cl; dropping $cb"
+widen_left "$ca" "$cl"
+snap "  widened"
+[ "$(wwidth "$ca")" -gt $(( $(wwidth "$cl") + 200 )) ] || check "the pair should be unequal after the grip drag ($ca $(wwidth "$ca"), $cl $(wwidth "$cl"))"
+shot unequal-before
+rec_start unequal
+read -r tx ty _ < <(tab_of "$cb")
+[ -n "${tx:-}" ] || fail "no tab for $cb ($(tabs))"
+dx=$(( $(wx "$ca") + $(wwidth "$ca") - 60 ))
+echo "dropping at x=$dx (over $ca, right of the screen's middle)"
+send "move $tx $ty" "sleep 300" "button 272 down" "sleep 100"
+for i in $(seq 1 12); do send "move $((tx + (dx - tx) * i / 12)) $((ty + (400 - ty) * i / 12))" "sleep 40"; done
+send "sleep 600"; drain
+shot unequal-held
+send "button 272 up"; drain
+ms=$(wait_ms 5 '[ "$(active)" = "$cb" ] && on_screen "$cb" && [ "$(wx "$cb")" -lt "$(wx "$cl")" ]')
+latency "$ms" "drop on the wider side until the window is there, focused"
+settle 2
+rec_stop
+snap "  after"
+echo "after: $(col_order)"
+on_screen "$cb" >/dev/null || check "$cb should be on screen after its tab was dropped on the wider side"
+on_screen "$cl" >/dev/null || check "$cl should stay on screen beside it"
+[ "$(wx "$cb")" -lt "$(wx "$cl")" ] || check "$cb should take the left side, the one under the pointer ($cb x=$(wx "$cb"), $cl x=$(wx "$cl"))"
+[ "$(wwidth "$cb")" -lt 700 ] && [ "$(wwidth "$cl")" -lt 700 ] || check "both sides should be Half after the drop ($cb $(wwidth "$cb"), $cl $(wwidth "$cl"))"
+on_screen "$ca" >/dev/null && check "$ca should have been pushed out to a page of its own"
+[ "$(active)" = "$cb" ] || check "the dropped window should have focus (active is '$(active)')"
+for w in "$ca" "$cb" "$cl"; do edge_ok "$w" "after the drop on an unequal pair"; done
+finish
+
+# ---- unequalsuper -----------------------------------------------------------------------------
+# The same with Super+drag: the pair made unequal again, and the wider left window dragged onto
+# the narrower right one. The two swap sides, nothing gets stacked.
+begin unequalsuper
+read -r ca cb <<<"$(pair_on_screen)"
+echo "pair: $ca | $cb"
+widen_left "$ca" "$cb"
+[ "$(wwidth "$ca")" -gt $(( $(wwidth "$cb") + 200 )) ] || check "the pair should be unequal after the grip drag ($ca $(wwidth "$ca"), $cb $(wwidth "$cb"))"
+cols_before=$(clients | jq '[.[] | select(.workspace.id == 1 and .floating == false) | .at[0]] | unique | length')
+rec_start unequalsuper
+read -r cx cy < <(clients | jq -r --arg t "$ca" '.[] | select(.title==$t) | "\((.at[0] + .size[0]/2)|floor) \((.at[1] + .size[1]/2)|floor)"')
+dx=$(( $(wx "$cb") + $(wwidth "$cb") / 2 ))
+send "move $cx $cy" "sleep 300" "mod super down" "sleep 100" "button 272 down" "sleep 100"
+for i in $(seq 1 12); do send "move $((cx + (dx - cx) * i / 12)) $cy" "sleep 40"; done
+send "sleep 800"; drain
+held_layers=$(hc layers -j | jq -r '[.. | objects | select(has("namespace")) | .namespace] | unique | join(" ")')
+echo "$held_layers" | grep -q uq-tab-drop || check "no drop preview while the window was held over the narrower side"
+shot unequalsuper-held
+send "button 272 up" "sleep 80" "mod super up"; drain
+ms=$(wait_ms 5 '[ "$(wx "$ca")" -gt "$(wx "$cb")" ] && [ "$(win "$ca" floating)" = false ] && on_screen "$ca"')
+latency "$ms" "release until the window is on the right side"
+settle 2
+rec_stop
+snap "  after"
+cols_after=$(clients | jq '[.[] | select(.workspace.id == 1 and .floating == false) | .at[0]] | unique | length')
+[ "$cols_after" = "$cols_before" ] || check "the dropped window was stacked into another column ($cols_before columns before, $cols_after after)"
+[ "$(win "$ca" floating)" = false ] || check "$ca is still floating after the drop"
+[ "$(wx "$ca")" -gt "$(wx "$cb")" ] || check "$ca should be on the right side after the drag ($ca x=$(wx "$ca"), $cb x=$(wx "$cb"))"
+on_screen "$ca" >/dev/null && on_screen "$cb" >/dev/null || check "both should be on screen after the drag"
+[ "$(wwidth "$ca")" -lt 700 ] && [ "$(wwidth "$cb")" -lt 700 ] && [ $(( $(wwidth "$ca") + $(wwidth "$cb") )) -ge 1200 ] \
+    || check "the pair should fill the screen as two Halves after the swap ($ca $(wwidth "$ca"), $cb $(wwidth "$cb"))"
+for w in $(clients | jq -r '.[] | select(.workspace.id == 1 and .hidden == false) | .title'); do edge_ok "$w" "after the swap"; done
+# Back to Half each, for what follows.
+for w in $(clients | jq -r '.[] | select(.workspace.id == 1 and .floating == false) | .title'); do
+    dispatch "[\"column_width\",{\"address\":\"$(addr_of "$w")\",\"width\":\"half\"}]"
+done
+dispatch "[\"focus_window\",{\"address\":\"$(addr_of "$ca")\"}]"
+settle 2
 finish
 
 # ---- minimise ---------------------------------------------------------------------------------
