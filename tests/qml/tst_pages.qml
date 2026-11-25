@@ -165,7 +165,10 @@ TestCase {
         var left = P.dropPlan(wins, room, extra, {}, "0xl", "0xd", "left");
         compare(left.half, ["0xd", "0xr"]);
         compare(left.starts, { "0xl": true, "0xd": true, "0xr": false }, "L pushed out to the left");
-        compare(P.dropPlan(wins, room, extra, {}, "0xl", "0xl", "right", {}).steps, 1, "and the pair swaps");
+        var swap = P.dropPlan(wins, room, extra, {}, "0xl", "0xl", "right", {});
+        compare(swap.steps, 1, "and the pair swaps");
+        compare(swap.half, ["0xl", "0xr"], "as two Halves");
+        compare(swap.area, { from: 940, width: 940 });
     }
 
     function test_drop_side_follows_the_gap() {
@@ -236,6 +239,7 @@ TestCase {
         var d = P.dropPlan(wins, room, extra, {}, "0xl", "0xl", "right", {});
         compare(d.steps, 1);
         compare(d.starts, { "0xl": false, "0xr": true }, "R begins the page now");
+        compare(d.half, ["0xl", "0xr"], "both Half");
         compare(d.area, { from: 940, width: 940 });
         compare(P.dropPlan(wins, room, extra, {}, "0xl", "0xr", "left", {}).steps, -1);
         compare(P.dropPlan(wins, room, extra, {}, "0xl", "0xl", "left", {}), null, "where it is");

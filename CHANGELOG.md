@@ -10,7 +10,7 @@ All notable changes to uQ are listed here. The format follows
 ### Fixed
 
 - **A window can be dropped on the left half of the screen too.** A tab dragged out of the Open windows island onto a page with one window (Full, or alone on half the screen) used to put its window on the right whatever half it was dropped on. It now takes the half it is dropped on, and the window already there slides over to the other half.
-- **Drops work on a pair whose sides aren't equal.** After the gap between two windows was dragged with the resize grip, which side a drop landed on was still worked out from the screen's middle, so the preview and the drop could replace the window the pointer wasn't over. The side now follows the gap between the two windows, for tabs and for windows moved with Super+drag, and both sides are made Half after the drop. A window alone at another width (left so by the grip) is made Half too when another joins it.
+- **Drops work on a pair whose sides aren't equal.** After the gap between two windows was dragged with the resize grip, which side a drop landed on was still worked out from the screen's middle, so the preview and the drop could replace the window the pointer wasn't over. The side now follows the gap between the two windows, for tabs and for windows moved with Super+drag, and both sides are made Half after the drop. A pair swapped with Super+drag used to come back with one side at Hyprland's default width and a sliver of the next window showing; it now ends up as two Halves. A window alone at another width (left so by the grip) is made Half too when another joins it.
 
 ## [0.3.40] - 2026-11-24
 

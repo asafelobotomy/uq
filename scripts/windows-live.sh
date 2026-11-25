@@ -12,7 +12,7 @@
 #   grip      the gap between that pair dragged with the pointer: only the gap moves
 #   superdrag Super+drag the left window to the right half: they swap, nothing gets stacked
 #   tableft   a tab dropped on the left half beside a lone Half: it takes the left, that one slides right
-#   unequal   a pair made unequal with the grip, a tab dropped on its narrower side: it takes that side
+#   unequal   a pair made unequal with the grip, a tab dropped on the side under the pointer: it takes it
 #   unequalsuper the same pair made unequal, Super+drag of its wider side onto the narrower: they swap
 #   minimise  minimised to its tab, then restored by clicking the tab: back at the end, focused
 #   float     a floating window dragged half off the screen stays where it was put
@@ -496,8 +496,9 @@ widen_left() { # left right
 }
 
 # ---- unequal ----------------------------------------------------------------------------------
-# The pair's sides made unequal with the grip, then a tab dropped on the narrower right side: the
-# dropped window takes that side, the window there is pushed out, and both sides end up Half.
+# The pair's sides made unequal with the grip, then a tab dropped on the wider left window, right
+# of the screen's middle: the dropped window takes the side under the pointer (the left), the
+# window there is pushed out, and both sides end up Half.
 begin unequal
 read -r ca cl <<<"$(pair_on_screen)"
 cb=$(clients | jq -r --arg a "$ca" --arg b "$cl" '[.[] | select(.workspace.id == 1 and .floating == false and .title != $a and .title != $b)] | .[0].title')
@@ -509,24 +510,26 @@ shot unequal-before
 rec_start unequal
 read -r tx ty _ < <(tab_of "$cb")
 [ -n "${tx:-}" ] || fail "no tab for $cb ($(tabs))"
-dx=$(( $(wx "$cl") + $(wwidth "$cl") / 2 ))
+dx=$(( $(wx "$ca") + $(wwidth "$ca") - 60 ))
+echo "dropping at x=$dx (over $ca, right of the screen's middle)"
 send "move $tx $ty" "sleep 300" "button 272 down" "sleep 100"
 for i in $(seq 1 12); do send "move $((tx + (dx - tx) * i / 12)) $((ty + (400 - ty) * i / 12))" "sleep 40"; done
 send "sleep 600"; drain
 shot unequal-held
 send "button 272 up"; drain
-ms=$(wait_ms 5 '[ "$(active)" = "$cb" ] && on_screen "$cb" && on_screen "$ca"')
-latency "$ms" "drop on the narrower side until the window is there, focused"
+ms=$(wait_ms 5 '[ "$(active)" = "$cb" ] && on_screen "$cb" && [ "$(wx "$cb")" -lt "$(wx "$cl")" ]')
+latency "$ms" "drop on the wider side until the window is there, focused"
 settle 2
 rec_stop
 snap "  after"
 echo "after: $(col_order)"
-on_screen "$cb" >/dev/null || check "$cb should be on screen after its tab was dropped on the narrower side"
-on_screen "$ca" >/dev/null || check "$ca should stay on screen beside it"
-[ "$(wx "$cb")" -gt "$(wx "$ca")" ] || check "$cb should take the right side ($cb x=$(wx "$cb"), $ca x=$(wx "$ca"))"
-[ "$(wwidth "$cb")" -lt 700 ] && [ "$(wwidth "$ca")" -lt 700 ] || check "both sides should be Half after the drop ($ca $(wwidth "$ca"), $cb $(wwidth "$cb"))"
-on_screen "$cl" >/dev/null && check "$cl should have been pushed out to a page of its own"
+on_screen "$cb" >/dev/null || check "$cb should be on screen after its tab was dropped on the wider side"
+on_screen "$cl" >/dev/null || check "$cl should stay on screen beside it"
+[ "$(wx "$cb")" -lt "$(wx "$cl")" ] || check "$cb should take the left side, the one under the pointer ($cb x=$(wx "$cb"), $cl x=$(wx "$cl"))"
+[ "$(wwidth "$cb")" -lt 700 ] && [ "$(wwidth "$cl")" -lt 700 ] || check "both sides should be Half after the drop ($cb $(wwidth "$cb"), $cl $(wwidth "$cl"))"
+on_screen "$ca" >/dev/null && check "$ca should have been pushed out to a page of its own"
 [ "$(active)" = "$cb" ] || check "the dropped window should have focus (active is '$(active)')"
+for w in "$ca" "$cb" "$cl"; do edge_ok "$w" "after the drop on an unequal pair"; done
 finish
 
 # ---- unequalsuper -----------------------------------------------------------------------------
@@ -558,6 +561,9 @@ cols_after=$(clients | jq '[.[] | select(.workspace.id == 1 and .floating == fal
 [ "$(win "$ca" floating)" = false ] || check "$ca is still floating after the drop"
 [ "$(wx "$ca")" -gt "$(wx "$cb")" ] || check "$ca should be on the right side after the drag ($ca x=$(wx "$ca"), $cb x=$(wx "$cb"))"
 on_screen "$ca" >/dev/null && on_screen "$cb" >/dev/null || check "both should be on screen after the drag"
+[ "$(wwidth "$ca")" -lt 700 ] && [ "$(wwidth "$cb")" -lt 700 ] && [ $(( $(wwidth "$ca") + $(wwidth "$cb") )) -ge 1200 ] \
+    || check "the pair should fill the screen as two Halves after the swap ($ca $(wwidth "$ca"), $cb $(wwidth "$cb"))"
+for w in $(clients | jq -r '.[] | select(.workspace.id == 1 and .hidden == false) | .title'); do edge_ok "$w" "after the swap"; done
 # Back to Half each, for what follows.
 for w in "$ca" "$cb" "$cl"; do dispatch "[\"column_width\",{\"address\":\"$(addr_of "$w")\",\"width\":\"half\"}]"; done
 dispatch "[\"focus_window\",{\"address\":\"$(addr_of "$ca")\"}]"

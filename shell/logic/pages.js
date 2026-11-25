@@ -163,7 +163,7 @@ function rightOf(wins, room, extra, starts, right) {
 // On its own page:
 //   - a Half alone moves to the half it was dropped on, the other left empty, with no column
 //     moving (not on the first page, which Hyprland keeps at the screen's left edge);
-//   - a pair swaps halves when dropped on the other one.
+//   - a pair swaps sides when dropped on the other one, both made Half.
 function dropPlan(wins, room, extra, starts, shown, dragged, side, right) {
     var list = pages(wins, room, extra, starts), p = pageOf(list, shown), from = pageOf(list, dragged);
     if (p === null || from === null || p.cols.length > 2)
@@ -195,8 +195,10 @@ function dropPlan(wins, room, extra, starts, shown, dragged, side, right) {
         var other = p.cols[1 - mine], me = p.cols[mine];
         s[dragged] = want === 0;
         s[first(other)] = want !== 0;
-        return { steps: want - mine, half: [], starts: s, right: {},
-                 area: want === 0 ? { from: 0, width: slot(me) } : { from: room - slot(me), width: slot(me) } };
+        // Both made Half: the sides a resize grip left unequal would swap widths otherwise, and a
+        // window moved with the pointer comes back from Hyprland at its default width.
+        return { steps: want - mine, half: [dragged, first(other)], starts: s, right: {},
+                 area: want === 0 ? { from: 0, width: room / 2 } : { from: room / 2, width: room / 2 } };
     }
     half = [dragged];
     area = { from: room / 2, width: room / 2 };
