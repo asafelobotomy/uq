@@ -479,6 +479,10 @@ on_screen "$cl" >/dev/null || check "$cl should stay on screen, slid to the righ
 [ "$(active)" = "$ca" ] || check "the dropped window should have focus (active is '$(active)')"
 finish
 
+# The two tiled windows fully on screen, left then right.
+pair_on_screen() {
+    clients | jq -r '[.[] | select(.workspace.id == 1 and .floating == false and .at[0] >= 0 and .at[0] + .size[0] <= 1280)] | sort_by(.at[0]) | map(.title) | join(" ")'
+}
 # Drag the gap between the pair shown 150 px right, so its two sides are no longer equal.
 widen_left() { # left right
     local x1 w1 x2 gx gy=360
@@ -495,6 +499,9 @@ widen_left() { # left right
 # The pair's sides made unequal with the grip, then a tab dropped on the narrower right side: the
 # dropped window takes that side, the window there is pushed out, and both sides end up Half.
 begin unequal
+read -r ca cl <<<"$(pair_on_screen)"
+cb=$(clients | jq -r --arg a "$ca" --arg b "$cl" '[.[] | select(.workspace.id == 1 and .floating == false and .title != $a and .title != $b)] | .[0].title')
+echo "pair: $ca | $cl; dropping $cb"
 widen_left "$ca" "$cl"
 snap "  widened"
 [ "$(wwidth "$ca")" -gt $(( $(wwidth "$cl") + 200 )) ] || check "the pair should be unequal after the grip drag ($ca $(wwidth "$ca"), $cl $(wwidth "$cl"))"
@@ -526,6 +533,8 @@ finish
 # The same with Super+drag: the pair made unequal again, and the wider left window dragged onto
 # the narrower right one. The two swap sides, nothing gets stacked.
 begin unequalsuper
+read -r ca cb <<<"$(pair_on_screen)"
+echo "pair: $ca | $cb"
 widen_left "$ca" "$cb"
 [ "$(wwidth "$ca")" -gt $(( $(wwidth "$cb") + 200 )) ] || check "the pair should be unequal after the grip drag ($ca $(wwidth "$ca"), $cb $(wwidth "$cb"))"
 cols_before=$(clients | jq '[.[] | select(.workspace.id == 1 and .floating == false) | .at[0]] | unique | length')
