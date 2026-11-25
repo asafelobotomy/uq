@@ -7,6 +7,8 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.41] - 2026-11-25
+
 ### Fixed
 
 - **A window can be dropped on the left half of the screen too.** A tab dragged out of the Open windows island onto a page with one window (Full, or alone on half the screen) used to put its window on the right whatever half it was dropped on. It now takes the half it is dropped on, and the window already there slides over to the other half.
