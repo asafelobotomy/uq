@@ -565,7 +565,9 @@ on_screen "$ca" >/dev/null && on_screen "$cb" >/dev/null || check "both should b
     || check "the pair should fill the screen as two Halves after the swap ($ca $(wwidth "$ca"), $cb $(wwidth "$cb"))"
 for w in $(clients | jq -r '.[] | select(.workspace.id == 1 and .hidden == false) | .title'); do edge_ok "$w" "after the swap"; done
 # Back to Half each, for what follows.
-for w in "$ca" "$cb" "$cl"; do dispatch "[\"column_width\",{\"address\":\"$(addr_of "$w")\",\"width\":\"half\"}]"; done
+for w in $(clients | jq -r '.[] | select(.workspace.id == 1 and .floating == false) | .title'); do
+    dispatch "[\"column_width\",{\"address\":\"$(addr_of "$w")\",\"width\":\"half\"}]"
+done
 dispatch "[\"focus_window\",{\"address\":\"$(addr_of "$ca")\"}]"
 settle 2
 finish
