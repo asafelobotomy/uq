@@ -23,6 +23,9 @@ function initialOf(name) {
 }
 
 // The AccountsService icon, then ~/.face, then the user's initial.
+// The login wallpaper, so the lock looks like the login screen.
+var WALLPAPER_PATH = Auth.LOGIN_WALLPAPER_PATH;
+
 function avatarSource(accountsIcon, faceExists, home, name) {
     return Auth.avatarSource(accountsIcon, faceExists, home, name);
 }
