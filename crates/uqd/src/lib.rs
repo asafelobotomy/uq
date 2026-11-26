@@ -16,6 +16,7 @@ mod outputs;
 pub mod pick;
 pub mod power;
 mod profiles;
+mod reset;
 mod rules;
 mod sections;
 pub mod service;

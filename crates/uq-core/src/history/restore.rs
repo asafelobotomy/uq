@@ -20,6 +20,10 @@ pub enum AutoReason {
     BeforeProfile,
     BeforeImport,
     NewVersion,
+    /// Before "Reset all settings" put every setting back to uQ's defaults.
+    BeforeReset,
+    /// Before a settings backup from a file replaced every setting.
+    BeforeBackup,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

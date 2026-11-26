@@ -459,6 +459,59 @@ static RULES_SETTINGS: [SearchEntry; 6] = [
     ),
 ];
 
+static RESTORE_SETTINGS: [SearchEntry; 10] = [
+    entry(
+        "reset-all",
+        "Reset all settings",
+        &["reset", "defaults", "factory", "start again", "clear"],
+    ),
+    entry(
+        "backup",
+        "Save the settings to a file",
+        &["backup", "export", "save", "copy", "move"],
+    ),
+    entry(
+        "backup-restore",
+        "Bring back settings from a file",
+        &["backup", "import", "load", "restore"],
+    ),
+    entry(
+        "rebase",
+        "Rebase the system",
+        &["rebase", "reinstall", "repair", "bindle", "as installed"],
+    ),
+    entry(
+        "factory-restore",
+        "Factory Restore",
+        &["factory", "erase", "reinstall", "wipe", "install again"],
+    ),
+    entry(
+        "keep-installer",
+        "Keep the installer on this computer",
+        &["installer", "offline", "iso", "boot menu"],
+    ),
+    entry(
+        "take-snapshot",
+        "Take a snapshot",
+        &["snapshot", "snapper", "btrfs", "backup", "save"],
+    ),
+    entry(
+        "snapshot-timeline",
+        "Take a snapshot every hour",
+        &["snapshot", "automatic", "timeline", "hourly"],
+    ),
+    entry(
+        "snapshot-limits",
+        "Snapshots kept",
+        &["snapshot", "keep", "limit", "space", "cleanup"],
+    ),
+    entry(
+        "rollback",
+        "Roll back the system",
+        &["rollback", "roll back", "snapshot", "undo update"],
+    ),
+];
+
 static HISTORY_SETTINGS: [SearchEntry; 2] = [
     entry(
         "history",
@@ -1169,7 +1222,7 @@ static NETWORK_SETTINGS: [SearchEntry; 8] = [
     ),
 ];
 
-static CORE_PAGES: [PageInfo; 24] = [
+static CORE_PAGES: [PageInfo; 25] = [
     PageInfo {
         id: "appearance",
         name: "Appearance",
@@ -1294,6 +1347,15 @@ static CORE_PAGES: [PageInfo; 24] = [
         category: Category::Uq,
         qml: "pages/HistoryPage.qml",
         settings: &HISTORY_SETTINGS,
+        domains: &[],
+    },
+    PageInfo {
+        id: "restore",
+        name: "Restore",
+        icon: "edit-undo-history",
+        category: Category::Uq,
+        qml: "pages/RestorePage.qml",
+        settings: &RESTORE_SETTINGS,
         domains: &[],
     },
     PageInfo {
@@ -1747,8 +1809,8 @@ mod tests {
         let at = ids.iter().position(|id| *id == "keybinds").unwrap();
         assert_eq!(
             (ids[at - 1], ids[at + 1]),
-            ("history", "startup"),
-            "after History, the last uQ page"
+            ("restore", "startup"),
+            "after History and Restore, the last uQ page"
         );
     }
 
@@ -1797,6 +1859,7 @@ mod tests {
                 "profiles",
                 "rules",
                 "history",
+                "restore",
                 "keybinds",
                 "startup",
                 "power",
@@ -1831,13 +1894,15 @@ mod tests {
         assert_eq!(v[9]["categoryName"], "Connections");
         assert_eq!(v[10]["qml"], "pages/ShellPage.qml");
         assert_eq!(v[10]["categoryName"], "uQ");
-        assert_eq!(v[14]["qml"], "pages/KeybindsPage.qml");
+        assert_eq!(v[14]["qml"], "pages/RestorePage.qml");
         assert_eq!(v[14]["categoryName"], "uQ");
-        assert_eq!(v[14]["domains"], serde_json::json!(["keybinds"]));
-        assert_eq!(v[15]["qml"], "pages/StartupPage.qml");
-        assert_eq!(v[15]["category"], "system");
-        assert_eq!(v[15]["categoryName"], "System");
-        assert_eq!(v[15]["domains"], serde_json::json!(["autostart", "env"]));
+        assert_eq!(v[15]["qml"], "pages/KeybindsPage.qml");
+        assert_eq!(v[15]["categoryName"], "uQ");
+        assert_eq!(v[15]["domains"], serde_json::json!(["keybinds"]));
+        assert_eq!(v[16]["qml"], "pages/StartupPage.qml");
+        assert_eq!(v[16]["category"], "system");
+        assert_eq!(v[16]["categoryName"], "System");
+        assert_eq!(v[16]["domains"], serde_json::json!(["autostart", "env"]));
     }
 
     #[test]

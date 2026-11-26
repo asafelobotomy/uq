@@ -9,6 +9,7 @@ mod keys_cmd;
 mod launch_cmd;
 mod profile_cmd;
 mod render_themes;
+mod reset_cmd;
 mod settings_app;
 mod settings_cmd;
 mod setup;
@@ -159,6 +160,17 @@ enum Cmd {
     Restore {
         #[command(subcommand)]
         cmd: RestoreCmd,
+    },
+    /// Put every setting back to uQ's defaults (a restore point of the current ones first).
+    Reset {
+        /// Don't ask first.
+        #[arg(long, short)]
+        yes: bool,
+    },
+    /// Save the settings to a file (`save FILE`), or bring a saved file back (`restore FILE`).
+    Backup {
+        #[command(subcommand)]
+        cmd: reset_cmd::BackupCmd,
     },
     /// Re-render every config file from uqd's state.
     Reload,
@@ -328,6 +340,12 @@ async fn run(cmd: Cmd) -> Result<(), String> {
         lines.iter().for_each(|l| println!("{l}"));
         return Ok(());
     }
+    if let Cmd::Reset { yes } = cmd {
+        return reset_cmd::reset(&profile_cmd::connect().await?, yes).await;
+    }
+    if let Cmd::Backup { cmd } = cmd {
+        return reset_cmd::backup(&profile_cmd::connect().await?, cmd).await;
+    }
     if let Cmd::Theme { cmd } = cmd {
         return theme_cmd::run(&profile_cmd::connect().await?, cmd).await;
     }
@@ -465,6 +483,8 @@ async fn run(cmd: Cmd) -> Result<(), String> {
         | Cmd::Profile { .. }
         | Cmd::Keys { .. }
         | Cmd::Theme { .. }
+        | Cmd::Reset { .. }
+        | Cmd::Backup { .. }
         | Cmd::Wallpaper { .. }
         | Cmd::Launch { .. } => {
             unreachable!("handled before connecting")

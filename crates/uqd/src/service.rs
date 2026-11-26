@@ -986,7 +986,7 @@ impl Desktop {
     /// automatic point of the current state is saved first. Returns plain notices (the power
     /// mode of a profile the restore ended).
     pub async fn restore(&mut self, id: &str) -> Result<Vec<String>, DesktopError> {
-        let mut next = self.restore.load(id).map_err(|e| match e.kind() {
+        let next = self.restore.load(id).map_err(|e| match e.kind() {
             std::io::ErrorKind::InvalidData => {
                 DesktopError::InvalidArgument("restore point is damaged".into())
             }
@@ -995,13 +995,31 @@ impl Desktop {
             }
             _ => DesktopError::Io(format!("reading restore point: {e}")),
         })?;
+        self.replace_all(
+            next,
+            "Before restoring a restore point",
+            AutoReason::BeforeRestore,
+        )
+        .await
+    }
+
+    /// Make `next` every setting, as one write: restore, reset and a backup from a file.
+    /// Refused, changing nothing, when its theme isn't installed. A point of the current
+    /// settings (`before`, `reason`) is saved first; launch counts and Welcome's bookkeeping
+    /// stay as they are. Returns plain notices (the power mode of a profile it ended).
+    pub(crate) async fn replace_all(
+        &mut self,
+        mut next: State,
+        before: &str,
+        reason: AutoReason,
+    ) -> Result<Vec<String>, DesktopError> {
         if self.themes.get(&next.theme, next.variant).is_none() {
             return Err(DesktopError::UnknownTheme(next.theme));
         }
         if let Err(e) = self.restore.save(
             &self.state,
-            "Before restoring a restore point",
-            PointKind::Auto(AutoReason::BeforeRestore),
+            before,
+            PointKind::Auto(reason),
             Utc::now().timestamp(),
         ) {
             tracing::warn!("[STATE-005] saving before-restore point: {e}");
