@@ -177,7 +177,7 @@ for _ in $(seq 1 15); do
 done
 # Four apps with tray icons: the Tray island (Small) shows one and lists the rest under "+3".
 for n in alpha beta gamma delta; do
-    "${shell_env[@]}" "$qmlbin" "$root/tests/live/fixtures/tray-app.qml" -- "$n" \
+    "${shell_env[@]}" QT_FORCE_STDERR_LOGGING=1 "$qmlbin" "$root/tests/live/fixtures/tray-app.qml" -- "$n" \
         "$root/tests/live/fixtures/oysterav.png" >>"$tmp/tray.log" 2>&1 &
     pids+=($!)
 done
@@ -260,10 +260,15 @@ expect "Super+A over the calendar: the calendar goes" "quicksettings none"
 still 6-quick-over-popup
 esc
 expect "quick settings opened over a popup takes the keyboard" "closed none"
+# Opened from its button the bar is in its focus grab, so a click on an island goes through and
+# opens that island's popup. Opened by key it isn't: the click only closes quick settings.
+click $qx $qy; sleep 0.3
+click $(centre sysmon)
+expect "an island clicked while quick settings (from its button) is open" "closed popup"
+esc
 ipc quicksettings; sleep 0.8
 click $(centre sysmon)
-expect "an island clicked while quick settings is open" "closed popup"
-esc
+expect "a click outside quick settings (by key) closes it" "closed none"
 
 # --- the notification centre (built-in): from its island, Esc, a second click -------------------
 if [ -n "$(slot notif)" ]; then
