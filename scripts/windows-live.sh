@@ -71,8 +71,8 @@ probe = '''
         onTriggered: probe()
         function probe() {
             var out = [];
-            for (var k = 0; k < tabsRep.count; k++) {
-                var it = tabsRep.itemAt(k);
+            for (var k = 0; k < row.tabsRep.count; k++) {
+                var it = row.tabsRep.itemAt(k);
                 if (!it)
                     continue;
                 var p = it.mapToItem(null, 0, 0);

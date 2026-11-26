@@ -14,6 +14,7 @@ import "../logic/quickui.js" as QuickUi
 import "../logic/shellprefs.js" as ShellPrefs
 import "../logic/failure.js" as F
 import "../logic/lookhome.js" as H
+import "lookseedo"
 
 // Super+Space search box: a top hit, then results grouped by type: apps, a typed web address,
 // open windows, Settings, files by type (folders, documents, images, …) and by their text, the
@@ -130,426 +131,100 @@ PanelWindow {
         return null;
     }
 
-    function wipe() {
-        actionMenu.close();
-        error = "";
-        searchError = "";
-        activateClose.stop();
-        debounce.stop();
-        deadline.stop();
-        copied.stop();
-        termWatch.stop();
-        termState = "";
-        grabbed = true;
-        pinSlot = -1;
-        editPins = false;
-        field.text = "";
-        query = "";
-        searched = "";
-        providerResults = ({});
-        apps = [];
-        sections = [];
-        selection = ({ group: -1, index: -1 });
-        gotExternal = false;
-        deadlinePassed = false;
-        // A new generation makes any answer still in flight stale, so it can't land after a quick
-        // reopen; the empty Search also makes the bridge forget the last `>` command.
-        Bridge.call("Search", ["", Surfaces.nextGeneration()]).catch(function () {});
-        if (shown)
-            rebuild(true);
+    SearchState {
+        id: searchState
+        root: root
+        actionMenu: body.appActionMenu
+        activateClose: activateClose
+        copied: copied
+        deadline: deadline
+        debounce: debounce
+        field: field
+        termWatch: termWatch
     }
+    function wipe() { searchState.wipe(); }
 
-    function edited(text) {
-        query = text;
-        // Typing again starts over: a terminal opened for the last command stays on screen, but
-        // the drop-down is for the command being typed now.
-        if (termState !== "") {
-            termWatch.stop();
-            termState = "";
-        }
-        debounce.restart();
-    }
+    function edited(text) { searchState.edited(text); }
 
-    function runSearch() {
-        Surfaces.nextGeneration();
-        providerResults = ({});
-        gotExternal = false;
-        deadlinePassed = false;
-        var q = query.trim();
-        searched = q;
-        if (pinSlot >= 0) {
-            // Choosing an app to pin: apps only, matched here; the bridge isn't asked.
-            apps = q !== "" ? Rank.searchApps(q, appList, Settings.launchCounts) : [];
-            rebuild(true);
-            return null;
-        }
-        apps = q !== "" && L.classify(q) === "search"
-            ? Rank.searchApps(q, appList, Settings.launchCounts) : [];
-        var wins = q !== "" && L.classify(q) === "search"
-            && ShellPrefs.providerEnabled(Settings.values.shell, "windows")
-            ? Rank.searchWindows(q, windowList()) : [];
-        var cmds = q !== "" && L.classify(q) === "search"
-            && ShellPrefs.providerEnabled(Settings.values.shell, "commands")
-            ? Commands.search(q, profiles) : [];
-        if (wins.length > 0 || cmds.length > 0) {
-            var pr = {};
-            if (wins.length > 0)
-                pr.windows = { generation: generation, provider: "windows", provider_name: "Windows", items: wins };
-            if (cmds.length > 0)
-                pr.commands = { generation: generation, provider: "commands", provider_name: "Commands", items: cmds };
-            providerResults = pr;
-        }
-        rebuild(true);
-        // Always sent, even when empty, so the bridge drops a stale run command.
-        var reply = Bridge.call("Search", [q, generation]);
-        reply.then(function () {
-            root.searchError = "";
-        }).catch(function (e) {
-            var text = F.failureText("Search isn't working", e);
-            if (text !== root.searchError)
-                console.warn("uq[LAUNCH-002] Search failed: " + e);
-            if (root.shown)
-                root.searchError = text;
-        });
-        if (q !== "")
-            deadline.restart();
-        else
-            deadline.stop();
-        return reply;
-    }
+    function runSearch() { return searchState.runSearch(); }
 
     // The open windows, read when a search runs (not kept up to date while look=see>do_ is shut).
-    function windowList() {
-        var out = [], vals = Hyprland.toplevels.values;
-        var mon = Hyprland.focusedMonitor;
-        var toWs = mon && mon.activeWorkspace ? mon.activeWorkspace.id : 1;
-        for (var i = 0; i < vals.length; i++) {
-            var t = vals[i], o = t.lastIpcObject || ({});
-            var cls = o["class"] ? String(o["class"]) : "";
-            var d = cls ? DesktopEntries.heuristicLookup(cls) : null;
-            var a = String(t.address || "");
-            if (a !== "" && a.indexOf("0x") !== 0)
-                a = "0x" + a;
-            var ws = t.workspace ? t.workspace.name : "";
-            out.push({ address: a, title: t.title || "", cls: cls,
-                       app: d && d.name ? String(d.name) : cls, icon: d && d.icon ? String(d.icon) : "",
-                       minimised: ws === "special:minimized",
-                       workspace: ws.indexOf("special:") === 0 ? "" : ws, toWs: toWs });
-        }
-        return out;
-    }
+    function windowList() { return searchState.windowList(); }
 
     // Nothing typed: the apps opened lately, in one group.
-    function homeSections() {
-        var r = H.recentEntries(LauncherState.recents, appList);
-        return r.length > 0 ? [{ provider: "apps", providerName: "Recent", top: false, items: r }] : [];
-    }
+    function homeSections() { return searchState.homeSections(); }
 
     // The picker for square `pinSlot`: matching apps (or the first few by name), and a row that
     // empties the square when it holds an app.
-    function pickSections() {
-        var items = searched !== "" ? apps.slice(0, 8) : H.pickList(appList, 8);
-        var out = [];
-        if (items.length > 0)
-            out.push({ provider: "apps", providerName: "Pin to square " + (pinSlot + 1), top: false,
-                       pick: true, items: items });
-        if (LauncherState.pins[pinSlot] !== "")
-            out.push({ provider: "apps", providerName: "", top: false, pick: true,
-                       items: [{ id: "", name: "Remove from the pinned squares", icon: "list-remove",
-                                 comment: "", remove: true }] });
-        return out;
-    }
+    function pickSections() { return searchState.pickSections(); }
 
-    function rebuild(reset) {
-        if (pinSlot >= 0)
-            sections = pickSections();
-        else if (searched === "")
-            sections = homeSections();
-        else
-            sections = L.sections(Rank.merge(apps, providerResults, generation,
-                ShellPrefs.providerOrder(Settings.values.shell)));
-        // Nothing is chosen on the home view, so Enter never opens a recent app by accident.
-        selection = reset && pinSlot < 0 && searched === "" ? ({ group: -1, index: -1 })
-            : L.clampSelection(reset ? null : selection, sections);
-    }
+    function rebuild(reset) { searchState.rebuild(reset); }
 
     // Square `slot` of the pinned apps: open the picker for it.
-    function startPick(slot) {
-        pinSlot = slot;
-        field.text = "";
-        query = "";
-        searched = "";
-        apps = [];
-        providerResults = ({});
-        rebuild(true);
-        Qt.callLater(field.forceActiveFocus);
-    }
+    function startPick(slot) { searchState.startPick(slot); }
 
-    function endPick() {
-        pinSlot = -1;
-        field.text = "";
-        query = "";
-        searched = "";
-        apps = [];
-        rebuild(true);
-    }
+    function endPick() { searchState.endPick(); }
 
-    function chooseForPin(item) {
-        LauncherState.setPin(pinSlot, item.remove === true ? "" : String(item.id));
-        endPick();
-    }
+    function chooseForPin(item) { searchState.chooseForPin(item); }
 
-    function onResults(data) {
-        if (!shown || !data || data.generation !== generation || typeof data.provider !== "string")
-            return;
-        var pr = providerResults;
-        pr[data.provider] = data;
-        providerResults = pr;
-        if (data.source_dir !== "builtin")
-            gotExternal = true;
-        rebuild(false);
-    }
+    function onResults(data) { searchState.onResults(data); }
 
-    function selectedSection() {
-        return selection.group >= 0 ? sections[selection.group] : null;
-    }
+    function selectedSection() { return searchState.selectedSection(); }
 
+    Activation {
+        id: activation
+        root: root
+        activateClose: activateClose
+        copied: copied
+        debounce: debounce
+        termWatch: termWatch
+    }
     // Enter. If the rows are stale (typed within the debounce), search now and act on the fresh
     // top hit once the bridge replies: it emits the built-in calc/run rows before the reply, so
     // they're in place by then, and the bridge's run state is this generation's.
-    function activate(alt) {
-        if (Bridge.locked)
-            return;
-        if (pinSlot >= 0) {
-            if (L.resultsStale(debounce.running, query, searched)) {
-                debounce.stop();
-                runSearch();
-            }
-            activateSelected(alt);
-            return;
-        }
-        if (L.resultsStale(debounce.running, query, searched)) {
-            debounce.stop();
-            var gen;
-            var reply = runSearch();
-            gen = generation;
-            reply.then(function () {
-                if (root.shown && generation === gen && !L.resultsStale(debounce.running, query, searched))
-                    root.activateSelected(alt);
-            }).catch(function () {
-                // runSearch's own handler has logged it and shows it (searchError).
-            });
-            return;
-        }
-        activateSelected(alt);
-    }
+    function activate(alt) { activation.activate(alt); }
 
     // A click acts on the row the user clicked, so it's only honoured when the rows are current;
     // otherwise it just brings the rows up to date.
-    function activateClicked(group, index) {
-        if (Bridge.locked)
-            return;
-        if (pinSlot < 0 && L.resultsStale(debounce.running, query, searched)) {
-            debounce.stop();
-            runSearch();
-            return;
-        }
-        selection = { group: group, index: index };
-        activateSelected();
-    }
+    function activateClicked(group, index) { activation.activateClicked(group, index); }
 
-    function activateSelected(alt) {
-        var sec = selectedSection();
-        if (!sec || Bridge.locked)
-            return;
-        if (pinSlot >= 0) {
-            chooseForPin(sec.items[selection.index]);
-            return;
-        }
-        if (sec.provider === "run" && alt !== true && sec.items[selection.index]) {
-            openInTerminal(sec.items[selection.index]);
-            return;
-        }
-        var a = L.activation(sec.provider, sec.items[selection.index], alt === true);
-        if (a === null)
-            return;
-        var item = sec.items[selection.index];
-        var label = String(item.name || item.title || item.id || "");
-        var what = a.kind === "launch" ? "Couldn't open " + label
-            : a.kind === "copy" ? "Couldn't copy that" : "Couldn't do that";
-        // A refusal keeps look=see>do_ open and says why; it closes once the call worked (or after
-        // activateClose, if that takes long).
-        var fail = function (e) {
-            activateClose.stop();
-            console.warn("uq[LAUNCH-002] " + a.call + " (" + sec.provider + ") failed: " + e);
-            if (root.shown)
-                root.error = F.failureText(what, e);
-        };
-        error = "";
-        var h = Bridge.call(a.call, a.args);
-        if (a.kind === "copy") {
-            h.then(function (reply) {
-                var v = L.copyValue(reply);
-                if (v !== null && root.shown) {
-                    Quickshell.clipboardText = v;
-                    copied.restart();
-                }
-            }).catch(fail);
-        } else if (a.close) {
-            activateClose.restart();
-            h.then(function () {
-                activateClose.stop();
-                if (sec.provider === "apps")
-                    LauncherState.recordRecent(String(item.id));
-                if (root.shown)
-                    Surfaces.close();
-            }).catch(fail);
-        } else {
-            h.catch(fail);
-        }
-    }
+    function activateSelected(alt) { activation.activateSelected(alt); }
 
     // A pinned square (or Alt+N): open that app like a result row does.
-    function openPinned(slot) {
-        var sq = squares[slot];
-        if (!sq || !sq.entry || Bridge.locked)
-            return;
-        error = "";
-        activateClose.restart();
-        Bridge.call("Launch", [{ desktop_id: sq.id }]).then(function () {
-            activateClose.stop();
-            LauncherState.recordRecent(sq.id);
-            if (root.shown)
-                Surfaces.close();
-        }).catch(function (e) {
-            activateClose.stop();
-            console.warn("uq[LAUNCH-001] Launch (pinned " + sq.id + ") failed: " + e);
-            if (root.shown)
-                root.error = F.failureText("Couldn't open " + String(sq.entry.name || sq.id), e);
-        });
-    }
+    function openPinned(slot) { activation.openPinned(slot); }
 
     // Enter on a `>` command. With a terminal docked that takes tabs, a new tab in it; else the
     // default terminal opens docked beneath the pill (a docked one that can't take tabs is
     // minimised to the Open windows island first). look=see>do_ stays either way.
-    function openInTerminal(item) {
-        if (Bridge.locked || termState === "sending")
-            return;
-        error = "";
-        if (dockAlive() && dockTabs !== "") {
-            termState = "sending";
-            Bridge.call("Launch", [{ run_id: item.id, terminal: true, tab: dockTabs }]).then(function () {
-                root.termState = "sent";
-            }).catch(function (e) {
-                console.warn("uq[LAUNCH-003] a new tab in the docked terminal failed: " + e);
-                root.termState = "";
-                root.releaseDock();
-                root.openNew(item);
-            });
-            return;
-        }
-        if (dockAlive())
-            releaseDock();
-        openNew(item);
-    }
+    function openInTerminal(item) { activation.openInTerminal(item); }
 
-    function openNew(item) {
-        var before = {};
-        var vals = Hyprland.toplevels.values;
-        for (var i = 0; i < vals.length; i++)
-            before[addressOf(vals[i])] = true;
-        termBefore = before;
-        pendingTabs = "";
-        var sc = screen;
-        var r = dockRect(1);
-        // The window rules take the monitor's own coordinates.
-        var place = { x: r.x - (sc ? sc.x : 0), y: r.y - (sc ? sc.y : 0), w: r.w, h: r.h,
-                      monitor: sc ? String(sc.name) : "" };
-        termState = "sending";
-        Bridge.call("Launch", [{ run_id: item.id, terminal: true, dock: true, place: place }]).then(function (v) {
-            root.pendingTabs = v && typeof v.tabs === "string" ? v.tabs : "";
-            root.termTries = 0;
-            termWatch.restart();
-        }).catch(function (e) {
-            console.warn("uq[LAUNCH-001] Launch (run in a terminal) failed: " + e);
-            root.termState = "";
-            if (root.shown)
-                root.error = F.failureText("Couldn't open " + root.termName, e);
-        });
-    }
+    function openNew(item) { activation.openNew(item); }
 
-    function addressOf(t) {
-        var a = String(t.address || "");
-        return a !== "" && a.indexOf("0x") !== 0 ? "0x" + a : a;
+    TerminalDock {
+        id: terminalDock
+        root: root
     }
+    function addressOf(t) { return terminalDock.addressOf(t); }
 
     // Where the docked terminal goes, in layout coordinates: under the pill and its strip, as
     // wide as look=see>do_. `scale` < 1 gives the same box shrunk about its centre, which is
     // where a tucked-away terminal waits so that it grows in when it comes back.
-    function dockRect(scale) {
-        var sc = screen;
-        var w = Math.round(root.implicitWidth), h = termHeight;
-        var x = (sc ? sc.x : 0) + Math.round(((sc ? sc.width : 1280) - w) / 2);
-        var y = (sc ? sc.y : 0) + root.margins.top + pillHeight + Theme.gapIn + sentHeight
-            + Theme.gapOut * 2 + Theme.gapIn;
-        var s = scale > 0 ? scale : 1;
-        return { x: Math.round(x + w * (1 - s) / 2), y: Math.round(y + h * (1 - s) / 2),
-                 w: Math.round(w * s), h: Math.round(h * s) };
-    }
+    function dockRect(scale) { return terminalDock.dockRect(scale); }
 
     // Whether the docked terminal's window is still there; forgets it once it's gone.
-    function dockAlive() {
-        if (dockAddress === "")
-            return false;
-        var vals = Hyprland.toplevels.values;
-        for (var i = 0; i < vals.length; i++)
-            if (addressOf(vals[i]) === dockAddress)
-                return true;
-        forgetDock();
-        return false;
-    }
-    function forgetDock() {
-        dockAddress = "";
-        dockTabs = "";
-        dockHidden = false;
-    }
+    function dockAlive() { return terminalDock.dockAlive(); }
+    function forgetDock() { terminalDock.forgetDock(); }
     // The workspace shown on look=see>do_'s screen.
-    function activeWsId() {
-        var m = screen ? Hyprland.monitorFor(screen) : null;
-        var ws = m && m.activeWorkspace ? m.activeWorkspace : Hyprland.focusedWorkspace;
-        return ws ? ws.id : 1;
-    }
-    function placeDock(scale) {
-        var r = dockRect(scale);
-        return Bridge.call("Dispatch", ["dock", { address: dockAddress, x: r.x, y: r.y, w: r.w, h: r.h }]);
-    }
+    function activeWsId() { return terminalDock.activeWsId(); }
+    function placeDock(scale) { return terminalDock.placeDock(scale); }
     // look=see>do_ closed: the terminal goes to a special workspace of its own (it isn't in the
     // Open windows island while away), shrunk a little so it grows back in.
-    function hideDock() {
-        if (dockHidden || !dockAlive())
-            return;
-        dockHidden = true;
-        Bridge.call("Dispatch", ["move", { address: dockAddress, workspace: "special:uq-lookseedo" }]).then(function () {
-            return root.placeDock(0.87);
-        }).catch(function (e) { console.warn("uq[LAUNCH-003] tuck the terminal away: " + e); });
-    }
+    function hideDock() { return terminalDock.hideDock(); }
     // look=see>do_ opened again: the terminal comes back under the pill on the workspace shown.
-    function showDock() {
-        if (!dockHidden || !dockAlive())
-            return;
-        dockHidden = false;
-        Bridge.call("Dispatch", ["move", { address: dockAddress, workspace: activeWsId() }]).then(function () {
-            return root.placeDock(1);
-        }).catch(function (e) { console.warn("uq[LAUNCH-003] bring the terminal back: " + e); });
-    }
+    function showDock() { return terminalDock.showDock(); }
     // A docked terminal that can't take a tab: minimised to the Open windows island, where it
     // can still be found, so a new one can dock.
-    function releaseDock() {
-        if (dockAlive())
-            Bridge.call("Dispatch", ["minimise", { address: dockAddress, from_ws: activeWsId() }])
-                .catch(function (e) { console.warn("uq[LAUNCH-003] minimise the terminal: " + e); });
-        forgetDock();
-    }
+    function releaseDock() { terminalDock.releaseDock(); }
     function regrab() {
         grabbed = true;
         field.forceActiveFocus();
@@ -590,14 +265,7 @@ PanelWindow {
     }
 
     // Focus on the docked terminal (or the one opening) keeps look=see>do_.
-    function focusOnTerminal() {
-        var t = Hyprland.activeToplevel;
-        if (!t)
-            return false;
-        var a = addressOf(t);
-        return a !== "" && ((dockAddress !== "" && a === dockAddress)
-                            || (termState === "sending" && !termBefore[a]));
-    }
+    function focusOnTerminal() { return terminalDock.focusOnTerminal(); }
     // A click outside look=see>do_ ends its focus grab. Hyprland doesn't hand that click's focus
     // on while the grab holds it, so where the pointer is says where it went: on the docked
     // terminal, look=see>do_ stays (without the grab) and the terminal is given the keyboard;
@@ -628,20 +296,7 @@ PanelWindow {
             }
         }
     }
-    function pointerAt(p) {
-        if (!shown)
-            return;
-        var r = dockRect(1);
-        if (p && docked && p.x >= r.x && p.x < r.x + r.w && p.y >= r.y && p.y < r.y + r.h) {
-            grabbed = false;
-            Bridge.call("Dispatch", ["focus_window", { address: dockAddress, keep_pointer: true }])
-                .catch(function (e) { console.warn("uq[LAUNCH-003] focus the terminal: " + e); });
-        } else {
-            console.debug("uq: lookseedo dock: grab cleared at " + JSON.stringify(p) + ", terminal at "
-                          + JSON.stringify(r) + (docked ? "" : " (not docked)") + ", closing");
-            Surfaces.close();
-        }
-    }
+    function pointerAt(p) { terminalDock.pointerAt(p); }
 
     Connections {
         target: Hyprland
@@ -822,433 +477,11 @@ PanelWindow {
             }
         }
 
-        Rectangle {
+        ResultsPanel {
             id: body
-            y: pill.height + Theme.gapIn
-            width: parent.width
-            height: col.implicitHeight + Theme.gapOut * 2
-            visible: root.sections.length > 0 || root.homeShown || root.runMode || root.pinSlot >= 0
-                     || root.termState !== "" || root.dockStrip || root.error !== "" || root.searchError !== ""
-                     || root.emojiHint || copied.running
-                     || (root.searched !== "" && root.deadlinePassed)
-            radius: Theme.radius
-            color: Theme.surface
-            border.color: Theme.border
-            border.width: Theme.borderWidth
-
-            ColumnLayout {
-                id: col
-                anchors.fill: parent
-                anchors.margins: Theme.gapOut
-                spacing: Theme.gapIn
-
-                Flickable {
-                    id: flick
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: Math.min(results.implicitHeight, root.maxListHeight)
-                    // Recents and the picker show with an empty field; once there is text the
-                    // list is the search's, and a `>` command has the terminal instead.
-                    visible: root.sections.length > 0 && !root.runMode && !root.dockStrip
-                             && !(root.query.trim() !== "" && root.searched === "" && root.pinSlot < 0)
-                    contentHeight: results.implicitHeight
-                    clip: true
-                    boundsBehavior: Flickable.StopAtBounds
-
-                    function ensureVisible(item) {
-                        var p = item.mapToItem(results, 0, 0);
-                        if (p.y < contentY)
-                            contentY = p.y;
-                        else if (p.y + item.height > contentY + height)
-                            contentY = p.y + item.height - height;
-                    }
-
-                    Column {
-                        id: results
-                        width: flick.width
-                        spacing: 2
-
-                        Repeater {
-                            model: root.sections
-                            delegate: Column {
-                                id: sec
-                                required property var modelData
-                                required property int index
-                                width: results.width
-                                spacing: 2
-
-                                UqText {
-                                    width: parent.width
-                                    visible: text !== ""
-                                    leftPadding: Theme.gapIn
-                                    topPadding: sec.index > 0 ? Theme.gapIn : 0
-                                    text: sec.modelData.top ? "Top hit" : sec.modelData.providerName
-                                    color: Theme.textMuted
-                                    font.pixelSize: Theme.fontSize - 1
-                                }
-
-                                Repeater {
-                                    model: sec.modelData.items
-                                    delegate: Rectangle {
-                                        id: row
-                                        required property var modelData
-                                        required property int index
-                                        readonly property bool isApp: sec.modelData.provider === "apps"
-                                        readonly property bool selected: root.selection.group === sec.index
-                                            && root.selection.index === index
-                                        width: results.width
-                                        height: root.rowHeight
-                                        radius: Theme.radiusControl
-                                        color: selected ? Theme.overlay
-                                            : (rowMouse.containsMouse ? Theme.surfaceAlt : "transparent")
-                                        Behavior on color { ColorAnimation { duration: Motion.fast } }
-                                        Accessible.role: Accessible.ListItem
-                                        Accessible.name: isApp ? String(modelData.name || "")
-                                            : String(modelData.title || "")
-                                        onSelectedChanged: if (selected) flick.ensureVisible(row)
-
-                                        RowLayout {
-                                            anchors.fill: parent
-                                            anchors.leftMargin: Theme.gapIn
-                                            anchors.rightMargin: Theme.gapIn
-                                            spacing: Theme.gapIn * 2
-
-                                            IconImage {
-                                                Layout.preferredWidth: root.iconSize
-                                                Layout.preferredHeight: root.iconSize
-                                                implicitSize: root.iconSize
-                                                backer.sourceSize.width: root.iconSize * root.dpr
-                                                backer.sourceSize.height: root.iconSize * root.dpr
-                                                source: root.iconSource(row.modelData.icon)
-                                            }
-                                            ColumnLayout {
-                                                Layout.fillWidth: true
-                                                spacing: 0
-                                                UqText {
-                                                    Layout.fillWidth: true
-                                                    text: String((row.isApp ? row.modelData.name
-                                                                            : row.modelData.title) || "")
-                                                }
-                                                UqText {
-                                                    Layout.fillWidth: true
-                                                    visible: text !== ""
-                                                    text: String((row.isApp ? row.modelData.comment
-                                                                            : row.modelData.subtitle) || "")
-                                                    color: Theme.textMuted
-                                                    font.pixelSize: Theme.fontSize - 1
-                                                }
-                                            }
-                                            // The top hit names where it came from; other rows sit
-                                            // under their group's heading.
-                                            UqText {
-                                                visible: sec.modelData.top === true
-                                                Layout.maximumWidth: root.width * 0.3
-                                                text: String(sec.modelData.providerName || "")
-                                                color: Theme.textMuted
-                                                font.pixelSize: Theme.fontSize - 1
-                                            }
-                                        }
-                                        MouseArea {
-                                            id: rowMouse
-                                            anchors.fill: parent
-                                            hoverEnabled: true
-                                            acceptedButtons: Qt.LeftButton | Qt.RightButton
-                                            onClicked: function (mouse) {
-                                                if (mouse.button === Qt.RightButton) {
-                                                    // App actions from other apps (Phase 4 §2.4.2).
-                                                    if (row.isApp && sec.modelData.pick !== true && row.modelData.id)
-                                                        actionMenu.openAt(row, mouse.x, mouse.y,
-                                                                          String(row.modelData.id || ""));
-                                                } else {
-                                                    root.activateClicked(sec.index, row.index);
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // The pinned squares: open an app, or fill an empty square.
-                ColumnLayout {
-                    id: pinned
-                    Layout.fillWidth: true
-                    spacing: Theme.gapIn
-                    visible: root.homeShown
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        UqText {
-                            Layout.fillWidth: true
-                            leftPadding: Theme.gapIn
-                            text: root.editPins ? "Pinned: choose a square to change" : "Pinned"
-                            color: Theme.textMuted
-                            font.pixelSize: Theme.fontSize - 1
-                        }
-                        Rectangle {
-                            id: editButton
-                            objectName: "lookseedoEditPins"
-                            implicitWidth: editLabel.implicitWidth + Theme.gapOut
-                            implicitHeight: 22
-                            radius: height / 2
-                            color: editMouse.containsMouse ? Theme.surfaceAlt : "transparent"
-                            Behavior on color { ColorAnimation { duration: Motion.fast } }
-                            Accessible.role: Accessible.Button
-                            Accessible.name: root.editPins ? "Done editing pinned apps" : "Edit pinned apps"
-                            UqText {
-                                id: editLabel
-                                anchors.centerIn: parent
-                                text: root.editPins ? "Done" : "Edit"
-                                color: Theme.accent
-                                font.pixelSize: Theme.fontSize - 1
-                            }
-                            MouseArea {
-                                id: editMouse
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                onClicked: root.editPins = !root.editPins
-                            }
-                        }
-                    }
-
-                    Row {
-                        id: squareRow
-                        Layout.fillWidth: true
-                        readonly property int side: 76
-                        spacing: Math.max(Theme.gapIn, (width - 5 * side) / 4)
-                        Repeater {
-                            model: root.squares
-                            delegate: Rectangle {
-                                id: sq
-                                required property var modelData
-                                readonly property bool filled: modelData.entry !== null
-                                objectName: "lookseedoSquare" + modelData.slot
-                                width: squareRow.side
-                                height: squareRow.side
-                                radius: Theme.radiusControl
-                                color: sqMouse.containsMouse ? Theme.overlay : Theme.surfaceAlt
-                                Behavior on color { ColorAnimation { duration: Motion.fast } }
-                                border.color: root.editPins ? Theme.accent : Theme.border
-                                border.width: Theme.borderWidth - 1
-                                Accessible.role: Accessible.Button
-                                Accessible.name: filled ? String(modelData.entry.name)
-                                    : "Empty square " + (modelData.slot + 1) + ": pin an app"
-
-                                IconImage {
-                                    visible: sq.filled
-                                    anchors.horizontalCenter: parent.horizontalCenter
-                                    y: Theme.gapIn * 2
-                                    implicitSize: 32
-                                    backer.sourceSize.width: 32 * root.dpr
-                                    backer.sourceSize.height: 32 * root.dpr
-                                    source: sq.filled ? root.iconSource(sq.modelData.entry.icon) : ""
-                                }
-                                UqText {
-                                    visible: sq.filled
-                                    anchors.left: parent.left
-                                    anchors.right: parent.right
-                                    anchors.bottom: parent.bottom
-                                    anchors.margins: Theme.gapIn
-                                    horizontalAlignment: Text.AlignHCenter
-                                    text: sq.filled ? String(sq.modelData.entry.name) : ""
-                                    font.pixelSize: Theme.fontSize - 1
-                                }
-                                UqText {
-                                    visible: !sq.filled
-                                    anchors.centerIn: parent
-                                    text: "+"
-                                    color: Theme.textMuted
-                                    font.pixelSize: 24
-                                }
-                                // Edit mode: a small mark on a filled square that it can be changed.
-                                UqText {
-                                    visible: sq.filled && root.editPins
-                                    anchors.top: parent.top
-                                    anchors.right: parent.right
-                                    anchors.margins: Theme.gapIn
-                                    text: "…"
-                                    color: Theme.accent
-                                    font.pixelSize: Theme.fontSize
-                                }
-                                MouseArea {
-                                    id: sqMouse
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    acceptedButtons: Qt.LeftButton | Qt.RightButton
-                                    onClicked: function (mouse) {
-                                        // Empty squares, edit mode and a right click all choose the
-                                        // app for the square; a plain click opens the app.
-                                        if (!sq.filled || root.editPins || mouse.button === Qt.RightButton)
-                                            root.startPick(sq.modelData.slot);
-                                        else
-                                            root.openPinned(sq.modelData.slot);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // The default terminal, dropped down from the pill with the command being typed.
-                // Enter opens the real one in its place.
-                Rectangle {
-                    id: termDrop
-                    objectName: "lookseedoTerminal"
-                    Layout.fillWidth: true
-                    readonly property bool open: root.runMode && root.termState !== "sent" && !root.docked
-                    Layout.preferredHeight: open ? root.termHeight : 0
-                    visible: Layout.preferredHeight > 0
-                    clip: true
-                    radius: Theme.radiusControl
-                    color: Theme.bg
-                    border.color: Theme.border
-                    border.width: Theme.borderWidth - 1
-                    Behavior on Layout.preferredHeight {
-                        NumberAnimation { duration: Motion.base; easing.type: Motion.easing }
-                    }
-
-                    Rectangle {
-                        id: termBar
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.top: parent.top
-                        height: 28
-                        color: Theme.surfaceAlt
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.leftMargin: Theme.gapOut
-                            anchors.rightMargin: Theme.gapOut
-                            spacing: Theme.gapIn * 2
-                            IconImage {
-                                Layout.preferredWidth: 16
-                                Layout.preferredHeight: 16
-                                implicitSize: 16
-                                source: root.defaultTerminal && root.defaultTerminal.icon
-                                    ? root.iconSource(root.defaultTerminal.icon)
-                                    : root.iconSource("utilities-terminal")
-                            }
-                            UqText {
-                                Layout.fillWidth: true
-                                text: root.termName
-                                color: Theme.textMuted
-                                font.pixelSize: Theme.fontSize - 1
-                            }
-                        }
-                    }
-                    UqText {
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.top: termBar.bottom
-                        anchors.margins: Theme.gapOut
-                        baseFamily: Theme.fontMono
-                        wrapMode: Text.WrapAnywhere
-                        maximumLineCount: 7
-                        // The same "prompt, command, cursor" the real terminal opens with.
-                        text: "$ " + root.command + "\u2588"
-                        color: Theme.text
-                    }
-                    UqText {
-                        anchors.right: parent.right
-                        anchors.bottom: parent.bottom
-                        anchors.margins: Theme.gapOut
-                        visible: root.termState === "sending"
-                        text: "Opening…"
-                        color: Theme.textMuted
-                        font.pixelSize: Theme.fontSize - 1
-                    }
-                }
-
-                // The terminal is docked under the pill: what Enter does next, or what is running.
-                Rectangle {
-                    objectName: "lookseedoSent"
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: root.sentHeight
-                    visible: root.dockStrip || (root.termState === "sent" && !root.docked)
-                    radius: Theme.radiusControl
-                    color: Theme.surfaceAlt
-                    UqText {
-                        anchors.fill: parent
-                        anchors.leftMargin: Theme.gapOut
-                        anchors.rightMargin: Theme.gapOut
-                        verticalAlignment: Text.AlignVCenter
-                        elide: Text.ElideRight
-                        text: L.dockText(root.termName, root.dockTabs !== "", root.termState, root.runMode)
-                        color: Theme.accent
-                    }
-                }
-
-                UqText {
-                    Layout.fillWidth: true
-                    Layout.leftMargin: Theme.gapIn
-                    // Nothing found, once the providers have had their time.
-                    visible: root.sections.length === 0 && root.searched !== "" && root.deadlinePassed
-                             && !root.emojiHint && root.query.trim() === root.searched
-                             && !root.runMode && root.pinSlot < 0
-                    text: "No matches"
-                    color: Theme.textMuted
-                }
-                UqText {
-                    Layout.fillWidth: true
-                    Layout.leftMargin: Theme.gapIn
-                    visible: root.pinSlot >= 0 && root.searched !== "" && root.sections.length === 0
-                    text: "No apps match"
-                    color: Theme.textMuted
-                }
-                UqText {
-                    Layout.fillWidth: true
-                    visible: root.emojiHint
-                    text: "No emoji provider installed"
-                    color: Theme.textMuted
-                }
-                UqText {
-                    Layout.fillWidth: true
-                    visible: copied.running
-                    text: "Copied"
-                    color: Theme.success
-                }
-                UqText {
-                    objectName: "lookseedoError"
-                    Layout.fillWidth: true
-                    visible: text !== ""
-                    text: root.error !== "" ? root.error : root.searchError
-                    color: Theme.error
-                    wrapMode: Text.Wrap
-                    maximumLineCount: 2
-                    elide: Text.ElideRight
-                }
-                UqText {
-                    objectName: "lookseedoHint"
-                    Layout.fillWidth: true
-                    Layout.topMargin: Theme.gapIn
-                    visible: root.termState !== "sent" && !root.dockStrip
-                    text: root.pinSlot >= 0 ? "Enter pins the app   Esc goes back"
-                        : (root.runMode ? "Enter runs it in " + root.termName + "   Shift+Enter runs it in the background"
-                        : (root.homeShown ? "Alt+1 to 5 open a pinned app   = maths   > terminal   : emoji"
-                        : "= maths   > terminal   : emoji   Tab next group"))
-                    color: Theme.textMuted
-                    font.pixelSize: Theme.fontSize - 1
-                }
-            }
-
-            // More rows below: the list fades out instead of ending on a row cut in half.
-            Rectangle {
-                x: col.x + flick.x
-                y: col.y + flick.y + flick.height - height
-                width: flick.width
-                height: Math.min(28, flick.height)
-                visible: flick.visible && flick.contentY + flick.height < flick.contentHeight - 1
-                gradient: Gradient {
-                    GradientStop { position: 0; color: Qt.rgba(Theme.surface.r, Theme.surface.g, Theme.surface.b, 0) }
-                    GradientStop { position: 1; color: Theme.surface }
-                }
-            }
-
-            AppActionMenu {
-                id: actionMenu
-                onDone: Surfaces.close()
-                onOpenChanged: if (!open && root.shown) field.forceActiveFocus()
-            }
+            field: field
+            pill: pill
+            root: root
         }
         // After the docked terminal was clicked, the first click back on look=see>do_ only
         // takes the focus grab (and the keyboard) back.

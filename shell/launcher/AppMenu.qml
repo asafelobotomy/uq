@@ -12,6 +12,7 @@ import "../logic/launcher.js" as L
 import "../logic/rank.js" as Rank
 import "../logic/appmenu.js" as M
 import "../logic/failure.js" as F
+import "appmenu"
 
 // KDE-style app menu, hung under the System island's app-menu button: avatar and an apps-only
 // search at the top, categories on the left, an app grid on the right, and user@host plus the
@@ -113,8 +114,8 @@ PanelWindow {
         field.text = "";
         query = "";
         currentCategory = favList.length > 0 ? M.FAVOURITES : M.ALL;
-        grid.currentIndex = 0;
-        grid.positionViewAtBeginning();
+        menuBody.appGrid.currentIndex = 0;
+        menuBody.appGrid.positionViewAtBeginning();
     }
 
     function launch(item) {
@@ -184,7 +185,7 @@ PanelWindow {
         var n = gridModel.length;
         if (n === 0)
             return;
-        grid.currentIndex = Math.max(0, Math.min(n - 1, grid.currentIndex + step));
+        menuBody.appGrid.currentIndex = Math.max(0, Math.min(n - 1, menuBody.appGrid.currentIndex + step));
     }
 
     onShownChanged: {
@@ -198,7 +199,7 @@ PanelWindow {
             Qt.callLater(field.forceActiveFocus);
         }
     }
-    onGridModelChanged: grid.currentIndex = 0
+    onGridModelChanged: menuBody.appGrid.currentIndex = 0
 
     Connections {
         target: Bridge
@@ -314,7 +315,7 @@ PanelWindow {
                             Surfaces.close();
                         } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
                             if (root.gridModel.length > 0)
-                                root.launch(root.gridModel[Math.max(0, grid.currentIndex)]);
+                                root.launch(root.gridModel[Math.max(0, menuBody.appGrid.currentIndex)]);
                         } else if (event.key === Qt.Key_Down) {
                             root.moveGrid(root.columns);
                         } else if (event.key === Qt.Key_Up) {
@@ -332,140 +333,11 @@ PanelWindow {
             }
 
             // --- body: categories | grid ---
-            RowLayout {
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                spacing: Theme.gapIn * 2
-
-                ListView {
-                    id: cats
-                    Layout.preferredWidth: 112
-                    Layout.fillHeight: true
-                    clip: true
-                    spacing: 2
-                    boundsBehavior: Flickable.StopAtBounds
-                    model: root.categoryList
-                    delegate: Rectangle {
-                        id: catRow
-                        required property var modelData
-                        readonly property bool current: !root.searching
-                            && root.currentCategory === modelData.key
-                        width: cats.width
-                        height: 28
-                        radius: Theme.radiusControl
-                        color: current ? Theme.overlay
-                            : (catMouse.containsMouse ? Theme.surfaceAlt : "transparent")
-                        Behavior on color { ColorAnimation { duration: Motion.fast } }
-                        Accessible.role: Accessible.Button
-                        Accessible.name: modelData.key
-
-                        UqText {
-                            anchors.fill: parent
-                            anchors.leftMargin: Theme.gapIn * 2
-                            anchors.rightMargin: Theme.gapIn
-                            verticalAlignment: Text.AlignVCenter
-                            text: catRow.modelData.key
-                            color: catRow.current ? Theme.text : Theme.textMuted
-                        }
-                        MouseArea {
-                            id: catMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            onClicked: {
-                                root.currentCategory = catRow.modelData.key;
-                                field.text = "";
-                                root.query = "";
-                                field.forceActiveFocus();
-                            }
-                        }
-                    }
-                }
-
-                Rectangle {
-                    Layout.preferredWidth: 1
-                    Layout.fillHeight: true
-                    color: Theme.border
-                }
-
-                Item {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-
-                    GridView {
-                        id: grid
-                        anchors.fill: parent
-                        clip: true
-                        boundsBehavior: Flickable.StopAtBounds
-                        cellWidth: Math.floor(width / root.columns)
-                        cellHeight: 76
-                        model: root.gridModel
-                        currentIndex: 0
-                        delegate: Rectangle {
-                            id: cell
-                            required property var modelData
-                            required property int index
-                            readonly property bool selected: grid.currentIndex === index
-                            width: grid.cellWidth - 2
-                            height: grid.cellHeight - 2
-                            radius: Theme.radiusControl
-                            color: selected ? Theme.overlay
-                                : (cellMouse.containsMouse ? Theme.surfaceAlt : "transparent")
-                            Behavior on color { ColorAnimation { duration: Motion.fast } }
-                            Accessible.role: Accessible.Button
-                            Accessible.name: String(modelData.name || "")
-
-                            ColumnLayout {
-                                anchors.fill: parent
-                                anchors.margins: 4
-                                spacing: 2
-
-                                IconImage {
-                                    Layout.alignment: Qt.AlignHCenter
-                                    Layout.preferredWidth: root.iconSize
-                                    Layout.preferredHeight: root.iconSize
-                                    implicitSize: root.iconSize
-                                    backer.sourceSize.width: root.iconSize * root.dpr
-                                    backer.sourceSize.height: root.iconSize * root.dpr
-                                    // Icon files decode off the GUI thread, so the menu's first frame doesn't wait on them.
-                                    // Theme icons (image://icon) load on the GUI thread: QIcon is not thread-safe.
-                                    source: root.iconSource(cell.modelData.icon)
-                                    backer.asynchronous: L.asyncImageOk(source)
-                                }
-                                UqText {
-                                    Layout.fillWidth: true
-                                    Layout.fillHeight: true
-                                    horizontalAlignment: Text.AlignHCenter
-                                    wrapMode: Text.Wrap
-                                    maximumLineCount: 2
-                                    font.pixelSize: Theme.fontSize - 1
-                                    text: String(cell.modelData.name || "")
-                                }
-                            }
-                            MouseArea {
-                                id: cellMouse
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                acceptedButtons: Qt.LeftButton | Qt.RightButton
-                                onClicked: function (mouse) {
-                                    if (mouse.button === Qt.RightButton)
-                                        actionMenu.openAt(cell, mouse.x, mouse.y,
-                                                          String(cell.modelData.id || ""));
-                                    else
-                                        root.launch(cell.modelData);
-                                }
-                            }
-                        }
-                    }
-
-                    UqText {
-                        anchors.centerIn: parent
-                        visible: root.gridModel.length === 0
-                        text: root.searching ? "No matching apps"
-                            : (root.currentCategory === M.FAVOURITES
-                               ? "No favourites yet: pin apps from the dock" : "No apps")
-                        color: Theme.textMuted
-                    }
-                }
+            AppMenuBody {
+                id: menuBody
+                actionMenu: actionMenu
+                field: field
+                root: root
             }
 
             UqText {

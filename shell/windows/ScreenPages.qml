@@ -10,6 +10,7 @@ import "../logic/edges.js" as Edges
 import "../logic/mousehold.js" as Hold
 import "../logic/pages.js" as Pages
 import "../logic/work.js" as Work
+import "screenpages"
 
 // Whole screen pages in the scrolling layout: the columns fall into pages a screen wide (a Full
 // column, two Half ones, or a pair a resize grip shared out), and after focus moves or windows
@@ -421,128 +422,24 @@ Scope {
     // clicked by accident (a right click opens the desktop menu, as on empty desktop).
     Variants {
         model: Quickshell.screens
-        delegate: PanelWindow {
+        delegate: HiddenCover {
             id: cov
-            required property var modelData
-            readonly property var mon: root.monitors[modelData.name] || null
-            readonly property var area: {
-                var m = cov.mon;
-                if (!root.enabled || !WindowLook.known || !m || !m.activeWorkspace)
-                    return null;
-                var wins = root.tiled[m.activeWorkspace.id], g = Pages.geometry(m, WindowLook);
-                if (!wins || g === null)
-                    return null;
-                var c = Pages.cover(wins, root.anchorOf(wins), g.room, g.extra, root.starts, root.right);
-                if (c === null)
-                    return null;
-                var scale = m.scale > 0 ? m.scale : 1;
-                var res = m.reserved && m.reserved.length >= 4 ? m.reserved : [0, 0, 0, 0];
-                // In the screen's own coordinates, between the reserved strips (the bar): the
-                // empty part, out to the screen's edge on the side it reaches.
-                var sw = Math.round(m.width / scale), base = res[0] + WindowLook.gapLeft;
-                var x0 = c.from <= Pages.TOLERANCE ? 0 : Math.round(base + c.from);
-                var x1 = c.from + c.width >= g.room - Pages.TOLERANCE ? sw : Math.round(base + c.from + c.width);
-                return x1 > x0 ? { x: x0, top: res[1], bottom: res[3], w: x1 - x0 } : null;
-            }
-
-            screen: modelData
-            visible: area !== null
-            color: "transparent"
-            WlrLayershell.layer: WlrLayer.Top
-            WlrLayershell.namespace: "uq-page-cover"
-            WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
-            exclusionMode: ExclusionMode.Ignore
-            anchors { top: true; bottom: true; left: true }
-            margins { top: area ? area.top : 0; bottom: area ? area.bottom : 0; left: area ? area.x : 0 }
-            implicitWidth: area ? area.w : 1
-
-            MouseArea {
-                anchors.fill: parent
-                acceptedButtons: Qt.RightButton
-                onClicked: function (ev) {
-                    Surfaces.toggle("desktopmenu", cov.modelData,
-                                    { x: ev.x + (cov.area ? cov.area.x : 0), y: ev.y + (cov.area ? cov.area.top : 0) });
-                }
-            }
+            root: root
         }
     }
 
-    // The gaps at a screen's edges (gaps_out) are wider than the gap between two columns, so a
-    // few pixels of the window on the page beside the one shown show there. A strip at that edge
-    // draws the wallpaper over them (Pages.edgeStrips): only while there is such a sliver, not
-    // where a floating window reaches the edge, and not over a special workspace. Draws only.
-    component EdgeStrip: PanelWindow {
-        id: strip
-        required property var modelData
-        property bool rightSide: false
-        readonly property var mon: root.monitors[modelData.name] || null
-        readonly property var box: {
-            var m = strip.mon;
-            if (!root.enabled || !WindowLook.known || !m || !m.activeWorkspace)
-                return null;
-            if (m.specialWorkspace && m.specialWorkspace.name)
-                return null;
-            var wins = root.tiled[m.activeWorkspace.id];
-            if (!wins)
-                return null;
-            var scale = m.scale > 0 ? m.scale : 1;
-            var sw = Math.round(m.width / scale), sh = Math.round(m.height / scale);
-            var res = m.reserved && m.reserved.length >= 4 ? m.reserved : [0, 0, 0, 0];
-            var bands = { left: res[0] + WindowLook.edgeLeft, right: res[2] + WindowLook.edgeRight };
-            var want = Pages.edgeStrips(wins, root.loose[m.activeWorkspace.id] || [], m.x, sw, bands, WindowLook.border);
-            if (!(strip.rightSide ? want.right : want.left))
-                return null;
-            var w = strip.rightSide ? bands.right : bands.left;
-            return { x: strip.rightSide ? sw - w : 0, y: res[1], w: w, h: sh - res[1] - res[3], sw: sw, sh: sh };
-        }
-        readonly property var paper: WallpaperShown.screens[modelData.name] || null
-
-        screen: modelData
-        visible: box !== null && paper !== null
-        color: "transparent"
-        WlrLayershell.layer: WlrLayer.Top
-        WlrLayershell.namespace: "uq-edge-strip"
-        WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
-        exclusionMode: ExclusionMode.Ignore
-        anchors { top: true; bottom: true; left: !strip.rightSide; right: strip.rightSide }
-        margins { top: box ? box.y : 0; bottom: box && paper ? box.sh - box.y - box.h : 0 }
-        implicitWidth: box ? box.w : 1
-        mask: Region {}
-
-        // The whole screen's wallpaper, moved so the strip shows its own part of it.
-        Loader {
-            active: strip.visible
-            x: strip.box ? -strip.box.x : 0
-            y: strip.box ? -strip.box.y : 0
-            width: strip.box ? strip.box.sw : 0
-            height: strip.box ? strip.box.sh : 0
-            sourceComponent: Item {
-                UqBackdrop {
-                    anchors.fill: parent
-                    visible: strip.paper.backdrop === true
-                }
-                Crossfade {
-                    id: paperView
-                    anchors.fill: parent
-                    // A target set from the start changes nothing, so show it here.
-                    Component.onCompleted: paperView.show()
-                    target: strip.paper.target
-                    fit: strip.paper.fit
-                    span: strip.paper.span
-                    color: strip.paper.color
-                    reduceMotion: true
-                    clearOnFail: true
-                }
-            }
+    Variants {
+        model: Quickshell.screens
+        delegate: EdgeStrip {
+            root: root
         }
     }
     Variants {
         model: Quickshell.screens
-        delegate: EdgeStrip {}
-    }
-    Variants {
-        model: Quickshell.screens
-        delegate: EdgeStrip { rightSide: true }
+        delegate: EdgeStrip {
+            root: root
+            rightSide: true
+        }
     }
 
     // Windows that share a screen (two Halves, or a pair a resize grip shared out) get a light
@@ -550,53 +447,9 @@ Scope {
     // the windows, where the page shown on each screen sits once the view is on it.
     Variants {
         model: Quickshell.screens
-        delegate: PanelWindow {
+        delegate: SharedFrame {
             id: frameWin
-            required property var modelData
-            readonly property var mon: root.monitors[modelData.name] || null
-            readonly property var rect: {
-                var m = frameWin.mon;
-                if (!root.enabled || !WindowLook.known || !m || !m.activeWorkspace)
-                    return null;
-                var wins = root.tiled[m.activeWorkspace.id], g = Pages.geometry(m, WindowLook);
-                if (!wins || g === null)
-                    return null;
-                var sh = Pages.shared(wins, root.anchorOf(wins), g.room, g.extra, root.starts, root.right);
-                if (sh === null)
-                    return null;
-                var scale = m.scale > 0 ? m.scale : 1;
-                var res = m.reserved && m.reserved.length >= 4 ? m.reserved : [0, 0, 0, 0];
-                var gin = WindowLook.windowGap / 2;
-                // The windows' frames (borders included), then out into the gaps around them.
-                var pad = Math.max(2, Math.min(gin, WindowLook.gapTop, WindowLook.gapBottom) - 1);
-                var left = res[0] + WindowLook.gapLeft + sh.from + gin;
-                var top = res[1] + WindowLook.gapTop;
-                return { x: left - pad, y: top - pad, w: sh.width - 2 * gin + 2 * pad,
-                         h: Math.round(m.height / scale) - res[3] - WindowLook.gapBottom - top + 2 * pad,
-                         radius: WindowLook.frameRadius + pad };
-            }
-
-            screen: modelData
-            visible: rect !== null
-            color: "transparent"
-            WlrLayershell.layer: WlrLayer.Bottom
-            WlrLayershell.namespace: "uq-page-frame"
-            WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
-            exclusionMode: ExclusionMode.Ignore
-            anchors { top: true; bottom: true; left: true; right: true }
-            mask: Region {}
-
-            Rectangle {
-                visible: frameWin.rect !== null
-                x: frameWin.rect ? frameWin.rect.x : 0
-                y: frameWin.rect ? frameWin.rect.y : 0
-                width: frameWin.rect ? frameWin.rect.w : 0
-                height: frameWin.rect ? frameWin.rect.h : 0
-                radius: frameWin.rect ? frameWin.rect.radius : 0
-                color: "transparent"
-                border.width: 2
-                border.color: Qt.alpha(Theme.text, 0.35)
-            }
+            root: root
         }
     }
 
@@ -604,109 +457,16 @@ Scope {
     // over that part of the page (nothing where it can't go).
     Variants {
         model: Quickshell.screens
-        delegate: PanelWindow {
+        delegate: DropHint {
             id: hintWin
-            required property var modelData
-            readonly property var hint: PageActions.dropHint
-            readonly property var place: {
-                var h = hintWin.hint;
-                if (!h || h.screen !== hintWin.modelData.name || h.drop !== true)
-                    return null;
-                var d = root.dropPlanFor(h.screen, h.address, h.x);
-                if (d === null)
-                    return null;
-                var m = d.m, res = m.reserved && m.reserved.length >= 4 ? m.reserved : [0, 0, 0, 0];
-                return { x: res[0] + WindowLook.gapLeft + d.plan.area.from + WindowLook.windowGap / 2,
-                         y: res[1] + WindowLook.gapTop,
-                         w: d.plan.area.width - WindowLook.windowGap,
-                         h: hintWin.modelData.height - res[1] - res[3] - WindowLook.gapTop - WindowLook.gapBottom };
-            }
-
-            screen: modelData
-            visible: hint !== null && hint.screen === modelData.name
-            color: "transparent"
-            WlrLayershell.layer: WlrLayer.Overlay
-            WlrLayershell.namespace: "uq-tab-drop"
-            WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
-            exclusionMode: ExclusionMode.Ignore
-            anchors { top: true; bottom: true; left: true; right: true }
-            // Draws only: the dragged tab keeps the pointer.
-            mask: Region {}
-
-            Rectangle {
-                visible: hintWin.place !== null
-                x: hintWin.place ? hintWin.place.x : 0
-                y: hintWin.place ? hintWin.place.y : 0
-                width: hintWin.place ? hintWin.place.w : 0
-                height: hintWin.place ? hintWin.place.h : 0
-                radius: WindowLook.frameRadius
-                color: Qt.alpha(WindowLook.activeBorder, 0.18)
-                border.width: Math.max(2, WindowLook.border)
-                border.color: WindowLook.activeBorder
-            }
-
-            // The tab, see-through, held by the pointer where it was taken.
-            Rectangle {
-                id: ghost
-                readonly property var h: hintWin.hint
-                // Not for a window moved with the pointer: it is the window itself.
-                visible: h !== null && h.ghost !== false
-                x: h ? h.x - h.holdX : 0
-                y: h ? h.y - h.holdY : 0
-                width: h ? Math.max(h.width, Theme.fontSize * 9) : 0
-                height: h ? h.height : 0
-                radius: Theme.radiusControl
-                color: Theme.surfaceAlt
-                border.width: 1
-                border.color: h && h.drop ? WindowLook.activeBorder : Theme.border
-                opacity: 0.8
-                Row {
-                    anchors.fill: parent
-                    anchors.leftMargin: Theme.gapIn
-                    anchors.rightMargin: Theme.gapIn
-                    spacing: Theme.gapIn
-                    Image {
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: Math.round(ghost.height * 0.6)
-                        height: width
-                        sourceSize.width: width * 2
-                        sourceSize.height: height * 2
-                        source: ghost.h ? ghost.h.icon : ""
-                    }
-                    UqText {
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: ghost.width - ghost.height - Theme.gapIn * 3
-                        text: ghost.h ? ghost.h.title : ""
-                        elide: Text.ElideRight
-                    }
-                }
-            }
+            root: root
         }
     }
 
     // A window moved with the pointer: while it is held, the screen shows where it would go if
     // let go here (the frame a dragged tab shows); when it is let go, it is placed there.
-    Connections {
-        target: WindowDrag
-        function onCursorChanged() {
-            var c = WindowDrag.cursor, lifted = Hold.address(WindowDrag.seen.lifted);
-            var at = c === null || lifted === "" ? null : Hold.place(root.monitors, c.x, c.y);
-            PageActions.dropHint = at === null ? null : {
-                screen: at.screen, address: lifted, x: at.x, y: at.y, drop: true,
-                holdX: 0, holdY: 0, width: 0, height: 0, title: "", icon: "", ghost: false
-            };
-        }
-        function onActiveChanged() {
-            if (WindowDrag.active) {
-                root.preDrag = root.tiled;
-                root.preStarts = root.starts;
-                root.preRight = root.right;
-            }
-        }
-        function onEnded() {
-            PageActions.dropHint = null;
-            root.pendingDrop = WindowDrag.drop;
-        }
+    WindowDragDrop {
+        root: root
     }
 
     Component.onCompleted: {
@@ -729,32 +489,8 @@ Scope {
         target: WindowLook
         function onKnownChanged() { root.refresh(); }
     }
-    Connections {
-        target: Hyprland
-        // Focus moves the view, without an event of its own.
-        function onActiveToplevelChanged() {
-            root.followFocus();
-            root.refresh(true);
-        }
-        function onRawEvent(event) {
-            switch (event.name) {
-            case "openwindow":
-            case "closewindow":
-            case "movewindowv2":
-            case "changefloatingmode":
-            case "fullscreen":
-            case "workspacev2":
-            case "monitoraddedv2":
-                root.refreshMoved();
-                break;
-            case "configreloaded":
-                // A reload starts Hyprland's Lua afresh: the hiding table and its handler (and
-                // the focus fade as configured) are sent again.
-                root.hidingSent = "";
-                root.refresh();
-                break;
-            }
-        }
+    HyprlandEvents {
+        root: root
     }
     Connections {
         target: Bridge
