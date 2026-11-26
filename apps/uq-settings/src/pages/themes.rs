@@ -20,6 +20,8 @@ use crate::pages::runner::{ORIGIN, PageLogic, parse_json};
 
 pub mod editor;
 use editor::Session;
+mod swatches;
+pub use swatches::*;
 
 /// The error name uqd's `ImportTheme` answers when the id exists and `replace` is false.
 const CONFLICT: &str = "org.uq.Desktop1.Error.Conflict";
@@ -412,74 +414,5 @@ impl PageLogic for ThemesState {
 #[cfg(test)]
 mod tests;
 
-/// The colours a theme's tile is drawn with: `[background, panels, text, accent, success, warning,
-/// error]` from its pre-rendered `<dir>/<id>-<variant>/tokens.json` (the other variant when that
-/// one isn't there), or none for a theme that isn't pre-rendered (the user's own).
-pub fn swatches(dir: &Path, id: &str, variant: &str) -> Vec<String> {
-    const KEYS: [&str; 7] = [
-        "bg", "surface", "text", "accent", "success", "warning", "error",
-    ];
-    const MAX: u64 = 1024 * 1024;
-    if id.is_empty() || id.contains('/') || id.starts_with('.') {
-        return Vec::new();
-    }
-    let other = if variant == "light" { "dark" } else { "light" };
-    for v in [variant, other] {
-        let file = dir.join(format!("{id}-{v}")).join("tokens.json");
-        let Ok(meta) = std::fs::metadata(&file) else {
-            continue;
-        };
-        if meta.len() > MAX {
-            continue;
-        }
-        let Ok(text) = std::fs::read_to_string(&file) else {
-            continue;
-        };
-        let Ok(tokens) = serde_json::from_str::<Value>(&text) else {
-            continue;
-        };
-        let colours: Vec<String> = KEYS
-            .iter()
-            .filter_map(|k| tokens["colors"][*k].as_str())
-            .filter(|c| {
-                c.starts_with('#')
-                    && c.len() <= 9
-                    && c[1..].chars().all(|ch| ch.is_ascii_hexdigit())
-            })
-            .map(str::to_string)
-            .collect();
-        if colours.len() >= 4 {
-            return colours;
-        }
-    }
-    Vec::new()
-}
-
 #[cfg(test)]
-mod swatch_tests {
-    use super::swatches;
-
-    #[test]
-    fn swatches_come_from_the_rendered_variant() {
-        let dir = std::env::temp_dir().join(format!("uq-swatches-{}", std::process::id()));
-        let d = dir.join("forest-dark");
-        std::fs::create_dir_all(&d).unwrap();
-        std::fs::write(
-            d.join("tokens.json"),
-            r##"{"colors":{"bg":"#111111","surface":"#222222","text":"#eeeeee","accent":"#7fb069","success":"#00ff00","warning":"#ffaa00","error":"#ff0000"}}"##,
-        )
-        .unwrap();
-        assert_eq!(swatches(&dir, "forest", "dark").len(), 7);
-        // The light rendering isn't there: the dark one stands in.
-        assert_eq!(swatches(&dir, "forest", "light")[0], "#111111");
-        assert!(
-            swatches(&dir, "mine", "dark").is_empty(),
-            "a theme that isn't rendered"
-        );
-        assert!(
-            swatches(&dir, "../forest", "dark").is_empty(),
-            "no paths in ids"
-        );
-        std::fs::remove_dir_all(&dir).unwrap();
-    }
-}
+mod swatch_tests;
