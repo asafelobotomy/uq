@@ -155,6 +155,7 @@ jobs:
           native/gen-check.sh
           git diff --exit-code -- native web/uq-tokens
           native/test/check-uq-native.test.sh
+          native/test/check-loc.test.sh
 
   smoke:
     # The shell on a real Hyprland (scripts/smoke-shell.sh). Hyprland cannot start without a DRM

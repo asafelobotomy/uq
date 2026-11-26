@@ -9,6 +9,7 @@ run. Apps vendor them unchanged and pin a version; CI checks the copies.
 | [`uq-consts`](uq-consts/) | 1.0.0 | the shared values (paths, install folders, D-Bus names, `uq_api`, motion, shape, type, fallback palette) for Rust, C++, QML, Python, JS and shell, and `UqThemeBase.qml` |
 | [`uq-theme`](uq-theme/) | 1.1.0 | reading and following `tokens.json` (Rust, C++, Python), and following uQ's KDE colour scheme (C++) |
 | [`uq-diag`](uq-diag/) | 1.0.1 | problem codes, the log format and crash records (Rust, C++) |
+| [`uq-loc`](uq-loc/) | 1.0.0 | `check-loc.sh`: CI fails when a source file has more than 400 lines of code |
 | [`../web/uq-tokens`](../web/uq-tokens/) | 1.0.0 | `tokens.json` as CSS custom properties for web front ends |
 
 ## In an app
@@ -30,7 +31,17 @@ version = "1.0.1"
 files = ["src/uq_diag.rs"]
 codes = "uq/diag/myapp.toml"   # optional: the codes the sources log and the list agree
 sources = ["src", "qml"]
+
+[uq-loc]
+version = "1.0.0"
+files = ["scripts/check-loc.sh"]
 ```
+
+Every repo in the uQ family keeps each source file to 400 lines of code (blank and comment-only
+lines not counted, tests included). `scripts/check-loc.sh` runs in CI and names any file over the
+limit, to be split into smaller modules. Generated files, the vendored kits and `fixtures/` are
+left out; `uq/loc-ignore` can list more generated or data files (globs), never a long
+hand-written one.
 
 Copy [`check-uq-native.sh`](check-uq-native.sh) to `scripts/check-uq-native.sh` and run it in CI.
 It checks each file's version header and that its contents are exactly that release's (it knows
