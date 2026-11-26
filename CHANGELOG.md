@@ -7,6 +7,8 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.42] - 2026-11-26
+
 ### Added
 
 - **Settings › Restore: every way back in one place.** Reset every uQ setting to its default, save the settings to a file and bring a file back, and restore the newest restore points. With Bindle 0.1.47 or later it also runs Bindle's Rebase and Factory Restore and keeps its installer on the computer, each explaining what stays and what goes and showing Bindle's output as it works; with snapper, it lists, takes and deletes snapshots, rolls back to one, and sets how many automatic ones are kept. Tabs Bindle or snapper can't serve on this computer are hidden.
