@@ -218,5 +218,5 @@ pub(super) fn emit_layer_block(rules: &[LayerRule]) -> String {
 }
 
 #[cfg(test)]
-#[path = "rules_tests.rs"]
+#[path = "rules_tests/mod.rs"]
 mod tests;

@@ -333,5 +333,5 @@ pub fn roles(m: &Monitors, live: &[LiveOutput]) -> Roles {
 }
 
 #[cfg(test)]
-#[path = "plan_tests.rs"]
+#[path = "plan_tests/mod.rs"]
 mod tests;

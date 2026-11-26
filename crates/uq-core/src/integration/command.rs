@@ -475,5 +475,5 @@ pub fn find<'a>(commands: &'a [CommandSpec], id: &str) -> Result<&'a CommandSpec
 }
 
 #[cfg(test)]
-#[path = "command_tests.rs"]
+#[path = "command_tests/mod.rs"]
 mod tests;
