@@ -119,16 +119,11 @@ FocusScope {
         date: greeter.date
     }
 
-    Rectangle {
+    AuthCard {
         id: card
         anchors.centerIn: parent
         width: Math.min(Math.max(380, userList.implicitWidth + Theme.gapOut * 4), parent.width - Theme.gapOut * 2)
         height: form.implicitHeight + Theme.gapOut * 4
-        radius: Theme.radius
-        color: Theme.surface
-        opacity: 0.94
-        border.color: Theme.border
-        border.width: Theme.borderWidth
     }
 
     Column {
