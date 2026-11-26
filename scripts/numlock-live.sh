@@ -22,8 +22,9 @@ cp "$root/scripts/numlock/client.qml" "$work/client.qml"
 python3 "$root/scripts/numlock/driver.py" "$mode" "$work/hypr.lua" "$work/client.qml" "$work"
 rc=$?
 pkill -u tester qs 2>/dev/null; pkill -u tester Hyprland 2>/dev/null
+[ "$rc" = 2 ] && { echo "FAIL: setup (exit 2), not a Num Lock result"; exit 1; }
 if [ "$mode" = stock ]; then
-    [ "$rc" != 0 ] && { echo "stock Hyprland shows the bug, as expected"; exit 0; }
+    [ "$rc" = 1 ] && { echo "stock Hyprland shows the bug, as expected"; exit 0; }
     echo "NOTE: stock Hyprland no longer shows the bug"; exit 0
 fi
 [ "$rc" = 0 ] || { echo "--- hypr.log"; tail -n 40 "$work/hypr.log"; echo "--- client.log"; tail -n 20 "$work/client.log"; }

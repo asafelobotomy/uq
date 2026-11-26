@@ -11,10 +11,12 @@ a digit means the app has Num Lock on.
 stock: plain numlock_by_default = true. Expected to show the bug (focus brings Num Lock back).
 uq:    the same plus base.lua's numlock-devices block, and emobie's lock sync before it types.
 """
-import json, os, subprocess, sys, time
+import json, os, subprocess, sys, time, traceback
 from evdev import UInput, ecodes as e
 
 mode, cfg, client, work = sys.argv[1:5]
+# Exit 1 means a Num Lock check failed; anything unexpected is a setup failure (2).
+sys.excepthook = lambda *a: (traceback.print_exception(*a), sys.stdout.flush(), os._exit(2))
 TESTER = "tester"
 
 def mk(name, keys, vendor=0x1234, product=0x5678):
@@ -40,7 +42,10 @@ def sig():
                 if os.path.exists(os.path.join(d, s, ".socket.sock")):
                     return s
         time.sleep(0.2)
-    sys.exit("FAIL: Hyprland never opened its socket\n" + open(f"{work}/hypr.log").read()[-3000:])
+    logs = [os.path.join(dp, f) for dp, _, fs in os.walk(d) for f in fs if f == "hyprland.log"]
+    tail = "".join(open(p, errors="replace").read()[-6000:] for p in logs)
+    print("SETUP: Hyprland never opened its socket\n" + tail)
+    sys.exit(2)
 
 SIG = sig()
 
@@ -61,7 +66,8 @@ for _ in range(50):
         break
     time.sleep(0.2)
 else:
-    sys.exit("FAIL: Hyprland did not pick up the uinput keyboards: %s" % names)
+    print("SETUP: Hyprland did not pick up the uinput keyboards: %s" % names)
+    sys.exit(2)
 
 wl = next(f for f in os.listdir(rt) if f.startswith("wayland-") and not f.endswith(".lock"))
 subprocess.Popen(["su", TESTER, "-c", f"env XDG_RUNTIME_DIR={rt} WAYLAND_DISPLAY={wl} QT_QPA_PLATFORM=wayland "
@@ -71,7 +77,8 @@ for _ in range(50):
         break
     time.sleep(0.2)
 else:
-    sys.exit("FAIL: client windows never appeared")
+    print("SETUP: client windows never appeared\n" + open(f"{work}/client.log", errors="replace").read()[-3000:])
+    sys.exit(2)
 time.sleep(1)
 
 def tap(dev, key):
