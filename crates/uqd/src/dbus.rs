@@ -10,46 +10,17 @@ use uq_core::schedule::Schedule;
 use uq_core::theme::Variant;
 use zbus::object_server::SignalEmitter;
 
+mod error;
 mod signals;
+pub use error::*;
+mod serve;
+pub use serve::*;
 
 pub const NAME: &str = "org.uq.Desktop1";
 pub const PATH: &str = "/org/uq/Desktop1";
 pub const IFACE: &str = "org.uq.Desktop1";
 
 pub type SharedDesktop = Arc<Mutex<Desktop>>;
-
-#[derive(Debug, zbus::DBusError)]
-#[zbus(prefix = "org.uq.Desktop1.Error")]
-pub enum UqError {
-    #[zbus(error)]
-    ZBus(zbus::Error),
-    UnknownTheme(String),
-    InvalidLayout(String),
-    EmptyWorkspace(String),
-    InvalidSchedule(String),
-    InvalidArgument(String),
-    InvalidSetting(String),
-    ConfigInvalid(String),
-    Io(String),
-    Conflict(String),
-}
-
-impl From<DesktopError> for UqError {
-    fn from(e: DesktopError) -> Self {
-        let msg = e.to_string();
-        match e {
-            DesktopError::UnknownTheme(_) => UqError::UnknownTheme(msg),
-            DesktopError::InvalidLayout(_) => UqError::InvalidLayout(msg),
-            DesktopError::EmptyWorkspace => UqError::EmptyWorkspace(msg),
-            DesktopError::InvalidSchedule(_) => UqError::InvalidSchedule(msg),
-            DesktopError::InvalidSetting(_) => UqError::InvalidSetting(msg),
-            DesktopError::ConfigInvalid(_) => UqError::ConfigInvalid(msg),
-            DesktopError::Io(_) => UqError::Io(msg),
-            DesktopError::InvalidArgument(_) => UqError::InvalidArgument(msg),
-            DesktopError::Conflict(_) => UqError::Conflict(msg),
-        }
-    }
-}
 
 pub struct DesktopIface {
     desktop: SharedDesktop,
@@ -556,59 +527,4 @@ impl DesktopIface {
 
     #[zbus(signal)]
     async fn config_error(e: &SignalEmitter<'_>, message: &str) -> zbus::Result<()>;
-}
-
-/// uqd's own revert timer: sleeps without the lock, then reverts if `token` is still pending.
-/// A confirmed or replaced token makes it a no-op.
-async fn revert_timer(shared: SharedDesktop, token: String, deadline: std::time::Instant) {
-    tokio::time::sleep_until(tokio::time::Instant::from_std(deadline)).await;
-    shared
-        .lock()
-        .await
-        .expire_monitors(&token, std::time::Instant::now())
-        .await;
-}
-
-/// Claim the bus name, export the interface and forward service events as signals. The
-/// autostart runner is disabled: it never starts a process (F1).
-pub async fn serve(
-    builder: zbus::connection::Builder<'_>,
-    desktop: Desktop,
-) -> zbus::Result<(zbus::Connection, SharedDesktop)> {
-    serve_with(builder, desktop, AutostartConfig::disabled()).await
-}
-
-/// [`serve`] with an autostart runner: with a spawner, it starts the startup apps on
-/// `ShellReady`, or [`SHELL_WAIT`](crate::autostart::SHELL_WAIT) after this call.
-pub async fn serve_with(
-    builder: zbus::connection::Builder<'_>,
-    desktop: Desktop,
-    cfg: AutostartConfig,
-) -> zbus::Result<(zbus::Connection, SharedDesktop)> {
-    let events = desktop.subscribe();
-    let shared: SharedDesktop = Arc::new(Mutex::new(desktop));
-    let enabled = cfg.has_spawner();
-    let runner = Runner::shared(cfg);
-    let conn = builder
-        .name(NAME)
-        .serve_at(
-            PATH,
-            DesktopIface {
-                desktop: shared.clone(),
-                picks: crate::pick::PickBroker::default(),
-                captures: crate::capture::CaptureBroker::default(),
-                runner: runner.clone(),
-            },
-        )
-        .build()
-        .await?;
-    if enabled {
-        crate::autostart::spawn_fallback(shared.clone(), runner);
-    }
-    let iface = conn
-        .object_server()
-        .interface::<_, DesktopIface>(PATH)
-        .await?;
-    tokio::spawn(signals::forward(iface, events));
-    Ok((conn, shared))
 }
