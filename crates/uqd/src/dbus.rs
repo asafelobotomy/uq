@@ -246,6 +246,27 @@ impl DesktopIface {
         Ok(())
     }
 
+    /// Every setting back to uQ's defaults, after a restore point of the current ones.
+    async fn reset_all(&self) -> Result<(), UqError> {
+        for notice in self.desktop.lock().await.reset_all().await? {
+            tracing::warn!("[STATE-008] reset: {notice}");
+        }
+        Ok(())
+    }
+
+    /// The current settings as a backup file's text.
+    async fn export_settings(&self) -> Result<String, UqError> {
+        Ok(self.desktop.lock().await.export_settings()?)
+    }
+
+    /// Make a backup's settings the current ones, after a restore point of the current ones.
+    async fn import_settings(&self, text: &str) -> Result<(), UqError> {
+        for notice in self.desktop.lock().await.import_settings(text).await? {
+            tracing::warn!("[STATE-008] backup: {notice}");
+        }
+        Ok(())
+    }
+
     /// Where each key of `domain` gets its live value, as JSON:
     /// `{key: {source, live, stored, detail}}`.
     async fn explain(&self, domain: &str) -> Result<String, UqError> {

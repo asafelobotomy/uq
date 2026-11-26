@@ -38,6 +38,7 @@ mod problems_model;
 mod profiles_model;
 mod region_model;
 mod registry;
+mod restore_model;
 mod rules_model;
 mod search;
 mod session;

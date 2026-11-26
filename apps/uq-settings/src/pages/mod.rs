@@ -24,6 +24,7 @@ pub mod profiles;
 pub mod prompt;
 pub mod proxies;
 pub mod region;
+pub mod restore;
 pub mod rules;
 pub mod runner;
 pub mod shell;
