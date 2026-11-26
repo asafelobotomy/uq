@@ -166,6 +166,25 @@ hl.config({
     },
 })
 
+-- numlock-devices:begin (scripts/numlock-live.sh runs this block on a real Hyprland)
+-- Hyprland keeps a Num Lock state per keyboard and tells apps the OR of all of them whenever focus
+-- moves. numlock_by_default turns Num Lock on for *every* keyboard, including button-only "keyboards"
+-- nobody can press Num Lock on (the power and sleep buttons, the display's brightness keys, laptop
+-- hotkey devices) and emobie's typing device. Those would then hold Num Lock on for good: after you
+-- turn it off, the next window you focus (or the lock screen) gets it back on. So they start with it
+-- off; your real keyboards still start with it on. Duplicates get a -1, -2 suffix in Hyprland.
+for _, base in ipairs({
+    "power-button", "sleep-button", "video-bus", "intel-hid-events", "intel-hid-5-button-array",
+    "asus-wmi-hotkeys", "thinkpad-extra-buttons", "dell-wmi-hotkeys", "hp-wmi-hotkeys",
+    "ideapad-extra-buttons", "huawei-wmi-hotkeys", "acer-wmi-hotkeys", "msi-wmi-hotkeys",
+    "framework-laptop-hotkeys", "emobie-inject",
+}) do
+    for _, suffix in ipairs({ "", "-1", "-2", "-3" }) do
+        hl.device({ name = base .. suffix, numlock_by_default = false })
+    end
+end
+-- numlock-devices:end
+
 -- Touchpad gestures come from generated.lua (Input page), so a second copy here can't
 -- shadow them.
 
