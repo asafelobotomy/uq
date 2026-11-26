@@ -44,6 +44,8 @@ jobs:
         run: |
           compat/clone.sh family/main main
           compat/clone.sh family/latest latest
+          # uQ itself as this run has it: on a pull request, the change under test.
+          rm -rf family/main/uq && git clone -q --depth 1 "file://$PWD" family/main/uq
       - name: Every PKGBUILD on main carries its uq-compat line, and family.toml says what each uses
         run: python3 compat/compat.py check --repos family/main
       - name: The latest releases meet each other's needs
