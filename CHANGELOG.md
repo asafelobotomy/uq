@@ -7,6 +7,16 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Settings › Default apps has three tabs: Apps, File types and Links.** Apps gains Calendar, Archives and Torrents. File types lists every type of file an installed app can open, by group and searchable, and Links does the same for kinds of link (email addresses, magnet links, Steam, Zoom and so on). Each row opens a picker of the apps that can open it. Every choice can go back to the system's with one button.
+- **uQ's own apps are the defaults where you haven't chosen.** At login, uQview opens pictures, reelo opens videos and music, and uQbit opens torrents and magnet links, but only for kinds you never chose, and only once each: a later choice or a reset is never undone. The Default apps page marks uQ's own apps and has **Use uQ's apps** to switch every kind to them.
+
+### Fixed
+
+- **Choosing reelo or uQview covers every type it opens.** A picture, video or music app used to get only the 6 or 7 common types; it now gets every picture, video or sound type it says it opens, such as AVIF, HEIC, Ogg video or Opus.
+- **A choice in `hyprland-mimeapps.list` no longer silently wins over the page.** The page shows that list's choices as the current ones, says the list exists, and choosing an app takes the same type out of it, so the choice made on the page is the one used.
+
 ## [0.3.42] - 2026-11-26
 
 ### Added

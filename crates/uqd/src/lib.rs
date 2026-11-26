@@ -11,6 +11,7 @@ pub mod hypr;
 pub mod hypr_events;
 mod keybinds;
 mod monitors;
+mod native_defaults;
 pub mod notify;
 mod outputs;
 pub mod pick;

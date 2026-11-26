@@ -39,6 +39,21 @@ async fn run(desktop: SharedDesktop, runner: SharedRunner) {
             Box::pin(async move { still_on(&d, &id).await })
         }));
     }
+    // uQ's own apps for the kinds nobody chose, before anything starts (Default apps).
+    let defaults = {
+        let d = desktop.lock().await;
+        let state_dir = d
+            .paths
+            .state_file
+            .parent()
+            .unwrap_or(std::path::Path::new("."));
+        let desktops = std::env::var("XDG_CURRENT_DESKTOP")
+            .ok()
+            .filter(|v| !v.is_empty())
+            .unwrap_or_else(|| "Hyprland".into());
+        crate::native_defaults::Where::new(&d.paths.startup, state_dir, &desktops)
+    };
+    let _ = tokio::task::spawn_blocking(move || crate::native_defaults::run(&defaults)).await;
     let (plan, env, events) = {
         let d = desktop.lock().await;
         let (plan, env) = d.autostart_plan();
