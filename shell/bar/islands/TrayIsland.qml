@@ -48,6 +48,7 @@ Island {
         // The rest, in a list.
         Rectangle {
             id: moreButton
+            objectName: "trayMore"
             visible: root.fit.more > 0
             Layout.preferredWidth: root.cell
             Layout.preferredHeight: root.cell

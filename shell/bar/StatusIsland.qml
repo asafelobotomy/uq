@@ -401,6 +401,7 @@ Island {
         // Quick settings: opens QuickSettings under this button, on this island's screen.
         Rectangle {
             id: quickButton
+            objectName: "quickButton"
             // Read by QuickSettings: its focus grab includes this bar so a second click toggles it shut.
             readonly property var barWindow: root.QsWindow.window
             readonly property bool open: Surfaces.open === "quicksettings" && Surfaces.anchor === quickButton

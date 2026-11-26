@@ -10,6 +10,7 @@ import "../../logic/net.js" as Net
 // tooltip title, which is untrusted and only reaches UqText.
 Item {
     id: trayItem
+    objectName: "trayIcon"
     required property var modelData
     property int cell: 26
     property int iconSize: 18
