@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# CI entry point for scripts/numlock-live.sh (the job "numlock"), as root in a privileged archlinux
-# container sharing the runner's /dev/input, /run/udev and network, given a vkms card:
-#   docker run --rm --privileged --network host -v /dev/input:/dev/input -v /run/udev:/run/udev:ro \
+# CI entry point for scripts/numlock-live.sh (the job "numlock"), as root in an archlinux container
+# given the vkms card and /dev/uinput, sharing the runner's /dev/input, /run/udev and network:
+#   docker run --rm --network host --device "$card" --device /dev/uinput --device-cgroup-rule 'c 13:* rmw' \
+#       -v /dev/input:/dev/input -v /run/udev:/run/udev:ro \
 #       -e SMOKE_CARD="$card" -v "$PWD:/src" archlinux:latest bash /src/scripts/numlock-in-container.sh
 set -eu
 card=${SMOKE_CARD:?SMOKE_CARD must name the DRM card}

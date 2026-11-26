@@ -221,7 +221,10 @@ jobs:
           echo "SMOKE_CARD=$card" >> "$GITHUB_ENV"
       - name: Num Lock on Hyprland with real keyboards
         run: |
-          docker run --rm --privileged --network host -v /dev/input:/dev/input -v /run/udev:/run/udev:ro \
+          # Only the vkms card (Hyprland aborts with the runner's other GPU in view), uinput, and the
+          # input event nodes (char major 13), which uinput creates after the container starts.
+          docker run --rm --network host --device "$SMOKE_CARD" --device /dev/uinput \
+            --device-cgroup-rule 'c 13:* rmw' -v /dev/input:/dev/input -v /run/udev:/run/udev:ro \
             -e SMOKE_CARD -v "$GITHUB_WORKSPACE:/src" archlinux:latest bash /src/scripts/numlock-in-container.sh
 
   windows:
