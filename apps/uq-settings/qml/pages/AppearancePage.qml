@@ -10,6 +10,7 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.uq.settings
 import "../components"
+import "appearance"
 
 SettingsPage {
     id: page
@@ -266,7 +267,7 @@ SettingsPage {
         nameFilters: ["uQ themes (*.uqtheme)"] // jargon-ok: the file filter shows the file's extension
         onAccepted: {
             page.importUrl = String(selectedFile);
-            page.importLook = importLookBox.checked;
+            page.importLook = importExportTab.importLookChecked;
             tm.importFrom(page.importUrl, false, page.importLook);
         }
     }
@@ -279,7 +280,7 @@ SettingsPage {
         fileMode: FileDialog.SaveFile
         defaultSuffix: "uqtheme" // jargon-ok: the file extension
         nameFilters: ["uQ themes (*.uqtheme)"] // jargon-ok: the file filter shows the file's extension
-        onAccepted: tm.exportTo(exportDialog.themeId, String(selectedFile), exportLookBox.checked)
+        onAccepted: tm.exportTo(exportDialog.themeId, String(selectedFile), importExportTab.exportLookChecked)
     }
 
     banners: [
@@ -385,472 +386,29 @@ SettingsPage {
         }
     ]
 
-    SettingsTab {
-        title: "Theme"
-        iconName: "preferences-desktop-theme-global"
-
-        SettingsCard {
-            id: galleryCard
-            title: "Theme"
-            iconName: "color-management"
-            wide: true
-
-            SettingRow {
-                settingId: "theme"
-                highlight: App.highlight
-                enabled: page.ready
-                wideControls: true
-                Layout.fillWidth: true
-
-                ColumnLayout {
-                    spacing: Kirigami.Units.smallSpacing
-                    Layout.fillWidth: true
-                    Flow {
-                        objectName: "themeGallery"
-                        spacing: Kirigami.Units.largeSpacing
-                        Layout.fillWidth: true
-                        Repeater {
-                            model: page.themes
-                            ThemeChip {
-                                required property var modelData
-                                theme: Object.assign({}, modelData, {
-                                    active: modelData.id === page.snap.theme,
-                                    swatches: page.swatchesOf(modelData.id)
-                                })
-                                onChosen: id => am.setTheme(id, page.snap.variant || "dark")
-                                onEdit: id => {
-                                    page.editorWanted = true;
-                                    tm.openEditor(id, true);
-                                }
-                                onExportTheme: id => {
-                                    exportDialog.themeId = id;
-                                    exportDialog.open();
-                                }
-                                onRemove: id => {
-                                    const t = page.themeById(id);
-                                    confirmDelete.themeId = id;
-                                    confirmDelete.themeName = t ? String(t.name) : id;
-                                    confirmDelete.active = id === page.snap.theme;
-                                    confirmDelete.open();
-                                }
-                            }
-                        }
-                    }
-                    RowLayout {
-                        visible: page.tsnap.rootIsLink === true
-                        spacing: Kirigami.Units.smallSpacing
-                        Layout.fillWidth: true
-                        Kirigami.Icon {
-                            source: "dialog-warning"
-                            implicitWidth: Kirigami.Units.iconSizes.small
-                            implicitHeight: Kirigami.Units.iconSizes.small
-                            Accessible.ignored: true
-                        }
-                        UqLabel {
-                            objectName: "rootIsLink"
-                            text: "Your themes folder is a link, so uQ won't use or change it."
-                            wrapMode: Text.Wrap
-                            Layout.fillWidth: true
-                        }
-                    }
-                    RowLayout {
-                        visible: page.skipped.length > 0
-                        spacing: Kirigami.Units.smallSpacing
-                        Layout.fillWidth: true
-                        Kirigami.Icon {
-                            source: "dialog-warning"
-                            implicitWidth: Kirigami.Units.iconSizes.small
-                            implicitHeight: Kirigami.Units.iconSizes.small
-                            Accessible.ignored: true
-                        }
-                        UqLabel {
-                            objectName: "skippedLine"
-                            text: page.skipped.length === 1 ? "1 theme in your themes folder couldn't be used." : page.skipped.length + " themes in your themes folder couldn't be used."
-                            wrapMode: Text.Wrap
-                        }
-                        QQC2.ToolButton {
-                            id: skippedToggle
-                            objectName: "skippedToggle"
-                            text: "Details"
-                            icon.name: checked ? "arrow-down" : "arrow-right"
-                            checkable: true
-                            display: QQC2.AbstractButton.TextBesideIcon
-                        }
-                        Item {
-                            Layout.fillWidth: true
-                        }
-                    }
-                    ColumnLayout {
-                        visible: page.skipped.length > 0 && skippedToggle.checked
-                        spacing: Kirigami.Units.smallSpacing
-                        Layout.leftMargin: Kirigami.Units.largeSpacing * 2
-                        Layout.fillWidth: true
-                        Repeater {
-                            model: page.skipped
-                            delegate: ColumnLayout {
-                                required property var modelData
-                                spacing: 0
-                                Layout.fillWidth: true
-                                UqLabel {
-                                    text: String(modelData.folder)
-                                    visible: String(modelData.folder) !== ""
-                                    font.bold: true
-                                    elide: Text.ElideRight
-                                    Layout.fillWidth: true
-                                }
-                                UqLabel {
-                                    text: String(modelData.reason)
-                                    wrapMode: Text.Wrap
-                                    opacity: 0.7
-                                    Layout.fillWidth: true
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        SettingsCard {
-            title: "Light or dark"
-            iconName: "weather-clear-night"
-
-            SettingRow {
-                settingId: "variant"
-                iconName: "contrast"
-                label: "Style"
-                highlight: App.highlight
-                enabled: page.ready
-                Layout.fillWidth: true
-
-                // Two tiles, a sun and a moon: the one in use is checked.
-                Repeater {
-                    model: [
-                        { id: "light", name: "Light", icon: "weather-clear" },
-                        { id: "dark", name: "Dark", icon: "weather-clear-night" }
-                    ]
-                    QQC2.Button {
-                        required property var modelData
-                        readonly property bool current: modelData.id === page.snap.variant
-                        objectName: "variant-" + modelData.id
-                        checkable: true
-                        checked: current
-                        Accessible.name: modelData.name
-                        Layout.preferredWidth: Kirigami.Units.gridUnit * 6
-                        contentItem: ColumnLayout {
-                            spacing: Kirigami.Units.smallSpacing
-                            Kirigami.Icon {
-                                source: modelData.icon
-                                implicitWidth: Kirigami.Units.iconSizes.large
-                                implicitHeight: Kirigami.Units.iconSizes.large
-                                Layout.alignment: Qt.AlignHCenter
-                                Accessible.ignored: true
-                            }
-                            UqLabel {
-                                text: modelData.name
-                                font.bold: current
-                                horizontalAlignment: Text.AlignHCenter
-                                Layout.fillWidth: true
-                            }
-                        }
-                        onClicked: {
-                            am.setTheme(page.snap.theme || "", modelData.id);
-                            checked = Qt.binding(() => current);
-                        }
-                    }
-                }
-            }
-            ScheduleEditor {
-                schedule: page.schedule
-                highlight: App.highlight
-                enabled: page.ready
-                onApply: json => am.setSchedule(json)
-                Layout.fillWidth: true
-            }
-        }
-
-        SettingsCard {
-            title: "Other apps"
-            iconName: "preferences-desktop-theme-applications"
-
-            SettingRow {
-                settingId: "theme-apps"
-                iconName: "preferences-desktop-color"
-                label: "Theme other apps"
-                help: "Qt, KDE, GTK and Flatpak apps take the theme's colours, fonts, icons and corners, even after another app changed their settings. Off leaves those settings alone."
-                highlight: App.highlight
-                enabled: page.ready
-                Layout.fillWidth: true
-                QQC2.Switch {
-                    id: ta
-                    checked: page.appearance.theme_apps !== false
-                    Accessible.name: "Theme other apps"
-                    onToggled: {
-                        page.field("theme_apps", ta.checked);
-                        ta.checked = Qt.binding(() => page.appearance.theme_apps !== false);
-                    }
-                }
-            }
-            SettingRow {
-                settingId: "kvantum"
-                iconName: "preferences-desktop-theme-applications"
-                label: "Style Qt apps to match the theme"
-                help: "KDE and other Qt apps take the theme's colours and shapes."
-                highlight: App.highlight
-                enabled: page.ready
-                Layout.fillWidth: true
-                QQC2.Switch {
-                    id: kv
-                    checked: page.appearance.kvantum !== false
-                    Accessible.name: "Style Qt apps to match the theme"
-                    onToggled: {
-                        page.field("kvantum", kv.checked);
-                        kv.checked = Qt.binding(() => page.appearance.kvantum !== false);
-                    }
-                }
-            }
-        }
+    ThemeTab {
+        am: am
+        confirmDelete: confirmDelete
+        exportDialog: exportDialog
+        page: page
+        tm: tm
     }
 
-    SettingsTab {
-        title: "Fonts"
-        iconName: "preferences-desktop-font"
-
-        SettingsCard {
-            title: "Fonts"
-            iconName: "preferences-desktop-font"
-
-            OverrideCombo {
-                settingId: "ui-font"
-                iconName: "font-select-symbolic"
-                source: page.sourceOf("ui-font")
-                onReapply: am.reapply("appearance")
-                label: "Interface font"
-                highlight: App.highlight
-                enabled: page.ready
-                choices: Qt.fontFamilies()
-                value: page.appearance.ui_font || null
-                onChosen: v => page.field("ui_font", v)
-                Layout.fillWidth: true
-            }
-            OverrideCombo {
-                settingId: "mono-font"
-                iconName: "utilities-terminal"
-                source: page.sourceOf("mono-font")
-                onReapply: am.reapply("appearance")
-                label: "Monospace font"
-                highlight: App.highlight
-                enabled: page.ready
-                choices: Qt.fontFamilies()
-                value: page.appearance.mono_font || null
-                onChosen: v => page.field("mono_font", v)
-                Layout.fillWidth: true
-            }
-            OverrideSpin {
-                busy: am.busy
-                settingId: "font-size"
-                iconName: "format-font-size-more"
-                source: page.sourceOf("font-size")
-                onReapply: am.reapply("appearance")
-                label: "Font size"
-                highlight: App.highlight
-                enabled: page.ready
-                from: 6
-                to: 32
-                fallback: page.themeFontSize
-                unit: "pt"
-                value: page.appearance.font_size === undefined ? null : page.appearance.font_size
-                onChosen: v => page.field("font_size", v)
-                Layout.fillWidth: true
-            }
-        }
-
-        // The chosen fonts at the chosen size, so a change shows before it reaches the apps.
-        SettingsCard {
-            title: "Preview"
-            iconName: "view-preview"
-
-            UqLabel {
-                objectName: "uiFontSample"
-                text: "The quick brown fox jumps over the lazy dog"
-                font.family: page.uiFont
-                font.pointSize: page.fontSize
-                elide: Text.ElideRight
-                Layout.fillWidth: true
-                Layout.leftMargin: Kirigami.Units.largeSpacing
-            }
-            UqLabel {
-                text: "Aa Bb Cc 0123456789"
-                font.family: page.uiFont
-                font.pointSize: page.fontSize * 1.6
-                font.bold: true
-                elide: Text.ElideRight
-                Layout.fillWidth: true
-                Layout.leftMargin: Kirigami.Units.largeSpacing
-            }
-            Rectangle {
-                radius: Kirigami.Units.cornerRadius
-                color: Kirigami.Theme.backgroundColor
-                implicitHeight: monoSample.implicitHeight + Kirigami.Units.largeSpacing * 2
-                Layout.fillWidth: true
-                Layout.leftMargin: Kirigami.Units.largeSpacing
-                Layout.rightMargin: Kirigami.Units.largeSpacing
-                UqLabel {
-                    id: monoSample
-                    objectName: "monoFontSample"
-                    text: "$ ls -l ~/Pictures   0O 1lI {}"
-                    font.family: page.monoFont
-                    font.pointSize: page.fontSize
-                    elide: Text.ElideRight
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.margins: Kirigami.Units.largeSpacing
-                }
-            }
-        }
+    FontsTab {
+        am: am
+        page: page
     }
 
-    SettingsTab {
-        title: "Cursor and icons"
-        iconName: "preferences-desktop-icons"
-
-        SettingsCard {
-            title: "Cursor"
-            iconName: "preferences-desktop-cursors"
-
-            OverrideCombo {
-                settingId: "cursor-theme"
-                iconName: "preferences-desktop-cursors"
-                source: page.sourceOf("cursor-theme")
-                onReapply: am.reapply("appearance")
-                label: "Cursor theme"
-                highlight: App.highlight
-                enabled: page.ready
-                choices: page.snap.cursorThemes || []
-                value: page.appearance.cursor_theme || null
-                onChosen: v => page.field("cursor_theme", v)
-                Layout.fillWidth: true
-            }
-            OverrideSpin {
-                busy: am.busy
-                settingId: "cursor-size"
-                iconName: "transform-scale"
-                source: page.sourceOf("cursor-size")
-                onReapply: am.reapply("appearance")
-                label: "Cursor size"
-                highlight: App.highlight
-                enabled: page.ready
-                from: 16
-                to: 96
-                fallback: (page.tokens.icons && page.tokens.icons.cursor_size) || 24
-                unit: "px"
-                value: page.appearance.cursor_size === undefined ? null : page.appearance.cursor_size
-                onChosen: v => page.field("cursor_size", v)
-                Layout.fillWidth: true
-            }
-        }
-        SettingsCard {
-            title: "Icons"
-            iconName: "preferences-desktop-icons"
-
-            OverrideCombo {
-                settingId: "icon-theme"
-                iconName: "preferences-desktop-icons"
-                source: page.sourceOf("icon-theme")
-                onReapply: am.reapply("appearance")
-                label: "Icon theme"
-                highlight: App.highlight
-                enabled: page.ready
-                choices: page.snap.iconThemes || []
-                value: page.appearance.icon_theme || null
-                onChosen: v => page.field("icon_theme", v)
-                Layout.fillWidth: true
-            }
-        }
+    CursorIconsTab {
+        am: am
+        page: page
     }
 
-    SettingsTab {
-        title: "Import and export"
-        iconName: "document-export"
-
-        SettingsCard {
-            title: "Make a theme"
-            iconName: "list-add"
-
-            SettingRow {
-                settingId: "theme-new"
-                iconName: "document-new"
-                label: "New theme from this one"
-                help: "Starts from the colours of the theme in use."
-                highlight: App.highlight
-                enabled: page.idle
-                Layout.fillWidth: true
-                QQC2.Button {
-                    text: "New…"
-                    icon.name: "list-add"
-                    Accessible.name: "New theme from this one"
-                    onClicked: {
-                        page.editorWanted = true;
-                        tm.openEditor(page.snap.theme || "", false);
-                    }
-                }
-            }
-        }
-        SettingsCard {
-            title: "Share themes"
-            iconName: "document-share"
-
-            SettingRow {
-                settingId: "theme-import"
-                iconName: "document-import"
-                label: "Import a theme"
-                highlight: App.highlight
-                enabled: page.idle
-                Layout.fillWidth: true
-                QQC2.CheckBox {
-                    id: importLookBox
-                    text: "With its window look"
-                    Accessible.name: "Also use its window gaps, corners and effects"
-                    QQC2.ToolTip.visible: hovered
-                    QQC2.ToolTip.text: "Also use its window gaps, corners and effects"
-                }
-                QQC2.Button {
-                    text: "Import…"
-                    icon.name: "document-import"
-                    onClicked: importDialog.open()
-                }
-            }
-            SettingRow {
-                settingId: "theme-export"
-                iconName: "document-export"
-                label: "Export the theme in use"
-                highlight: App.highlight
-                enabled: page.idle
-                Layout.fillWidth: true
-                UqLabel {
-                    objectName: "exportsWhich"
-                    text: page.currentThemeName
-                    elide: Text.ElideRight
-                    opacity: 0.7
-                    Layout.maximumWidth: Kirigami.Units.gridUnit * 8
-                }
-                QQC2.CheckBox {
-                    id: exportLookBox
-                    text: "With the window look"
-                    Accessible.name: "Include window gaps, corners and effects"
-                    QQC2.ToolTip.visible: hovered
-                    QQC2.ToolTip.text: "Include window gaps, corners and effects"
-                }
-                QQC2.Button {
-                    text: "Export…"
-                    icon.name: "document-export"
-                    onClicked: {
-                        exportDialog.themeId = page.snap.theme || "";
-                        exportDialog.open();
-                    }
-                }
-            }
-        }
+    ImportExportTab {
+        id: importExportTab
+        exportDialog: exportDialog
+        importDialog: importDialog
+        page: page
+        tm: tm
     }
 }
