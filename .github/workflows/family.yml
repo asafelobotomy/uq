@@ -1,0 +1,83 @@
+name: Family
+
+# uQ, Bindle and the apps at their latest releases, checked together (docs/compat.md): the
+# versions in compat/family.toml, the uq-compat line in every PKGBUILD on main, what the AUR has,
+# and every app's integration files against uqctl at the oldest uQ they say they work with, the
+# latest release and main. Daily, and on changes to the manifest.
+on:
+  schedule:
+    - cron: '41 5 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'compat/**'
+      - '.github/workflows/family.yml'
+  pull_request:
+    paths:
+      - 'compat/**'
+      - '.github/workflows/family.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  manifest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: compat.py's tests
+        run: python3 -m unittest discover -s compat -v
+      - name: family.toml
+        run: python3 compat/compat.py check
+
+  together:
+    runs-on: ubuntu-latest
+    needs: manifest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Clone every repo at main and at its latest release
+        run: |
+          compat/clone.sh family/main main
+          compat/clone.sh family/latest latest
+      - name: Every PKGBUILD on main carries its uq-compat line, and family.toml says what each uses
+        run: python3 compat/compat.py check --repos family/main
+      - name: The latest releases meet each other's needs
+        run: python3 compat/compat.py releases family/latest
+      - name: The AUR's versions can be installed together
+        run: python3 compat/compat.py aur family/latest
+
+  pages:
+    runs-on: ubuntu-latest
+    needs: manifest
+    strategy:
+      fail-fast: false
+      matrix:
+        # floor: the oldest uQ family.toml says the apps work with (uq-api's first level).
+        uq: [floor, latest, main]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Which uQ
+        id: ref
+        run: |
+          case "${{ matrix.uq }}" in
+            floor) ref=v$(python3 -c 'import tomllib; m=tomllib.load(open("compat/family.toml","rb")); print(min(m["contract"]["uq-api"]["levels"].values(), key=lambda v: tuple(map(int, v.split(".")))))') ;;
+            latest) ref=$(git ls-remote --tags --refs https://github.com/asafelobotomy/uq.git | sed -n 's#.*refs/tags/\(v[0-9][0-9.]*\)$#\1#p' | sort -V | tail -1) ;;
+            main) ref=main ;;
+          esac
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "uQ at $ref"
+      - name: uQ at that version
+        run: |
+          git clone -q --depth 1 --branch "${{ steps.ref.outputs.ref }}" https://github.com/asafelobotomy/uq.git uq-at
+          cd uq-at && cargo build -j 2 -p uqctl --locked
+      - name: The apps' latest releases
+        run: compat/clone.sh family/latest latest
+      - name: Their integration files load in that uQ
+        run: scripts/check-companion-pages.sh uq-at/target/debug/uqctl $(ls -d family/latest/*/uq | grep -v '^family/latest/uq/uq$')

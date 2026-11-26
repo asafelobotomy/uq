@@ -7,6 +7,34 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.43] - 2026-11-26
+
+### Added
+
+- **uQ and its apps say which versions of each other they work with.** A new `compat/family.toml`
+  lists every package of the uQ family, the contracts between them (integration files, the theme
+  files, problem codes, `uqctl`, `bindle`'s commands, `oyst-cli scan` and `status`, `uqbit status`,
+  `uqview` and kyko) and the level of each one every package needs. `compat/compat.py` writes one
+  `conflicts+=(…)  # uq-compat` line into every PKGBUILD from it, so pacman refuses a set of
+  versions that would break, and bindleUP (Bindle 0.1.49) holds an update back until the partner
+  it needs is on the AUR. uQ's own line asks for Bindle 0.1.47 or newer (the Restore page), kyko
+  1.3.3, oysterAV 0.5.0, uQbit 0.6.1 and uQview 0.1.6. See docs/compat.md.
+- **CI checks the family together every day** (`.github/workflows/family.yml`): the manifest,
+  every repo's PKGBUILD line and what its files use, that the latest releases meet each other's
+  needs, that the AUR's versions install together (and which are behind their release), and every
+  app's integration files at its latest release against uqctl from uQ 0.3.41, the latest release
+  and main.
+
+### Fixed
+
+- **Welcome's Apps step lists every app, each with its AUR package.** It still said to download
+  scale_tail, XZram, appOFholding, hauler, emobie and romforge from GitHub, which Bindle no longer
+  does, and left out kyko, uQview, reelo, uQbit, bindaru and AV Morning Star. A test keeps the list
+  the same as `compat/family.toml`.
+- **The Security island doesn't half-read a summary it doesn't know.** A summary from oysterAV in a
+  schema other than 1 now reads as unavailable instead of showing whichever fields happen to
+  match.
+
 ## [0.3.42] - 2026-11-26
 
 ### Added
