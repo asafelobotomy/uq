@@ -16,6 +16,9 @@ hl.config({
     animations = { enabled = false },
     input = { kb_layout = "us", numlock_by_default = true, follow_mouse = 0 },
 })
+-- The CI runner's own (idle) keyboard. A second real keyboard nobody types on holds Num Lock on
+-- the same way the button-only ones do; Hyprland offers no way to share one lock state.
+hl.device({ name = "at-translated-set-2-keyboard", numlock_by_default = false })
 LUA
 [ "$mode" = uq ] && sed -n '/-- numlock-devices:begin/,/-- numlock-devices:end/p' "$root/config/hypr/base.lua" >> "$work/hypr.lua"
 cp "$root/scripts/numlock/client.qml" "$work/client.qml"

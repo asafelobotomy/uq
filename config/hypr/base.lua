@@ -173,6 +173,8 @@ hl.config({
 -- hotkey devices) and emobie's typing device. Those would then hold Num Lock on for good: after you
 -- turn it off, the next window you focus (or the lock screen) gets it back on. So they start with it
 -- off; your real keyboards still start with it on. Duplicates get a -1, -2 suffix in Hyprland.
+-- A second real keyboard you never type on (a laptop's own while you use an external one) does the
+-- same; set numlock_by_default = false for it in user.lua (its name is in `hyprctl devices`).
 for _, base in ipairs({
     "power-button", "sleep-button", "video-bus", "intel-hid-events", "intel-hid-5-button-array",
     "asus-wmi-hotkeys", "thinkpad-extra-buttons", "dell-wmi-hotkeys", "hp-wmi-hotkeys",
