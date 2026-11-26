@@ -11,6 +11,7 @@ kits=(
     "uq-diag native/uq-diag uq_diag.rs uq_diag.rs uqdiag.h uqdiag.cpp"
     "uq-consts native/uq-consts uq_consts.rs uq_consts.rs uqconsts.h uq_consts.py uq-consts.js uq-consts.sh UqThemeBase.qml"
     "uq-tokens web/uq-tokens uq-tokens.js uq-tokens.js uq-tokens.css"
+    "uq-loc native/uq-loc check-loc.sh check-loc.sh"
 )
 all=""
 for k in "${kits[@]}"; do
