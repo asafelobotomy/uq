@@ -19,6 +19,7 @@ for t in tests/shell/*.sh; do bash "$t"; done
 QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -import shell -input tests/qml
 QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -import apps/uq-settings/qml -input tests/settings-qml
 node --test 'web/uq-tokens/test/*.test.js'
+native/uq-loc/check-loc.sh                                # no file over 400 lines of code (counts git-tracked files: git add new ones first)
 cargo test --manifest-path native/uq-theme/test/Cargo.toml   # + cmake -S native/uq-theme/test for the C++ copy
 cargo deny check advisories
 ```
@@ -44,6 +45,7 @@ Read `docs/developing.md`. In short:
 - No `Text`, `Label`, `TextEdit`, `TextInput` or `Qt.createQmlObject` in QML. Shell text goes through `UqText` (`shell/core/UqText.qml`), Settings text through `UqLabel` (`apps/uq-settings/qml/components/UqLabel.qml`). Both render plain text only, so strings from apps and notifications can't inject markup.
 - Settings controls show data through `UqLabel` content items: `text:` may only be a string literal, and a `ComboBox` needs `contentItem:` and `delegate:`.
 - Text people read in Settings uses plain words. `scripts/settings-jargon.txt` lists the banned ones; end a line with `// jargon-ok: <reason>` for a real exception.
+- No source file over 400 lines of code (`native/uq-loc/check-loc.sh`; blank and comment lines don't count). Split a long file by responsibility (a child module, component or sourced file per topic, tests by topic), not at an arbitrary line. Only generated, vendored or data files may be exempt, each listed in `uq/loc-ignore` with its reason.
 - Every `.qml` and `.js` under `apps/uq-settings/qml` must be listed in `apps/uq-settings/build.rs` (`QmlFile::from("...")`). A missing file passes `qmltestrunner` and fails in the real app with "X is not a type".
 - Every `tracing::warn!`/`error!` starts with a code, `"[AREA-NNN] …"`, and every QML `console.warn`/`console.error` has `uq[AREA-NNN]` (Settings: `uq-settings[AREA-NNN]`), from `crates/uq-core/src/diag/codes.toml`. A new kind of problem gets a new code there; never reuse a number (retire it). `cargo test -p uq-core --test diag_codes` checks both ways. See `docs/diagnostics.md`.
 - Golden files: `UQ_BLESS=1 cargo test -p uq-core` rewrites them (`render_golden`, `uqtheme_corpus`). Read the diff before committing it.
