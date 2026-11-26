@@ -177,7 +177,7 @@ for _ in $(seq 1 15); do
 done
 # Four apps with tray icons: the Tray island (Small) shows one and lists the rest under "+3".
 for n in alpha beta gamma delta; do
-    "${shell_env[@]}" QT_QPA_PLATFORM=offscreen "$qmlbin" "$root/tests/live/fixtures/tray-app.qml" -- "$n" \
+    "${shell_env[@]}" "$qmlbin" "$root/tests/live/fixtures/tray-app.qml" -- "$n" \
         "$root/tests/live/fixtures/oysterav.png" >>"$tmp/tray.log" 2>&1 &
     pids+=($!)
 done

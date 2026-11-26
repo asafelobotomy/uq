@@ -63,14 +63,16 @@ Island {
         return Tray.shownItems(all, { notifiBell: bell, securityIcon: BarLayout.placed("security") }).slice(0, trayRoom);
     }
 
-    // --- media ---
+    // --- media: the playing player, else the first (as Now playing), so a paused track can be
+    // resumed from here ---
     readonly property var player: {
         var ps = Mpris.players.values;
         for (var i = 0; i < ps.length; i++)
             if (ps[i].isPlaying)
                 return ps[i];
-        return null;
+        return ps.length > 0 ? ps[0] : null;
     }
+    readonly property bool playing: player !== null && player.isPlaying
 
     // --- network ---
     readonly property var netDevice: {
@@ -203,8 +205,9 @@ Island {
         return d && d.isLaptopBattery ? d : null;
     }
 
-    // A widget's popup, or the widgets that didn't fit, under their icon.
-    WidgetPopup {
+    // A widget's popup, or the widgets that didn't fit, under their icon: an island popup, so it
+    // takes the keyboard (Esc closes it) and replaces any other bar popup.
+    LazyPopup {
         id: widgetPopup
     }
     Component {
@@ -281,7 +284,7 @@ Island {
             Layout.preferredWidth: root.cell
             Layout.preferredHeight: root.cell
             Accessible.role: Accessible.Button
-            Accessible.name: root.player ? "Play or pause " + String(root.player.trackTitle) : "Media"
+            Accessible.name: root.player ? (root.playing ? "Pause " : "Play ") + String(root.player.trackTitle || "") : "Media"
             RowLayout {
                 id: mediaRow
                 anchors.verticalCenter: parent.verticalCenter
@@ -290,12 +293,12 @@ Island {
                 implicitSize: root.iconSize
                 Layout.preferredWidth: root.iconSize
                 Layout.preferredHeight: root.iconSize
-                source: Quickshell.iconPath("media-playback-start-symbolic", true)
+                source: Quickshell.iconPath(root.playing ? "media-playback-pause-symbolic" : "media-playback-start-symbolic", true)
             }
             }
             MouseArea {
                 anchors.fill: parent
-                onClicked: if (root.player) root.player.togglePlaying()
+                onClicked: if (root.player && root.player.canTogglePlaying) root.player.togglePlaying()
                 onWheel: function (w) {
                     if (root.player && root.player.canGoNext)
                         root.player.next();

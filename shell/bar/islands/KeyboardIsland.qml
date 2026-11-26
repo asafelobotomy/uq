@@ -59,7 +59,16 @@ Island {
 
     Process {
         id: devices
+        // A switch seen while a read was running: read again once it ends, or the label keeps
+        // the layout from before the switch.
+        property bool again: false
         command: ["hyprctl", "devices", "-j"]
+        onRunningChanged: {
+            if (!running && again) {
+                again = false;
+                root.refresh();
+            }
+        }
         stdout: StdioCollector {
             onStreamFinished: {
                 try {
@@ -82,7 +91,11 @@ Island {
     }
 
     function refresh() {
-        if (shown && !devices.running)
+        if (!shown)
+            return;
+        if (devices.running)
+            devices.again = true;
+        else
             devices.running = true;
     }
     onShownChanged: refresh()
