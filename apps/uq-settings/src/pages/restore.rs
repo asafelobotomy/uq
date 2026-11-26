@@ -127,7 +127,7 @@ impl RestoreState {
             let mut s = self.shown.lock().unwrap();
             match status {
                 Ok(v) => (s.status, s.status_error) = (Some(v), None),
-                // Bindle before 0.1.46 has no --status.
+                // Bindle before 0.1.47 has no --status.
                 Err(o) => {
                     s.status = None;
                     s.status_error = Some(format!(

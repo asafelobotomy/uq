@@ -462,7 +462,7 @@ The **Restore** page has every way back in one place. **uQ settings**: **Reset a
 puts every uQ setting back to how uQ comes (theme, bar, shortcuts, gestures, rules, startup apps;
 your files, apps, wallpapers and `user.lua` stay), **Save…** writes every setting to a file and
 **Open…** brings such a file back; each saves a restore point first, so it can be undone, and the
-newest restore points are listed with **Restore**. With Bindle 0.1.46 or later, **System** runs
+newest restore points are listed with **Restore**. With Bindle 0.1.47 or later, **System** runs
 Bindle's **Rebase** (the system as installed, keeping your home and own apps) and **Factory
 Restore** (restart into Bindle's installer; type ERASE first, nothing is erased until the
 installer's last question), and keeps the installer on the computer; each says what stays and
