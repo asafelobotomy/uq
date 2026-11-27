@@ -110,7 +110,7 @@ Singleton {
             onStreamFinished: {
                 try {
                     var d = JSON.parse(text);
-                    if (d && typeof d.state === "string") {
+                    if (Sec.readable(d)) {
                         root.summary = d;
                         root.failed = false;
                         root.maybeNotify();
