@@ -7,6 +7,8 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.47] - 2026-11-27
+
 ### Fixed
 
 - **The login screen no longer starts audio and portal services it never uses.** The `greeter` account (whose home is `/`) used to get PipeWire, WirePlumber and the desktop portals at every boot, which logged "failed to create directory /.local/state/wireplumber" and left a failed `xdg-desktop-portal-gtk` behind at login. uQ now keeps those units from starting for that account only.
