@@ -7,6 +7,9 @@
 
 var MAX_MESSAGE = 200;
 
+// The login wallpaper both screens show (Settings → Login screen writes it; world-readable).
+var LOGIN_WALLPAPER_PATH = "/var/lib/uq-greeter/wallpaper";
+
 // How many of an attempt's PAM messages a failure shows (pam_faillock sends two).
 var FAILURE_LINES = 2;
 

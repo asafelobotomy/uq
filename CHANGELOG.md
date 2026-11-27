@@ -7,7 +7,7 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
-## [0.3.43] - 2026-11-26
+## [0.3.44] - 2026-11-27
 
 ### Added
 
@@ -16,7 +16,7 @@ All notable changes to uQ are listed here. The format follows
   files, problem codes, `uqctl`, `bindle`'s commands, `oyst-cli scan` and `status`, `uqbit status`,
   `uqview` and kyko) and the level of each one every package needs. `compat/compat.py` writes one
   `conflicts+=(…)  # uq-compat` line into every PKGBUILD from it, so pacman refuses a set of
-  versions that would break, and bindleUP (Bindle 0.1.49) holds an update back until the partner
+  versions that would break, and bindleUP (Bindle 0.1.51) holds an update back until the partner
   it needs is on the AUR. uQ's own line asks for Bindle 0.1.47 or newer (the Restore page), kyko
   1.3.3, oysterAV 0.5.0, uQbit 0.6.1 and uQview 0.1.6. See docs/compat.md.
 - **CI checks the family together every day** (`.github/workflows/family.yml`): the manifest,
@@ -34,6 +34,12 @@ All notable changes to uQ are listed here. The format follows
 - **The Security island doesn't half-read a summary it doesn't know.** A summary from oysterAV in a
   schema other than 1 now reads as unavailable instead of showing whichever fields happen to
   match.
+
+## [0.3.43] - 2026-11-26
+
+### Changed
+
+- **The lock screen now looks like the login screen.** It shows the login wallpaper (or uQ's backdrop in your theme's colours when none is set), the clock at the top and the avatar, name and password field on the same card as the login screen. The background and card are shared components (`shell/auth/AuthBackdrop.qml`, `AuthCard.qml`), so the two can't drift apart again.
 
 ## [0.3.42] - 2026-11-26
 
