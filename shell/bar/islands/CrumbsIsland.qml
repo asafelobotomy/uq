@@ -1,9 +1,9 @@
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
-import Quickshell.Io
 import Quickshell.Widgets
 import "../../core"
+import "../../services"
 import "../../logic/ticker.js" as T
 import "../../logic/crumbs.js" as C
 import ".."
@@ -12,16 +12,17 @@ import ".."
 // that can be reclaimed, by category). Icon: the bin. Small: and the amount. Medium and Large: and
 // "to free". It turns amber at shell.bar.options.crumbs.warn_gb. A click lists the biggest
 // categories, scans again, and opens crumBS's Storage page in Settings. The scan only reads; it
-// runs at low priority, once when the shell starts and then every half hour. Hidden while crumbs
-// isn't installed or can't answer. The trash is left out of the amount: only naming it empties it.
+// runs at low priority, once for all screens (services/CrumbsStatus.qml): when the island is
+// placed, then every half hour. Hidden while crumbs isn't installed or can't answer. The trash is left out of the amount: only naming it empties it.
 Island {
     id: root
 
     readonly property var opts: BarLayout.options.crumbs || ({})
     readonly property real warnGb: typeof opts.warn_gb === "number" ? opts.warn_gb : 5
 
-    property var rows: null
-    property bool failed: false
+    // crumBS's reading, taken once for every screen (services/CrumbsStatus.qml).
+    readonly property var rows: CrumbsStatus.rows
+    readonly property bool failed: CrumbsStatus.failed
 
     readonly property real total: rows ? C.total(rows) : 0
     readonly property bool warn: warnGb > 0 && total >= warnGb * 1024 * 1024 * 1024
@@ -31,39 +32,6 @@ Island {
     shown: rows !== null && !failed
     Accessible.role: Accessible.Button
     Accessible.name: "Storage cleanup: " + T.bytes(total) + " can be freed. Show details"
-
-    Process {
-        id: scan
-        command: ["nice", "-n", "19", "crumbs", "scan", "--json"]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                var r = C.parse(text);
-                if (r !== null) {
-                    root.rows = r;
-                    root.failed = false;
-                } else {
-                    root.failed = true;
-                }
-            }
-        }
-        // crumbs missing (exit 127) or failing hides the island.
-        onExited: function (code) {
-            if (code !== 0)
-                root.failed = true;
-        }
-    }
-
-    function refresh() {
-        if (!scan.running)
-            scan.running = true;
-    }
-    Component.onCompleted: refresh()
-    Timer {
-        interval: 1800000
-        running: true
-        repeat: true
-        onTriggered: root.refresh()
-    }
 
     RowLayout {
         anchors.centerIn: parent
@@ -146,9 +114,9 @@ Island {
             }
             MenuRow {
                 Layout.fillWidth: true
-                text: scan.running ? "Scanning…" : "Scan again"
-                enabled: !scan.running
-                onActivated: root.refresh()
+                text: CrumbsStatus.scanning ? "Scanning…" : "Scan again"
+                enabled: !CrumbsStatus.scanning
+                onActivated: CrumbsStatus.refresh()
             }
         }
     }
