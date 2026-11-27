@@ -567,7 +567,10 @@ async fn stop_now_ends_a_running_app_without_calling_it_a_failure() {
     settle().await;
     assert_eq!(r.fake.stops.lock().unwrap().len(), 1);
     let out = rows(&r.runner, &plan).await;
-    assert_eq!(out[0]["status"], "exited");
+    assert_eq!(
+        out[0]["status"], "stopped",
+        "not \"started, then finished\""
+    );
     // Nothing runs now, so there is nothing to stop.
     assert!(!stop_now(&r.runner, "a.desktop", || {}).await);
 }

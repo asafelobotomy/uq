@@ -9,6 +9,7 @@ use std::path::PathBuf;
 
 mod folders;
 mod scan;
+mod session;
 
 fn reason(e: SettingError) -> String {
     match e {

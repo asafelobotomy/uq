@@ -27,6 +27,7 @@ pub mod region;
 pub mod restore;
 pub mod rules;
 pub mod runner;
+pub mod services;
 pub mod shell;
 pub mod sound;
 pub mod startup;

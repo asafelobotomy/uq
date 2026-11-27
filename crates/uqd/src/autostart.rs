@@ -6,9 +6,11 @@
 //! or a journal read (its guard can't be held across an `await` in a spawned task). Writes to
 //! the startup section never start or stop anything; they show at the next login.
 
+pub mod conditions;
 pub mod hide;
 mod list;
 mod record;
+mod restore;
 pub mod spawn;
 mod trigger;
 
@@ -25,6 +27,7 @@ use std::pin::Pin;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 use tokio::sync::Semaphore;
+use uq_core::autostart::When;
 use uq_core::autostart::scan::{Plan, Resolved};
 use uq_core::desktop_entry::{random_suffix, unit_id};
 
@@ -51,6 +54,8 @@ pub struct AutostartConfig {
     session: Option<String>,
     dev: bool,
     hider: Option<Arc<dyn Hider>>,
+    /// Where the network and power are read from (`/`, or a test folder).
+    probe_root: PathBuf,
 }
 
 impl AutostartConfig {
@@ -80,6 +85,7 @@ impl AutostartConfig {
             session,
             dev,
             hider: None,
+            probe_root: PathBuf::from("/"),
         }
     }
 
@@ -91,12 +97,19 @@ impl AutostartConfig {
             session: None,
             dev: false,
             hider: None,
+            probe_root: PathBuf::from("/"),
         }
     }
 
     /// What hides the windows of apps set to start minimised. Without one they open as usual.
     pub fn with_hider(mut self, hider: Arc<dyn Hider>) -> AutostartConfig {
         self.hider = Some(hider);
+        self
+    }
+
+    /// Read the network and power under `root` instead of `/` (tests).
+    pub fn with_probe_root(mut self, root: PathBuf) -> AutostartConfig {
+        self.probe_root = root;
         self
     }
 
@@ -117,6 +130,7 @@ impl AutostartConfig {
             session,
             dev,
             hider: None,
+            probe_root: PathBuf::from("/"),
         }
     }
 }
@@ -137,6 +151,10 @@ pub(crate) enum Status {
     /// It ended, but how isn't known.
     Gone,
     SpawnFailed,
+    /// Stopped with Stop now.
+    Stopped,
+    /// Not started this login: its condition wasn't met.
+    Held(&'static str),
 }
 
 pub struct Runner {
@@ -153,6 +171,14 @@ pub struct Runner {
     /// Apps stopped on purpose, so their end isn't a failure and isn't retried.
     stopped: BTreeSet<String>,
     shell_ready_calls: u32,
+    /// What each entry waits for, from the state at login.
+    when: BTreeMap<String, When>,
+    /// When a waiting entry starts (Unix seconds), so the page can count down.
+    due: BTreeMap<String, i64>,
+    /// Entries waiting for their condition now, with what the page says.
+    holding: BTreeMap<String, &'static str>,
+    /// Last session's apps to reopen at this login, each with its workspace.
+    restore: Vec<(Resolved, i64)>,
     /// The cleaned last lines of a failed run, by `(unit, exit)` (F16).
     logs: HashMap<(String, ExitInfo), Vec<String>>,
     record: Record,
@@ -177,6 +203,10 @@ impl Runner {
             retried: BTreeSet::new(),
             stopped: BTreeSet::new(),
             shell_ready_calls: 0,
+            when: BTreeMap::new(),
+            due: BTreeMap::new(),
+            holding: BTreeMap::new(),
+            restore: Vec::new(),
             logs: HashMap::new(),
             record: Record::default(),
             spawns: 0,
@@ -188,6 +218,16 @@ impl Runner {
     /// How a delayed entry is checked again before it starts. Without one, it always starts.
     pub fn set_recheck(&mut self, recheck: Recheck) {
         self.recheck = Some(recheck);
+    }
+
+    /// What each entry waits for at this login's run.
+    pub fn set_when(&mut self, when: BTreeMap<String, When>) {
+        self.when = when;
+    }
+
+    /// Last session's apps, started with this login's run and moved to their workspaces.
+    pub fn set_restore(&mut self, restore: Vec<(Resolved, i64)>) {
+        self.restore = restore;
     }
 
     pub fn shared(cfg: AutostartConfig) -> SharedRunner {
@@ -234,6 +274,9 @@ struct Job {
     delay: u32,
     minimize: bool,
     retry: bool,
+    when: Option<When>,
+    /// Move the app's first windows to this workspace (restore last session).
+    workspace: Option<i64>,
     /// Part of this login's run, so its start counts as "N s after login". Run now's isn't.
     at_login: bool,
 }
@@ -298,6 +341,8 @@ pub async fn start_once(
                     minimize,
                     retry,
                 } => Some(Job {
+                    when: lock(runner).when.get(&e.id).copied(),
+                    workspace: None,
                     id: e.id,
                     argv,
                     cwd,
@@ -310,6 +355,10 @@ pub async fn start_once(
             })
             .collect()
     };
+    let mut jobs = jobs;
+    if !record.ran && !same {
+        jobs.extend(restore::jobs(std::mem::take(&mut lock(runner).restore)));
+    }
     if !same {
         record.pending = jobs.iter().map(|j| j.id.clone()).collect();
     }
@@ -334,7 +383,9 @@ pub async fn start_once(
     );
     let recheck = lock(runner).recheck.clone();
     let hider = lock(runner).cfg.hider.clone();
+    let probe_root = lock(runner).cfg.probe_root.clone();
     let ctx = Ctx {
+        probe_root,
         hider,
         recheck,
         runner: runner.clone(),
@@ -364,6 +415,7 @@ struct Ctx {
     path: PathBuf,
     env: Arc<Vec<(String, String)>>,
     emit: Arc<dyn Fn() + Send + Sync>,
+    probe_root: PathBuf,
 }
 
 fn now_secs() -> i64 {
@@ -378,6 +430,10 @@ pub const RETRY_AFTER: Duration = Duration::from_secs(10);
 /// Sleep the delay, then start the entry.
 async fn run_one(ctx: Ctx, job: Job) {
     if job.delay > 0 {
+        lock(&ctx.runner)
+            .due
+            .insert(job.id.clone(), now_secs() + i64::from(job.delay));
+        (ctx.emit)();
         tokio::time::sleep(Duration::from_secs(job.delay.into())).await;
         if let Some(check) = &ctx.recheck
             && !check(job.id.clone()).await
@@ -393,6 +449,12 @@ async fn run_one(ctx: Ctx, job: Job) {
             (ctx.emit)();
             return;
         }
+    }
+    lock(&ctx.runner).due.remove(&job.id);
+    if let Some(when) = job.when
+        && !conditions::met(&ctx, &job.id, when).await
+    {
+        return;
     }
     launch(ctx, job, 0).await;
 }
@@ -456,6 +518,12 @@ async fn launch_inner(ctx: Ctx, job: Job, attempt: u32) {
     let Some((child, run)) = child else {
         return;
     };
+    if let (Some(ws), Some(hider)) = (job.workspace, ctx.hider.clone()) {
+        let unit = run.unit.clone();
+        tokio::spawn(async move {
+            hider.place(&unit, ws).await;
+        });
+    }
     if job.minimize
         && let Some(hider) = ctx.hider.clone()
     {
@@ -476,7 +544,7 @@ async fn launch_inner(ctx: Ctx, job: Job, attempt: u32) {
         let exit = child.wait.await;
         let on_purpose = lock(&ctx.runner).stopped.contains(&id);
         let status = match exit {
-            _ if on_purpose => Status::Exited,
+            _ if on_purpose => Status::Stopped,
             ExitInfo::Code(0) => Status::Exited,
             ExitInfo::Unknown => Status::Gone,
             exit => Status::Failed { run, exit },
@@ -522,7 +590,9 @@ pub async fn run_now(
     if is_running(runner, &job_plan.id, &spawner).await {
         return false;
     }
+    let probe_root = lock(runner).cfg.probe_root.clone();
     let ctx = Ctx {
+        probe_root,
         hider,
         recheck: None,
         runner: runner.clone(),
@@ -542,6 +612,8 @@ pub async fn run_now(
         delay: 0,
         minimize,
         retry,
+        when: None,
+        workspace: None,
         at_login: false,
     };
     launch(ctx, job, 0).await;
@@ -583,7 +655,7 @@ pub async fn stop_now(runner: &SharedRunner, id: &str, emit: impl Fn()) -> bool 
         // An app an earlier uqd started has no waiter to say it ended.
         let mut r = lock(runner);
         if matches!(r.statuses.get(id), Some(Status::Adopted(_))) {
-            r.statuses.insert(id.to_string(), Status::Exited);
+            r.statuses.insert(id.to_string(), Status::Stopped);
         }
     }
     emit();

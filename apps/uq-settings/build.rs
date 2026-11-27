@@ -78,6 +78,10 @@ fn main() {
         QmlFile::from("qml/pages/RulesPage.qml"),
         QmlFile::from("qml/pages/ShellPage.qml"),
         QmlFile::from("qml/pages/StartupPage.qml"),
+        QmlFile::from("qml/pages/startup/EnvironmentTab.qml"),
+        QmlFile::from("qml/pages/startup/SessionTab.qml"),
+        QmlFile::from("qml/pages/startup/ServicesTab.qml"),
+        QmlFile::from("qml/pages/startup/ServiceRow.qml"),
         QmlFile::from("qml/pages/WallpaperPage.qml"),
         QmlFile::from("qml/pages/PowerPage.qml"),
         QmlFile::from("qml/pages/UsersPage.qml"),
@@ -138,6 +142,7 @@ fn main() {
         "src/network_model.rs",
         "src/bluetooth_model.rs",
         "src/sound_model.rs",
+        "src/services_model.rs",
         "src/printers_model.rs",
     ])
     .cpp_file("cpp/window.cpp");

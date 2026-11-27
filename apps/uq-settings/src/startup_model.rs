@@ -63,6 +63,24 @@ pub mod qobject {
         #[qinvokable]
         fn set_retry(self: Pin<&mut StartupModel>, on: bool);
 
+        /// What app `id` waits for: "network", "power", or "" for nothing.
+        #[qinvokable]
+        fn set_when(self: Pin<&mut StartupModel>, id: &QString, when: &QString);
+
+        /// Reopen last session's apps on their workspaces at login.
+        #[qinvokable]
+        fn set_restore(self: Pin<&mut StartupModel>, on: bool);
+
+        /// Run a typed command at logout; an empty `name` names it after its program.
+        #[qinvokable]
+        fn add_logout(self: Pin<&mut StartupModel>, name: &QString, command: &QString);
+
+        #[qinvokable]
+        fn set_logout_enabled(self: Pin<&mut StartupModel>, id: &QString, on: bool);
+
+        #[qinvokable]
+        fn remove_logout(self: Pin<&mut StartupModel>, id: &QString);
+
         /// Start an installed app (by its desktop id) at login.
         #[qinvokable]
         fn add_app(self: Pin<&mut StartupModel>, id: &QString);
@@ -205,6 +223,44 @@ impl StartupModel {
 
     fn set_retry(self: Pin<&mut Self>, on: bool) {
         model_core::start(self, Op::SetRetry { on });
+    }
+
+    fn set_when(self: Pin<&mut Self>, id: &QString, when: &QString) {
+        model_core::start(
+            self,
+            Op::SetWhen {
+                id: id.to_string(),
+                when: when.to_string(),
+            },
+        );
+    }
+
+    fn set_restore(self: Pin<&mut Self>, on: bool) {
+        model_core::start(self, Op::SetRestore { on });
+    }
+
+    fn add_logout(self: Pin<&mut Self>, name: &QString, command: &QString) {
+        model_core::start(
+            self,
+            Op::AddLogout {
+                name: name.to_string(),
+                command: command.to_string(),
+            },
+        );
+    }
+
+    fn set_logout_enabled(self: Pin<&mut Self>, id: &QString, on: bool) {
+        model_core::start(
+            self,
+            Op::SetLogoutEnabled {
+                id: id.to_string(),
+                on,
+            },
+        );
+    }
+
+    fn remove_logout(self: Pin<&mut Self>, id: &QString) {
+        model_core::start(self, Op::RemoveLogout { id: id.to_string() });
     }
 
     fn add_app(self: Pin<&mut Self>, id: &QString) {

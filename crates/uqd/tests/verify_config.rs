@@ -593,6 +593,10 @@ for _, want in ipairs({
     error("missing in " .. want[1] .. " hook: " .. want[2])
   end
 end
+-- uqd hears the session is ending before anything stops (restore last session, logout commands).
+if not (executed["hyprland.shutdown"] or ""):find("systemctl --user kill -s USR1 uqd.service", 1, true) then
+  error("the shutdown hook must tell uqd the session is ending (SIGUSR1) with os.execute")
+end
 -- The shell and uqlip are stopped and waited for before Hyprland closes its socket.
 if not (executed["hyprland.shutdown"] or ""):find("systemctl --user stop uq-shell.service uqlip.service", 1, true) then
   error("the shutdown hook must stop uq-shell and uqlip with os.execute (blocking), not exec_cmd")

@@ -814,7 +814,7 @@ static COMPAT_SETTINGS: [SearchEntry; 7] = [
     ),
 ];
 
-static STARTUP_SETTINGS: [SearchEntry; 6] = [
+static STARTUP_SETTINGS: [SearchEntry; 10] = [
     entry(
         "login-apps",
         "Apps that start when you log in",
@@ -835,6 +835,26 @@ static STARTUP_SETTINGS: [SearchEntry; 6] = [
         "start-retry",
         "Try again if an app fails",
         &["retry", "again", "fail", "crash"],
+    ),
+    entry(
+        "start-restore",
+        "Restore your last session",
+        &["restore", "session", "reopen", "resume", "workspace"],
+    ),
+    entry(
+        "logout-commands",
+        "Commands at logout",
+        &["logout", "log out", "shutdown", "script", "backup"],
+    ),
+    entry(
+        "background-services",
+        "Background services",
+        &["service", "systemd", "daemon", "unit", "background"],
+    ),
+    entry(
+        "services-show-all",
+        "Show every service",
+        &["service", "static", "all"],
     ),
     entry(
         "env-vars",
@@ -1983,6 +2003,26 @@ mod tests {
                     "start-retry",
                     "Try again if an app fails",
                     &["retry", "again", "fail", "crash"][..]
+                ),
+                (
+                    "start-restore",
+                    "Restore your last session",
+                    &["restore", "session", "reopen", "resume", "workspace"][..]
+                ),
+                (
+                    "logout-commands",
+                    "Commands at logout",
+                    &["logout", "log out", "shutdown", "script", "backup"][..]
+                ),
+                (
+                    "background-services",
+                    "Background services",
+                    &["service", "systemd", "daemon", "unit", "background"][..]
+                ),
+                (
+                    "services-show-all",
+                    "Show every service",
+                    &["service", "static", "all"][..]
                 ),
                 (
                     "env-vars",

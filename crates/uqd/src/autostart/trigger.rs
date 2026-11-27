@@ -56,7 +56,33 @@ async fn run(desktop: SharedDesktop, runner: SharedRunner) {
     let _ = tokio::task::spawn_blocking(move || crate::native_defaults::run(&defaults)).await;
     let (plan, env, events) = {
         let d = desktop.lock().await;
+        lock(&runner).set_when(d.state.autostart.when.clone());
         let (plan, env) = d.autostart_plan();
+        // Last session's apps, read before anything notes this session's.
+        if d.state.autostart.restore {
+            let running: Vec<&str> = plan
+                .iter()
+                .filter(|e| matches!(e.plan, Plan::Run { .. }))
+                .map(|e| e.id.as_str())
+                .collect();
+            let added_apps = d.state.autostart.added.iter().filter_map(|a| match a {
+                uq_core::autostart::Added::App { id, app, .. }
+                    if running.contains(&id.as_str()) =>
+                {
+                    Some(app.clone())
+                }
+                _ => None,
+            });
+            let taken = running
+                .iter()
+                .filter(|id| id.ends_with(".desktop"))
+                .map(|id| id.to_string())
+                .chain(added_apps)
+                .collect();
+            let apps = crate::session::snapshot::load(&d.session_file());
+            lock(&runner).set_restore(d.restore_plan(&apps, &taken));
+        }
+        tokio::spawn(crate::session::record(desktop.clone()));
         (plan, env, d.events.clone())
     };
     start_once(&runner, plan, env, move || {

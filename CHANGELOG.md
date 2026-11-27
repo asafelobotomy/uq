@@ -11,6 +11,11 @@ All notable changes to uQ are listed here. The format follows
 
 - **Settings › Default apps has three tabs: Apps, File types and Links.** Apps gains Calendar, Archives and Torrents. File types lists every type of file an installed app can open, by group and searchable, and Links does the same for kinds of link (email addresses, magnet links, Steam, Zoom and so on). Each row opens a picker of the apps that can open it. Every choice can go back to the system's with one button.
 - **uQ's own apps are the defaults where you haven't chosen.** At login, uQview opens pictures, reelo opens videos and music, and uQbit opens torrents and magnet links, but only for kinds you never chose, and only once each: a later choice or a reset is never undone. The Default apps page marks uQ's own apps and has **Use uQ's apps** to switch every kind to them.
+- **Settings › Startup has four tabs: Apps, Session, Services and Environment.** Session and Services are new.
+- **A startup app can wait for the network or start only on mains power.** "Start when" on each app chooses: right away, wait for the network (up to a minute), or only when plugged in. A delayed app counts down to its start, and an app stopped with Stop now says Stopped instead of Finished.
+- **Restore your session (Startup › Session, off by default).** uQ remembers the apps you have open and their workspaces, and at the next login opens them again on those workspaces. Apps that already start at login aren't opened twice.
+- **Commands at logout (Startup › Session).** Commands such as a backup or a sync run one after another as you log out; uQ waits up to 10 seconds for them.
+- **Startup › Services lists your background services.** Each shows whether it is running, can be started, stopped or restarted, turned on or off for login, and shows its recent log lines. uQ's own services are listed but locked, and **Show every service** adds the ones the system starts on demand.
 
 ### Fixed
 

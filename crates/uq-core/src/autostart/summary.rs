@@ -100,6 +100,7 @@ pub fn summary(before: &Value, after: &Value) -> String {
             lines.push(format!("Startup app {} removed", added_name(b)));
         }
     }
+    session_lines(before, after, &mut lines);
     if lines.is_empty() {
         let same_order = ba.iter().map(|(i, _)| i).eq(aa.iter().map(|(i, _)| i));
         return if same_order {
@@ -113,4 +114,60 @@ pub fn summary(before: &Value, after: &Value) -> String {
         line.push_str(&format!(", and {} more", lines.len() - MAX_NAMED));
     }
     line
+}
+
+/// Restore the last session, the conditions and the commands at logout.
+fn session_lines(before: &Value, after: &Value, out: &mut Vec<String>) {
+    let restore = |v: &Value| v.get("restore").and_then(Value::as_bool).unwrap_or(false);
+    if restore(before) != restore(after) {
+        out.push(if restore(after) {
+            "Restore last session turned on".to_string()
+        } else {
+            "Restore last session turned off".to_string()
+        });
+    }
+    let when = |v: &Value| v.get("when").cloned().unwrap_or(Value::Null);
+    let (bw, aw) = (when(before), when(after));
+    let name = |id: &str| {
+        let named = list(after, "added")
+            .into_iter()
+            .chain(list(before, "added"))
+            .find(|(i, _)| *i == id)
+            .map(|(_, v)| added_name(v));
+        named.unwrap_or_else(|| file_name(id))
+    };
+    if let Some(m) = aw.as_object() {
+        for (id, w) in m {
+            if bw.get(id) != Some(w) {
+                let what = match w.as_str() {
+                    Some("network") => "waits for the network",
+                    Some("power") => "starts only on mains power",
+                    _ => "has a new condition",
+                };
+                out.push(format!("Startup app {} {what}", name(id)));
+            }
+        }
+    }
+    if let Some(m) = bw.as_object() {
+        for id in m.keys() {
+            if aw.get(id).is_none() {
+                out.push(format!("Startup app {} starts without waiting", name(id)));
+            }
+        }
+    }
+    let (bl, al) = (list(before, "logout"), list(after, "logout"));
+    for (id, a) in &al {
+        match bl.iter().find(|(i, _)| i == id) {
+            None => out.push(format!("Command at logout {} added", added_name(a))),
+            Some((_, b)) if b != a => {
+                out.push(format!("Command at logout {} changed", added_name(a)))
+            }
+            _ => {}
+        }
+    }
+    for (id, b) in &bl {
+        if !al.iter().any(|(i, _)| i == id) {
+            out.push(format!("Command at logout {} removed", added_name(b)));
+        }
+    }
 }

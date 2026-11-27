@@ -51,6 +51,9 @@ end)
 -- timeout keeps a hung stop from holding up the logout.
 hl.on("hyprland.shutdown", function()
     if (os.getenv("UQ_DEV_SESSION") or "") == "" then
+        -- Tells uqd the session is ending: it notes the open apps (restore last session) while
+        -- the windows are still there, and runs the logout commands when it is stopped below.
+        os.execute("timeout 2 systemctl --user kill -s USR1 uqd.service")
         os.execute("timeout 5 systemctl --user stop uq-shell.service uqlip.service")
     end
     hl.exec_cmd("test -n \"$UQ_DEV_SESSION\" || { systemctl --user stop uqd.service; systemctl --user stop scdr-session.service; }")

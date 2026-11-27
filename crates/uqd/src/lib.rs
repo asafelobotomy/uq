@@ -21,6 +21,7 @@ mod reset;
 mod rules;
 mod sections;
 pub mod service;
+pub mod session;
 mod startup;
 pub mod system;
 mod themes;
