@@ -44,7 +44,7 @@ PanelWindow {
     property int placeX: Theme.gapOut
     property int placeY: barBottom + Theme.gapIn
 
-    readonly property var appList: M.menuEntries(DesktopEntries.applications.values)
+    readonly property var appList: M.menuEntries(DesktopEntries.applications.values, StaleApps.hidden)
     readonly property var pinned: Settings.values.pinned || []
     readonly property var favList: M.favourites(pinned, appList)
     readonly property var categoryList: M.categories(appList, favList.length)

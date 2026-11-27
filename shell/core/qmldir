@@ -10,6 +10,7 @@ singleton BarLayout 1.0 BarLayout.qml
 singleton WindowLook 1.0 WindowLook.qml
 singleton PageActions 1.0 PageActions.qml
 singleton WallpaperShown 1.0 WallpaperShown.qml
+singleton StaleApps 1.0 StaleApps.qml
 UqText 1.0 UqText.qml
 UqInput 1.0 UqInput.qml
 ThemeIo 1.0 ThemeIo.qml
