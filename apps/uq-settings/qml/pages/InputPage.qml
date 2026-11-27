@@ -8,6 +8,7 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.uq.settings
 import "../components"
+import "input"
 
 SettingsPage {
     id: page
@@ -227,125 +228,9 @@ SettingsPage {
         }
     }
 
-    SettingsTab {
-        title: "Mouse"
-        iconName: "input-mouse"
-
-        SettingsCard {
-            title: "Pointer"
-            iconName: "tool-pointer"
-
-            ValueSlider {
-                id: speedRow
-                busy: im.busy
-                settingId: "mouse-speed"
-                iconName: "speedometer"
-                label: "Pointer speed"
-                highlight: App.highlight
-                enabled: page.ready
-                source: page.sourceOf("mouse-speed")
-                from: -1
-                to: 1
-                lowLabel: "Slower"
-                highLabel: "Faster"
-                value: page.mouse.sensitivity || 0
-                onChosen: v => page.setMouse("sensitivity", v)
-                Layout.fillWidth: true
-
-                UqLabel {
-                    objectName: "speedValue"
-                    text: page.signed(speedRow.slider.value)
-                    horizontalAlignment: Text.AlignRight
-                    Layout.minimumWidth: Kirigami.Units.gridUnit * 2
-                }
-            }
-            SettingRow {
-                settingId: "mouse-accel"
-                iconName: "transform-scale"
-                label: "Pointer acceleration"
-                help: "Adaptive speeds the pointer up on fast moves. Flat keeps it in step with your hand."
-                highlight: App.highlight
-                enabled: page.ready
-                source: page.sourceOf("mouse-accel")
-                Layout.fillWidth: true
-
-                QQC2.ButtonGroup {
-                    id: accelGroup
-                }
-                Repeater {
-                    model: page.accelCodes
-                    ChoiceButton {
-                        id: accelButton
-                        required property string modelData
-                        required property int index
-                        objectName: "accel-" + modelData
-                        checkable: true
-                        checked: (page.mouse.accel_profile || "default") === modelData
-                        QQC2.ButtonGroup.group: accelGroup
-                        Accessible.name: page.accelNames[index]
-                        label: page.accelNames[accelButton.index]
-                        onClicked: {
-                            page.setMouse("accel_profile", modelData);
-                            checked = Qt.binding(() => (page.mouse.accel_profile || "default") === modelData);
-                        }
-                    }
-                }
-            }
-        }
-
-        SettingsCard {
-            title: "Buttons and wheel"
-            iconName: "input-mouse"
-
-            SwitchRow {
-                settingId: "mouse-natural-scroll"
-                iconName: "transform-browse"
-                label: "Natural scrolling"
-                help: "The page follows your fingers, as on a phone."
-                highlight: App.highlight
-                enabled: page.ready
-                source: page.sourceOf("mouse-natural-scroll")
-                value: page.mouse.natural_scroll === true
-                onChosen: v => page.setMouse("natural_scroll", v)
-                Layout.fillWidth: true
-            }
-            SwitchRow {
-                settingId: "mouse-left-handed"
-                iconName: "object-flip-horizontal"
-                label: "Left-handed buttons"
-                highlight: App.highlight
-                enabled: page.ready
-                source: page.sourceOf("mouse-left-handed")
-                value: page.mouse.left_handed === true
-                onChosen: v => page.setMouse("left_handed", v)
-                Layout.fillWidth: true
-            }
-            ValueSlider {
-                id: scrollRow
-                busy: im.busy
-                settingId: "mouse-scroll-speed"
-                iconName: "arrow-down"
-                label: "Scroll speed"
-                highlight: App.highlight
-                enabled: page.ready
-                source: page.sourceOf("mouse-scroll-speed")
-                from: 0.1
-                to: 5
-                stepSize: 0.1
-                lowLabel: "Slower"
-                highLabel: "Faster"
-                value: page.mouse.scroll_factor || 1
-                onChosen: v => page.setMouse("scroll_factor", v)
-                Layout.fillWidth: true
-
-                UqLabel {
-                    objectName: "scrollValue"
-                    text: "×" + (Math.round(scrollRow.slider.value * 10) / 10)
-                    horizontalAlignment: Text.AlignRight
-                    Layout.minimumWidth: Kirigami.Units.gridUnit * 2
-                }
-            }
-        }
+    MouseTab {
+        im: im
+        page: page
     }
 
     SettingsTab {
@@ -525,128 +410,8 @@ SettingsPage {
         }
     }
 
-    SettingsTab {
-        title: "Devices"
-        iconName: "preferences-desktop-peripherals"
-
-        SettingsCard {
-            title: "Settings for one device"
-            iconName: "preferences-desktop-peripherals"
-            help: "A device's own settings win over the mouse's. A new one starts from the mouse's speed."
-            wide: Object.keys(page.deviceSettings).length === 0
-
-            SettingRow {
-                settingId: "device-overrides"
-                iconName: "list-add"
-                label: "Add a device"
-                highlight: App.highlight
-                enabled: page.ready && page.addable.length > 0
-                Layout.fillWidth: true
-
-                UqComboBox {
-                    id: devicePick
-                    model: ["Choose a device"].concat(page.addable.map(p => p.name))
-                    currentIndex: 0
-                    Accessible.name: "Device to add"
-                    Layout.preferredWidth: Kirigami.Units.gridUnit * 14
-                }
-                QQC2.Button {
-                    objectName: "addDevice"
-                    text: "Add"
-                    icon.name: "list-add"
-                    enabled: devicePick.currentIndex > 0 && !im.busy
-                    onClicked: {
-                        // Starts from the mouse's own speed, so nothing moves until you change it.
-                        im.addDevice(page.addable[devicePick.currentIndex - 1].name);
-                        devicePick.currentIndex = 0;
-                    }
-                }
-            }
-            UqLabel {
-                visible: page.pointers.length === 0
-                text: "No pointing devices found."
-                opacity: 0.7
-                Layout.leftMargin: Kirigami.Units.largeSpacing
-            }
-        }
-
-        Repeater {
-            model: Object.keys(page.deviceSettings)
-
-            SettingsCard {
-                id: dev
-                required property string modelData
-                readonly property var s: page.deviceSettings[modelData] || {}
-                title: modelData
-                iconName: modelData.indexOf("touchpad") >= 0 ? "input-touchpad" : "input-mouse"
-                actions: [
-                    QQC2.ToolButton {
-                        text: "Remove"
-                        icon.name: "edit-delete"
-                        display: QQC2.AbstractButton.IconOnly
-                        enabled: page.ready && !im.busy
-                        Accessible.name: "Remove " + dev.modelData
-                        QQC2.ToolTip.visible: hovered
-                        QQC2.ToolTip.text: "Remove this device's settings"
-                        onClicked: im.removeDevice(dev.modelData)
-                    }
-                ]
-
-                OverrideSlider {
-                    busy: im.busy
-                    iconName: "speedometer"
-                    label: "Pointer speed"
-                    enabled: page.ready
-                    from: -1
-                    to: 1
-                    fallback: page.mouse.sensitivity || 0
-                    value: page.saved(dev.s, "sensitivity")
-                    onChosen: v => page.setDevice(dev.modelData, "sensitivity", v)
-                    Layout.fillWidth: true
-                }
-                OverrideCombo {
-                    iconName: "transform-scale"
-                    label: "Pointer acceleration"
-                    enabled: page.ready
-                    themeLabel: "Same as the mouse"
-                    choices: page.accelCodes
-                    labels: ({ "default": "Default", "adaptive": "Adaptive", "flat": "Flat" })
-                    value: page.saved(dev.s, "accel_profile")
-                    onChosen: v => page.setDevice(dev.modelData, "accel_profile", v)
-                    Layout.fillWidth: true
-                }
-                OverrideSwitch {
-                    iconName: "transform-browse"
-                    label: "Natural scrolling"
-                    enabled: page.ready
-                    fallback: page.mouse.natural_scroll === true
-                    value: page.saved(dev.s, "natural_scroll")
-                    onChosen: v => page.setDevice(dev.modelData, "natural_scroll", v)
-                    Layout.fillWidth: true
-                }
-                OverrideSwitch {
-                    iconName: "object-flip-horizontal"
-                    label: "Left-handed buttons"
-                    enabled: page.ready
-                    fallback: page.mouse.left_handed === true
-                    value: page.saved(dev.s, "left_handed")
-                    onChosen: v => page.setDevice(dev.modelData, "left_handed", v)
-                    Layout.fillWidth: true
-                }
-                OverrideSlider {
-                    busy: im.busy
-                    iconName: "arrow-down"
-                    label: "Scroll speed"
-                    enabled: page.ready
-                    from: 0.1
-                    to: 5
-                    stepSize: 0.1
-                    fallback: page.mouse.scroll_factor || 1
-                    value: page.saved(dev.s, "scroll_factor")
-                    onChosen: v => page.setDevice(dev.modelData, "scroll_factor", v)
-                    Layout.fillWidth: true
-                }
-            }
-        }
+    DevicesTab {
+        im: im
+        page: page
     }
 }

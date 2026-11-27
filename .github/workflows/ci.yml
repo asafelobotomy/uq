@@ -41,6 +41,10 @@ jobs:
       # Hyprland refuses to run as root and needs XDG_RUNTIME_DIR, even for --verify-config.
       - name: Create an unprivileged test user
         run: useradd -m tester && chown -R tester:tester "$GITHUB_WORKSPACE"
+      # No source file over 400 lines of code (native/uq-loc). It counts the files git tracks;
+      # uq/loc-ignore lists the data files it skips.
+      - name: File length (at most 400 lines of code per file)
+        run: su tester -c "cd '$GITHUB_WORKSPACE' && native/uq-loc/check-loc.sh"
       - name: Format, lint and test (including Hyprland --verify-config for every theme)
         run: |
           su tester -c "set -e

@@ -1,0 +1,289 @@
+//! Listing, flags and the CLI itself.
+
+use super::*;
+
+#[test]
+fn problems_are_listed_and_fail() {
+    let d = tempfile::tempdir().unwrap();
+    let uq = d.path().join("uq");
+    good_folder(&uq);
+    // A bare Text in a page, a widget whose id isn't its folder, a command that doesn't exist,
+    // a bad bus name, an activatable provider without a service file, a stray file, an app
+    // action whose program is missing, and an unknown key.
+    put(
+        &uq.join("pages/demo/Page.qml"),
+        "import QtQuick\nItem {\n    Text { text: \"x\" }\n}\n",
+    );
+    put(
+        &uq.join("widgets/other/widget.toml"),
+        "uq_api = 1\nid = \"wrong\"\nname = \"W\"\nslot = \"bar\"\nqml = \"W.qml\"\n",
+    );
+    put(&uq.join("widgets/other/W.qml"), "Item {}\n");
+    put(
+        &uq.join("widgets/cmd/widget.toml"),
+        "uq_api = 1\nid = \"cmd\"\nname = \"C\"\nslot = \"bar\"\nqml = \"W.qml\"\n\
+         [[command]]\nid = \"x\"\nargv = [\"/usr/bin/uq-test-no-such-program\"]\noutput = \"none\"\n",
+    );
+    put(&uq.join("widgets/cmd/W.qml"), "Item {}\n");
+    put(
+        &uq.join("launcher/bad.provider"),
+        "[Launcher Provider]\nBusName=nodots\nName=Bad\n",
+    );
+    put(
+        &uq.join("launcher/cold.provider"),
+        "[Launcher Provider]\nBusName=org.cold.Provider\nName=Cold\nActivatable=true\n",
+    );
+    put(&uq.join("launcher/notes.txt"), "stray");
+    put(
+        &uq.join("launcher/actions/gone.appaction"),
+        "[App Action]\nName=Gone\nExec=/usr/bin/uq-test-no-such-program %d\n",
+    );
+    put(
+        &uq.join("pages/extra/page.toml"),
+        "id = \"extra\"\nname = \"E\"\nqml = \"Page.qml\"\nsurprise = 1\n",
+    );
+    put(&uq.join("pages/extra/Page.qml"), "Item {}\n");
+    put(&uq.join("icons/x.svg"), "<svg/>");
+    // Rule files: a bad pattern, an id without the folder name, an unknown key, a bad
+    // workspace, a stray file, and a folder with no rules.toml.
+    put(
+        &uq.join("integrations/demo/rules.toml"),
+        "[[window_rule]]\nid = \"demo.games\"\nclass = [\"(\"]\nfullscreen = true\n",
+    );
+    put(
+        &uq.join("integrations/thief/rules.toml"),
+        "[[window_rule]]\nid = \"demo.games\"\nclass = [\"a\"]\nfloat = true\n",
+    );
+    put(
+        &uq.join("integrations/keys/rules.toml"),
+        "[[window_rule]]\nid = \"keys.x\"\nclass = [\"a\"]\nfloat = true\nexec = \"x\"\n",
+    );
+    put(
+        &uq.join("integrations/ws/rules.toml"),
+        "[[window_rule]]\nid = \"ws.x\"\nclass = [\"a\"]\nworkspace = \"game\"\n",
+    );
+    put(&uq.join("integrations/ws/rules.lua"), "hl.exec_cmd('x')");
+    put(&uq.join("integrations/empty/README.md"), "");
+    let code = |id: &str| {
+        format!(
+            "[[code]]\nid = \"{id}\"\nseverity = \"warn\"\ntitle = \"t\"\nmeans = \"m\"\nfix = \"f\"\n"
+        )
+    };
+    put(
+        &uq.join("diag/good.toml"),
+        &format!(
+            "app = \"Good\"\nunits = [\"good.service\"]\n{}",
+            code("GOOD-001")
+        ),
+    );
+    put(
+        &uq.join("diag/mine.toml"),
+        &format!("app = \"Mine\"\n{}", code("HYPR-901")),
+    );
+    put(&uq.join("diag/notes.txt"), "");
+    put(&uq.join("native.toml"), "[uq-diag]\nversion = \"1.0.1\"\n");
+
+    let (ok, out) = uqctl(&["integrations", "check", uq.to_str().unwrap()]);
+    assert!(!ok, "{out}");
+    for needle in [
+        "Page.qml:3: Text, Label",
+        "must equal the folder name",
+        "uq-test-no-such-program does not exist",
+        "invalid BusName",
+        "Activatable=true needs dbus/org.cold.Provider.service",
+        "notes.txt: only <id>.provider files",
+        "Exec program /usr/bin/uq-test-no-such-program does not exist",
+        "unknown field",
+        "icons: not part of a uq/ folder",
+        "demo/rules.toml: window_rule \"demo.games\": class[0]: this pattern can't be used",
+        "thief/rules.toml: window_rule[0]: id \"demo.games\" must be \"thief.<rule>\"",
+        "keys/rules.toml: rules.toml line 5: unknown field `exec`",
+        "ws/rules.toml: window_rule \"ws.x\": workspace must be",
+        "rules.lua: only rules.toml belongs in integrations/<name>/",
+        "empty: has no rules.toml",
+        "mine.toml: HYPR is one of uQ's own areas",
+        "diag/notes.txt: only <app>.toml files belong in diag/",
+        "18 problem(s)",
+    ] {
+        assert!(out.contains(needle), "{needle:?} missing from:\n{out}");
+    }
+    // uq/native.toml (the kit pins) belongs in a uq/ folder.
+    assert!(!out.contains("native.toml: not part"), "{out}");
+}
+
+#[test]
+fn list_reads_a_tree_laid_out_like_usr_share_uq() {
+    let d = tempfile::tempdir().unwrap();
+    let root = d.path();
+    let uq = d.path().join("src");
+    good_folder(&uq);
+    std::fs::create_dir_all(root.join("shell")).unwrap();
+    std::fs::create_dir_all(root.join("settings")).unwrap();
+    std::fs::rename(uq.join("widgets"), root.join("shell/widgets")).unwrap();
+    std::fs::rename(uq.join("pages"), root.join("settings/pages")).unwrap();
+    std::fs::rename(uq.join("launcher"), root.join("launcher")).unwrap();
+    std::fs::rename(uq.join("integrations"), root.join("integrations")).unwrap();
+    put(
+        &root.join("settings/pages/waits/page.toml"),
+        "id = \"waits\"\nname = \"W\"\nqml = \"Page.qml\"\n[requires]\nbus_name = \"org.uq.TestNobody\"\n",
+    );
+    put(&root.join("settings/pages/waits/Page.qml"), "Item {}\n");
+
+    let (ok, out) = uqctl(&["integrations", "list", "--root", root.to_str().unwrap()]);
+    assert!(ok, "{out}");
+    let lines: Vec<&str> = out.lines().collect();
+    assert_eq!(lines.len(), 6, "{out}");
+    assert!(lines[0].starts_with("widget\tdemo\tshown\t"), "{out}");
+    assert!(lines[1].starts_with("page\tdemo\tshown\t"), "{out}");
+    assert!(
+        lines[2].starts_with("page\twaits\tshown\t") && lines[2].contains("not checked"),
+        "no session bus here, so the name is not checked: {out}"
+    );
+    assert!(
+        lines[3].starts_with("provider\torg.demo.Provider\tshown\t"),
+        "{out}"
+    );
+    assert!(
+        lines[4].starts_with("app_action\tdemo-check\tshown\t"),
+        "{out}"
+    );
+    assert!(
+        lines[5].starts_with("rules\tdemo\tshown\t") && lines[5].ends_with("rules.toml"),
+        "{out}"
+    );
+
+    let (ok, json) = uqctl(&[
+        "integrations",
+        "list",
+        "--json",
+        "--root",
+        root.to_str().unwrap(),
+    ]);
+    assert!(ok);
+    let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+    assert_eq!(v.as_array().unwrap().len(), 6);
+    assert_eq!(v[5]["kind"], "rules");
+    assert_eq!(v[5]["name"], "1 window rule");
+    assert_eq!(v[2]["waits_for"], "org.uq.TestNobody");
+    assert_eq!(v[3]["kind"], "provider");
+
+    // On a bus where nobody owns the name, the page is hidden.
+    let bus = uq_core::test_bus::private_bus();
+    let (ok, out) = uqctl_on(
+        &bus.address,
+        &["integrations", "list", "--root", root.to_str().unwrap()],
+    );
+    assert!(ok);
+    assert!(
+        out.contains("page\twaits\thidden\t") && out.contains("hidden until org.uq.TestNobody"),
+        "{out}"
+    );
+
+    let empty = tempfile::tempdir().unwrap();
+    let (ok, out) = uqctl(&[
+        "integrations",
+        "list",
+        "--root",
+        empty.path().to_str().unwrap(),
+    ]);
+    assert!(ok);
+    assert_eq!(out.trim(), "no integrations installed");
+}
+
+/// `uqctl integrations list | head` (or any reader that has gone): stdout is a pipe whose read
+/// end is already closed. uqctl stops quietly instead of panicking on the broken pipe.
+#[test]
+fn closed_stdout_pipe_is_not_a_panic() {
+    let dir = tempfile::tempdir().unwrap();
+    good_folder(&dir.path().join("share/uq"));
+    let (reader, writer) = std::io::pipe().unwrap();
+    drop(reader);
+    let out = Command::new(env!("CARGO_BIN_EXE_uqctl"))
+        .args(["integrations", "list", "--root"])
+        .arg(dir.path().join("share/uq"))
+        .env("DBUS_SESSION_BUS_ADDRESS", "unix:path=/nonexistent")
+        .stdout(writer)
+        .output()
+        .unwrap();
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(!err.contains("panicked"), "{err}");
+    assert!(!err.contains("Broken pipe"), "{err}");
+    assert!(out.status.success(), "{:?} {err}", out.status);
+}
+
+/// A page's `[dbus] timeout_ms` (a write that may ask for a password) is checked: listed
+/// methods only, at most 120 s.
+#[test]
+fn dbus_timeouts_are_checked() {
+    let d = tempfile::tempdir().unwrap();
+    let uq = d.path().join("uq");
+    good_folder(&uq);
+    let page = |timeouts: &str| {
+        put(
+            &uq.join("pages/demo/page.toml"),
+            &format!(
+                "uq_api = 1\nid = \"demo\"\nname = \"Demo\"\nqml = \"Page.qml\"\n\
+                 [dbus]\nname = \"org.demo.App1\"\npath = \"/org/demo/App1\"\n\
+                 interface = \"org.demo.App1\"\nmethods = [\"SetSize\", \"State\"]\n\
+                 bus = \"system\"\n{timeouts}"
+            ),
+        );
+    };
+    page("timeout_ms = { SetSize = 120000 }\n");
+    let (ok, out) = uqctl(&["integrations", "check", uq.to_str().unwrap()]);
+    assert!(ok, "{out}");
+    for (bad, needle) in [
+        ("timeout_ms = { SetSize = 600000 }\n", "must be 1 to 120000"),
+        (
+            "timeout_ms = { Other = 5000 }\n",
+            "\"Other\" is not listed in dbus.methods",
+        ),
+    ] {
+        page(bad);
+        let (ok, out) = uqctl(&["integrations", "check", uq.to_str().unwrap()]);
+        assert!(!ok, "{bad}: {out}");
+        assert!(out.contains(needle), "{needle:?} missing from:\n{out}");
+    }
+}
+
+/// `--no-programs`: an app's CI without its programs installed. Missing programs are not
+/// problems; everything else still is, including an `argv[0]` outside /usr/bin and /usr/lib.
+#[test]
+fn no_programs_skips_only_the_installed_check() {
+    let d = tempfile::tempdir().unwrap();
+    let uq = d.path().join("uq");
+    good_folder(&uq);
+    put(
+        &uq.join("widgets/demo/widget.toml"),
+        "uq_api = 1\nid = \"demo\"\nname = \"Demo\"\nslot = \"quick\"\nqml = \"Widget.qml\"\n\
+         [[command]]\nid = \"status\"\nargv = [\"/usr/bin/uq-test-no-such-program\"]\n\
+         output = \"text\"\n",
+    );
+    put(
+        &uq.join("launcher/actions/demo-check.appaction"),
+        "[App Action]\nName=Check\nMatch=demo-*.desktop\nExec=/usr/lib/uq-test-no-such/x %d\n",
+    );
+    let dir = uq.to_str().unwrap();
+    let (ok, out) = uqctl(&["integrations", "check", dir]);
+    assert!(!ok, "{out}");
+    assert!(out.contains("2 problem(s)"), "{out}");
+
+    let (ok, out) = uqctl(&["integrations", "check", "--no-programs", dir]);
+    assert!(ok, "{out}");
+    assert!(
+        out.ends_with("1 rule file(s) (programs not checked)\n"),
+        "{out}"
+    );
+
+    put(
+        &uq.join("pages/demo/page.toml"),
+        "uq_api = 1\nid = \"demo\"\nname = \"Demo\"\nqml = \"Page.qml\"\n\
+         [[command]]\nid = \"x\"\nargv = [\"/opt/demo/x\"]\noutput = \"text\"\n",
+    );
+    let (ok, out) = uqctl(&["integrations", "check", "--no-programs", dir]);
+    assert!(
+        !ok,
+        "a path outside /usr/bin and /usr/lib is still refused: {out}"
+    );
+    assert!(out.contains("must be an absolute path under"), "{out}");
+}

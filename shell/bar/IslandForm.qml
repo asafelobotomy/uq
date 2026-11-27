@@ -7,6 +7,7 @@ import "../logic/ticker.js" as T
 import "../logic/weather.js" as Weather
 import "../logic/work.js" as Work
 import "islands"
+import "islandform"
 
 // One island's settings (IslandSettings' popup and the Bar editor dialog show it): its size
 // (Icon, Small, Medium, Large, or Custom: wider than Large, one Icon size at a time), whether it
@@ -224,143 +225,8 @@ Item {
         }
 
         // --- text: font, formatting, size (the island's face; its popup keeps the theme's) ---
-        ColumnLayout {
-            visible: pop.island !== L.SEPARATOR
-            spacing: 2
-            Layout.fillWidth: true
-            Layout.topMargin: Theme.gapIn
-
-            RowLayout {
-                Layout.fillWidth: true
-                UqText {
-                    text: "Text"
-                    color: Theme.textMuted
-                    Layout.fillWidth: true
-                }
-                MenuRow {
-                    visible: pop.ownText
-                    text: L.isPlainText(BarLayout.allText) ? "Use the theme's" : "Use the all-islands text"
-                    onActivated: pop.setText(null)
-                }
-            }
-            UqText {
-                text: "Font"
-                color: Theme.textMuted
-            }
-            Flow {
-                spacing: 2
-                Layout.fillWidth: true
-                MenuRow {
-                    text: "Theme"
-                    detail: pop.textStyle.font === null ? "✓" : ""
-                    Accessible.checkable: true
-                    Accessible.checked: pop.textStyle.font === null
-                    onActivated: pop.setText({ font: null })
-                }
-                MenuRow {
-                    text: "Monospace"
-                    detail: pop.textStyle.font === L.MONO ? "✓" : ""
-                    Accessible.checkable: true
-                    Accessible.checked: pop.textStyle.font === L.MONO
-                    onActivated: pop.setText({ font: L.MONO })
-                }
-                // A font picked from the search below.
-                MenuRow {
-                    visible: pop.textStyle.font !== null && pop.textStyle.font !== L.MONO
-                    text: pop.textStyle.font || ""
-                    detail: "✓"
-                    Accessible.checkable: true
-                    Accessible.checked: true
-                }
-            }
-            UqInput {
-                id: fontInput
-                Layout.fillWidth: true
-                maximumLength: 64
-                placeholder: "Find a font…"
-                Accessible.name: "Find a font"
-                onEdited: function (s) { pop.fontQuery = s; }
-                Keys.onDownPressed: nextItemInFocusChain(true).forceActiveFocus()
-            }
-            Repeater {
-                model: pop.fontMatches
-                delegate: MenuRow {
-                    required property string modelData
-                    text: modelData
-                    detail: pop.textStyle.font === modelData ? "✓" : ""
-                    // Each name in its own font.
-                    textItem.baseFamily: modelData
-                    Layout.fillWidth: true
-                    onActivated: pop.setText({ font: modelData })
-                }
-            }
-            UqText {
-                visible: pop.fontQuery.trim() !== "" && pop.fontMatches.length === 0
-                text: "No installed font matches"
-                color: Theme.textMuted
-            }
-
-            UqText {
-                text: "Formatting"
-                color: Theme.textMuted
-                Layout.topMargin: Theme.gapIn
-            }
-            Flow {
-                spacing: 2
-                Layout.fillWidth: true
-                MenuRow {
-                    text: "Bold"
-                    textItem.baseBold: true
-                    detail: pop.textStyle.bold ? "✓" : ""
-                    Accessible.checkable: true
-                    Accessible.checked: pop.textStyle.bold
-                    onActivated: pop.setText({ bold: !pop.textStyle.bold })
-                }
-                MenuRow {
-                    text: "Italic"
-                    textItem.font.italic: true
-                    detail: pop.textStyle.italic ? "✓" : ""
-                    Accessible.checkable: true
-                    Accessible.checked: pop.textStyle.italic
-                    onActivated: pop.setText({ italic: !pop.textStyle.italic })
-                }
-                MenuRow {
-                    text: "All capitals"
-                    detail: pop.textStyle.caps ? "✓" : ""
-                    Accessible.checkable: true
-                    Accessible.checked: pop.textStyle.caps
-                    onActivated: pop.setText({ caps: !pop.textStyle.caps })
-                }
-            }
-
-            UqText {
-                text: "Text size: " + pop.textStyle.size + "%"
-                color: Theme.textMuted
-                Layout.topMargin: Theme.gapIn
-            }
-            RowLayout {
-                spacing: 2
-                MenuRow {
-                    text: "Smaller"
-                    detail: "−"
-                    enabled: L.stepTextSize(pop.textStyle.size, -1) !== null
-                    onActivated: {
-                        var n = L.stepTextSize(pop.textStyle.size, -1);
-                        if (n !== null)
-                            pop.setText({ size: n });
-                    }
-                }
-                MenuRow {
-                    text: "Larger"
-                    detail: "+"
-                    enabled: L.stepTextSize(pop.textStyle.size, 1) !== null
-                    onActivated: {
-                        var n = L.stepTextSize(pop.textStyle.size, 1);
-                        if (n !== null)
-                            pop.setText({ size: n });
-                    }
-                }
-            }
+        TextOptions {
+            pop: pop
         }
 
         // --- clock ---
@@ -468,51 +334,9 @@ Item {
         }
 
         // --- open windows: their order ---
-        ColumnLayout {
-            readonly property string mode: Work.SORTS.indexOf(pop.opts.sort) >= 0 ? pop.opts.sort : Work.DEFAULT_SORT
+        WorkSortOptions {
             id: sortBox
-            visible: pop.island === "work"
-            spacing: 2
-            Layout.fillWidth: true
-            Layout.topMargin: Theme.gapIn
-            UqText {
-                text: "Order windows by"
-                color: Theme.textMuted
-            }
-            Repeater {
-                model: pop.island === "work" ? Work.SORTS : []
-                delegate: MenuRow {
-                    required property string modelData
-                    Layout.fillWidth: true
-                    text: Work.SORT_NAMES[modelData]
-                    detail: sortBox.mode === modelData ? "✓" : ""
-                    Accessible.checkable: true
-                    Accessible.checked: sortBox.mode === modelData
-                    onActivated: BarLayout.setOptions("work", Object.assign({}, pop.opts, { sort: modelData }))
-                }
-            }
-            UqText {
-                visible: Work.sortHasOrder(sortBox.mode)
-                text: "Order"
-                color: Theme.textMuted
-            }
-            Repeater {
-                model: pop.island === "work" && Work.sortHasOrder(sortBox.mode) ? [false, true] : []
-                delegate: MenuRow {
-                    required property bool modelData
-                    Layout.fillWidth: true
-                    text: Work.ORDER_NAMES[sortBox.mode][modelData ? 1 : 0]
-                    detail: (pop.opts.descending === true) === modelData ? "✓" : ""
-                    onActivated: BarLayout.setOptions("work", Object.assign({}, pop.opts, { sort: sortBox.mode, descending: modelData }))
-                }
-            }
-            UqText {
-                visible: sortBox.mode === "activity"
-                text: "The app that last sent a notification comes first."
-                color: Theme.textMuted
-                wrapMode: Text.WordWrap
-                Layout.fillWidth: true
-            }
+            pop: pop
         }
 
         // --- open windows: what a tab's X does ---
@@ -548,197 +372,15 @@ Item {
         }
 
         // --- weather ---
-        ColumnLayout {
-            visible: pop.island === "weather"
-            spacing: Theme.gapIn
-            Layout.fillWidth: true
-            Layout.topMargin: Theme.gapIn
-            UqText {
-                text: Settings.values.weather_location
-                    ? "City: " + String(Settings.values.weather_location.name) : "Choose a city for the weather"
-                color: Theme.textMuted
-                Layout.fillWidth: true
-            }
-            UqInput {
-                id: cityInput
-                Layout.fillWidth: true
-                placeholder: "City"
-                Accessible.name: "City"
-                onEdited: function (s) { pop.queryEdited(s); }
-                Keys.onDownPressed: nextItemInFocusChain(true).forceActiveFocus()
-            }
-            UqText {
-                visible: pop.geoError !== ""
-                text: pop.geoError
-                color: Theme.textMuted
-            }
-            Repeater {
-                model: pop.island === "weather" ? pop.results : []
-                delegate: MenuRow {
-                    required property var modelData
-                    Layout.fillWidth: true
-                    text: String(modelData.name)
-                    detail: modelData.country ? String(modelData.country) : ""
-                    onActivated: {
-                        var loc = Weather.locationArg(modelData);
-                        if (loc !== null)
-                            Bridge.call("SetSetting", ["weather_location", loc]);
-                        pop.results = [];
-                        cityInput.clear();
-                    }
-                }
-            }
+        WeatherOptions {
+            id: weatherOptions
+            pop: pop
         }
 
         // --- stocks, news, world clock: an ordered list ---
-        ColumnLayout {
+        ListOptions {
             id: listBox
-            readonly property string listKey: pop.island === "stocks" ? "symbols"
-                : (pop.island === "news" ? "feeds" : "zones")
-            readonly property var list: pop.opts[listKey] || []
-            readonly property int max: pop.island === "stocks" ? 12 : (pop.island === "news" ? 8 : 4)
-            visible: pop.island === "stocks" || pop.island === "news" || pop.island === "worldclock"
-            spacing: 2
-            Layout.fillWidth: true
-            Layout.topMargin: Theme.gapIn
-
-            function label(v) {
-                if (pop.island !== "news")
-                    return pop.island === "worldclock" ? v.split("/").pop().replace(/_/g, " ") : v;
-                var info = Bridge.news && Array.isArray(Bridge.news.feeds) ? Bridge.news.feeds : [];
-                for (var i = 0; i < info.length; i++)
-                    if (info[i] && info[i].url === v && typeof info[i].title === "string" && info[i].title !== "")
-                        return info[i].title.slice(0, 80) + (info[i].ok === false ? " (can't be read)" : "");
-                for (var j = 0; j < T.PRESET_FEEDS.length; j++)
-                    if (T.PRESET_FEEDS[j].url === v)
-                        return T.PRESET_FEEDS[j].name;
-                return v;
-            }
-            function add(text) {
-                var v = pop.island === "stocks" ? T.cleanSymbol(text)
-                    : (pop.island === "news" ? (T.validFeed(text) ? text.trim() : null)
-                    : T.cleanZone(text));
-                if (v === null) {
-                    pop.addError = pop.island === "stocks" ? "That isn't a ticker symbol"
-                        : (pop.island === "news" ? "Use the feed's https:// address" : "Use a zone name like Europe/Paris");
-                    return;
-                }
-                if (list.indexOf(v) >= 0 || list.length >= max) {
-                    pop.addError = list.length >= max ? "The list is full" : "Already on the list";
-                    return;
-                }
-                if (pop.island !== "news") {
-                    pop.addError = "";
-                    pop.setList(listKey, list.concat([v]));
-                    addInput.clear();
-                    return;
-                }
-                pop.addError = "Checking…";
-                Bridge.call("PreviewFeed", [v]).then(function () {
-                    pop.addError = "";
-                    pop.setList("feeds", listBox.list.concat([v]));
-                    addInput.clear();
-                }).catch(function () {
-                    pop.addError = "That address isn't a feed uQ can read";
-                });
-            }
-
-            UqText {
-                text: pop.island === "stocks" ? "Symbols" : (pop.island === "news" ? "Feeds" : "Time zones")
-                color: Theme.textMuted
-            }
-            UqText {
-                visible: listBox.list.length === 0
-                text: "None yet."
-                color: Theme.textMuted
-            }
-            Repeater {
-                model: listBox.visible ? listBox.list : []
-                delegate: RowLayout {
-                    id: lrow
-                    required property string modelData
-                    required property int index
-                    spacing: 2
-                    Layout.fillWidth: true
-                    UqText {
-                        text: listBox.label(lrow.modelData)
-                        Layout.fillWidth: true
-                    }
-                    MenuRow {
-                        text: "Move up"
-                        icon: "go-up"
-                        enabled: lrow.index > 0
-                        opacity: enabled ? 1 : 0.4
-                        Accessible.name: "Move " + lrow.modelData + " up"
-                        onActivated: pop.setList(listBox.listKey, pop.listMove(listBox.list, lrow.index, -1))
-                    }
-                    MenuRow {
-                        text: "Move down"
-                        icon: "go-down"
-                        enabled: lrow.index < listBox.list.length - 1
-                        opacity: enabled ? 1 : 0.4
-                        Accessible.name: "Move " + lrow.modelData + " down"
-                        onActivated: pop.setList(listBox.listKey, pop.listMove(listBox.list, lrow.index, 1))
-                    }
-                    MenuRow {
-                        text: "Remove"
-                        icon: "list-remove"
-                        Accessible.name: "Remove " + lrow.modelData
-                        onActivated: pop.setList(listBox.listKey, listBox.list.filter(function (x) { return x !== lrow.modelData; }))
-                    }
-                }
-            }
-            RowLayout {
-                spacing: Theme.gapIn
-                Layout.fillWidth: true
-                UqInput {
-                    id: addInput
-                    Layout.fillWidth: true
-                    maximumLength: pop.island === "news" ? 512 : 64
-                    placeholder: pop.island === "stocks" ? "Add a symbol, e.g. AAPL, ^GSPC, BTC-USD"
-                        : (pop.island === "news" ? "https://… feed address" : "Time zone, e.g. Europe/Paris")
-                    Accessible.name: placeholder
-                    onAccepted: listBox.add(text)
-                }
-                MenuRow {
-                    text: "Add"
-                    onActivated: listBox.add(addInput.text)
-                }
-            }
-            UqText {
-                visible: pop.addError !== ""
-                text: pop.addError
-                color: Theme.textMuted
-                wrapMode: Text.WordWrap
-                Layout.fillWidth: true
-            }
-            Flow {
-                visible: (pop.island === "news" || pop.island === "worldclock") && listBox.list.length < listBox.max
-                spacing: 2
-                Layout.fillWidth: true
-                Repeater {
-                    model: pop.island === "news"
-                        ? T.PRESET_FEEDS.filter(function (p) { return listBox.list.indexOf(p.url) < 0; })
-                        : (pop.island === "worldclock"
-                           ? pop.suggestedZones.filter(function (z) { return listBox.list.indexOf(z) < 0; })
-                               .map(function (z) { return { name: z.split("/").pop().replace(/_/g, " "), url: z }; })
-                           : [])
-                    delegate: MenuRow {
-                        required property var modelData
-                        text: "+ " + modelData.name
-                        Accessible.name: "Add " + modelData.name
-                        onActivated: pop.setList(listBox.listKey, listBox.list.concat([modelData.url]))
-                    }
-                }
-            }
-            UqText {
-                visible: pop.island === "stocks" || pop.island === "news"
-                text: pop.island === "stocks" ? "Quotes may be delayed. Only the symbols are sent."
-                    : "uQ asks only these sites for their headlines."
-                color: Theme.textMuted
-                wrapMode: Text.WordWrap
-                Layout.fillWidth: true
-            }
+            pop: pop
         }
 
         // --- place ---
@@ -782,7 +424,7 @@ Item {
             if (!pop.autoFocus)
                 return;
             if (pop.island === "weather")
-                cityInput.forceActiveFocus();
+                weatherOptions.cityField.forceActiveFocus();
             else if (firstSize.row)
                 firstSize.row.forceActiveFocus();
         }

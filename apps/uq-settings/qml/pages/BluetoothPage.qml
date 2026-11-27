@@ -9,6 +9,7 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.uq.settings
 import "../components"
+import "bluetooth"
 
 SettingsPage {
     id: page
@@ -82,94 +83,9 @@ SettingsPage {
     }
 
     // A pairing question. Nothing is accepted unless Confirm is pressed.
-    Kirigami.Dialog {
+    QuestionDialog {
         id: questionDialog
-        property int askId: -1
-        property var q: ({})
-        property bool answered: false
-        readonly property bool typed: q.kind === "pin" || q.kind === "passkey"
-
-        function ask(question) {
-            questionDialog.q = question;
-            questionDialog.askId = question.id;
-            questionDialog.answered = false;
-            typedCode.clear();
-            questionDialog.open();
-            if (questionDialog.typed)
-                typedCode.forceActiveFocus();
-        }
-        function reply(yes) {
-            questionDialog.answered = true;
-            bm.answer(questionDialog.askId, yes, yes ? typedCode.text : "");
-            questionDialog.close();
-        }
-
-        title: questionDialog.q.kind === "service" ? "Allow this device?" : "Pair with " + String(questionDialog.q.device || "") + "?"
-        standardButtons: QQC2.Dialog.NoButton
-        preferredWidth: Kirigami.Units.gridUnit * 24
-        closePolicy: QQC2.Popup.CloseOnEscape
-        onClosed: {
-            if (!questionDialog.answered && questionDialog.askId >= 0)
-                bm.answer(questionDialog.askId, false, "");
-            typedCode.clear();
-        }
-        customFooterActions: [
-            Kirigami.Action {
-                text: "Confirm"
-                icon.name: "dialog-ok"
-                enabled: !questionDialog.typed || typedCode.text.trim() !== ""
-                onTriggered: questionDialog.reply(true)
-            },
-            Kirigami.Action {
-                text: "Reject"
-                icon.name: "dialog-cancel"
-                onTriggered: questionDialog.reply(false)
-            }
-        ]
-        ColumnLayout {
-            UqLabel {
-                objectName: "questionText"
-                text: {
-                    const dev = String(questionDialog.q.device || "the device");
-                    switch (questionDialog.q.kind) {
-                    case "confirm":
-                        return "Check that " + dev + " shows this code, then press Confirm. If it shows a different code, press Reject.";
-                    case "authorize":
-                        return dev + " wants to pair with this computer. Pair only with devices you know.";
-                    case "service":
-                        return dev + " wants to " + String(questionDialog.q.service || "use a service") + ".";
-                    case "pin":
-                        return "Type the PIN for " + dev + ". It's often in the device's manual (for example 0000).";
-                    case "passkey":
-                        return "Type the 6-digit code " + dev + " shows.";
-                    default:
-                        return "";
-                    }
-                }
-                wrapMode: Text.Wrap
-                Layout.fillWidth: true
-            }
-            UqLabel {
-                objectName: "questionCode"
-                visible: questionDialog.q.kind === "confirm"
-                text: String(questionDialog.q.code || "")
-                font.pointSize: Kirigami.Theme.defaultFont.pointSize * 2.5
-                font.bold: true
-                font.letterSpacing: Kirigami.Units.smallSpacing
-                Layout.alignment: Qt.AlignHCenter
-                Accessible.name: "Code " + String(questionDialog.q.code || "").split("").join(" ")
-            }
-            QQC2.TextField {
-                id: typedCode
-                visible: questionDialog.typed
-                maximumLength: questionDialog.q.kind === "passkey" ? 6 : 16
-                inputMethodHints: questionDialog.q.kind === "passkey" ? Qt.ImhDigitsOnly : Qt.ImhNone
-                Accessible.name: questionDialog.q.kind === "passkey" ? "Code" : "PIN"
-                Layout.fillWidth: true
-                onAccepted: if (text.trim() !== "")
-                    questionDialog.reply(true)
-            }
-        }
+        bm: bm
     }
 
     Kirigami.Dialog {
@@ -193,102 +109,6 @@ SettingsPage {
         UqLabel {
             text: "To use it again you'll need to pair it again."
             wrapMode: Text.Wrap
-        }
-    }
-
-    // One device: its picture and name, battery, connect or pair, and (once paired) whether it
-    // may connect on its own and Forget.
-    component DeviceCard: SettingsCard {
-        id: card
-        required property var modelData
-        required property int index
-        readonly property var d: modelData
-
-        title: String(card.d.name)
-        iconName: String(card.d.icon || "") === "" || card.d.icon === "bluetooth" ? "network-bluetooth" : String(card.d.icon)
-        border.width: card.d.connected === true ? 2 : 1
-        border.color: card.d.connected === true ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
-        Accessible.description: String(card.d.kind)
-
-        actions: [
-            Kirigami.Icon {
-                visible: page.hasBattery(card.d)
-                source: page.hasBattery(card.d) ? page.batteryIcon(card.d.battery) : ""
-                implicitWidth: Kirigami.Units.iconSizes.small
-                implicitHeight: Kirigami.Units.iconSizes.small
-                Accessible.ignored: true
-            },
-            UqLabel {
-                visible: page.hasBattery(card.d)
-                text: page.hasBattery(card.d) ? card.d.battery + "%" : ""
-                Accessible.name: "Battery " + text
-            },
-            QQC2.ToolButton {
-                icon.name: "edit-delete"
-                visible: card.d.paired === true
-                enabled: page.idle
-                display: QQC2.AbstractButton.IconOnly
-                Accessible.name: "Forget " + String(card.d.name)
-                QQC2.ToolTip.text: "Forget"
-                QQC2.ToolTip.visible: hovered
-                onClicked: {
-                    forgetDialog.path = String(card.d.path);
-                    forgetDialog.name = String(card.d.name);
-                    forgetDialog.open();
-                }
-            }
-        ]
-
-        SettingRow {
-            settingId: card.d.paired && card.index === 0 ? "bluetooth-devices" : ""
-            highlight: App.highlight
-            iconName: card.d.connected === true ? "network-connect" : (card.d.working ? "chronometer" : "network-disconnect")
-            label: page.status(card.d) !== "" ? page.status(card.d) : (card.d.paired ? "Not connected" : String(card.d.kind))
-            Layout.fillWidth: true
-
-            QQC2.BusyIndicator {
-                visible: !!card.d.working
-                running: visible
-                implicitWidth: Kirigami.Units.iconSizes.small
-                implicitHeight: Kirigami.Units.iconSizes.small
-            }
-            QQC2.Button {
-                text: "Pair"
-                icon.name: "network-connect"
-                visible: !card.d.paired && !card.d.working
-                enabled: page.idle && page.powered
-                onClicked: bm.pair(String(card.d.path))
-            }
-            QQC2.Button {
-                text: "Stop"
-                icon.name: "process-stop"
-                visible: card.d.working === "pairing"
-                onClicked: bm.cancelPairing(String(card.d.path))
-            }
-            QQC2.Button {
-                text: "Connect"
-                icon.name: "network-connect"
-                visible: card.d.paired && !card.d.connected && !card.d.working
-                enabled: page.idle && page.powered
-                onClicked: bm.connectDevice(String(card.d.path))
-            }
-            QQC2.Button {
-                text: "Disconnect"
-                icon.name: "network-disconnect"
-                visible: card.d.paired && card.d.connected === true
-                enabled: page.idle
-                onClicked: bm.disconnectDevice(String(card.d.path))
-            }
-        }
-        SwitchRow {
-            visible: card.d.paired === true
-            iconName: "security-high"
-            label: "Connects without asking"
-            help: "It can connect to this computer on its own, without a question each time."
-            value: card.d.trusted === true
-            enabled: page.idle
-            Layout.fillWidth: true
-            onChosen: on => bm.setTrusted(String(card.d.path), on)
         }
     }
 
@@ -369,7 +189,11 @@ SettingsPage {
 
         Repeater {
             model: page.powered ? page.paired : []
-            delegate: DeviceCard {}
+            delegate: BluetoothDeviceCard {
+                bm: bm
+                forgetDialog: forgetDialog
+                page: page
+            }
         }
         SettingsCard {
             visible: page.ready && (!page.powered || page.paired.length === 0)
@@ -457,7 +281,11 @@ SettingsPage {
         }
         Repeater {
             model: page.powered ? page.nearby : []
-            delegate: DeviceCard {}
+            delegate: BluetoothDeviceCard {
+                bm: bm
+                forgetDialog: forgetDialog
+                page: page
+            }
         }
     }
 }

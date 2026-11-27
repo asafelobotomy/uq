@@ -1,0 +1,5 @@
+# Paths native/uq-loc/check-loc.sh does not count (globs, one per line). Data only: never use this
+# to let a hand-written source file stay long.
+
+# The default shortcut table: one ten-line struct literal per default shortcut, nothing else.
+crates/uq-core/src/keybinds/defaults/table.rs
