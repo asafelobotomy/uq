@@ -10,15 +10,6 @@ use std::path::Path;
 use serde_json::{Value, json};
 use uq_core::integration::scan::Entry;
 
-/// Where an app comes from, for someone installing it by hand.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Source {
-    /// An AUR package.
-    Aur(&'static str),
-    /// A release download from this GitHub project.
-    Release(&'static str),
-}
-
 #[derive(Debug, Clone, Copy)]
 pub struct App {
     /// bindle's id for it.
@@ -26,19 +17,20 @@ pub struct App {
     pub name: &'static str,
     /// One plain line on what it adds to uQ.
     pub description: &'static str,
-    pub source: Source,
+    /// Its AUR package (the one Bindle installs; uQ's compat/family.toml lists them all).
+    pub package: &'static str,
     /// Integration ids (folder or file ids under /usr/share/uq) that show it is installed.
     pub integrations: &'static [&'static str],
     /// Programs in /usr/bin that show it is installed.
     pub bins: &'static [&'static str],
 }
 
-pub const APPS: [App; 10] = [
+pub const APPS: [App; 16] = [
     App {
         id: "noti-fi",
         name: "noti-fi",
         description: "Notifications with grouped pop-ups, rules, history and Do Not Disturb.",
-        source: Source::Aur("noti-fi"),
+        package: "noti-fi",
         integrations: &["noti-fi", "notifi"],
         bins: &["notifd"],
     },
@@ -46,7 +38,7 @@ pub const APPS: [App; 10] = [
         id: "scdr",
         name: "scdr",
         description: "Keeps the app you're using responsive and slows down background work.",
-        source: Source::Aur("scdr"),
+        package: "scdr",
         integrations: &["scdr"],
         bins: &["scdr", "scdrctl"],
     },
@@ -54,7 +46,7 @@ pub const APPS: [App; 10] = [
         id: "crumbs",
         name: "crumBS",
         description: "Uninstalls apps with their leftovers and cleans up old files.",
-        source: Source::Aur("crum-bs-bin"),
+        package: "crum-bs-bin",
         integrations: &["crumbs"],
         bins: &["crumbs"],
     },
@@ -62,7 +54,7 @@ pub const APPS: [App; 10] = [
         id: "scale_tail",
         name: "scale_tail",
         description: "Tailscale in quick settings: connect and switch exit nodes.",
-        source: Source::Release("asafelobotomy/scale_tail"),
+        package: "scale_tail",
         integrations: &["scale_tail", "scale-tail"],
         bins: &["scale_tail"],
     },
@@ -70,7 +62,7 @@ pub const APPS: [App; 10] = [
         id: "xzram",
         name: "XZram",
         description: "A Memory and swap page for zram and swap files.",
-        source: Source::Release("asafelobotomy/XZram"),
+        package: "xzram",
         integrations: &["xzram"],
         bins: &["xzram"],
     },
@@ -78,7 +70,7 @@ pub const APPS: [App; 10] = [
         id: "appofholding",
         name: "appOFholding",
         description: "AppImages in the app menu, kept up to date.",
-        source: Source::Release("asafelobotomy/appofholding"),
+        package: "appofholding",
         integrations: &["appofholding"],
         bins: &["appofholding"],
     },
@@ -86,7 +78,7 @@ pub const APPS: [App; 10] = [
         id: "hauler",
         name: "hauler",
         description: "Fast, resumable downloads, with progress in the bar.",
-        source: Source::Release("asafelobotomy/hauler"),
+        package: "hauler",
         integrations: &["hauler"],
         bins: &["hauler"],
     },
@@ -94,7 +86,7 @@ pub const APPS: [App; 10] = [
         id: "emobie",
         name: "emobie",
         description: "Emoji in the launcher and on a hotkey.",
-        source: Source::Release("asafelobotomy/emobie"),
+        package: "emobie",
         integrations: &["emobie"],
         bins: &["emobie"],
     },
@@ -102,7 +94,7 @@ pub const APPS: [App; 10] = [
         id: "oysterav",
         name: "oysterAV",
         description: "Security status in quick settings, and scans.",
-        source: Source::Aur("oysterav"),
+        package: "oysterav",
         integrations: &["oysterav"],
         bins: &["oyst-cli", "oysterav"],
     },
@@ -110,9 +102,57 @@ pub const APPS: [App; 10] = [
         id: "romforge",
         name: "romforge",
         description: "Your games in the launcher.",
-        source: Source::Release("asafelobotomy/romforge"),
+        package: "romforge-bin",
         integrations: &["romforge"],
         bins: &["romforge"],
+    },
+    App {
+        id: "kyko",
+        name: "kyko",
+        description: "uQ's terminal, with a drop-down one on F12.",
+        package: "kyko",
+        integrations: &["kyko"],
+        bins: &["kyko"],
+    },
+    App {
+        id: "uqview",
+        name: "uQview",
+        description: "Opens pictures in uQ's theme and marks up screenshots.",
+        package: "uqview",
+        integrations: &["uqview"],
+        bins: &["uqview"],
+    },
+    App {
+        id: "reelo",
+        name: "reelo",
+        description: "Plays video and music in uQ's theme, with uQ's media controls.",
+        package: "reelo",
+        integrations: &["reelo"],
+        bins: &["reelo"],
+    },
+    App {
+        id: "uqbit",
+        name: "uQbit",
+        description: "Downloads torrents in the background, only through your VPN if you ask.",
+        package: "uqbit",
+        integrations: &["uqbit"],
+        bins: &["uqbit"],
+    },
+    App {
+        id: "bindaru",
+        name: "bindaru",
+        description: "Finds, installs and removes software from the repositories and the AUR.",
+        package: "bindaru",
+        integrations: &["software", "bindaru"],
+        bins: &["bindaru"],
+    },
+    App {
+        id: "av-morning-star",
+        name: "AV Morning Star",
+        description: "Downloads video and audio from YouTube and many other sites.",
+        package: "av-morning-star",
+        integrations: &[],
+        bins: &["av-morning-star"],
     },
 ];
 
@@ -135,7 +175,7 @@ pub fn installed(app: &App, entries: &[Entry], bin_exists: &dyn Fn(&str) -> bool
     entries.iter().any(|e| e.valid && matches(app, &e.id)) || app.bins.iter().any(|b| bin_exists(b))
 }
 
-/// `[{id, name, description, installed, package?, project?}]`, installed apps first.
+/// `[{id, name, description, installed, package}]`, installed apps first.
 pub fn list(entries: &[Entry], bin_exists: &dyn Fn(&str) -> bool) -> Vec<Value> {
     let mut rows: Vec<(bool, Value)> = APPS
         .iter()
@@ -147,10 +187,7 @@ pub fn list(entries: &[Entry], bin_exists: &dyn Fn(&str) -> bool) -> Vec<Value> 
                 "description": a.description,
                 "installed": is,
             });
-            match a.source {
-                Source::Aur(p) => row["package"] = json!(p),
-                Source::Release(p) => row["project"] = json!(p),
-            }
+            row["package"] = json!(a.package);
             (is, row)
         })
         .collect();
@@ -219,8 +256,7 @@ mod tests {
         let noti = rows.iter().find(|r| r["id"] == "noti-fi").unwrap();
         assert_eq!(noti["package"], "noti-fi");
         let hauler = rows.iter().find(|r| r["id"] == "hauler").unwrap();
-        assert_eq!(hauler["project"], "asafelobotomy/hauler");
-        assert!(hauler.get("package").is_none());
+        assert_eq!(hauler["package"], "hauler");
     }
 
     #[test]
@@ -235,6 +271,42 @@ mod tests {
             );
             assert!(a.description.ends_with('.'), "{}", a.id);
             assert!(!a.integrations.is_empty() || !a.bins.is_empty(), "{}", a.id);
+        }
+    }
+
+    #[test]
+    fn every_app_is_an_aur_package_of_the_family() {
+        // The family as uQ's compat/family.toml lists it: every app (all but uQ and Bindle,
+        // which Welcome names on its own) is here, under one of its AUR packages.
+        let family: toml::Table = include_str!("../../../../../compat/family.toml")
+            .parse()
+            .unwrap();
+        let packages = family["package"].as_table().unwrap();
+        for a in APPS {
+            let p = packages
+                .get(a.id)
+                .unwrap_or_else(|| panic!("{} isn't in family.toml", a.id));
+            let aur: Vec<&str> = p["aur"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter_map(|v| v.as_str())
+                .collect();
+            assert!(
+                aur.contains(&a.package),
+                "{}: {} isn't one of {aur:?}",
+                a.id,
+                a.package
+            );
+        }
+        for name in packages
+            .keys()
+            .filter(|n| !["uq", "bindle"].contains(&n.as_str()))
+        {
+            assert!(
+                APPS.iter().any(|a| a.id == name),
+                "{name} is missing from Welcome's apps"
+            );
         }
     }
 }

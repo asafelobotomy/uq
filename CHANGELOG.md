@@ -18,17 +18,46 @@ All notable changes to uQ are listed here. The format follows
 - **Restore your session (Startup › Session, off by default).** uQ remembers the apps you have open and their workspaces, and at the next login opens them again on those workspaces. Apps that already start at login aren't opened twice.
 - **Commands at logout (Startup › Session).** Commands such as a backup or a sync run one after another as you log out; uQ waits up to 10 seconds for them.
 - **Startup › Services lists your background services.** Each shows whether it is running, can be started, stopped or restarted, turned on or off for login, and shows its recent log lines. uQ's own services are listed but locked, and **Show every service** adds the ones the system starts on demand.
-- `scripts/popups-live.sh` (CI smoke job): every island popup, the island menu, quick settings, the notification centre, the VPN details and real tray apps' icons, menus and "+N" list on Hyprland, with real clicks and keys.
 
 ### Fixed
 
 - **Choosing reelo or uQview covers every type it opens.** A picture, video or music app used to get only the 6 or 7 common types; it now gets every picture, video or sound type it says it opens, such as AVIF, HEIC, Ogg video or Opus.
 - **A choice in `hyprland-mimeapps.list` no longer silently wins over the page.** The page shows that list's choices as the current ones, says the list exists, and choosing an app takes the same type out of it, so the choice made on the page is the one used.
+
+## [0.3.44] - 2026-11-27
+
+### Added
+
+- **uQ and its apps say which versions of each other they work with.** A new `compat/family.toml`
+  lists every package of the uQ family, the contracts between them (integration files, the theme
+  files, problem codes, `uqctl`, `bindle`'s commands, `oyst-cli scan` and `status`, `uqbit status`,
+  `uqview` and kyko) and the level of each one every package needs. `compat/compat.py` writes one
+  `conflicts+=(…)  # uq-compat` line into every PKGBUILD from it, so pacman refuses a set of
+  versions that would break, and bindleUP (Bindle 0.1.51) holds an update back until the partner
+  it needs is on the AUR. uQ's own line asks for Bindle 0.1.47 or newer (the Restore page), kyko
+  1.3.3, oysterAV 0.5.0, uQbit 0.6.1 and uQview 0.1.6. See docs/compat.md.
+- **CI checks the family together every day** (`.github/workflows/family.yml`): the manifest,
+  every repo's PKGBUILD line and what its files use, that the latest releases meet each other's
+  needs, that the AUR's versions install together (and which are behind their release), and every
+  app's integration files at its latest release against uqctl from uQ 0.3.41, the latest release
+  and main.
+- `scripts/popups-live.sh` (CI smoke job): every island popup, the island menu, quick settings, the notification centre, the VPN details and real tray apps' icons, menus and "+N" list on Hyprland, with real clicks and keys.
+
+### Fixed
+
+- **Welcome's Apps step lists every app, each with its AUR package.** It still said to download
+  scale_tail, XZram, appOFholding, hauler, emobie and romforge from GitHub, which Bindle no longer
+  does, and left out kyko, uQview, reelo, uQbit, bindaru and AV Morning Star. A test keeps the list
+  the same as `compat/family.toml`.
+- **The Security island doesn't half-read a summary it doesn't know.** A summary from oysterAV in a
+  schema other than 1 now reads as unavailable instead of showing whichever fields happen to
+  match.
 - **One Security notification, however many screens.** The Security and Storage cleanup islands used to read oysterAV and crumBS once per screen, so with two monitors every change in security state sent two notifications and every check ran twice. They now share one reading, taken only while the island is on the bar, and a missing oysterAV is looked for every 5 minutes instead of every 30 seconds.
 - **The Status island's media button can resume a paused track.** It showed a play icon even while playing and disappeared as soon as playback paused. It now shows play or pause and stays while a player is open.
 - **Widget popups and the dock's Pin/Unpin menu take the keyboard.** Esc closes them, Enter picks, they look like the other island popups and opening another bar popup closes them.
 - The Keyboard layout island no longer misses a layout switch that lands while it is already reading the keyboards.
 - Opening a bar popup closes quick settings, the app menu or the notification centre first, and the notification centre joins the bar to its focus grab a moment after opening, as quick settings does, so it always gets the keyboard.
+
 
 ## [0.3.43] - 2026-11-26
 
