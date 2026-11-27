@@ -6,9 +6,11 @@
 //! refusal is a plain sentence.
 
 mod check;
+pub mod extra;
 pub mod scan;
 mod summary;
 
+pub use extra::When;
 pub use summary::summary;
 
 use crate::desktop_entry::normalise_id;
@@ -17,7 +19,7 @@ use crate::settings::{SettingError, check_known, invalid};
 use check::{check_added, check_choice, items, parse_added, parse_choice};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{Map, Value};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 pub const MAX_FILES: usize = 200;
 pub const MAX_ADDED: usize = 50;
@@ -140,6 +142,15 @@ pub struct Autostart {
     /// Start an app that failed again once, ten seconds later.
     #[serde(skip_serializing_if = "is_false")]
     pub retry: bool,
+    /// Reopen the apps that were open at the end of the last session, on their workspaces.
+    #[serde(skip_serializing_if = "is_false")]
+    pub restore: bool,
+    /// What an entry (by its id) waits for before it starts.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub when: BTreeMap<String, When>,
+    /// Commands run when you log out (commands only, no delay).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub logout: Vec<Added>,
 }
 
 fn field_of<'a>(o: &'a Map<String, Value>, f: &str) -> Option<&'a Value> {
@@ -198,11 +209,24 @@ impl<'de> Deserialize<'de> for Autostart {
             .filter(|n| *n <= u64::from(MAX_STAGGER))
             .map_or(0, |n| n as u32);
         let retry = o.get("retry").and_then(Value::as_bool).unwrap_or(false);
+        let restore = o.get("restore").and_then(Value::as_bool).unwrap_or(false);
+        let logout = each("logout")
+            .iter()
+            .enumerate()
+            .filter_map(|(i, e)| {
+                extra::parse_logout(&format!("autostart.logout[{i}]"), e)
+                    .map_err(|err| keep("logout", err))
+                    .ok()
+            })
+            .collect();
         Ok(Autostart {
             files,
             added,
             stagger,
             retry,
+            restore,
+            when: extra::lenient_when(o),
+            logout,
         }
         .repaired())
     }
@@ -216,7 +240,13 @@ impl Autostart {
         let Some(o) = v.as_object() else {
             return Err(invalid("autostart", "expected an object"));
         };
-        check_known("autostart", v, &["files", "added", "stagger", "retry"])?;
+        check_known(
+            "autostart",
+            v,
+            &[
+                "files", "added", "stagger", "retry", "restore", "when", "logout",
+            ],
+        )?;
         let files = items(o, "files")?;
         if files.len() > MAX_FILES {
             return Err(invalid("autostart.files", "at most 200 startup choices"));
@@ -242,9 +272,15 @@ impl Autostart {
                 .as_bool()
                 .ok_or_else(|| invalid("autostart.retry", "expected on or off (true or false)"))?,
         };
+        let logout = items(o, "logout")?;
+        if logout.len() > extra::MAX_LOGOUT {
+            return Err(invalid("autostart.logout", "at most 20 commands at logout"));
+        }
         let mut out = Autostart {
             stagger,
             retry,
+            restore: extra::parse_restore(o)?,
+            when: extra::parse_when(o)?,
             ..Autostart::default()
         };
         let mut seen = BTreeSet::new();
@@ -270,13 +306,32 @@ impl Autostart {
             }
             out.added.push(a);
         }
-        ids.extend(current.added.iter().map(|a| a.id().to_string()));
+        for (i, item) in logout.iter().enumerate() {
+            let key = format!("autostart.logout[{i}]");
+            let a = extra::parse_logout(&key, item)?;
+            if !a.id().is_empty() {
+                if !valid_added_id(a.id()) {
+                    return Err(invalid(&format!("{key}.id"), "an id looks like a-1a2b"));
+                }
+                if !ids.insert(a.id().to_string()) {
+                    return Err(invalid(&format!("{key}.id"), "another entry has this id"));
+                }
+            }
+            out.logout.push(a);
+        }
+        ids.extend(
+            current
+                .added
+                .iter()
+                .chain(&current.logout)
+                .map(|a| a.id().to_string()),
+        );
         out.fill_ids(&mut ids);
         Ok(out)
     }
 
     fn fill_ids(&mut self, taken: &mut BTreeSet<String>) {
-        for a in &mut self.added {
+        for a in self.added.iter_mut().chain(self.logout.iter_mut()) {
             if a.id().is_empty() {
                 let id = fresh_prefixed("a-", taken);
                 taken.insert(id.clone());
@@ -312,8 +367,9 @@ impl Autostart {
                 }
                 Ok(()) => true,
             });
+        self.logout.truncate(extra::MAX_LOGOUT);
         let mut ids = BTreeSet::new();
-        for a in &mut self.added {
+        for a in self.added.iter_mut().chain(self.logout.iter_mut()) {
             let id = a.id_mut();
             if !id.is_empty() && !(valid_added_id(id) && ids.insert(id.clone())) {
                 tracing::warn!(
@@ -329,7 +385,12 @@ impl Autostart {
         }
         self.files.truncate(MAX_FILES);
         self.added.truncate(MAX_ADDED);
-        let mut ids: BTreeSet<String> = self.added.iter().map(|a| a.id().to_string()).collect();
+        let mut ids: BTreeSet<String> = self
+            .added
+            .iter()
+            .chain(&self.logout)
+            .map(|a| a.id().to_string())
+            .collect();
         self.fill_ids(&mut ids);
         self
     }

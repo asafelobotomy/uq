@@ -4,6 +4,7 @@ pub mod autostart;
 pub mod client;
 pub mod compat;
 pub mod contrast;
+pub mod default_apps;
 pub mod desktop_entry;
 pub mod diag;
 pub mod env;

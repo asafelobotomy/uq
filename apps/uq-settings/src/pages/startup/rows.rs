@@ -38,6 +38,7 @@ pub(super) fn status_text(row: &Value, off_in_uq: bool) -> String {
             _ => "Running",
         },
         "exited" => "Started, then finished",
+        "stopped" => "Stopped",
         "failed" => {
             return if let Some(code) = row["exit"].as_i64() {
                 format!("Failed (exit {code})")
@@ -48,6 +49,9 @@ pub(super) fn status_text(row: &Value, off_in_uq: bool) -> String {
             } else {
                 "Failed".to_string()
             };
+        }
+        "waiting" if row["waiting_for"].is_string() => {
+            return row["waiting_for"].as_str().unwrap_or_default().to_string();
         }
         "waiting" => {
             return match row["start_in"].as_u64().or(row["delay"].as_u64()) {
@@ -111,6 +115,8 @@ pub(super) fn app_row(row: &Value, section: &Value, explained: &Value) -> Value 
         "log": row.get("log").cloned().unwrap_or_else(|| json!([])),
         "command_text": command_text,
         "origin": origin(explained, id),
+        "start_at": row["start_at"],
+        "when": section["when"][id],
     })
 }
 

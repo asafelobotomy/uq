@@ -19,7 +19,7 @@ pub mod qobject {
     unsafe extern "RustQt" {
         #[qobject]
         #[qml_element]
-        /// `{kinds, terminal}` (see `pages::defaultapps`).
+        /// `{kinds, apps, types, native_left, override_file, terminal}` (see `pages::defaultapps`).
         #[qproperty(QString, state_json)]
         /// The message of the last refused request, "" when there is none.
         #[qproperty(QString, error)]
@@ -34,6 +34,22 @@ pub mod qobject {
         /// app `app` (a desktop id).
         #[qinvokable]
         fn set_default(self: Pin<&mut DefaultAppsModel>, kind: &QString, app: &QString);
+
+        /// Kind `kind` goes back to the system's choice.
+        #[qinvokable]
+        fn reset_default(self: Pin<&mut DefaultAppsModel>, kind: &QString);
+
+        /// Every kind uQ has its own installed app for opens with it.
+        #[qinvokable]
+        fn use_native(self: Pin<&mut DefaultAppsModel>);
+
+        /// One file or link type opens with `app`.
+        #[qinvokable]
+        fn set_type(self: Pin<&mut DefaultAppsModel>, mime: &QString, app: &QString);
+
+        /// One file or link type goes back to the system's choice.
+        #[qinvokable]
+        fn reset_type(self: Pin<&mut DefaultAppsModel>, mime: &QString);
 
         /// The terminal for apps that run in one; "" is uQ's default.
         #[qinvokable]
@@ -112,6 +128,38 @@ impl DefaultAppsModel {
             Op::SetDefault {
                 kind: kind.to_string(),
                 app: app.to_string(),
+            },
+        );
+    }
+
+    fn reset_default(self: Pin<&mut Self>, kind: &QString) {
+        model_core::start(
+            self,
+            Op::ResetDefault {
+                kind: kind.to_string(),
+            },
+        );
+    }
+
+    fn use_native(self: Pin<&mut Self>) {
+        model_core::start(self, Op::UseNative);
+    }
+
+    fn set_type(self: Pin<&mut Self>, mime: &QString, app: &QString) {
+        model_core::start(
+            self,
+            Op::SetType {
+                mime: mime.to_string(),
+                app: app.to_string(),
+            },
+        );
+    }
+
+    fn reset_type(self: Pin<&mut Self>, mime: &QString) {
+        model_core::start(
+            self,
+            Op::ResetType {
+                mime: mime.to_string(),
             },
         );
     }

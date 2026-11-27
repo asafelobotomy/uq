@@ -41,6 +41,7 @@ mod registry;
 mod restore_model;
 mod rules_model;
 mod search;
+mod services_model;
 mod session;
 mod shell_model;
 mod sound_model;

@@ -35,6 +35,10 @@ pub async fn list(
     plan: &[Resolved],
     commands: &BTreeMap<String, Vec<String>>,
 ) -> Vec<Value> {
+    let (due, holding) = {
+        let r = lock(runner);
+        (r.due.clone(), r.holding.clone())
+    };
     let (statuses, spawner, why_not, sem, mut logs, hidden, times) = {
         let r = lock(runner);
         let times: BTreeMap<String, (Option<u32>, bool)> = plan
@@ -141,11 +145,20 @@ pub async fn list(
                     ("failed", None)
                 }
                 (Some(Status::SpawnFailed), _) => ("failed", Some(SPAWN_FAILED)),
+                (Some(Status::Stopped), _) => ("stopped", None),
+                (Some(Status::Held(why)), _) => ("skipped", Some(*why)),
                 (None, Plan::Off) => ("off", None),
                 (None, Plan::Skip(r)) => ("skipped", Some(*r)),
                 (None, Plan::Run { .. }) => ("not_started", Some(why_not.unwrap_or(NEXT_LOGIN))),
             };
             o.insert("status".into(), json!(status));
+            if let Some(at) = due.get(&e.id) {
+                o.insert("start_at".into(), json!(at));
+            }
+            if let Some(why) = holding.get(&e.id) {
+                o.insert("waiting_for".into(), json!(why));
+            }
+
             if let Plan::Run { delay, .. } = &e.plan {
                 o.insert("start_in".into(), json!(delay));
             }

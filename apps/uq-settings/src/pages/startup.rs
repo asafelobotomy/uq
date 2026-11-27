@@ -8,6 +8,7 @@
 
 pub(crate) mod edit;
 pub(crate) mod rows;
+mod session;
 
 use std::path::PathBuf;
 use std::sync::Mutex as StdMutex;
@@ -90,6 +91,27 @@ pub enum Op {
     MoveVar {
         name: String,
         to: usize,
+    },
+    /// What an entry waits for: "network", "power", or "" for nothing.
+    SetWhen {
+        id: String,
+        when: String,
+    },
+    /// Reopen last session's apps at login.
+    SetRestore {
+        on: bool,
+    },
+    /// A command run at logout.
+    AddLogout {
+        name: String,
+        command: String,
+    },
+    SetLogoutEnabled {
+        id: String,
+        on: bool,
+    },
+    RemoveLogout {
+        id: String,
     },
 }
 
@@ -323,6 +345,11 @@ impl PageLogic for StartupState {
             Op::AddApp { desktop_id } => self.add_app(p, &desktop_id).await,
             Op::AddCommand { name, command } => self.add_command(p, &name, &command).await,
             Op::Remove { id } => self.remove(p, &id).await,
+            Op::SetWhen { id, when } => self.set_when(p, &id, Some(&when)).await,
+            Op::SetRestore { on } => self.set_restore(p, on).await,
+            Op::AddLogout { name, command } => self.add_logout(p, &name, &command).await,
+            Op::SetLogoutEnabled { id, on } => self.set_logout_enabled(p, &id, on).await,
+            Op::RemoveLogout { id } => self.remove_logout(p, &id).await,
             Op::SetVar { index, name, value } => {
                 let var = json!({"name": name, "value": value});
                 self.write_env(p, false, |vars| {
@@ -391,8 +418,11 @@ impl PageLogic for StartupState {
             "installed": installed,
             "stagger": auto_section["stagger"].as_u64().unwrap_or(0),
             "retry": auto_section["retry"] == true,
+            "restore": auto_section["restore"] == true,
+            "logout": session::logout_rows(&auto_section),
             "limits": {"stagger_max": autostart::MAX_STAGGER, "vars": env::MAX_VARS, "value_bytes": env::MAX_VALUE_BYTES,
-                "added": autostart::MAX_ADDED, "delay_max": autostart::MAX_DELAY},
+                "added": autostart::MAX_ADDED, "delay_max": autostart::MAX_DELAY,
+                "logout": autostart::extra::MAX_LOGOUT},
             "notice": {"seq": seq, "text": text},
         }))
     }
@@ -408,6 +438,8 @@ pub(crate) async fn explain(proxy: &DesktopProxy<'_>, domain: &str) -> zbus::Res
     }
 }
 
+#[cfg(test)]
+mod session_tests;
 #[cfg(test)]
 mod tests;
 

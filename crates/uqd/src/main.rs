@@ -109,6 +109,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let mut term = signal(SignalKind::terminate())?;
+    // base.lua's shutdown hook sends SIGUSR1 before it stops uqd: the session is ending, so the
+    // open apps are noted for "restore last session" and the logout commands run at SIGTERM.
+    let mut usr1 = signal(SignalKind::user_defined1())?;
+    let mut logging_out = false;
     // Nothing here runs on a fixed tick: each part sleeps until its own next deadline or is
     // woken by what it depends on.
     // - Startup files and the user's themes: inotify on the folders they are made from
@@ -168,6 +172,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             () = desktop_event(&mut events) => schedule = true,
             _ = tokio::signal::ctrl_c() => break,
             _ = term.recv() => break,
+            _ = usr1.recv() => {
+                logging_out = true;
+                uqd::session::record_now(&shared).await;
+                continue;
+            }
         }
         let now = Instant::now();
         let poll_due = now >= poll_at;
@@ -194,6 +203,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .lock()
         .await
         .flush_launch_counts_at(std::time::Instant::now() + Duration::from_secs(60));
+    // A SIGUSR1 sent just before this SIGTERM may not have been picked yet.
+    if !logging_out
+        && tokio::time::timeout(Duration::from_millis(50), usr1.recv())
+            .await
+            .is_ok()
+    {
+        logging_out = true;
+        uqd::session::record_now(&shared).await;
+    }
+    if logging_out && !dev {
+        uqd::session::run_logout(&shared).await;
+    }
     tracing::info!("shutting down");
     Ok(())
 }

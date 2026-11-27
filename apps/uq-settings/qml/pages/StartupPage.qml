@@ -10,6 +10,7 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.uq.settings
 import "../components"
+import "startup"
 
 SettingsPage {
     id: page
@@ -23,7 +24,6 @@ SettingsPage {
     }
     readonly property var limits: snap.limits || ({})
     readonly property var apps: snap.apps || []
-    readonly property var vars: snap.vars || []
     readonly property var section: snap.section || ({})
     readonly property bool ready: App.uqdUp && snap.error === undefined
     readonly property bool idle: page.ready && !sm.busy
@@ -84,42 +84,6 @@ SettingsPage {
         idle: page.idle
         onAppChosen: id => sm.addApp(id)
         onCommandChosen: (name, command) => sm.addCommand(name, command)
-    }
-
-    Kirigami.Dialog {
-        id: varDialog
-
-        title: "Add a variable"
-        standardButtons: Kirigami.Dialog.Cancel
-        preferredWidth: Kirigami.Units.gridUnit * 28
-        onOpened: newVar.nameField.forceActiveFocus()
-        customFooterActions: [
-            Kirigami.Action {
-                text: "Add"
-                icon.name: "list-add"
-                enabled: page.idle && newVar.nameField.text.trim() !== ""
-                onTriggered: {
-                    sm.setVar(-1, newVar.nameField.text.trim(), newVar.valueField.text);
-                    varDialog.close();
-                }
-            }
-        ]
-
-        ColumnLayout {
-            EnvVarRow {
-                id: newVar
-                showSave: false
-                removable: false
-                valueLimit: page.limits.value_bytes || 4096
-                Layout.preferredWidth: Kirigami.Units.gridUnit * 26
-            }
-            UqLabel {
-                text: "Capital letters, digits and _."
-                wrapMode: Text.Wrap
-                opacity: 0.7
-                Layout.fillWidth: true
-            }
-        }
     }
 
     Kirigami.PromptDialog {
@@ -318,104 +282,26 @@ SettingsPage {
         }
     }
 
-    SettingsTab {
+    SessionTab {
+        title: "Session"
+        iconName: "system-log-out"
+        snap: page.snap
+        model: sm
+        idle: page.idle
+        ready: page.ready
+    }
+
+    ServicesTab {
+        title: "Services"
+        iconName: "preferences-system-services"
+    }
+
+    EnvironmentTab {
         title: "Environment"
         iconName: "code-variable"
-
-        SettingsCard {
-            title: "Environment variables"
-            iconName: "code-variable"
-            help: "Changes apply to apps started after the change, and fully after you log out and back in."
-
-            SettingRow {
-                settingId: "env-vars"
-                iconName: "format-list-unordered"
-                label: page.vars.length === 0 ? "None set here" : page.vars.length + (page.vars.length === 1 ? " variable" : " variables")
-                highlight: App.highlight
-                enabled: page.ready
-                Layout.fillWidth: true
-
-                QQC2.Button {
-                    objectName: "addVar"
-                    text: "Add a variable"
-                    icon.name: "list-add"
-                    enabled: page.idle && page.vars.length < (page.limits.vars || 100)
-                    onClicked: {
-                        newVar.name = "";
-                        newVar.value = "";
-                        newVar.reset();
-                        varDialog.open();
-                    }
-                }
-            }
-            Repeater {
-                model: page.vars
-                delegate: EnvVarRow {
-                    required property var modelData
-                    required property int index
-                    name: String(modelData.name)
-                    value: String(modelData.value)
-                    warn: modelData.warn === true
-                    origin: modelData.origin || null
-                    replacedBy: modelData.replaced_by_label ? String(modelData.replaced_by_label) : ""
-                    idle: page.idle
-                    movable: true
-                    canMoveUp: index > 0
-                    canMoveDown: index < page.vars.length - 1
-                    valueLimit: page.limits.value_bytes || 4096
-                    Layout.leftMargin: Kirigami.Units.largeSpacing
-                    Layout.rightMargin: Kirigami.Units.largeSpacing
-                    onSaveRequested: (n, v) => sm.setVar(index, n, v)
-                    onRemoveRequested: sm.removeVar(String(modelData.name))
-                    onMoveRequested: by => sm.moveVar(String(modelData.name), index + by)
-                }
-            }
-        }
-
-        // The switches of Apps and scaling, read-only here: they set variables too.
-        SettingsCard {
-            title: "Set on Apps and scaling"
-            iconName: "preferences-desktop-display"
-            help: "These switches set variables of their own. Change them on Apps and scaling."
-            actions: [
-                QQC2.ToolButton {
-                    objectName: "openAppsScaling"
-                    text: "Open Apps and scaling"
-                    icon.name: "go-next"
-                    display: QQC2.AbstractButton.IconOnly
-                    QQC2.ToolTip.visible: hovered
-                    QQC2.ToolTip.text: "Open Apps and scaling"
-                    onClicked: App.showPage("apps-scaling", "")
-                }
-            ]
-
-            Repeater {
-                model: page.snap.switches || []
-                delegate: RowLayout {
-                    required property var modelData
-                    spacing: Kirigami.Units.largeSpacing
-                    Layout.fillWidth: true
-                    Layout.leftMargin: Kirigami.Units.largeSpacing
-                    Layout.rightMargin: Kirigami.Units.largeSpacing
-                    Kirigami.Icon {
-                        source: modelData.on === true ? "emblem-checked" : "dialog-cancel"
-                        implicitWidth: Kirigami.Units.iconSizes.small
-                        implicitHeight: Kirigami.Units.iconSizes.small
-                        opacity: modelData.on === true ? 1 : 0.5
-                        Accessible.ignored: true
-                    }
-                    UqLabel {
-                        text: String(modelData.label)
-                        elide: Text.ElideRight
-                        Layout.fillWidth: true
-                    }
-                    UqLabel {
-                        objectName: "switchState_" + modelData.key
-                        text: modelData.on === true ? "On" : "Off"
-                        opacity: 0.7
-                    }
-                }
-            }
-        }
+        snap: page.snap
+        model: sm
+        idle: page.idle
+        ready: page.ready
     }
 }
