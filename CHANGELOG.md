@@ -22,6 +22,12 @@ All notable changes to uQ are listed here. The format follows
 - **Choosing reelo or uQview covers every type it opens.** A picture, video or music app used to get only the 6 or 7 common types; it now gets every picture, video or sound type it says it opens, such as AVIF, HEIC, Ogg video or Opus.
 - **A choice in `hyprland-mimeapps.list` no longer silently wins over the page.** The page shows that list's choices as the current ones, says the list exists, and choosing an app takes the same type out of it, so the choice made on the page is the one used.
 
+## [0.3.43] - 2026-11-26
+
+### Changed
+
+- **The lock screen now looks like the login screen.** It shows the login wallpaper (or uQ's backdrop in your theme's colours when none is set), the clock at the top and the avatar, name and password field on the same card as the login screen. The background and card are shared components (`shell/auth/AuthBackdrop.qml`, `AuthCard.qml`), so the two can't drift apart again.
+
 ## [0.3.42] - 2026-11-26
 
 ### Added
