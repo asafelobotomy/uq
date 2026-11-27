@@ -71,7 +71,16 @@ cmd=${cmd//\/etc\/uq\/greetd.toml/$tmp\/greetd.toml}
 has "$p/tmpfiles/uq-greeter.conf" 'd /var/lib/uq-greeter 0755 root root -'
 has "$p/tmpfiles/uq-greeter.conf" 'd /var/cache/uq-greeter 0700 greeter greeter -'
 
+# The greeter user's manager starts no PipeWire, WirePlumber or portals, and nobody else's is touched.
+has "$p/greeter/not-for-greeter.conf" 'ConditionUser=!greeter'
+[ "$(grep -cvE '^(#|$)' "$p/greeter/not-for-greeter.conf")" = 2 ] || bad "not-for-greeter.conf sets more than ConditionUser"
+
 pkg="$p/uq/PKGBUILD"
+for u in pipewire.socket pipewire.service wireplumber.service xdg-desktop-portal.service; do
+    grep -qF " $u " "$pkg" || grep -qF " $u \\" "$pkg" || bad "PKGBUILD does not keep $u from the greeter"
+done
+grep -qF 'packaging/greeter/not-for-greeter.conf' "$pkg" || bad "PKGBUILD does not install not-for-greeter.conf"
+grep -qF '"$pkgdir/usr/lib/systemd/user/$u.d/uq-not-for-greeter.conf"' "$pkg" || bad "not-for-greeter.conf goes to the wrong place"
 for want in 'packaging/uq-greeter-session "$pkgdir/usr/lib/uq/uq-greeter-session"' \
     'packaging/greeter/greetd.toml "$pkgdir/etc/uq/greetd.toml"' \
     'packaging/greeter/greeter.toml "$pkgdir/etc/uq/greeter.toml"' \

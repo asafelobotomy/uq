@@ -121,6 +121,12 @@ TestCase {
         compare(M.avatarSources(undefined, "../x"), []);
         compare(M.avatarSources("/home/me", ".."), ["file:///home/me/.face"]);
         compare(M.avatarSources("", ""), []);
+        // Existence checks leave out what is known to be missing.
+        compare(M.avatarSources("/home/me", "me", { face: false, accounts: false }), []);
+        compare(M.avatarSources("/home/me", "me", { face: false, accounts: true }),
+                ["file:///var/lib/AccountsService/icons/me"]);
+        compare(M.avatarSources("/home/me", "me", { face: true, accounts: false }),
+                ["file:///home/me/.face"]);
     }
 
     function test_initial_and_hostname() {

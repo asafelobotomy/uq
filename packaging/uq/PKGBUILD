@@ -136,6 +136,13 @@ package() {
   install -Dm644 packaging/greeter/greeter.toml "$pkgdir/etc/uq/greeter.toml"
   install -Dm644 packaging/greeter/greetd-uq.conf "$pkgdir/usr/lib/systemd/system/greetd.service.d/uq.conf"
   install -Dm644 packaging/tmpfiles/uq-greeter.conf "$pkgdir/usr/lib/tmpfiles.d/uq-greeter.conf"
+  # The greeter user gets no PipeWire, WirePlumber or portals (it plays no sound and opens no files).
+  for u in pipewire.socket pipewire.service pipewire-pulse.socket pipewire-pulse.service \
+      wireplumber.service xdg-desktop-portal.service xdg-desktop-portal-gtk.service \
+      xdg-desktop-portal-hyprland.service xdg-document-portal.service xdg-permission-store.service; do
+    install -Dm644 packaging/greeter/not-for-greeter.conf \
+      "$pkgdir/usr/lib/systemd/user/$u.d/uq-not-for-greeter.conf"
+  done
   # The boot and shutdown banner (off until enabled: systemctl enable uq-banner-boot uq-banner-shutdown).
   install -Dm755 packaging/banner/uq-banner "$pkgdir/usr/lib/uq/uq-banner"
   install -Dm644 packaging/banner/uq-banner-boot.service "$pkgdir/usr/lib/systemd/system/uq-banner-boot.service"
