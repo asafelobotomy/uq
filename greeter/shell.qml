@@ -267,25 +267,12 @@ ShellRoot {
             WlrLayershell.namespace: "uq-greeter"
             WlrLayershell.keyboardFocus: isMain ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
 
-            // No login wallpaper (or it can't be read): uQ's backdrop in the theme's colours.
-            UqBackdrop {
+            // The login wallpaper, or uQ's backdrop in the theme's colours when there is none (or
+            // it can't be read). The greeter decodes the wallpaper itself; nothing root-side ever
+            // does (§2.2).
+            AuthBackdrop {
                 anchors.fill: parent
-                visible: !wallpaper.visible
-            }
-
-            // The greeter decodes the wallpaper itself; nothing root-side ever does (§2.2).
-            // Only once the window has its size: a sourceSize of 0 decodes the picture at full
-            // size, and the real size then decodes it a second time.
-            Image {
-                id: wallpaper
-                anchors.fill: parent
-                source: win.width > 0 && win.height > 0 ? "file://" + G.WALLPAPER_PATH : ""
-                sourceSize.width: win.width
-                sourceSize.height: win.height
-                fillMode: Image.PreserveAspectCrop
-                asynchronous: true
-                cache: false
-                visible: status === Image.Ready
+                source: "file://" + G.WALLPAPER_PATH
             }
 
             Clock {

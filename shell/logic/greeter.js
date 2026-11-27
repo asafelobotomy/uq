@@ -13,7 +13,7 @@
 // --- fixed paths the greeter may read (§2.2) ---
 var CONFIG_PATH = "/etc/uq/greeter.toml";
 var RENDERED_DIR = "/usr/share/uq/themes/rendered";
-var WALLPAPER_PATH = "/var/lib/uq-greeter/wallpaper";
+var WALLPAPER_PATH = Auth.LOGIN_WALLPAPER_PATH;
 var SESSIONS_DIR = "/usr/share/wayland-sessions";
 var STATE_PATH = "/var/cache/uq-greeter/state.toml";
 var ICONS_DIR = "/var/lib/AccountsService/icons/";
