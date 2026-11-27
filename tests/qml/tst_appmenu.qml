@@ -93,6 +93,12 @@ TestCase {
         compare(M.category(m[0]), "Multimedia");
     }
 
+    function test_menu_entries_leave_out_stale() {
+        var raw = [{ id: "grok-bot", name: "Grok Bot", categories: [] }, { id: "a", name: "A", categories: [] }];
+        var m = M.menuEntries(raw, { "grok-bot": true });
+        compare(M.appsIn("All apps", m, []).map(function (x) { return x.id; }), ["a"]);
+    }
+
     // lock goes to Session.lock() (as the power menu's does); logout and suspend run straight
     // from the app menu; restart and shut down open the power menu at that action's confirm
     // step. Anything else does nothing.

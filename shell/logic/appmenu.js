@@ -103,9 +103,9 @@ function appsIn(key, entries, pinned) {
 }
 
 // launcher.appEntries() copies plus each entry's categories, for category().
-function menuEntries(list) {
+function menuEntries(list, hidden) {
     var raw = _list(list).filter(function (d) { return !!d; });
-    var out = L.appEntries(raw);
+    var out = L.appEntries(raw, hidden);
     for (var i = 0; i < out.length; i++)
         out[i].categories = _list(raw[i].categories).map(String);
     return out;

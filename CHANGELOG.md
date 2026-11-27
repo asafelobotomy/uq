@@ -11,8 +11,10 @@ All notable changes to uQ are listed here. The format follows
 
 ### Fixed
 
+- **The app menu and look=see>do_ leave out apps that can't start any more.** A launcher whose program is gone (an AppImage you deleted, or one a removed package left in `~/.local/share/applications`) no longer shows, and neither does a launcher that is only a symlink to another one listed (an app that ships `app.desktop` as an alias of `org.example.App.desktop`, which showed it twice). The entries come back by themselves if the program is installed again.
 - **The login screen no longer starts audio and portal services it never uses.** The `greeter` account (whose home is `/`) used to get PipeWire, WirePlumber and the desktop portals at every boot, which logged "failed to create directory /.local/state/wireplumber" and left a failed `xdg-desktop-portal-gtk` behind at login. uQ now keeps those units from starting for that account only.
 - **No "Cannot open ~/.face" warnings when you have no avatar picture.** The app menu checks which avatar files exist before showing one, as the lock screen already did, so `uqctl log` no longer lists the missing `~/.face` and AccountsService icon at every start.
+
 
 ## [0.3.46] - 2026-11-27
 

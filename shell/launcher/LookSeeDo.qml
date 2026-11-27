@@ -101,7 +101,7 @@ PanelWindow {
     property bool gotExternal: false
     property bool deadlinePassed: false
     readonly property bool emojiHint: L.showEmojiHint(searched, gotExternal, deadlinePassed)
-    readonly property var appList: L.appEntries(DesktopEntries.applications.values)
+    readonly property var appList: L.appEntries(DesktopEntries.applications.values, StaleApps.hidden)
 
     visible: shown
     screen: target

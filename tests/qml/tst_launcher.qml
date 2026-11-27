@@ -376,4 +376,14 @@ TestCase {
         compare(JSON.stringify(e[1].keywords), JSON.stringify([]));
         compare(L.appEntries(null).length, 0);
     }
+
+    // Ids StaleApps found stale come back noDisplay; anything not `true` in the map is ignored.
+    function test_app_entries_hide_stale() {
+        var e = L.appEntries([{ id: "gone", name: "Gone" }, { id: "ok", name: "Ok" }, { id: "odd", name: "Odd" }],
+                             { gone: true, odd: "yes" });
+        verify(e[0].noDisplay);
+        verify(!e[1].noDisplay);
+        verify(!e[2].noDisplay);
+        verify(!L.appEntries([{ id: "gone" }], null)[0].noDisplay);
+    }
 }
