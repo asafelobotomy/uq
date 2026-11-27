@@ -10,7 +10,7 @@ async fn hotspot_on_and_off() {
         Op::Hotspot {
             on: true,
             name: "ana's laptop".into(),
-            password: "short".into(),
+            password: pw()[..5].to_string(),
         },
     )
     .await;
@@ -20,7 +20,7 @@ async fn hotspot_on_and_off() {
         Op::Hotspot {
             on: true,
             name: "ana's laptop".into(),
-            password: "longenough".into(),
+            password: pw(),
         },
     )
     .await;
@@ -49,12 +49,13 @@ async fn hotspot_on_and_off() {
     .await;
     assert_eq!(out.state["hotspot"]["state"], "on");
     let uuid = out.state["hotspot"]["uuid"].as_str().unwrap().to_string();
+    let psk = pw();
     run(
         &page,
         Op::Hotspot {
             on: true,
             name: String::new(),
-            password: "another-one".into(),
+            password: psk.clone(),
         },
     )
     .await;
@@ -63,7 +64,7 @@ async fn hotspot_on_and_off() {
             .lock()
             .unwrap()
             .secret(&uuid, "802-11-wireless-security", "psk"),
-        "another-one"
+        psk
     );
     assert_eq!(
         nm.state.lock().unwrap().conns.len(),

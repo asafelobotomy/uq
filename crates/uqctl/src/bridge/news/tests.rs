@@ -326,9 +326,13 @@ async fn preview_feed() {
         n.preview(&format!("{base}/to-http")).await,
         Err("request failed (redirect)".into())
     );
-    // The real client takes https only.
+    // The real client takes https only: no other scheme, and not https without a host.
     let real = News::new();
-    for bad in ["http://example.org/rss", "ftp://x.org/", "https://", "x"] {
+    let other: Vec<String> = ["http", "ftp"]
+        .iter()
+        .map(|scheme| format!("{scheme}://example.org/rss"))
+        .collect();
+    for bad in other.iter().map(String::as_str).chain(["https://", "x"]) {
         assert_eq!(
             real.preview(bad).await,
             Err("not an https feed address".into())

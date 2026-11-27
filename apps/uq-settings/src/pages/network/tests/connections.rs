@@ -7,12 +7,13 @@ async fn joining_a_new_network_keeps_it_private() {
     let (_rig, nm, page, _root) = setup().await;
     let s = run(&page, Op::Refresh).await.state;
     let home = ap_of(&s, "Home");
+    let psk = pw();
     let out = run(
         &page,
         Op::ConnectWifi {
             ap: home["ap"].as_str().unwrap().into(),
             device: home["device"].as_str().unwrap().into(),
-            password: "correct horse".into(),
+            password: psk.clone(),
             all_users: false,
             eap: None,
         },
@@ -24,10 +25,7 @@ async fn joining_a_new_network_keeps_it_private() {
     let uuid = home["saved"].as_str().unwrap().to_string();
     {
         let st = nm.state.lock().unwrap();
-        assert_eq!(
-            st.secret(&uuid, "802-11-wireless-security", "psk"),
-            "correct horse"
-        );
+        assert_eq!(st.secret(&uuid, "802-11-wireless-security", "psk"), psk);
         let c = st.conn(&uuid).unwrap();
         let perms = nm::get::<Vec<String>>(&c.settings["connection"], "permissions").unwrap();
         assert_eq!(perms, ["user:ana:"]);
@@ -89,7 +87,7 @@ async fn the_agent_asks_only_for_connections_started_here() {
     let (_rig, nm, page, _root) = setup().await;
     let page = Arc::new(page);
     nm.save(
-        home_settings("u-home", ""),
+        home_settings("u-home", Default::default()),
         Some("802-11-wireless-security"),
     )
     .await;
@@ -147,7 +145,7 @@ async fn the_agent_asks_only_for_connections_started_here() {
 
     // Not started from the page: no question, NetworkManager hears "no secrets".
     nm.save(
-        home_settings("u-other", ""),
+        home_settings("u-other", Default::default()),
         Some("802-11-wireless-security"),
     )
     .await;

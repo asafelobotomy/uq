@@ -90,25 +90,56 @@ impl FakeUqd {
         Ok(())
     }
 
-    /// As uqd: a point of the current settings, then every setting back to its default.
-    pub(crate) fn reset_all(&self) -> Result<(), FakeError> {
-        self.replace_all(State::default(), AutoReason::BeforeReset)
-    }
-
-    pub(crate) fn export_settings(&self) -> String {
-        let body = self.state.lock().unwrap().to_toml().unwrap();
-        format!("# uQ settings backup\n{body}")
-    }
-
-    pub(crate) fn import_settings(&self, text: &str) -> Result<(), FakeError> {
-        if !text.starts_with("# uQ settings backup") {
-            return Err(FakeError::InvalidArgument(
-                "that file isn't a uQ settings backup".into(),
-            ));
+    /// `SetSection`, as uqd: refusals, the write and what `explain` reports after it.
+    pub(crate) fn write_section(
+        &self,
+        domain: &str,
+        json: &str,
+        origin: &str,
+    ) -> Result<(), FakeError> {
+        if domain == "monitors" {
+            return self.set_monitors_section(json, origin);
         }
-        let next = State::parse_strict(text)
-            .map_err(|e| FakeError::InvalidArgument(e.message().to_string()))?;
-        self.replace_all(next, AutoReason::BeforeBackup)
+        if let Some(text) = self.refuse_next.lock().unwrap().take() {
+            return Err(FakeError::InvalidSetting(text));
+        }
+        let value =
+            serde_json::from_str(json).map_err(|e| invalid(format!("value is not JSON: {e}")))?;
+        let done = self.write(origin, |next| {
+            next.set_section(domain, value).map_err(invalid)?;
+            if renders_section(domain)
+                && let Some(message) = self.verify_error.lock().unwrap().take()
+            {
+                return Err(FakeError::ConfigInvalid(format!(
+                    "Hyprland rejected the new config: {message}"
+                )));
+            }
+            Ok(())
+        });
+        if domain == "rules" {
+            match &done {
+                Ok(_) => {}
+                Err(FakeError::ConfigInvalid(m)) => {
+                    *self.explain.rules_rejected.lock().unwrap() = Some(m.clone());
+                }
+                Err(_) => {}
+            }
+        }
+        if domain == "keybinds"
+            && let Err(FakeError::ConfigInvalid(m)) = &done
+        {
+            *self.explain.keybinds_rejected.lock().unwrap() = Some(m.clone());
+        }
+        if matches!(domain, "env" | "compat" | "autostart") {
+            let mut rejected = self.explain.startup_rejected.lock().unwrap();
+            match &done {
+                Ok(_) if rejected.as_ref().is_some_and(|(d, _)| d == domain) => *rejected = None,
+                Err(FakeError::ConfigInvalid(m)) => *rejected = Some((domain.into(), m.clone())),
+                _ => {}
+            }
+        }
+        done?;
+        Ok(())
     }
 }
 

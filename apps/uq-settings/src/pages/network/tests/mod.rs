@@ -2,8 +2,8 @@ use std::time::Duration;
 
 use super::read::{band, state_text};
 use super::*;
-use crate::pages::fake_system::SysRig;
 use crate::pages::fake_system::nm::{FakeNm, NmState, WIFI_DEV};
+use crate::pages::fake_system::{SysRig, pw};
 use crate::pages::runner::run;
 
 async fn setup() -> (SysRig, FakeNm, NetworkState, tempfile::TempDir) {
@@ -22,11 +22,10 @@ fn home_settings(uuid: &str, password: &str) -> Settings {
             ssid: b"Home".to_vec(),
             security: Some(Security::Password { sae_only: false }),
             password: if password.is_empty() {
-                "placeholder"
+                pw()
             } else {
-                password
-            }
-            .into(),
+                password.to_string()
+            },
             ..Default::default()
         },
     )

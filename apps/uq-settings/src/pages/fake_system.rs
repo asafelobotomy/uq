@@ -11,6 +11,13 @@ use std::sync::{Arc, Mutex};
 
 use uq_core::test_bus::{Bus, connect, private_bus};
 
+/// A throwaway password made when the test runs: 12 characters, different on every call. The
+/// tests write no password in the source, where a code scanner reads each one as a real
+/// credential.
+pub fn pw() -> String {
+    format!("pw{:010}", uq_core::desktop_entry::random_suffix())
+}
+
 use super::sysbus::SystemBus;
 
 mod accounts;

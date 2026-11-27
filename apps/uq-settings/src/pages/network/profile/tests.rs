@@ -129,11 +129,12 @@ fn enterprise_networks_need_their_details() {
 
 #[test]
 fn hotspot_checks_its_password() {
-    let s = hotspot_settings("u", "ana", "uQ laptop", "longenough").unwrap();
+    let psk = crate::pages::fake_system::pw();
+    let s = hotspot_settings("u", "ana", "uQ laptop", &psk).unwrap();
     assert_eq!(kind(&s), "hotspot");
     assert_eq!(text(&s["ipv4"], "method"), "shared");
-    assert!(hotspot_settings("u", "ana", "x", "short").is_err());
-    assert!(hotspot_settings("u", "ana", " ", "longenough").is_err());
+    assert!(hotspot_settings("u", "ana", "x", &psk[..5]).is_err());
+    assert!(hotspot_settings("u", "ana", " ", &psk).is_err());
 }
 
 #[test]

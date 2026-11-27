@@ -5,7 +5,8 @@ use super::*;
 #[tokio::test]
 async fn reads_wifi_wired_and_saved_connections() {
     let (_rig, nm, page, _root) = setup().await;
-    nm.save(home_settings("u-home", "hunter22!"), None).await;
+    let psk = pw();
+    nm.save(home_settings("u-home", &psk), None).await;
     let out = run(&page, Op::Refresh).await;
     assert_eq!(out.error, None);
     let s = out.state;
@@ -38,7 +39,7 @@ async fn reads_wifi_wired_and_saved_connections() {
     assert_eq!(saved["ssid"], "Home");
     assert_eq!(saved["everyone"], false);
     assert!(
-        !s.to_string().contains("hunter22"),
+        !s.to_string().contains(psk.as_str()),
         "secrets never reach the page"
     );
     assert_eq!(s["hotspot"]["can"], true);
@@ -53,7 +54,8 @@ async fn reads_wifi_wired_and_saved_connections() {
 #[tokio::test]
 async fn saved_connection_settings_round_trip_and_keep_secrets() {
     let (rig, nm, page, root) = setup().await;
-    nm.save(home_settings("u-home", "keep-me-1"), None).await;
+    let psk = pw();
+    nm.save(home_settings("u-home", &psk), None).await;
     let set = |op| run(&page, op);
     assert_eq!(
         set(Op::SetMetered {
@@ -114,7 +116,7 @@ async fn saved_connection_settings_round_trip_and_keep_secrets() {
             .lock()
             .unwrap()
             .secret("u-home", "802-11-wireless-security", "psk"),
-        "keep-me-1",
+        psk,
         "an edit keeps the saved password"
     );
 

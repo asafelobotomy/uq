@@ -1,5 +1,5 @@
 use super::*;
-use crate::pages::fake_system::{FakeAccounts, FakeHelper, FakeUser, SysRig};
+use crate::pages::fake_system::{FakeAccounts, FakeHelper, FakeUser, SysRig, pw};
 use crate::pages::runner::run;
 
 struct Setup(SysRig, FakeAccounts, UsersState, tempfile::TempDir);
@@ -42,7 +42,8 @@ fn own_password(uid: u64, current: &str, p: &str, c: &str) -> Op {
 
 /// A stand-in for `/usr/bin/passwd`, run by `/bin/sh` (never exec'd itself, so no ETXTBSY):
 /// it asks like shadow's passwd does (prompts on stderr, one line read per prompt), accepts
-/// the current password in `$1/current`, refuses "short" as pam_pwquality would, and records
+/// the current password in `$1/current`, refuses one under 8 characters as pam_pwquality
+/// would, and records
 /// the new password, its own arguments and its environment in `$1`. Mode `$2`: `hang` never
 /// asks anything.
 const STUB: &str = r#"
@@ -62,7 +63,7 @@ tries=0
 while :; do
     printf 'New password: ' >&2
     read -r new
-    if [ "$new" = short ]; then
+    if [ "${#new}" -lt 8 ]; then
         echo 'BAD PASSWORD: The password is shorter than 8 characters' >&2
         tries=$((tries + 1))
         [ "$tries" -ge 3 ] && exit 10
@@ -77,17 +78,19 @@ printf '%s' "$new" > "$dir/changed"
 echo 'passwd: password updated successfully'
 "#;
 
-fn stub_passwd(page: UsersState, mode: &str) -> (UsersState, tempfile::TempDir) {
+/// The page with the stub as its passwd, the stub's folder, and the current password it accepts.
+fn stub_passwd(page: UsersState, mode: &str) -> (UsersState, tempfile::TempDir, String) {
     let dir = tempfile::tempdir().unwrap();
+    let current = pw();
     std::fs::write(dir.path().join("stub.sh"), STUB).unwrap();
-    std::fs::write(dir.path().join("current"), "old pw").unwrap();
+    std::fs::write(dir.path().join("current"), &current).unwrap();
     let cmd = vec![
         OsString::from("/bin/sh"),
         dir.path().join("stub.sh").into_os_string(),
         dir.path().as_os_str().to_owned(),
         OsString::from(mode),
     ];
-    (page.with_passwd(cmd, Duration::from_secs(2)), dir)
+    (page.with_passwd(cmd, Duration::from_secs(2)), dir, current)
 }
 
 mod accounts;
