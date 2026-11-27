@@ -2,3 +2,5 @@ module services
 singleton HyprRefresh 1.0 HyprRefresh.qml
 singleton VpnStatus 1.0 VpnStatus.qml
 singleton WindowDrag 1.0 WindowDrag.qml
+singleton SecurityStatus 1.0 SecurityStatus.qml
+singleton CrumbsStatus 1.0 CrumbsStatus.qml

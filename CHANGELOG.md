@@ -24,6 +24,7 @@ All notable changes to uQ are listed here. The format follows
   needs, that the AUR's versions install together (and which are behind their release), and every
   app's integration files at its latest release against uqctl from uQ 0.3.41, the latest release
   and main.
+- `scripts/popups-live.sh` (CI smoke job): every island popup, the island menu, quick settings, the notification centre, the VPN details and real tray apps' icons, menus and "+N" list on Hyprland, with real clicks and keys.
 
 ### Fixed
 
@@ -34,6 +35,12 @@ All notable changes to uQ are listed here. The format follows
 - **The Security island doesn't half-read a summary it doesn't know.** A summary from oysterAV in a
   schema other than 1 now reads as unavailable instead of showing whichever fields happen to
   match.
+- **One Security notification, however many screens.** The Security and Storage cleanup islands used to read oysterAV and crumBS once per screen, so with two monitors every change in security state sent two notifications and every check ran twice. They now share one reading, taken only while the island is on the bar, and a missing oysterAV is looked for every 5 minutes instead of every 30 seconds.
+- **The Status island's media button can resume a paused track.** It showed a play icon even while playing and disappeared as soon as playback paused. It now shows play or pause and stays while a player is open.
+- **Widget popups and the dock's Pin/Unpin menu take the keyboard.** Esc closes them, Enter picks, they look like the other island popups and opening another bar popup closes them.
+- The Keyboard layout island no longer misses a layout switch that lands while it is already reading the keyboards.
+- Opening a bar popup closes quick settings, the app menu or the notification centre first, and the notification centre joins the bar to its focus grab a moment after opening, as quick settings does, so it always gets the keyboard.
+
 
 ## [0.3.43] - 2026-11-26
 

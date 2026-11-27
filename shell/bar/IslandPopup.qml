@@ -10,7 +10,7 @@ import "../core"
 // doesn't take the keyboard.) Closes on a click outside, on Esc, on lock, and when another bar
 // popup opens; never drawn above the lock screen.
 //
-// Either `show(item, component, ctx)` a Component (as WidgetPopup), or put the content inside
+// Either `show(item, component, ctx)` a Component (a widget's popup on the Status island), or put the content inside
 // as children and call `show(item)`.
 PanelWindow {
     id: pop
@@ -25,6 +25,11 @@ PanelWindow {
     readonly property int barBottom: WindowLook.gapTop + BarLayout.unit
 
     function show(item, component, context) {
+        // Quick settings, the app menu or the notification centre goes first: its focus grab
+        // ending after this popup's had started took this one down with it, so a click on an
+        // island while one was open closed everything.
+        if (Surfaces.open !== "closed")
+            Surfaces.close();
         anchorItem = item;
         content = component === undefined ? null : component;
         ctx = context === undefined ? null : context;
