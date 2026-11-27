@@ -7,6 +7,8 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.45] - 2026-11-27
+
 ### Added
 
 - **Settings › Default apps has three tabs: Apps, File types and Links.** Apps gains Calendar, Archives and Torrents. File types lists every type of file an installed app can open, by group and searchable, and Links does the same for kinds of link (email addresses, magnet links, Steam, Zoom and so on). Each row opens a picker of the apps that can open it. Every choice can go back to the system's with one button.
