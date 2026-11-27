@@ -7,6 +7,10 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **Num Lock no longer comes back on by itself.** Hyprland keeps a Num Lock state per keyboard and tells apps the OR of them whenever focus moves, and `numlock_by_default` turned it on for button-only "keyboards" (power and sleep buttons, the display's brightness keys, laptop hotkey devices) and emobie's typing device. After you turned Num Lock off, the next window or the lock screen got it back on. Those devices now start with it off. A new CI job (`numlock`) checks this on a real Hyprland with real keyboards. If you have a second real keyboard you never type on, set `numlock_by_default = false` for it in `user.lua`.
+
 ## [0.3.43] - 2026-11-26
 
 ### Changed
