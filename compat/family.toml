@@ -1,0 +1,189 @@
+# The uQ family: the packages that make up uQ, the contracts between them, and which versions
+# of each other they work with. docs/compat.md explains it; compat/compat.py checks it and writes
+# each package's PKGBUILD line from it:
+#
+#   conflicts+=('uq<0.3.41' 'oysterav<0.5.0')  # uq-compat: from uQ's compat/family.toml
+#
+# pacman then refuses a set of versions that would break, and bindleUP holds back an update until
+# the partner version it needs is on the AUR.
+#
+# Rules (CI enforces them, .github/workflows/family.yml):
+# - A contract has levels. A provider keeps speaking every level it has spoken until it drops it
+#   (`dropped`, the first provider version without it). Adding to a contract without breaking old
+#   users keeps the level; anything an old user can't cope with is a new level.
+# - `levels.N` is the first provider release that speaks level N. The first ones here are the
+#   releases everything was last tested together with on 2026-11-26 (the AUR's versions then):
+#   older ones may work, but nothing checks them.
+# - A package's `needs` names the level of each contract it uses. `min` raises the floor for one
+#   provider when the package uses something newer than the level's first release.
+# - A provider can't drop a level while the latest release of a package still needs it. When it
+#   drops one, every package that moved to the next level says from which of its releases
+#   (`since`), and the provider's PKGBUILD gets `conflicts+=('that-package<since')`.
+schema = 1
+
+[contract.uq-api]
+provider = "uq"
+what = "integration files: Settings pages, bar widgets, window rules, launcher providers and app actions (uq_api)"
+levels = { 1 = "0.3.41", 2 = "0.3.41", 3 = "0.3.41" }
+
+[contract.uq-theme]
+provider = "uq"
+what = "tokens.json and uQ's KDE colour scheme, as the uq-theme kit 1.x reads them"
+levels = { 1 = "0.3.41" }
+
+[contract.uq-diag]
+provider = "uq"
+what = "the [CODE] log lines, problem-code lists and crash records uQ reads (uq-diag kit 1.x)"
+levels = { 1 = "0.3.41" }
+
+[contract.uq-desktop]
+provider = "uq"
+what = "uqd's D-Bus API, org.uq.Desktop1 and the launcher provider interface (uq-consts 1.x)"
+levels = { 1 = "0.3.41" }
+
+[contract.uqctl]
+provider = "uq"
+what = "uqctl commands apps run: setup --apps, greeter, welcome, wallpaper set, settings PAGE, launch"
+levels = { 1 = "0.3.41" }
+
+[contract.bindle-cli]
+provider = "bindle"
+what = "bindle snapshot/recovery --status/rollback/rebase/restore and bindleup --gui"
+levels = { 1 = "0.1.47" }
+
+[contract.oyst-scan]
+provider = "oysterav"
+what = "oyst-cli scan PATH... --ndjson: progress lines, one result line, exit 0 clean, 1 threats, 3 busy"
+levels = { 1 = "0.5.0" }
+
+[contract.oyst-status]
+provider = "oysterav"
+what = "oyst-cli status summary --deep --json (schema 1) and oyst-cli scan --profile quick"
+levels = { 1 = "0.5.0" }
+
+[contract.uqbit-status]
+provider = "uqbit"
+what = "uqbit status --json: the vpn object (required, interface, up, bound)"
+levels = { 1 = "0.6.1" }
+
+[contract.uqview-cli]
+provider = "uqview"
+what = "uqview -- PICTURE and uqview --markup PICTURE"
+levels = { 1 = "0.1.6" }
+
+[contract.kyko-cli]
+provider = "kyko"
+what = "kyko as the terminal (uqctl launch --terminal) and kyko toggle (F12)"
+levels = { 1 = "1.3.3" }
+
+# Packages. `aur`: the AUR packages built from `pkgbuild` (paths in `repo`, each carrying the
+# uq-compat line). `needs`: contract = level.
+
+[package.uq]
+repo = "asafelobotomy/uq"
+aur = ["uq"]
+pkgbuild = ["packaging/uq/PKGBUILD"]
+needs = { oyst-status = 1, uqbit-status = 1, uqview-cli = 1, kyko-cli = 1, bindle-cli = 1 }
+
+[package.bindle]
+repo = "asafelobotomy/bindle"
+aur = ["bindle"]
+pkgbuild = ["packaging/aur/bindle/PKGBUILD"]
+needs = { uq-api = 3, uq-theme = 1, uq-diag = 1, uq-desktop = 1, uqctl = 1 }
+
+[package.noti-fi]
+repo = "asafelobotomy/noti-fi"
+aur = ["noti-fi"]
+pkgbuild = ["packaging/PKGBUILD"]
+needs = { uq-api = 3, uq-theme = 1, uq-diag = 1 }
+
+[package.emobie]
+repo = "asafelobotomy/emobie"
+aur = ["emobie"]
+pkgbuild = ["packaging/aur/emobie/PKGBUILD"]
+needs = { uq-api = 3, uq-theme = 1, uq-diag = 1, uq-desktop = 1 }
+
+[package.appofholding]
+repo = "asafelobotomy/appofholding"
+aur = ["appofholding"]
+pkgbuild = ["packaging/aur/appofholding/PKGBUILD"]
+needs = { uq-api = 3, uq-theme = 1, uq-diag = 1, uqctl = 1, oyst-scan = 1 }
+
+[package.romforge]
+repo = "asafelobotomy/romforge"
+aur = ["romforge", "romforge-bin"]
+# romforge-bin's PKGBUILD is written by the release workflow.
+pkgbuild = ["packaging/aur/PKGBUILD", ".github/workflows/release.yml"]
+needs = { uq-api = 3, uq-diag = 1, uq-desktop = 1, oyst-scan = 1 }
+
+[package.scale_tail]
+repo = "asafelobotomy/scale_tail"
+aur = ["scale_tail"]
+pkgbuild = ["packaging/aur/PKGBUILD"]
+needs = { uq-api = 3, uq-desktop = 1 }
+
+[package.crumbs]
+repo = "asafelobotomy/crumbs"
+aur = ["crum-bs", "crum-bs-bin"]
+pkgbuild = ["packaging/aur/crum-bs/PKGBUILD", "packaging/aur/crum-bs-bin/PKGBUILD"]
+needs = { uq-api = 2 }
+
+[package.scdr]
+repo = "asafelobotomy/scdr"
+aur = ["scdr", "scx-devbox"]
+pkgbuild = ["packaging/aur/scdr/PKGBUILD"]
+needs = { uq-api = 3, uq-diag = 1 }
+
+[package.xzram]
+repo = "asafelobotomy/XZram"
+aur = ["xzram", "xzram-gui"]
+pkgbuild = ["packaging/aur/PKGBUILD"]
+needs = { uq-api = 3, uq-theme = 1, uq-diag = 1 }
+
+[package.hauler]
+repo = "asafelobotomy/hauler"
+aur = ["hauler"]
+pkgbuild = ["dist/aur/hauler/PKGBUILD"]
+needs = { uq-api = 3, uq-theme = 1, uq-diag = 1, oyst-scan = 1 }
+
+[package.kyko]
+repo = "asafelobotomy/kyko"
+aur = ["kyko"]
+pkgbuild = ["packaging/kyko/PKGBUILD"]
+needs = { uq-api = 2, uq-theme = 1, uq-diag = 1, uq-desktop = 1 }
+
+[package.oysterav]
+repo = "asafelobotomy/oysterAV"
+aur = ["oysterav"]
+pkgbuild = ["packaging/arch/PKGBUILD"]
+needs = { uq-api = 3, uq-theme = 1 }
+
+[package.av-morning-star]
+repo = "asafelobotomy/AV-Morning-Star"
+aur = ["av-morning-star"]
+pkgbuild = ["packaging/aur/av-morning-star/PKGBUILD"]
+needs = { uq-theme = 1 }
+
+[package.bindaru]
+repo = "asafelobotomy/bindaru"
+aur = ["bindaru"]
+pkgbuild = ["packaging/aur/bindaru/PKGBUILD"]
+needs = { uq-api = 3, uq-theme = 1, uq-diag = 1, oyst-scan = 1, bindle-cli = 1 }
+
+[package.uqview]
+repo = "asafelobotomy/uqview"
+aur = ["uqview"]
+pkgbuild = ["packaging/aur/uqview/PKGBUILD"]
+needs = { uq-api = 3, uq-theme = 1, uq-diag = 1, uqctl = 1 }
+
+[package.reelo]
+repo = "asafelobotomy/reelo"
+aur = ["reelo"]
+pkgbuild = ["packaging/aur/reelo/PKGBUILD"]
+needs = { uq-api = 2, uq-theme = 1, uq-diag = 1 }
+
+[package.uqbit]
+repo = "asafelobotomy/uqbit"
+aur = ["uqbit"]
+pkgbuild = ["packaging/aur/uqbit/PKGBUILD"]
+needs = { uq-api = 2, uq-theme = 1, uq-diag = 1 }

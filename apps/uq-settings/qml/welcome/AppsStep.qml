@@ -97,13 +97,6 @@ QQC2.ScrollView {
                         }
                     }
                 }
-                UqLabel {
-                    visible: row.where === ""
-                    text: "Download it from github.com/" + (row.modelData.project || "") + ", or install it with bindle."
-                    wrapMode: Text.Wrap
-                    color: Kirigami.Theme.disabledTextColor
-                    Layout.fillWidth: true
-                }
             }
         }
     }

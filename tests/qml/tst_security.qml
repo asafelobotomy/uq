@@ -5,6 +5,14 @@ import "../../shell/logic/security.js" as S
 TestCase {
     name: "security"
 
+    function test_readable_only_in_a_schema_it_knows() {
+        verify(S.readable({ state: "ok", schema: 1 }));
+        verify(S.readable({ state: "ok" }), "an older oysterAV sends no schema");
+        verify(!S.readable({ state: "ok", schema: 2 }));
+        verify(!S.readable({ schema: 1 }));
+        verify(!S.readable(null));
+    }
+
     function test_ago() {
         compare(S.ago(null), "never");
         compare(S.ago(0.2), "just now");
