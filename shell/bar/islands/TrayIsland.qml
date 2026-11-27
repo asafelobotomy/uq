@@ -48,6 +48,7 @@ Island {
         // The rest, in a list.
         Rectangle {
             id: moreButton
+            objectName: "trayMore"
             visible: root.fit.more > 0
             Layout.preferredWidth: root.cell
             Layout.preferredHeight: root.cell
@@ -96,13 +97,15 @@ Island {
                     text: modelData.tooltipTitle || modelData.title || modelData.id || "Tray icon"
                     detail: modelData.hasMenu ? "Menu" : ""
                     onActivated: {
+                        // Read before hiding: hiding unloads this row.
+                        var item = modelData;
                         morePopup.hide();
                         // An app with only a menu opens it, under the island.
-                        if (modelData.onlyMenu && modelData.hasMenu) {
-                            moreMenu.menu = modelData.menu;
+                        if (item.onlyMenu && item.hasMenu) {
+                            moreMenu.menu = item.menu;
                             moreMenu.open();
                         } else {
-                            modelData.activate();
+                            item.activate();
                         }
                     }
                     Component.onCompleted: if (index === 0) forceActiveFocus()
