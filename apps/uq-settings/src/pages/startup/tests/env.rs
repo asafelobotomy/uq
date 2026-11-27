@@ -122,7 +122,7 @@ async fn switches_listed_read_only() {
     assert_eq!(switches[0]["on"], false);
     assert_eq!(
         out.state["limits"],
-        json!({"vars": 100, "value_bytes": 4096, "added": 50, "delay_max": 600, "stagger_max": 30})
+        json!({"vars": 100, "value_bytes": 4096, "added": 50, "delay_max": 600, "stagger_max": 30, "logout": 20})
     );
 }
 

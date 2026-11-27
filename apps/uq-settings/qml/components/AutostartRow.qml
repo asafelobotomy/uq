@@ -46,6 +46,19 @@ ColumnLayout {
     signal minimizeChosen(bool on)
     /// **Remove** was pressed (added entries only).
     signal removeRequested()
+    /// What the app waits for: "network", "power", or "" for nothing.
+    signal whenChosen(string when)
+
+    /// Now, in Unix seconds, ticking while the app waits, so the countdown moves.
+    property real now: Date.now() / 1000
+    readonly property string statusText: {
+        if (row.app.status === "waiting" && row.app.start_at && !row.app.waiting_for) {
+            const left = Math.max(0, Math.ceil(Number(row.app.start_at) - row.now));
+            return left > 0 ? "Starts in " + left + " s" : "Starting";
+        }
+        return String(row.app.status_text || "");
+    }
+    readonly property string whenText: row.app.when === "network" ? "Waits for the network" : row.app.when === "power" ? "Starts only on mains power" : ""
 
     spacing: 0
     Layout.fillWidth: true
@@ -108,8 +121,15 @@ ColumnLayout {
                 Layout.fillWidth: true
             }
             UqLabel {
+                objectName: "appWhen"
+                visible: text !== ""
+                text: row.whenText
+                opacity: 0.7
+                Layout.fillWidth: true
+            }
+            UqLabel {
                 objectName: "appStatus"
-                text: String(row.app.status_text || "")
+                text: row.statusText
                 color: row.failed ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.textColor
                 wrapMode: Text.Wrap
                 Layout.fillWidth: true
@@ -148,6 +168,45 @@ ColumnLayout {
             onToggled: {
                 row.minimizeChosen(hideButton.checked);
                 hideButton.checked = Qt.binding(() => row.app.minimize === true);
+            }
+        }
+        QQC2.ToolButton {
+            id: whenButton
+            objectName: "appWhenButton"
+            text: "Start when"
+            icon.name: row.app.when === "network" ? "network-wired" : row.app.when === "power" ? "battery-full-charging" : "view-calendar-upcoming-events"
+            display: QQC2.AbstractButton.IconOnly
+            checked: !!row.app.when
+            enabled: row.idle && row.app.can_toggle === true
+            Accessible.name: "Start when"
+            Accessible.description: row.name
+            QQC2.ToolTip.visible: hovered && !whenMenu.visible
+            QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+            QQC2.ToolTip.text: "What the app waits for before it starts"
+            onClicked: whenMenu.popup(whenButton, 0, whenButton.height)
+            QQC2.Menu {
+                id: whenMenu
+                QQC2.MenuItem {
+                    objectName: "whenNone"
+                    text: "Start right away"
+                    checkable: true
+                    checked: !row.app.when
+                    onTriggered: row.whenChosen("")
+                }
+                QQC2.MenuItem {
+                    objectName: "whenNetwork"
+                    text: "Wait for the network (up to a minute)"
+                    checkable: true
+                    checked: row.app.when === "network"
+                    onTriggered: row.whenChosen("network")
+                }
+                QQC2.MenuItem {
+                    objectName: "whenPower"
+                    text: "Start only on mains power"
+                    checkable: true
+                    checked: row.app.when === "power"
+                    onTriggered: row.whenChosen("power")
+                }
             }
         }
         Kirigami.Icon {
@@ -197,6 +256,12 @@ ColumnLayout {
             Accessible.description: row.name
             onClicked: row.removeRequested()
         }
+    }
+    Timer {
+        interval: 1000
+        repeat: true
+        running: row.app.status === "waiting" && !!row.app.start_at
+        onTriggered: row.now = Date.now() / 1000
     }
     // Spin changes are sent 400 ms after the last step; a refused one snaps back with the state.
     Timer {

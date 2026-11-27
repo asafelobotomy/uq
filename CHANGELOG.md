@@ -7,6 +7,90 @@ All notable changes to uQ are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.48] - 2026-11-27
+
+### Fixed
+
+- **The app menu and look=see>do_ leave out apps that can't start any more.** A launcher whose program is gone (an AppImage you deleted, or one a removed package left in `~/.local/share/applications`) no longer shows, and neither does a launcher that is only a symlink to another one listed (an app that ships `app.desktop` as an alias of `org.example.App.desktop`, which showed it twice). The entries come back by themselves if the program is installed again.
+
+## [0.3.47] - 2026-11-27
+
+### Fixed
+
+- **The login screen no longer starts audio and portal services it never uses.** The `greeter` account (whose home is `/`) used to get PipeWire, WirePlumber and the desktop portals at every boot, which logged "failed to create directory /.local/state/wireplumber" and left a failed `xdg-desktop-portal-gtk` behind at login. uQ now keeps those units from starting for that account only.
+- **No "Cannot open ~/.face" warnings when you have no avatar picture.** The app menu checks which avatar files exist before showing one, as the lock screen already did, so `uqctl log` no longer lists the missing `~/.face` and AccountsService icon at every start.
+
+## [0.3.46] - 2026-11-27
+
+### Added
+
+- **Settings › Default apps has three tabs: Apps, File types and Links.** Apps gains Calendar, Archives and Torrents. File types lists every type of file an installed app can open, by group and searchable, and Links does the same for kinds of link (email addresses, magnet links, Steam, Zoom and so on). Each row opens a picker of the apps that can open it. Every choice can go back to the system's with one button.
+- **uQ's own apps are the defaults where you haven't chosen.** At login, uQview opens pictures, reelo opens videos and music, and uQbit opens torrents and magnet links, but only for kinds you never chose, and only once each: a later choice or a reset is never undone. The Default apps page marks uQ's own apps and has **Use uQ's apps** to switch every kind to them.
+- **Settings › Startup has four tabs: Apps, Session, Services and Environment.** Session and Services are new.
+- **A startup app can wait for the network or start only on mains power.** "Start when" on each app chooses: right away, wait for the network (up to a minute), or only when plugged in. A delayed app counts down to its start, and an app stopped with Stop now says Stopped instead of Finished.
+- **Restore your session (Startup › Session, off by default).** uQ remembers the apps you have open and their workspaces, and at the next login opens them again on those workspaces. Apps that already start at login aren't opened twice.
+- **Commands at logout (Startup › Session).** Commands such as a backup or a sync run one after another as you log out; uQ waits up to 10 seconds for them.
+- **Startup › Services lists your background services.** Each shows whether it is running, can be started, stopped or restarted, turned on or off for login, and shows its recent log lines. uQ's own services are listed but locked, and **Show every service** adds the ones the system starts on demand.
+
+### Fixed
+
+- **Choosing reelo or uQview covers every type it opens.** A picture, video or music app used to get only the 6 or 7 common types; it now gets every picture, video or sound type it says it opens, such as AVIF, HEIC, Ogg video or Opus.
+- **A choice in `hyprland-mimeapps.list` no longer silently wins over the page.** The page shows that list's choices as the current ones, says the list exists, and choosing an app takes the same type out of it, so the choice made on the page is the one used.
+
+## [0.3.45] - 2026-11-27
+
+### Fixed
+
+- **Num Lock no longer comes back on by itself.** Hyprland keeps a Num Lock state per keyboard and tells apps the OR of them whenever focus moves, and `numlock_by_default` turned it on for button-only "keyboards" (power and sleep buttons, the display's brightness keys, laptop hotkey devices) and emobie's typing device. After you turned Num Lock off, the next window or the lock screen got it back on. Those devices now start with it off. A new CI job (`numlock`) checks this on a real Hyprland with real keyboards. If you have a second real keyboard you never type on, set `numlock_by_default = false` for it in `user.lua`.
+
+## [0.3.44] - 2026-11-27
+
+### Added
+
+- **uQ and its apps say which versions of each other they work with.** A new `compat/family.toml`
+  lists every package of the uQ family, the contracts between them (integration files, the theme
+  files, problem codes, `uqctl`, `bindle`'s commands, `oyst-cli scan` and `status`, `uqbit status`,
+  `uqview` and kyko) and the level of each one every package needs. `compat/compat.py` writes one
+  `conflicts+=(…)  # uq-compat` line into every PKGBUILD from it, so pacman refuses a set of
+  versions that would break, and bindleUP (Bindle 0.1.51) holds an update back until the partner
+  it needs is on the AUR. uQ's own line asks for Bindle 0.1.47 or newer (the Restore page), kyko
+  1.3.3, oysterAV 0.5.0, uQbit 0.6.1 and uQview 0.1.6. See docs/compat.md.
+- **CI checks the family together every day** (`.github/workflows/family.yml`): the manifest,
+  every repo's PKGBUILD line and what its files use, that the latest releases meet each other's
+  needs, that the AUR's versions install together (and which are behind their release), and every
+  app's integration files at its latest release against uqctl from uQ 0.3.41, the latest release
+  and main.
+- `scripts/popups-live.sh` (CI smoke job): every island popup, the island menu, quick settings, the notification centre, the VPN details and real tray apps' icons, menus and "+N" list on Hyprland, with real clicks and keys.
+
+### Fixed
+
+- **Welcome's Apps step lists every app, each with its AUR package.** It still said to download
+  scale_tail, XZram, appOFholding, hauler, emobie and romforge from GitHub, which Bindle no longer
+  does, and left out kyko, uQview, reelo, uQbit, bindaru and AV Morning Star. A test keeps the list
+  the same as `compat/family.toml`.
+- **The Security island doesn't half-read a summary it doesn't know.** A summary from oysterAV in a
+  schema other than 1 now reads as unavailable instead of showing whichever fields happen to
+  match.
+- **One Security notification, however many screens.** The Security and Storage cleanup islands used to read oysterAV and crumBS once per screen, so with two monitors every change in security state sent two notifications and every check ran twice. They now share one reading, taken only while the island is on the bar, and a missing oysterAV is looked for every 5 minutes instead of every 30 seconds.
+- **The Status island's media button can resume a paused track.** It showed a play icon even while playing and disappeared as soon as playback paused. It now shows play or pause and stays while a player is open.
+- **Widget popups and the dock's Pin/Unpin menu take the keyboard.** Esc closes them, Enter picks, they look like the other island popups and opening another bar popup closes them.
+- The Keyboard layout island no longer misses a layout switch that lands while it is already reading the keyboards.
+- Opening a bar popup closes quick settings, the app menu or the notification centre first, and the notification centre joins the bar to its focus grab a moment after opening, as quick settings does, so it always gets the keyboard.
+
+
+## [0.3.43] - 2026-11-26
+
+### Changed
+
+- **The lock screen now looks like the login screen.** It shows the login wallpaper (or uQ's backdrop in your theme's colours when none is set), the clock at the top and the avatar, name and password field on the same card as the login screen. The background and card are shared components (`shell/auth/AuthBackdrop.qml`, `AuthCard.qml`), so the two can't drift apart again.
+
+## [0.3.42] - 2026-11-26
+
+### Added
+
+- **Settings › Restore: every way back in one place.** Reset every uQ setting to its default, save the settings to a file and bring a file back, and restore the newest restore points. With Bindle 0.1.47 or later it also runs Bindle's Rebase and Factory Restore and keeps its installer on the computer, each explaining what stays and what goes and showing Bindle's output as it works; with snapper, it lists, takes and deletes snapshots, rolls back to one, and sets how many automatic ones are kept. Tabs Bindle or snapper can't serve on this computer are hidden.
+- **`uqctl reset`** puts every setting back to uQ's defaults, and **`uqctl backup save|restore FILE`** saves the settings to a file and brings them back. Each saves a restore point first (`auto:before_reset`, `auto:before_backup`), so it can be undone; launch counts and Welcome stay as they are. uqd has `ResetAll`, `ExportSettings` and `ImportSettings` for them.
+
 ## [0.3.41] - 2026-11-25
 
 ### Fixed

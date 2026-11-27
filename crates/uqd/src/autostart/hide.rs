@@ -9,6 +9,8 @@
 //! opened later of the same program is never touched, and everything read from Hyprland or the
 //! bus is untrusted text that is checked before it is used.
 
+mod place;
+
 use super::spawn::cgroup_has_unit;
 use crate::compositor::CompositorError;
 use crate::hypr::HyprSocket;
@@ -54,6 +56,12 @@ pub trait Hider: Send + Sync {
     /// Wait for the windows of the scope `unit` and hide them. `None` when the compositor
     /// couldn't be reached.
     async fn hide(&self, unit: &str) -> Option<Hidden>;
+
+    /// Wait for the windows of the scope `unit` and move them to `workspace` without following
+    /// them (restore last session). Whether a window was moved.
+    async fn place(&self, _unit: &str, _workspace: i64) -> bool {
+        false
+    }
 }
 
 /// One window Hyprland lists.
@@ -275,6 +283,10 @@ impl SystemHider {
 
 #[async_trait]
 impl Hider for SystemHider {
+    async fn place(&self, unit: &str, workspace: i64) -> bool {
+        self.place_windows(unit, workspace).await
+    }
+
     async fn hide(&self, unit: &str) -> Option<Hidden> {
         let start = tokio::time::Instant::now();
         let mut seen = BTreeSet::new();

@@ -200,6 +200,59 @@ pub(crate) static RULES_SETTINGS: [SearchEntry; 6] = [
     ),
 ];
 
+pub(crate) static RESTORE_SETTINGS: [SearchEntry; 10] = [
+    entry(
+        "reset-all",
+        "Reset all settings",
+        &["reset", "defaults", "factory", "start again", "clear"],
+    ),
+    entry(
+        "backup",
+        "Save the settings to a file",
+        &["backup", "export", "save", "copy", "move"],
+    ),
+    entry(
+        "backup-restore",
+        "Bring back settings from a file",
+        &["backup", "import", "load", "restore"],
+    ),
+    entry(
+        "rebase",
+        "Rebase the system",
+        &["rebase", "reinstall", "repair", "bindle", "as installed"],
+    ),
+    entry(
+        "factory-restore",
+        "Factory Restore",
+        &["factory", "erase", "reinstall", "wipe", "install again"],
+    ),
+    entry(
+        "keep-installer",
+        "Keep the installer on this computer",
+        &["installer", "offline", "iso", "boot menu"],
+    ),
+    entry(
+        "take-snapshot",
+        "Take a snapshot",
+        &["snapshot", "snapper", "btrfs", "backup", "save"],
+    ),
+    entry(
+        "snapshot-timeline",
+        "Take a snapshot every hour",
+        &["snapshot", "automatic", "timeline", "hourly"],
+    ),
+    entry(
+        "snapshot-limits",
+        "Snapshots kept",
+        &["snapshot", "keep", "limit", "space", "cleanup"],
+    ),
+    entry(
+        "rollback",
+        "Roll back the system",
+        &["rollback", "roll back", "snapshot", "undo update"],
+    ),
+];
+
 pub(crate) static HISTORY_SETTINGS: [SearchEntry; 2] = [
     entry(
         "history",
@@ -256,7 +309,7 @@ pub(crate) static KEYBINDS_SETTINGS: [SearchEntry; 5] = [
     ),
 ];
 
-pub(crate) static STARTUP_SETTINGS: [SearchEntry; 6] = [
+pub(crate) static STARTUP_SETTINGS: [SearchEntry; 10] = [
     entry(
         "login-apps",
         "Apps that start when you log in",
@@ -277,6 +330,26 @@ pub(crate) static STARTUP_SETTINGS: [SearchEntry; 6] = [
         "start-retry",
         "Try again if an app fails",
         &["retry", "again", "fail", "crash"],
+    ),
+    entry(
+        "start-restore",
+        "Restore your last session",
+        &["restore", "session", "reopen", "resume", "workspace"],
+    ),
+    entry(
+        "logout-commands",
+        "Commands at logout",
+        &["logout", "log out", "shutdown", "script", "backup"],
+    ),
+    entry(
+        "background-services",
+        "Background services",
+        &["service", "systemd", "daemon", "unit", "background"],
+    ),
+    entry(
+        "services-show-all",
+        "Show every service",
+        &["service", "static", "all"],
     ),
     entry(
         "env-vars",

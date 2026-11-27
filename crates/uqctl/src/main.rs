@@ -9,6 +9,7 @@ mod keys_cmd;
 mod launch_cmd;
 mod profile_cmd;
 mod render_themes;
+mod reset_cmd;
 mod settings_app;
 mod settings_cmd;
 mod setup;

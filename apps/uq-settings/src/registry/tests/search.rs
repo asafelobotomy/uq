@@ -153,6 +153,7 @@ fn default_apps_rows_match_the_kinds() {
         .map(|k| format!("default-{}", k.id))
         .collect();
     ids.push("default-terminal".into());
+    ids.extend(["default-native", "file-types", "link-types"].map(String::from));
     let listed: Vec<String> = page.settings.iter().map(|s| s.id.to_string()).collect();
     assert_eq!(listed, ids);
 }

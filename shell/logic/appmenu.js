@@ -103,9 +103,9 @@ function appsIn(key, entries, pinned) {
 }
 
 // launcher.appEntries() copies plus each entry's categories, for category().
-function menuEntries(list) {
+function menuEntries(list, hidden) {
     var raw = _list(list).filter(function (d) { return !!d; });
-    var out = L.appEntries(raw);
+    var out = L.appEntries(raw, hidden);
     for (var i = 0; i < out.length; i++)
         out[i].categories = _list(raw[i].categories).map(String);
     return out;
@@ -135,19 +135,22 @@ function _safeUser(user) {
 
 // Local avatar candidates in order: $HOME/.face, then AccountsService's icon for $USER, as
 // file:// URLs encoded the way look=see>do_ encodes local icon paths. Only built from HOME and
-// USER, never from other data.
-function avatarSources(home, user) {
+// USER, never from other data. `have` ({ face, accounts }, from existence checks) leaves out a
+// file known to be missing, so Image never tries it and Qt logs no "Cannot open" for it; without
+// it every candidate is listed.
+function avatarSources(home, user, have) {
+    var known = have !== undefined && have !== null;
     var out = [];
     var h = String(home === undefined || home === null ? "" : home).replace(/\/+$/, "");
     if (h.charAt(0) === "/" && h.charAt(1) !== "/") {
         var r = L.iconRef(h + "/.face");
-        if (r.path !== undefined)
+        if (r.path !== undefined && (!known || have.face === true))
             out.push(r.path);
     }
     var u = _safeUser(user);
     if (u !== "") {
         var r2 = L.iconRef("/var/lib/AccountsService/icons/" + u);
-        if (r2.path !== undefined)
+        if (r2.path !== undefined && (!known || have.accounts === true))
             out.push(r2.path);
     }
     return out;

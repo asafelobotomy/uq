@@ -24,6 +24,7 @@ pub mod protocol;
 mod providers;
 pub(crate) mod run;
 mod settings_search;
+mod staleapps;
 pub(crate) mod stdio;
 mod stocks;
 mod sysmon;
@@ -148,6 +149,7 @@ async fn handle(s: &Services, call: &str, args: &[Value]) -> Result<Value, Strin
         "WindowLook" if args.is_empty() => dispatch::window_look().await,
         "WindowLook" => Err("WindowLook takes no arguments".into()),
         "DefaultApps" => defaultapps::default_apps(link, args),
+        "StaleApps" => staleapps::stale_apps(args),
         "Power" => power::power(args).await,
         "Lock" => logind::lock(args).await,
         "SleepLockReady" if args.is_empty() => {

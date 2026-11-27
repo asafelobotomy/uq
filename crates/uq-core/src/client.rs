@@ -72,6 +72,11 @@ pub trait Desktop {
     fn save_restore_point(&self, name: &str) -> zbus::Result<String>;
     fn delete_restore_point(&self, id: &str) -> zbus::Result<()>;
     fn restore(&self, id: &str) -> zbus::Result<()>;
+    /// Every setting back to uQ's defaults (a restore point of the current ones first).
+    fn reset_all(&self) -> zbus::Result<()>;
+    /// The current settings as a backup file's text.
+    fn export_settings(&self) -> zbus::Result<String>;
+    fn import_settings(&self, text: &str) -> zbus::Result<()>;
     /// JSON `{key: {source, live, stored, detail}}` for one section (see `settings::provenance`).
     fn explain(&self, domain: &str) -> zbus::Result<String>;
     /// Run the section's render path again; writes no history, then emits `SectionChanged`.

@@ -76,6 +76,9 @@ PanelWindow {
     }
 
     onShownChanged: {
+        grabIncludesBar = false;
+        if (shown)
+            barJoinsGrab.restart();
         openedOn = shown ? screenFor(Hyprland.focusedMonitor) : null;
         wipe();
         if (shown) {
@@ -120,10 +123,19 @@ PanelWindow {
 
     HyprlandFocusGrab {
         // The bar window is included so a click on the Notifications island toggles the centre
-        // closed instead of clearing the grab and reopening it.
-        windows: Surfaces.anchor && Surfaces.anchor.barWindow ? [root, Surfaces.anchor.barWindow] : [root]
+        // closed instead of clearing the grab and reopening it. It joins a moment after the grab
+        // starts, as in QuickSettings: Hyprland hands the keyboard to the first window on a new
+        // grab's list, in no set order, and the bar takes no keyboard.
+        windows: root.grabIncludesBar && Surfaces.anchor && Surfaces.anchor.barWindow
+            ? [root, Surfaces.anchor.barWindow] : [root]
         active: root.visible
         onCleared: Surfaces.close()
+    }
+    property bool grabIncludesBar: false
+    Timer {
+        id: barJoinsGrab
+        interval: 150
+        onTriggered: root.grabIncludesBar = root.shown
     }
 
     UqCard {

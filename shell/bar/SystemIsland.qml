@@ -8,6 +8,7 @@ import "../services"
 import "../logic/dock.js" as Dock
 import "../logic/minimise.js" as Min
 import "../logic/quickui.js" as U
+import "islands"
 
 // App-menu button, workspaces, and the pinned apps that aren't open (open ones are pills on the
 // Open windows island).
@@ -330,9 +331,12 @@ Island {
                         if (mouse.button === Qt.RightButton) {
                             if (!Dock.canPin(dockItem.modelData) || !Settings.loaded)
                                 return;
+                            if (menu.open && menu.anchorItem === dockItem) {
+                                menu.hide();
+                                return;
+                            }
                             root.menuEntry = dockItem.modelData;
-                            menu.anchor.item = dockItem;
-                            menu.visible = true;
+                            menu.show(dockItem, pinMenu);
                         } else {
                             root.activate(dockItem.modelData);
                         }
@@ -342,37 +346,22 @@ Island {
         }
     }
 
-    PopupWindow {
+    // Pin or unpin, under the dock icon: an island popup, so it has the keyboard (Enter, Esc) and
+    // replaces any other bar popup.
+    LazyPopup {
         id: menu
-        anchor.window: root.QsWindow.window
-        anchor.edges: Edges.Bottom
-        anchor.gravity: Edges.Bottom
-        implicitWidth: 120
-        implicitHeight: 32
-        color: "transparent"
-
-        Rectangle {
-            anchors.fill: parent
-            color: Theme.surface
-            radius: Theme.radius
-            border.color: Theme.border
-            border.width: Theme.borderWidth
-            UqText {
-                anchors.centerIn: parent
-                text: root.menuEntry && root.menuEntry.pinned ? "Unpin" : "Pin"
-            }
-            MouseArea {
-                anchors.fill: parent
-                onClicked: {
-                    root.togglePin(root.menuEntry);
-                    menu.visible = false;
-                }
-            }
-        }
     }
-    HyprlandFocusGrab {
-        windows: [menu]
-        active: menu.visible
-        onCleared: menu.visible = false
+    Component {
+        id: pinMenu
+        MenuRow {
+            width: Theme.fontSize * 10
+            text: root.menuEntry && root.menuEntry.pinned ? "Unpin" : "Pin"
+            onActivated: {
+                var entry = root.menuEntry;
+                menu.hide();
+                root.togglePin(entry);
+            }
+            Component.onCompleted: forceActiveFocus()
+        }
     }
 }

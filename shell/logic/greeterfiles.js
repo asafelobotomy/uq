@@ -1,4 +1,5 @@
 .pragma library
+.import "auth.js" as Auth
 .import "notif.js" as Notif
 
 // uq-greeter's files and sessions (spec phase 5 §2.2): the fixed paths it may read, a small
@@ -8,7 +9,7 @@
 // --- fixed paths the greeter may read (§2.2) ---
 var CONFIG_PATH = "/etc/uq/greeter.toml";
 var RENDERED_DIR = "/usr/share/uq/themes/rendered";
-var WALLPAPER_PATH = "/var/lib/uq-greeter/wallpaper";
+var WALLPAPER_PATH = Auth.LOGIN_WALLPAPER_PATH;
 var SESSIONS_DIR = "/usr/share/wayland-sessions";
 var STATE_PATH = "/var/cache/uq-greeter/state.toml";
 var ICONS_DIR = "/var/lib/AccountsService/icons/";

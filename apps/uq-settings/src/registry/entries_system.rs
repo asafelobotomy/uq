@@ -205,13 +205,18 @@ pub(crate) static REGION_SETTINGS: [SearchEntry; 4] = [
     ),
 ];
 
-pub(crate) static DEFAULT_APPS_SETTINGS: [SearchEntry; 9] = [
+pub(crate) static DEFAULT_APPS_SETTINGS: [SearchEntry; 15] = [
     entry(
         "default-browser",
         "Web browser",
         &["browser", "internet", "links", "web"],
     ),
     entry("default-mail", "Email", &["mail", "email", "mailto"]),
+    entry(
+        "default-calendar",
+        "Calendar",
+        &["calendar", "events", "invitations", "ics"],
+    ),
     entry(
         "default-files",
         "Files",
@@ -239,9 +244,42 @@ pub(crate) static DEFAULT_APPS_SETTINGS: [SearchEntry; 9] = [
         &["pdf", "document viewer", "reader"],
     ),
     entry(
+        "default-archives",
+        "Archives",
+        &["zip", "archive", "compressed", "tar", "7z", "rar"],
+    ),
+    entry(
+        "default-torrents",
+        "Torrents",
+        &["torrent", "magnet", "bittorrent", "uqbit"],
+    ),
+    entry(
         "default-terminal",
         "Terminal",
         &["terminal", "console", "command line", "shell"],
+    ),
+    entry(
+        "default-native",
+        "Use uQ's own apps",
+        &["uq apps", "reelo", "uqview", "uqbit", "kyko", "native"],
+    ),
+    entry(
+        "file-types",
+        "File types",
+        &[
+            "file type",
+            "extension",
+            "file association",
+            "open with",
+            "mime",
+        ],
+    ),
+    entry(
+        "link-types",
+        "Links",
+        &[
+            "link", "protocol", "url", "scheme", "handler", "mailto", "magnet",
+        ],
     ),
 ];
 

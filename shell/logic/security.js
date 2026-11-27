@@ -10,6 +10,16 @@ function _n(v) {
     return isFinite(x) && x >= 0 ? x : -1;
 }
 
+// The summary's schema this uQ reads (oysterAV's SUMMARY_SCHEMA; compat/family.toml's
+// oyst-status level). A summary in a newer schema reads as unreadable, not as half-understood.
+var SCHEMA = 1;
+
+// Whether `d` is a summary this uQ can read: a state, and schema 1 (older oysterAVs send none).
+function readable(d) {
+    return !!d && typeof d === "object" && typeof d.state === "string"
+        && (d.schema === undefined || d.schema === SCHEMA);
+}
+
 // True only when oysterAV says first-time setup has never been completed. A summary without the
 // field (an older oysterAV) is taken as set up, so nothing is gated by guesswork.
 function setupNeeded(s) {

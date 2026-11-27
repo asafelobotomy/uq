@@ -11,6 +11,9 @@ pub(crate) struct Job {
     pub(crate) delay: u32,
     pub(crate) minimize: bool,
     pub(crate) retry: bool,
+    pub(crate) when: Option<When>,
+    /// Move the app's first windows to this workspace (restore last session).
+    pub(crate) workspace: Option<i64>,
     /// Part of this login's run, so its start counts as "N s after login". Run now's isn't.
     pub(crate) at_login: bool,
 }
@@ -75,6 +78,8 @@ pub async fn start_once(
                     minimize,
                     retry,
                 } => Some(Job {
+                    when: lock(runner).when.get(&e.id).copied(),
+                    workspace: None,
                     id: e.id,
                     argv,
                     cwd,
@@ -87,6 +92,10 @@ pub async fn start_once(
             })
             .collect()
     };
+    let mut jobs = jobs;
+    if !record.ran && !same {
+        jobs.extend(restore::jobs(std::mem::take(&mut lock(runner).restore)));
+    }
     if !same {
         record.pending = jobs.iter().map(|j| j.id.clone()).collect();
     }
@@ -111,7 +120,9 @@ pub async fn start_once(
     );
     let recheck = lock(runner).recheck.clone();
     let hider = lock(runner).cfg.hider.clone();
+    let probe_root = lock(runner).cfg.probe_root.clone();
     let ctx = Ctx {
+        probe_root,
         hider,
         recheck,
         runner: runner.clone(),
@@ -141,6 +152,7 @@ pub(crate) struct Ctx {
     pub(crate) path: PathBuf,
     pub(crate) env: Arc<Vec<(String, String)>>,
     pub(crate) emit: Arc<dyn Fn() + Send + Sync>,
+    pub(crate) probe_root: PathBuf,
 }
 
 pub(crate) fn now_secs() -> i64 {
@@ -152,6 +164,10 @@ pub(crate) fn now_secs() -> i64 {
 /// Sleep the delay, then start the entry.
 pub(crate) async fn run_one(ctx: Ctx, job: Job) {
     if job.delay > 0 {
+        lock(&ctx.runner)
+            .due
+            .insert(job.id.clone(), now_secs() + i64::from(job.delay));
+        (ctx.emit)();
         tokio::time::sleep(Duration::from_secs(job.delay.into())).await;
         if let Some(check) = &ctx.recheck
             && !check(job.id.clone()).await
@@ -167,6 +183,12 @@ pub(crate) async fn run_one(ctx: Ctx, job: Job) {
             (ctx.emit)();
             return;
         }
+    }
+    lock(&ctx.runner).due.remove(&job.id);
+    if let Some(when) = job.when
+        && !conditions::met(&ctx, &job.id, when).await
+    {
+        return;
     }
     launch(ctx, job, 0).await;
 }
@@ -230,6 +252,12 @@ pub(crate) async fn launch_inner(ctx: Ctx, job: Job, attempt: u32) {
     let Some((child, run)) = child else {
         return;
     };
+    if let (Some(ws), Some(hider)) = (job.workspace, ctx.hider.clone()) {
+        let unit = run.unit.clone();
+        tokio::spawn(async move {
+            hider.place(&unit, ws).await;
+        });
+    }
     if job.minimize
         && let Some(hider) = ctx.hider.clone()
     {
@@ -250,7 +278,7 @@ pub(crate) async fn launch_inner(ctx: Ctx, job: Job, attempt: u32) {
         let exit = child.wait.await;
         let on_purpose = lock(&ctx.runner).stopped.contains(&id);
         let status = match exit {
-            _ if on_purpose => Status::Exited,
+            _ if on_purpose => Status::Stopped,
             ExitInfo::Code(0) => Status::Exited,
             ExitInfo::Unknown => Status::Gone,
             exit => Status::Failed { run, exit },

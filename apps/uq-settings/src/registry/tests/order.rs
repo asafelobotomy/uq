@@ -80,6 +80,7 @@ fn pages_json_lists_pages_in_order() {
             "profiles",
             "rules",
             "history",
+            "restore",
             "keybinds",
             "startup",
             "power",
@@ -114,13 +115,15 @@ fn pages_json_lists_pages_in_order() {
     assert_eq!(v[9]["categoryName"], "Connections");
     assert_eq!(v[10]["qml"], "pages/ShellPage.qml");
     assert_eq!(v[10]["categoryName"], "uQ");
-    assert_eq!(v[14]["qml"], "pages/KeybindsPage.qml");
+    assert_eq!(v[14]["qml"], "pages/RestorePage.qml");
     assert_eq!(v[14]["categoryName"], "uQ");
-    assert_eq!(v[14]["domains"], serde_json::json!(["keybinds"]));
-    assert_eq!(v[15]["qml"], "pages/StartupPage.qml");
-    assert_eq!(v[15]["category"], "system");
-    assert_eq!(v[15]["categoryName"], "System");
-    assert_eq!(v[15]["domains"], serde_json::json!(["autostart", "env"]));
+    assert_eq!(v[15]["qml"], "pages/KeybindsPage.qml");
+    assert_eq!(v[15]["categoryName"], "uQ");
+    assert_eq!(v[15]["domains"], serde_json::json!(["keybinds"]));
+    assert_eq!(v[16]["qml"], "pages/StartupPage.qml");
+    assert_eq!(v[16]["category"], "system");
+    assert_eq!(v[16]["categoryName"], "System");
+    assert_eq!(v[16]["domains"], serde_json::json!(["autostart", "env"]));
 }
 
 #[test]

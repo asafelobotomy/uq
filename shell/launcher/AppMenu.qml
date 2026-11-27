@@ -45,7 +45,7 @@ PanelWindow {
     property int placeX: Theme.gapOut
     property int placeY: barBottom + Theme.gapIn
 
-    readonly property var appList: M.menuEntries(DesktopEntries.applications.values)
+    readonly property var appList: M.menuEntries(DesktopEntries.applications.values, StaleApps.hidden)
     readonly property var pinned: Settings.values.pinned || []
     readonly property var favList: M.favourites(pinned, appList)
     readonly property var categoryList: M.categories(appList, favList.length)
@@ -56,8 +56,29 @@ PanelWindow {
 
     // Header and footer: built only from $HOME, $USER, $HOSTNAME and /etc/hostname.
     readonly property string userName: String(Quickshell.env("USER") || "")
-    readonly property var avatarSources: M.avatarSources(Quickshell.env("HOME"), userName)
+    readonly property string homeDir: String(Quickshell.env("HOME") || "")
+    property bool faceExists: false
+    property bool accountsIconExists: false
+    readonly property var avatarSources: M.avatarSources(homeDir, userName,
+        { face: faceExists, accounts: accountsIconExists })
     property int avatarIndex: 0
+    onAvatarSourcesChanged: avatarIndex = 0
+
+    // Existence checks only, as the lock screen does: a missing ~/.face or AccountsService icon
+    // (the usual case) is skipped quietly instead of Image logging "Cannot open" at every start.
+    FileView {
+        path: root.homeDir.charAt(0) === "/" ? root.homeDir.replace(/\/+$/, "") + "/.face" : ""
+        printErrors: false
+        onLoaded: root.faceExists = true
+        onLoadFailed: root.faceExists = false
+    }
+    FileView {
+        path: root.userName !== "" && root.userName.indexOf("/") < 0
+            ? "/var/lib/AccountsService/icons/" + root.userName : ""
+        printErrors: false
+        onLoaded: root.accountsIconExists = true
+        onLoadFailed: root.accountsIconExists = false
+    }
     property string hostFileText: ""
     readonly property string hostName: M.hostname(Quickshell.env("HOSTNAME"), hostFileText)
 

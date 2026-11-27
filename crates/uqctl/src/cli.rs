@@ -129,6 +129,17 @@ pub(crate) enum Cmd {
         #[command(subcommand)]
         cmd: RestoreCmd,
     },
+    /// Put every setting back to uQ's defaults (a restore point of the current ones first).
+    Reset {
+        /// Don't ask first.
+        #[arg(long, short)]
+        yes: bool,
+    },
+    /// Save the settings to a file (`save FILE`), or bring a saved file back (`restore FILE`).
+    Backup {
+        #[command(subcommand)]
+        cmd: crate::reset_cmd::BackupCmd,
+    },
     /// Re-render every config file from uqd's state.
     Reload,
     /// Start an app by its desktop id (e.g. `org.mozilla.firefox`), as the shell does: with its

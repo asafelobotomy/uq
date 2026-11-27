@@ -35,6 +35,7 @@ ShellRoot {
     BridgeIo {}
     ThemeIo {}
     LauncherStateIo {}
+    StaleAppsIo {}
 
     Connections {
         target: Hyprland

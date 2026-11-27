@@ -93,6 +93,10 @@ SettingsPage {
             return "Saved automatically before an import";
         case "new_version":
             return "Saved automatically when uQ was updated";
+        case "before_reset":
+            return "Saved automatically before a reset";
+        case "before_backup":
+            return "Saved automatically before settings came back from a file";
         }
         return "Saved automatically";
     }
@@ -109,6 +113,10 @@ SettingsPage {
             return "document-import";
         case "new_version":
             return "system-software-install";
+        case "before_reset":
+            return "edit-reset";
+        case "before_backup":
+            return "document-open";
         }
         return "chronometer";
     }

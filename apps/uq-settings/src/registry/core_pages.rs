@@ -2,7 +2,7 @@
 
 use super::*;
 
-pub(crate) static CORE_PAGES: [PageInfo; 24] = [
+pub(crate) static CORE_PAGES: [PageInfo; 25] = [
     PageInfo {
         id: "appearance",
         name: "Appearance",
@@ -127,6 +127,15 @@ pub(crate) static CORE_PAGES: [PageInfo; 24] = [
         category: Category::Uq,
         qml: "pages/HistoryPage.qml",
         settings: &HISTORY_SETTINGS,
+        domains: &[],
+    },
+    PageInfo {
+        id: "restore",
+        name: "Restore",
+        icon: "edit-undo-history",
+        category: Category::Uq,
+        qml: "pages/RestorePage.qml",
+        settings: &RESTORE_SETTINGS,
         domains: &[],
     },
     PageInfo {

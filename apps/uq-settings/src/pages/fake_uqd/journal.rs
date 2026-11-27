@@ -75,6 +75,41 @@ impl FakeUqd {
         self.history.entries.lock().unwrap().extend(entries);
         Ok(ids)
     }
+
+    /// Reset and a backup: a point of the current settings first, launch counts kept.
+    pub(crate) fn replace_all(&self, next: State, reason: AutoReason) -> Result<(), FakeError> {
+        let current = self.state.lock().unwrap().clone();
+        self.history
+            .add_point("Before", PointKind::Auto(reason), current);
+        self.write("restore", |s| {
+            let launch_counts = std::mem::take(&mut s.launch_counts);
+            *s = next;
+            s.launch_counts = launch_counts;
+            Ok(())
+        })?;
+        Ok(())
+    }
+
+    /// As uqd: a point of the current settings, then every setting back to its default.
+    pub(crate) fn reset_all(&self) -> Result<(), FakeError> {
+        self.replace_all(State::default(), AutoReason::BeforeReset)
+    }
+
+    pub(crate) fn export_settings(&self) -> String {
+        let body = self.state.lock().unwrap().to_toml().unwrap();
+        format!("# uQ settings backup\n{body}")
+    }
+
+    pub(crate) fn import_settings(&self, text: &str) -> Result<(), FakeError> {
+        if !text.starts_with("# uQ settings backup") {
+            return Err(FakeError::InvalidArgument(
+                "that file isn't a uQ settings backup".into(),
+            ));
+        }
+        let next = State::parse_strict(text)
+            .map_err(|e| FakeError::InvalidArgument(e.message().to_string()))?;
+        self.replace_all(next, AutoReason::BeforeBackup)
+    }
 }
 
 /// What the fake's `Explain` answers. Without overrides each key is `uq` when the section sets

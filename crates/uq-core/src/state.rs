@@ -259,6 +259,11 @@ impl State {
     }
 
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
+        atomic_write(path, &self.to_toml()?)
+    }
+
+    /// The file `save` writes, as text (a settings backup is this).
+    pub fn to_toml(&self) -> std::io::Result<String> {
         let mut table = toml::Table::try_from(self).map_err(std::io::Error::other)?;
         let mut settings = self.settings.clone();
         if let Some(idle) = table.get_mut("idle").and_then(toml::Value::as_table_mut) {
@@ -268,8 +273,7 @@ impl State {
                 }
             }
         }
-        let body = toml::to_string(&table).map_err(std::io::Error::other)?;
-        atomic_write(path, &body)
+        toml::to_string(&table).map_err(std::io::Error::other)
     }
 }
 

@@ -180,8 +180,8 @@ fn keybinds_page_registered_with_search_entries() {
     let at = ids.iter().position(|id| *id == "keybinds").unwrap();
     assert_eq!(
         (ids[at - 1], ids[at + 1]),
-        ("history", "startup"),
-        "after History, the last uQ page"
+        ("restore", "startup"),
+        "after History and Restore, the last uQ page"
     );
 }
 
@@ -225,6 +225,26 @@ fn startup_page_registered_with_search_entries() {
                 "start-retry",
                 "Try again if an app fails",
                 &["retry", "again", "fail", "crash"][..]
+            ),
+            (
+                "start-restore",
+                "Restore your last session",
+                &["restore", "session", "reopen", "resume", "workspace"][..]
+            ),
+            (
+                "logout-commands",
+                "Commands at logout",
+                &["logout", "log out", "shutdown", "script", "backup"][..]
+            ),
+            (
+                "background-services",
+                "Background services",
+                &["service", "systemd", "daemon", "unit", "background"][..]
+            ),
+            (
+                "services-show-all",
+                "Show every service",
+                &["service", "static", "all"][..]
             ),
             (
                 "env-vars",

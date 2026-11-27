@@ -90,7 +90,7 @@ impl Desktop {
     /// override (which already carries its fix) is swapped for its own `X-uQ-Source` when the
     /// app has a fix and that source is valid and unmarked; otherwise it is kept, and the scan
     /// runs it as written, without the fix again.
-    fn follow_override(&self, id: &str, found: (PathBuf, String)) -> (PathBuf, String) {
+    pub(crate) fn follow_override(&self, id: &str, found: (PathBuf, String)) -> (PathBuf, String) {
         let e = read_entry(&found.1);
         if !e.uq_override || self.state.compat.fix_for(id).is_none() {
             return found;
@@ -350,7 +350,7 @@ fn new_failure<'a>(before: &Option<String>, now: &'a Option<String>) -> Option<&
 
 /// `TryExec`: an absolute path to a file, or a file of that name in an absolute entry of uqd's
 /// own `PATH`.
-fn program_exists(name: &str) -> bool {
+pub(crate) fn program_exists(name: &str) -> bool {
     if name.contains('/') {
         return Path::new(name).is_absolute() && Path::new(name).is_file();
     }

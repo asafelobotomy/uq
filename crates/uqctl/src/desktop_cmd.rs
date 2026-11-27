@@ -72,6 +72,12 @@ pub(crate) async fn run(cmd: Cmd) -> Result<(), String> {
         lines.iter().for_each(|l| println!("{l}"));
         return Ok(());
     }
+    if let Cmd::Reset { yes } = cmd {
+        return crate::reset_cmd::reset(&profile_cmd::connect().await?, yes).await;
+    }
+    if let Cmd::Backup { cmd } = cmd {
+        return crate::reset_cmd::backup(&profile_cmd::connect().await?, cmd).await;
+    }
     if let Cmd::Theme { cmd } = cmd {
         return theme_cmd::run(&profile_cmd::connect().await?, cmd).await;
     }
@@ -209,6 +215,8 @@ pub(crate) async fn run(cmd: Cmd) -> Result<(), String> {
         | Cmd::Profile { .. }
         | Cmd::Keys { .. }
         | Cmd::Theme { .. }
+        | Cmd::Reset { .. }
+        | Cmd::Backup { .. }
         | Cmd::Wallpaper { .. }
         | Cmd::Launch { .. } => {
             unreachable!("handled before connecting")

@@ -109,6 +109,9 @@ uqctl undo [<id>] [--force]            # no id: the newest change; --force if it
 uqctl restore list                     # also: restore save <name>, restore delete <id>
 uqctl restore <id>                     # bring back every setting as it was; to go back,
                                        # restore the newest auto:before_restore point it saved
+uqctl reset [--yes]                    # every setting back to uQ's defaults (auto:before_reset first)
+uqctl backup save <file>               # every setting to a file, to keep or take to another computer
+uqctl backup restore <file>            # bring a saved file back (auto:before_backup first)
 ```
 
 Profiles (a named set of settings you turn on together; see the Profiles page below):
@@ -452,6 +455,21 @@ exception is `~/.config/environment.d/60-uq.conf`, which is uQ's by name: uQ rep
 whatever it holds (a symlink there becomes a plain file). In `uq-dev session` the page refuses the
 elsewhere switch ("Not available in a test session"). Manual checks are in
 [docs/notes/settings-slice-d-live-check.md](docs/notes/settings-slice-d-live-check.md).
+
+#### Restore page
+
+The **Restore** page has every way back in one place. **uQ settings**: **Reset all settings**
+puts every uQ setting back to how uQ comes (theme, bar, shortcuts, gestures, rules, startup apps;
+your files, apps, wallpapers and `user.lua` stay), **Save…** writes every setting to a file and
+**Open…** brings such a file back; each saves a restore point first, so it can be undone, and the
+newest restore points are listed with **Restore**. With Bindle 0.1.47 or later, **System** runs
+Bindle's **Rebase** (the system as installed, keeping your home and own apps) and **Factory
+Restore** (restart into Bindle's installer; type ERASE first, nothing is erased until the
+installer's last question), and keeps the installer on the computer; each says what stays and
+what goes, and Bindle's output shows on the page, with **Restart now** when the next start does
+the work. With snapper set up, **Snapshots** takes a snapshot now, lists them with **Roll back**
+and **Delete**, and sets how many automatic snapshots are kept (`bindle snapshot`). Bindle asks
+for the password itself; the System and Snapshots tabs hide when Bindle or snapper isn't there.
 
 #### History page
 

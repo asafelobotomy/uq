@@ -229,8 +229,9 @@ function showEmojiHint(query, gotExternal, deadlinePassed) {
     return rest !== "" && !!deadlinePassed && !gotExternal;
 }
 
-// Plain copies of DesktopEntry objects in the shape rank.searchApps expects.
-function appEntries(list) {
+// Plain copies of DesktopEntry objects in the shape rank.searchApps expects. `hidden` (optional)
+// maps ids StaleApps found stale to true: those come back noDisplay, like NoDisplay=true entries.
+function appEntries(list, hidden) {
     var out = [];
     var l = list || [];
     for (var i = 0; i < l.length; i++) {
@@ -242,9 +243,10 @@ function appEntries(list) {
             ? kw.split(/[;,]/).map(function (k) { return k.trim(); })
                 .filter(function (k) { return k !== ""; })
             : (kw && kw.length !== undefined ? Array.prototype.slice.call(kw) : []);
-        out.push({ id: String(d.id || ""), name: String(d.name || ""),
+        var id = String(d.id || "");
+        out.push({ id: id, name: String(d.name || ""),
                    genericName: String(d.genericName || ""), comment: String(d.comment || ""),
-                   icon: String(d.icon || ""), keywords: keywords, noDisplay: !!d.noDisplay });
+                   icon: String(d.icon || ""), keywords: keywords, noDisplay: !!d.noDisplay || !!(hidden && hidden[id] === true) });
     }
     return out;
 }
